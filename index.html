@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设计项目管理系统</title>
+<style>
+:root {
+  --primary: #4F46E5; --primary-light: #EEF2FF;
+  --success: #10B981; --success-light: #ECFDF5;
+  --warning: #F59E0B; --warning-light: #FFFBEB;
+  --danger: #EF4444; --danger-light: #FEF2F2;
+  --gray-50: #F9FAFB; --gray-100: #F3F4F6; --gray-200: #E5E7EB; --gray-300: #D1D5DB;
+  --gray-400: #9CA3AF; --gray-500: #6B7280; --gray-600: #4B5563; --gray-700: #374151; --gray-800: #1F2937;
+  --radius: 8px; --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+}
+* { margin:0;padding:0;box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background:var(--gray-100); color:var(--gray-800); min-height:100vh; }
+
+.header { background:#fff; border-bottom:1px solid var(--gray-200); padding:0 24px; height:56px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+.header-left { display:flex; align-items:center; gap:12px; }
+.logo { font-size:20px; font-weight:700; color:var(--primary); }
+.logo span { color:var(--gray-600); font-weight:400; font-size:14px; margin-left:8px; }
+.header-right { display:flex; align-items:center; gap:16px; }
+.role-switcher { display:flex; background:var(--gray-100); border-radius:8px; padding:3px; }
+.role-btn { padding:6px 14px; border:none; background:transparent; border-radius:6px; cursor:pointer; font-size:13px; color:var(--gray-500); transition:all .2s; white-space:nowrap; }
+.role-btn.active { background:#fff; color:var(--primary); font-weight:600; box-shadow:var(--shadow); }
+.role-btn:hover:not(.active) { color:var(--gray-700); }
+.current-role { font-size:12px; color:var(--gray-400); }
+.user-select { padding:6px 10px; border:1px solid var(--gray-200); border-radius:6px; font-size:13px; color:var(--gray-700); background:#fff; cursor:pointer; min-width:100px; outline:none; }
+.user-select:focus { border-color:var(--primary); }
+
+.app-layout { display:flex; min-height:calc(100vh - 56px); }
+.sidebar { width:220px; background:#fff; border-right:1px solid var(--gray-200); padding:16px 12px; display:flex; flex-direction:column; gap:4px; flex-shrink:0; }
+.nav-item { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:8px; cursor:pointer; font-size:14px; color:var(--gray-600); transition:all .15s; border:none; background:none; width:100%; text-align:left; }
+.nav-item:hover { background:var(--gray-50); color:var(--gray-800); }
+.nav-item.active { background:var(--primary-light); color:var(--primary); font-weight:600; }
+.nav-icon { font-size:18px; width:22px; text-align:center; flex-shrink:0; }
+.nav-badge { margin-left:auto; background:var(--primary); color:#fff; font-size:11px; padding:2px 8px; border-radius:10px; min-width:20px; text-align:center; }
+.main-content { flex:1; padding:24px; overflow-y:auto; }
+
+.card { background:#fff; border-radius:var(--radius); box-shadow:var(--shadow); padding:20px; }
+.card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+.card-title { font-size:16px; font-weight:600; }
+
+.stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:16px; margin-bottom:24px; }
+.stat-card { background:#fff; border-radius:var(--radius); box-shadow:var(--shadow); padding:18px; display:flex; align-items:center; gap:14px; }
+.stat-icon { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+.stat-icon.blue { background:var(--primary-light); color:var(--primary); }
+.stat-icon.green { background:var(--success-light); color:var(--success); }
+.stat-icon.yellow { background:var(--warning-light); color:var(--warning); }
+.stat-icon.red { background:var(--danger-light); color:var(--danger); }
+.stat-value { font-size:26px; font-weight:700; line-height:1; }
+.stat-label { font-size:13px; color:var(--gray-500); margin-top:4px; }
+
+.btn { padding:8px 16px; border-radius:6px; border:none; cursor:pointer; font-size:13px; font-weight:500; display:inline-flex; align-items:center; gap:6px; transition:all .15s; }
+.btn-primary { background:var(--primary); color:#fff; } .btn-primary:hover { background:#4338CA; }
+.btn-success { background:var(--success); color:#fff; } .btn-success:hover { background:#059669; }
+.btn-danger { background:var(--danger); color:#fff; } .btn-danger:hover { background:#DC2626; }
+.btn-warning { background:var(--warning); color:#fff; } .btn-warning:hover { background:#D97706; }
+.btn-outline { background:#fff; color:var(--gray-700); border:1px solid var(--gray-300); }
+.btn-outline:hover { background:var(--gray-50); }
+.btn-sm { padding:5px 10px; font-size:12px; } .btn-lg { padding:10px 24px; font-size:14px; }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; }
+th { text-align:left; padding:10px 14px; font-size:12px; text-transform:uppercase; color:var(--gray-500); font-weight:500; border-bottom:2px solid var(--gray-200); }
+td { padding:12px 14px; font-size:13px; border-bottom:1px solid var(--gray-100); }
+tr:hover td { background:var(--gray-50); }
+
+.badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:500; }
+.badge-pending { background:#FEF3C7; color:#92400E; }
+.badge-progress { background:#DBEAFE; color:#1E40AF; }
+.badge-completed { background:#D1FAE5; color:#065F46; }
+.badge-rejected { background:#FEE2E2; color:#991B1B; }
+.badge-busy { background:#FEE2E2; color:#991B1B; }
+.badge-idle { background:#D1FAE5; color:#065F46; }
+
+.form-group { margin-bottom:16px; }
+.form-label { display:block; font-size:13px; font-weight:500; color:var(--gray-700); margin-bottom:6px; }
+.form-label .required { color:var(--danger); margin-left:2px; }
+.form-input,.form-select,.form-textarea { width:100%; padding:9px 12px; border:1px solid var(--gray-300); border-radius:6px; font-size:13px; color:var(--gray-800); background:#fff; transition:border-color .15s; font-family:inherit; }
+.form-input:focus,.form-select:focus,.form-textarea:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(79,70,229,.1); }
+.form-textarea { min-height:80px; resize:vertical; }
+.form-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.form-hint { font-size:11px; color:var(--gray-400); margin-top:3px; }
+
+.checkbox-group { display:flex; flex-wrap:wrap; gap:8px; }
+.checkbox-item { display:flex; align-items:center; gap:6px; padding:6px 12px; background:var(--gray-50); border:1px solid var(--gray-200); border-radius:6px; cursor:pointer; font-size:13px; transition:all .15s; }
+.checkbox-item:hover { border-color:var(--primary); }
+.checkbox-item.checked { background:var(--primary-light); border-color:var(--primary); color:var(--primary); font-weight:500; }
+.checkbox-item input { display:none; }
+
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:200; display:flex; align-items:center; justify-content:center; padding:24px; }
+.modal { background:#fff; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.15); width:100%; max-width:680px; max-height:90vh; overflow-y:auto; }
+.modal-lg { max-width:880px; }
+.modal-header { display:flex; justify-content:space-between; align-items:center; padding:20px 24px; border-bottom:1px solid var(--gray-200); }
+.modal-title { font-size:17px; font-weight:600; }
+.modal-close { width:32px; height:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; border:none; background:none; cursor:pointer; color:var(--gray-400); font-size:20px; }
+.modal-close:hover { background:var(--gray-100); color:var(--gray-600); }
+.modal-body { padding:24px; }
+.modal-footer { display:flex; justify-content:flex-end; gap:10px; padding:16px 24px; border-top:1px solid var(--gray-200); }
+
+.detail-section { margin-bottom:24px; }
+.detail-section-title { font-size:14px; font-weight:600; color:var(--gray-700); margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--gray-200); display:flex; align-items:center; gap:8px; }
+.detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.detail-label { font-size:12px; color:var(--gray-400); margin-bottom:2px; }
+.detail-value { font-size:14px; color:var(--gray-800); }
+
+.timeline { position:relative; padding-left:28px; }
+.timeline::before { content:''; position:absolute; left:13px; top:8px; bottom:8px; width:2px; background:var(--gray-200); }
+.timeline-item { position:relative; padding-bottom:20px; }
+.timeline-item:last-child { padding-bottom:0; }
+.timeline-dot { position:absolute; left:-21px; top:4px; width:16px; height:16px; border-radius:50%; border:3px solid var(--primary); background:#fff; }
+.timeline-dot.done { background:var(--success); border-color:var(--success); }
+.timeline-dot.current { background:var(--primary); border-color:var(--primary); box-shadow:0 0 0 4px rgba(79,70,229,.2); }
+.timeline-content {}
+.timeline-title { font-size:14px; font-weight:600; }
+.timeline-time { font-size:12px; color:var(--gray-400); }
+.timeline-desc { font-size:13px; color:var(--gray-600); margin-top:4px; }
+
+/* Subtask card */
+.subtask-card { border:1px solid var(--gray-200); border-radius:var(--radius); padding:16px; margin-bottom:10px; background:#fff; transition:all .15s; }
+.subtask-card:last-child { margin-bottom:0; }
+.subtask-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; }
+.subtask-name { font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px; }
+.subtask-number { background:var(--primary); color:#fff; font-size:11px; width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.subtask-meta { display:flex; gap:16px; flex-wrap:wrap; margin-top:8px; }
+.subtask-meta-item { font-size:12px; color:var(--gray-500); }
+.subtask-meta-item strong { color:var(--gray-700); }
+.subtask-actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+.subtask-deliver { margin-top:10px; padding:12px; background:var(--gray-50); border-radius:6px; border:1px solid var(--gray-200); }
+.subtask-deliver .detail-label { margin-bottom:4px; }
+.review-box { background:var(--gray-50); border-radius:8px; padding:14px; border:1px solid var(--gray-200); margin-top:10px; }
+.review-box.approved { background:var(--success-light); border-color:var(--success); }
+.review-box.rejected { background:var(--danger-light); border-color:var(--danger); }
+
+.progress-bar { height:6px; background:var(--gray-200); border-radius:3px; margin-top:8px; overflow:hidden; }
+.progress-fill { height:100%; background:var(--primary); border-radius:3px; transition:width .3s; }
+
+.score-input { width:60px; text-align:center; }
+.score-table th,.score-table td { text-align:center; }
+.score-table th:first-child,.score-table td:first-child { text-align:left; }
+.score-summary { background:var(--primary-light); border-radius:8px; padding:16px; text-align:center; margin-top:16px; }
+.score-final { font-size:36px; font-weight:700; color:var(--primary); }
+.score-final-label { font-size:12px; color:var(--gray-500); }
+
+.tabs { display:flex; gap:4px; border-bottom:1px solid var(--gray-200); margin-bottom:20px; }
+.tab { padding:10px 20px; border:none; background:none; cursor:pointer; font-size:14px; color:var(--gray-500); border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .15s; }
+.tab:hover { color:var(--gray-700); }
+.tab.active { color:var(--primary); border-bottom-color:var(--primary); font-weight:600; }
+
+.empty { text-align:center; padding:60px 20px; color:var(--gray-400); }
+.empty-icon { font-size:48px; margin-bottom:12px; }
+
+.filter-bar { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
+.filter-bar .form-select,.filter-bar .form-input { width:auto; min-width:140px; }
+
+.attachment-item { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--gray-50); border-radius:6px; margin-bottom:6px; }
+.attachment-name { font-size:13px; flex:1; }
+.attachment-size { font-size:11px; color:var(--gray-400); }
+.image-preview { display:flex; gap:8px; flex-wrap:wrap; }
+.image-preview img { width:80px; height:80px; object-fit:cover; border-radius:6px; border:1px solid var(--gray-200); }
+.weight-config { display:flex; gap:24px; align-items:center; flex-wrap:wrap; }
+.weight-item { display:flex; align-items:center; gap:8px; }
+.weight-item label { font-size:13px; white-space:nowrap; font-weight:500; }
+.weight-item input { width:60px; }
+.action-bar { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; padding-top:16px; border-top:1px solid var(--gray-200); }
+.type-section { margin-bottom:32px; }
+.type-section-title { font-size:18px; font-weight:600; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+.type-section-title .count { font-size:13px; color:var(--gray-400); font-weight:400; }
+.upload-area { border:2px dashed var(--gray-300); border-radius:8px; padding:24px; text-align:center; cursor:pointer; color:var(--gray-400); transition:all .15s; }
+.upload-area:hover { border-color:var(--primary); color:var(--primary); background:var(--primary-light); }
+.file-list { margin-top:12px; }
+.file-item { display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--gray-50); border-radius:6px; margin-bottom:4px; font-size:12px; }
+.file-item .remove-file { margin-left:auto; cursor:pointer; color:var(--danger); font-weight:bold; border:none; background:none; font-size:14px; }
+
+/* Designer status panel */
+.designer-status-panel { background:#fff; border-radius:var(--radius); box-shadow:var(--shadow); padding:20px; margin-bottom:24px; }
+.designer-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:12px; }
+.designer-card { padding:14px; border-radius:8px; border:1px solid var(--gray-200); display:flex; align-items:center; gap:12px; transition:all .15s; }
+.designer-card:hover { box-shadow:0 2px 8px rgba(0,0,0,.08); }
+.designer-card.idle { border-left:3px solid var(--success); background:var(--success-light); }
+.designer-card.busy { border-left:3px solid var(--danger); background:var(--danger-light); }
+.designer-avatar { width:40px; height:40px; border-radius:50%; background:var(--primary-light); color:var(--primary); display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:600; flex-shrink:0; }
+.designer-info { flex:1; min-width:0; }
+.designer-name { font-size:14px; font-weight:600; }
+.designer-title { font-size:11px; color:var(--gray-500); }
+.designer-tasks { font-size:11px; color:var(--gray-500); margin-top:4px; }
+.designer-tasks a { color:var(--primary); text-decoration:none; cursor:pointer; }
+.designer-tasks a:hover { text-decoration:underline; }
+
+@media (max-width:768px) {
+  .sidebar { display:none; }
+  .form-row { grid-template-columns:1fr; }
+  .detail-grid { grid-template-columns:1fr; }
+  .main-content { padding:16px; }
+  .stats-grid { grid-template-columns:repeat(2,1fr); }
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-left">
+    <div class="logo">🎨 设计项目管理<span>Design Project Management</span></div>
+  </div>
+  <div class="header-right">
+    <span class="current-role">当前角色：</span>
+    <div class="role-switcher" id="roleSwitcher">
+      <button class="role-btn" data-role="sales" onclick="switchRole('sales')">📞 销售</button>
+      <button class="role-btn" data-role="planner" onclick="switchRole('planner')">📋 产品企划</button>
+      <button class="role-btn" data-role="designer" onclick="switchRole('designer')">🎨 设计师</button>
+      <button class="role-btn" data-role="superior" onclick="switchRole('superior')">👔 上级</button>
+      <button class="role-btn" data-role="admin" onclick="switchRole('admin')">🔧 管理员</button>
+    </div>
+    <select class="user-select" id="userSelect" onchange="switchUser(this.value)"></select>
+  </div>
+</div>
+
+<div class="app-layout">
+  <aside class="sidebar">
+    <button class="nav-item active" onclick="navigate('dashboard')">
+      <span class="nav-icon">📊</span>工作台
+    </button>
+    <button class="nav-item" onclick="navigate('orders')">
+      <span class="nav-icon">📋</span>全部项目
+      <span class="nav-badge" id="badgeTotal">0</span>
+    </button>
+    <button class="nav-item" onclick="navigate('channel')">
+      <span class="nav-icon">📦</span>渠道定制单
+      <span class="nav-badge" id="badgeChannel">0</span>
+    </button>
+    <button class="nav-item" onclick="navigate('regular')">
+      <span class="nav-icon">🏭</span>公司常规品
+      <span class="nav-badge" id="badgeRegular">0</span>
+    </button>
+    <button class="nav-item" onclick="navigate('tasks')">
+      <span class="nav-icon">📌</span>我的子任务
+      <span class="nav-badge" id="badgeMyTasks">0</span>
+    </button>
+    <button class="nav-item" onclick="navigate('scoring')">
+      <span class="nav-icon">⭐</span>待评分
+      <span class="nav-badge" id="badgeScoring">0</span>
+    </button>
+  </aside>
+  <main class="main-content" id="mainContent"></main>
+</div>
+
+<script>
+// ==================== DATA STORE ====================
+const STORAGE_KEY = 'design_pm_v5';
+
+function loadData() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw) return JSON.parse(raw);
+  return { orders: [], nextId: 1, nextTaskId: 1 };
+}
+function saveData(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+function genTaskId() { return 'T' + (APP.nextTaskId++); }
+
+let APP = loadData();
+let currentRole = 'planner';
+let currentView = 'dashboard';
+let currentFilter = 'all';
+let currentUserId = null; // 具体当前用户ID
+
+// ==================== USERS ====================
+const USERS = {
+  sales: [
+    { id:'sales_sun',     name:'孙瑞婷', role:'sales', title:'销售' },
+    { id:'sales_cai',     name:'蔡小露', role:'sales', title:'销售' },
+    { id:'sales_cui',     name:'崔博文', role:'sales', title:'销售' },
+    { id:'sales_zhongt',  name:'钟婷婷', role:'sales', title:'销售' },
+    { id:'sales_xiong',   name:'熊敏',   role:'sales', title:'销售' },
+    { id:'sales_zhongw',  name:'钟武鹏', role:'sales', title:'销售' },
+  ],
+  planner: [
+    { id:'planner_zheng', name:'郑诗绚', role:'planner', title:'产品企划' },
+    { id:'planner_wu',    name:'吴思欣', role:'planner', title:'产品企划' },
+  ],
+  designer: [
+    { id:'designer_cheny',  name:'陈月珍', role:'designer', title:'设计师' },
+    { id:'designer_huang',  name:'黄海岚', role:'designer', title:'设计师' },
+    { id:'designer_xie',    name:'谢梓文', role:'designer', title:'设计师' },
+    { id:'designer_yang',   name:'杨炜杰', role:'designer', title:'设计师' },
+    { id:'designer_caim',   name:'蔡萌',   role:'designer', title:'设计师' },
+    { id:'designer_zhengc', name:'郑彩妮', role:'designer', title:'设计师' },
+  ],
+  superior: [
+    { id:'superior_chen', name:'joy', role:'superior', title:'设计总监' },
+  ],
+  admin: [
+    { id:'admin_liu', name:'刘海娇', role:'admin', title:'管理员' },
+  ]
+};
+
+function getCurrentUserName() {
+  if (currentUserId) {
+    const u = USERS[currentRole]?.find(x => x.id === currentUserId);
+    if (u) return u.name;
+  }
+  const u = USERS[currentRole]; return u && u[0] ? u[0].name : '未知';
+}
+function getCurrentUserId() {
+  if (currentUserId) return currentUserId;
+  const u = USERS[currentRole]; return u && u[0] ? u[0].id : '';
+}
+function getUserName(uid) {
+  for (const arr of Object.values(USERS)) {
+    const u = arr.find(x => x.id === uid);
+    if (u) return u.name;
+  }
+  return uid || '未知';
+}
+function roleLabel(r) {
+  return {sales:'需求方/销售',planner:'产品企划',designer:'设计师',superior:'上级',admin:'管理员'}[r]||r;
+}
+
+// ==================== PROJECT STATUS ====================
+function computeProjectStatus(order) {
+  if (order.status === 'draft' || order.status === 'pending_planner' || order.status === 'planner_accepted') {
+    return order.status;
+  }
+  if (order.tasks.length === 0) return order.status;
+  const allApproved = order.tasks.every(t => t.status === 'approved');
+  if (allApproved) return 'completed';
+  return 'in_progress';
+}
+
+const PROJECT_STATUS_MAP = {
+  draft:             { label:'草稿',           cls:'badge-pending' },
+  pending_planner:   { label:'待企划接单',     cls:'badge-pending' },
+  planner_accepted:  { label:'企划已接单',     cls:'badge-progress' },
+  in_progress:       { label:'进行中',         cls:'badge-progress' },
+  completed:         { label:'已完成',         cls:'badge-completed' },
+};
+
+const TASK_STATUS_MAP = {
+  pending:   { label:'待接单',   cls:'badge-pending', icon:'⏳' },
+  accepted:  { label:'设计中',   cls:'badge-progress', icon:'🎨' },
+  delivered: { label:'待验收',   cls:'badge-pending', icon:'📤' },
+  approved:  { label:'已通过',   cls:'badge-completed', icon:'✅' },
+  rejected:  { label:'已驳回',   cls:'badge-rejected', icon:'↩️' },
+};
+
+function getProjectStatusInfo(order) {
+  const s = computeProjectStatus(order);
+  return PROJECT_STATUS_MAP[s] || { label:s, cls:'' };
+}
+function getTaskStatusInfo(task) {
+  return TASK_STATUS_MAP[task.status] || { label:task.status, cls:'', icon:'❓' };
+}
+
+// ==================== ROLE-BASED ACCESS ====================
+function isMyProject(order) {
+  if (currentRole === 'superior' || currentRole === 'admin') return true; // 上级和管理员看全部
+  const myName = getCurrentUserName();
+  const myId = getCurrentUserId();
+  if (currentRole === 'sales') {
+    return order.salesId === myId || (order.salesPerson === myName);
+  }
+  if (currentRole === 'planner') {
+    return order.plannerId === myId || (order.plannerName === myName);
+  }
+  if (currentRole === 'designer') {
+    return order.tasks.some(t => t.designerId === myId);
+  }
+  return true;
+}
+
+function isMyTask(task) {
+  if (currentRole !== 'designer') return false;
+  const myId = getCurrentUserId();
+  return task.designerId === myId;
+}
+
+function getMyVisibleOrders() {
+  return APP.orders.filter(o => isMyProject(o));
+}
+
+// ==================== DESIGNER STATUS ====================
+function getDesignerStatus() {
+  const status = {};
+  USERS.designer.forEach(d => {
+    status[d.id] = { ...d, activeTasks: [], completedTasks: [], busy: false };
+  });
+  APP.orders.forEach(o => {
+    o.tasks.forEach(t => {
+      if (!t.designerId) return;
+      const did = t.designerId;
+      if (!status[did]) return;
+      if (t.status === 'pending' || t.status === 'accepted' || t.status === 'rejected' || t.status === 'delivered') {
+        status[did].activeTasks.push({ id: t.id, name: t.name, status: t.status, projectId: o.id });
+      } else if (t.status === 'approved') {
+        status[did].completedTasks.push({ id: t.id, name: t.name, projectId: o.id });
+      }
+    });
+  });
+  Object.values(status).forEach(d => { d.busy = d.activeTasks.length > 0; });
+  return status;
+}
+
+// ==================== NAVIGATION ====================
+function navigate(view) {
+  currentView = view;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  const idx = {dashboard:0,orders:1,channel:2,regular:3,tasks:4,scoring:5}[view]??0;
+  document.querySelectorAll('.nav-item')[idx]?.classList.add('active');
+  render();
+}
+
+function switchRole(role) {
+  currentRole = role;
+  currentUserId = USERS[role]?.[0]?.id || null;
+  document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-role="${role}"]`)?.classList.add('active');
+  refreshUserSelect();
+  render();
+}
+
+function refreshUserSelect() {
+  const sel = document.getElementById('userSelect');
+  if (!sel) return;
+  sel.innerHTML = USERS[currentRole].map(u =>
+    `<option value="${u.id}" ${u.id===currentUserId?'selected':''}>${u.name}（${u.title}）</option>`
+  ).join('');
+}
+
+function switchUser(uid) {
+  currentUserId = uid;
+  render();
+}
+
+// ==================== BADGES ====================
+function updateBadges() {
+  const visible = getMyVisibleOrders();
+  document.getElementById('badgeTotal').textContent = visible.length;
+  document.getElementById('badgeChannel').textContent = visible.filter(x=>x.type==='channel_custom').length;
+  document.getElementById('badgeRegular').textContent = visible.filter(x=>x.type==='regular').length;
+  document.getElementById('badgeScoring').textContent = APP.orders.reduce((sum,proj)=>
+    sum + proj.tasks.filter(t=>t.status==='approved'&&t.scoring&&!t.scoring.allDone).length, 0);
+
+  let myTasks = 0;
+  if (currentRole === 'designer') {
+    const myId = getCurrentUserId();
+    APP.orders.forEach(proj => {
+      proj.tasks.forEach(t => {
+        if (t.designerId === myId && (t.status === 'pending' || t.status === 'accepted' || t.status === 'rejected')) myTasks++;
+      });
+    });
+  }
+  document.getElementById('badgeMyTasks').textContent = myTasks;
+}
+
+// ==================== DASHBOARD ====================
+function renderDashboard() {
+  const visible = getMyVisibleOrders();
+  const channel = visible.filter(o=>o.type==='channel_custom');
+  const regular = visible.filter(o=>o.type==='regular');
+  const allTasks = visible.reduce((sum,o) => sum + o.tasks.length, 0);
+  const approvedTasks = visible.reduce((sum,o) => sum + o.tasks.filter(t=>t.status==='approved').length, 0);
+  const pendingTasks = visible.reduce((sum,o) => sum + o.tasks.filter(t=>t.status==='pending'||t.status==='delivered').length, 0);
+
+  let designerPanel = '';
+  if (currentRole === 'planner') {
+    designerPanel = renderDesignerStatusPanel();
+  }
+
+  document.getElementById('mainContent').innerHTML = `
+    <h2 style="font-size:22px;margin-bottom:20px;">📊 工作台 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">— ${getCurrentUserName()}（${roleLabel(currentRole)}）</span></h2>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon blue">📁</div><div><div class="stat-value">${visible.length}</div><div class="stat-label">我的项目</div></div></div>
+      <div class="stat-card"><div class="stat-icon blue">📌</div><div><div class="stat-value">${allTasks}</div><div class="stat-label">子任务总数</div></div></div>
+      <div class="stat-card"><div class="stat-icon yellow">⏳</div><div><div class="stat-value">${pendingTasks}</div><div class="stat-label">待处理子任务</div></div></div>
+      <div class="stat-card"><div class="stat-icon green">✅</div><div><div class="stat-value">${approvedTasks}</div><div class="stat-label">已完成子任务</div></div></div>
+    </div>
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
+      <div class="stat-card"><div class="stat-icon blue">📦</div><div><div class="stat-value">${channel.length}</div><div class="stat-label">渠道定制单</div></div></div>
+      <div class="stat-card"><div class="stat-icon green">🏭</div><div><div class="stat-value">${regular.length}</div><div class="stat-label">公司常规品</div></div></div>
+      <div class="stat-card"><div class="stat-icon yellow">🔄</div><div><div class="stat-value">${visible.filter(o=>computeProjectStatus(o)==='in_progress').length}</div><div class="stat-label">进行中项目</div></div></div>
+      <div class="stat-card" style="cursor:pointer" onclick="navigate('scoring')"><div class="stat-icon yellow">⭐</div><div><div class="stat-value">${APP.orders.reduce((s,p)=>s+p.tasks.filter(t=>t.status==='approved'&&t.scoring&&!t.scoring.allDone).length,0)}</div><div class="stat-label">待评分子任务</div></div></div>
+    </div>
+    ${designerPanel}
+    <div style="display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap;">
+      ${currentRole==='sales'?`<button class="btn btn-primary btn-lg" onclick="openCreateProject('channel_custom')">➕ 新建渠道定制项目</button>`:''}
+      ${currentRole==='planner'?`<button class="btn btn-primary btn-lg" onclick="openCreateProject('regular')">➕ 新建常规品设计项目</button>`:''}
+    </div>
+    ${visible.length===0?`<div class="empty"><div class="empty-icon">📭</div><p>暂无您负责的项目</p></div>`:''}
+    ${renderProjectSummary(channel,'📦 渠道定制单')}
+    ${renderProjectSummary(regular,'🏭 公司常规品')}
+  `;
+}
+
+function renderDesignerStatusPanel() {
+  const status = getDesignerStatus();
+  const designers = Object.values(status);
+  const busy = designers.filter(d=>d.busy);
+  const idle = designers.filter(d=>!d.busy);
+
+  return `<div class="designer-status-panel">
+    <div class="card-header">
+      <div class="card-title">👥 设计师状态看板</div>
+      <div style="display:flex;gap:12px;font-size:13px;">
+        <span><span class="badge badge-busy" style="margin-right:4px;">🟡</span>忙碌 ${busy.length}人</span>
+        <span><span class="badge badge-idle" style="margin-right:4px;">🟢</span>空闲 ${idle.length}人</span>
+      </div>
+    </div>
+    <div class="designer-grid">
+      ${designers.map(d=>`
+      <div class="designer-card ${d.busy?'busy':'idle'}">
+        <div class="designer-avatar">${d.name.charAt(0)}</div>
+        <div class="designer-info">
+          <div class="designer-name">${d.name}</div>
+          <div class="designer-title">${d.title}</div>
+          <div class="designer-tasks">
+            ${d.busy
+              ? `进行中：${d.activeTasks.length}个子任务`
+              : `🟢 空闲`
+            }
+          </div>
+          ${d.activeTasks.length>0?`<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;">
+            ${d.activeTasks.map(t=>`<span style="font-size:10px;background:#fff;padding:1px 6px;border-radius:4px;cursor:pointer;" onclick="openProjectDetail('${t.projectId}')" title="${t.name}">${t.name.substring(0,8)}...</span>`).join('')}
+          </div>`:''}
+        </div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function renderProjectSummary(projects, title) {
+  if (projects.length===0) return '';
+  const display = projects.slice(0,5);
+  return `
+    <div class="type-section">
+      <div class="type-section-title">${title} <span class="count">共 ${projects.length} 个</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>项目编号</th><th>需求方</th><th>产品企划</th><th>子任务数</th><th>进度</th><th>要求时间</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody>${display.map(o=>{
+          const st = getProjectStatusInfo(o);
+          const done = o.tasks.filter(t=>t.status==='approved').length;
+          const pct = o.tasks.length ? Math.round(done/o.tasks.length*100) : 0;
+          return `<tr onclick="openProjectDetail('${o.id}')" style="cursor:pointer;">
+            <td><strong>#${o.id}</strong></td>
+            <td>${o.salesPerson||'-'}</td>
+            <td>${o.plannerName}</td>
+            <td>${o.tasks.length}（完成${done}）</td>
+            <td><div class="progress-bar" style="width:80px;"><div class="progress-fill" style="width:${pct}%;"></div></div></td>
+            <td>${formatDate(o.deadline)}</td>
+            <td><span class="badge ${st.cls}">${st.label}</span></td>
+            <td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openProjectDetail('${o.id}')">查看</button></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+      ${projects.length>5?`<div style="text-align:center;margin-top:8px;"><button class="btn btn-outline btn-sm" onclick="navigate('${title.includes('渠道')?'channel':'regular'}')">查看全部 →</button></div>`:''}
+    </div>`;
+}
+
+// ==================== PROJECT LIST ====================
+function renderOrderList(type) {
+  let orders = getMyVisibleOrders();
+  let title = '全部项目';
+  if (type==='channel_custom') { orders=orders.filter(o=>o.type==='channel_custom'); title='📦 渠道定制单'; }
+  else if (type==='regular') { orders=orders.filter(o=>o.type==='regular'); title='🏭 公司常规品'; }
+  else title='📋 全部项目';
+
+  document.getElementById('mainContent').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h2 style="font-size:22px;">${title} <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${orders.length})</span></h2>
+      <div style="display:flex;gap:8px;">
+        ${currentRole==='sales'?`<button class="btn btn-primary" onclick="openCreateProject('channel_custom')">➕ 新建渠道定制项目</button>`:''}
+        ${currentRole==='planner'?`<button class="btn btn-primary" onclick="openCreateProject('regular')">➕ 新建常规品设计项目</button>`:''}
+      </div>
+    </div>
+    <div class="filter-bar">
+      <select class="form-select" onchange="currentFilter=this.value;refreshProjectList()" style="min-width:120px;">
+        <option value="all">全部状态</option>
+        <option value="in_progress">进行中</option>
+        <option value="completed">已完成</option>
+        <option value="pending_planner">待企划接单</option>
+      </select>
+      <input class="form-input" placeholder="🔍 搜索编号/描述..." oninput="searchProjects(this.value)" style="min-width:200px;">
+    </div>
+    <div class="card" id="projectListContainer">${renderProjectTable(getFilteredProjects())}</div>
+  `;
+}
+
+function getFilteredProjects() {
+  let orders = getMyVisibleOrders();
+  if (currentView==='channel') orders=orders.filter(o=>o.type==='channel_custom');
+  else if (currentView==='regular') orders=orders.filter(o=>o.type==='regular');
+  if (currentFilter==='in_progress') orders=orders.filter(o=>computeProjectStatus(o)==='in_progress'||o.status==='planner_accepted');
+  else if (currentFilter==='completed') orders=orders.filter(o=>computeProjectStatus(o)==='completed');
+  else if (currentFilter==='pending_planner') orders=orders.filter(o=>o.status==='pending_planner');
+  return orders;
+}
+
+function renderProjectTable(orders) {
+  if (!orders.length) return `<div class="empty"><div class="empty-icon">📭</div><p>暂无项目</p></div>`;
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>项目编号</th><th>类型</th><th>需求方</th><th>产品企划</th><th>子任务</th><th>要求时间</th><th>状态</th><th>操作</th></tr></thead>
+    <tbody>${orders.map(o=>{
+      const st=getProjectStatusInfo(o);
+      const done=o.tasks.filter(t=>t.status==='approved').length;
+      return `<tr onclick="openProjectDetail('${o.id}')" style="cursor:pointer;">
+        <td><strong>#${o.id}</strong></td>
+        <td>${o.type==='channel_custom'?'📦 渠道定制':'🏭 常规品'}</td>
+        <td>${o.salesPerson||'-'}</td>
+        <td>${o.plannerName}</td>
+        <td>${done}/${o.tasks.length}</td>
+        <td>${formatDate(o.deadline)}</td>
+        <td><span class="badge ${st.cls}">${st.label}</span></td>
+        <td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openProjectDetail('${o.id}')">查看</button></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div>`;
+}
+
+function refreshProjectList() {
+  const c = document.getElementById('projectListContainer');
+  if (c) c.innerHTML = renderProjectTable(getFilteredProjects());
+}
+function searchProjects(q) {
+  const c = document.getElementById('projectListContainer');
+  if (!c) return;
+  let orders = getFilteredProjects();
+  if (q) { const lq=q.toLowerCase(); orders=orders.filter(o=>o.id.includes(lq)||(o.productRequirements||'').toLowerCase().includes(lq)||(o.description||'').toLowerCase().includes(lq)); }
+  c.innerHTML = renderProjectTable(orders);
+}
+
+// ==================== MY TASKS VIEW ====================
+function renderMyTasks() {
+  const myId = getCurrentUserId();
+  let myTasks = [];
+  APP.orders.forEach(proj => {
+    proj.tasks.forEach(t => {
+      const isMine = currentRole==='designer' && t.designerId === myId;
+      if (isMine) {
+        myTasks.push({ ...t, projectId: proj.id, projectType: proj.type, projectName: proj.productRequirements?.substring(0,30)||'' });
+      }
+      // Also include approved tasks that need scoring from current user's role
+      if (t.status === 'approved' && t.scoring && !t.scoring.allDone) {
+        if (currentRole==='planner' && t.scoring.aesthetics.planner===null) {
+          const exists = myTasks.find(mt => mt.id===t.id);
+          if (!exists) myTasks.push({ ...t, projectId: proj.id, projectType: proj.type, projectName: proj.productRequirements?.substring(0,30)||'' });
+        }
+        if (currentRole==='superior' && t.scoring.aesthetics.superior===null) {
+          const exists = myTasks.find(mt => mt.id===t.id);
+          if (!exists) myTasks.push({ ...t, projectId: proj.id, projectType: proj.type, projectName: proj.productRequirements?.substring(0,30)||'' });
+        }
+      }
+    });
+  });
+
+  document.getElementById('mainContent').innerHTML = `
+    <h2 style="font-size:22px;margin-bottom:20px;">📌 我的子任务 <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${myTasks.length})</span></h2>
+    ${myTasks.length===0 ? `<div class="empty"><div class="empty-icon">🎉</div><p>暂无分配给您的子任务</p></div>` : `
+    <div class="card">
+      ${myTasks.map(t => {
+        const tsi = getTaskStatusInfo(t);
+        const needScore = t.scoring && !t.scoring.allDone && ((currentRole==='sales'&&t.scoring.aesthetics.sales===null)||(currentRole==='planner'&&t.scoring.aesthetics.planner===null)||(currentRole==='designer'&&t.scoring.aesthetics.designer===null)||(currentRole==='superior'&&t.scoring.aesthetics.superior===null));
+        return `<div class="subtask-card">
+          <div class="subtask-header">
+            <div class="subtask-name">${tsi.icon} ${t.name}</div>
+            <span class="badge ${tsi.cls}">${tsi.label}</span>
+          </div>
+          <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">📁 项目 #${t.projectId}：${t.projectName}</div>
+          <div class="subtask-meta">
+            <div class="subtask-meta-item">👤 设计师：<strong>${t.designerName||'待分配'}</strong></div>
+            <div class="subtask-meta-item">📅 计划完成：<strong>${formatDate(t.plannedDate)}</strong></div>
+            ${t.actualDate?`<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(t.actualDate)}</strong></div>`:''}
+          </div>
+          ${t.details?`<div style="font-size:13px;color:var(--gray-600);margin-top:8px;">📝 ${t.details}</div>`:''}
+          ${t.reviewComments?`<div class="review-box ${t.status==='rejected'?'rejected':'approved'}">${t.status==='rejected'?'驳回意见':'验收意见'}：${t.reviewComments}</div>`:''}
+          ${t.scoring?renderTaskScoringMini({type:t.projectType},t):''}
+          <div class="subtask-actions">
+            ${t.status==='pending'?`<button class="btn btn-primary btn-sm" onclick="taskAccept('${t.projectId}','${t.id}')">✅ 接单</button>`:''}
+            ${t.status==='accepted'?`<button class="btn btn-primary btn-sm" onclick="taskDeliver('${t.projectId}','${t.id}')">📤 交付成果</button>`:''}
+            ${t.status==='rejected'?`<button class="btn btn-warning btn-sm" onclick="taskRedeliver('${t.projectId}','${t.id}')">📤 重新交付</button>`:''}
+            ${needScore?`<button class="btn btn-warning btn-sm" onclick="openScoring('${t.projectId}','${t.id}')">⭐ 评分</button>`:''}
+            <button class="btn btn-outline btn-sm" onclick="openProjectDetail('${t.projectId}')">查看项目</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`}
+  `;
+}
+
+// ==================== CREATE PROJECT ====================
+let refImages = [];
+function openCreateProject(type) {
+  const plannerOpts = USERS.planner.map(u=>`<option value="${u.id}">${u.name} (${u.title})</option>`).join('');
+  const salesOpts = USERS.sales.map(u=>`<option value="${u.id}">${u.name} (${u.title})</option>`).join('');
+  const title = type==='channel_custom'?'新建渠道定制项目':'新建常规品设计项目';
+  refImages = [];
+
+  const modal = document.createElement('div');
+  modal.className='modal-overlay'; modal.id='createProjectModal';
+  modal.innerHTML = `
+    <div class="modal modal-lg">
+      <div class="modal-header"><div class="modal-title">${title}</div><button class="modal-close" onclick="closeM('createProjectModal')">✕</button></div>
+      <div class="modal-body">
+        <form id="createProjectForm">
+          ${type==='channel_custom'?`
+          <div class="form-row">
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 需求方（销售）</label><select class="form-select" name="salesId" required><option value="">请选择</option>${salesOpts}</select></div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 要求完成时间</label><input type="date" class="form-input" name="deadline" required></div>
+          </div>`:`
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 要求完成时间</label><input type="date" class="form-input" name="deadline" required></div>`}
+          <div class="form-group"><label class="form-label">指定产品企划</label><select class="form-select" name="plannerId"><option value="">不指定</option>${plannerOpts}</select></div>
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 产品要求</label><textarea class="form-textarea" name="productRequirements" required placeholder="请描述产品设计要求..."></textarea></div>
+          <div class="form-group"><label class="form-label">细节描述</label><textarea class="form-textarea" name="description" placeholder="补充细节说明..."></textarea></div>
+          <div class="form-group"><label class="form-label">参考图</label>
+            <div class="upload-area" onclick="document.getElementById('refImgInput').click()"><div>📁 点击上传参考图</div><input type="file" id="refImgInput" accept="image/*" multiple style="display:none" onchange="hRefImg(this)"></div>
+            <div class="file-list" id="refImgList"></div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('createProjectModal')">取消</button><button class="btn btn-primary" onclick="submitCreateProject('${type}')">创建项目</button></div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function hRefImg(input) {
+  Array.from(input.files).forEach(f=>{const r=new FileReader();r.onload=function(e){refImages.push({name:f.name,data:e.target.result,size:f.size});renderRefImages();};r.readAsDataURL(f);});
+  input.value='';
+}
+function renderRefImages() {
+  const c=document.getElementById('refImgList'); if(!c)return;
+  c.innerHTML=refImages.map((img,i)=>`<div class="file-item"><span>🖼️ ${img.name}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(img.size)}</span><button class="remove-file" onclick="refImages.splice(${i},1);renderRefImages();">✕</button></div>`).join('');
+}
+
+function submitCreateProject(type) {
+  const fd = new FormData(document.getElementById('createProjectForm'));
+  const d = Object.fromEntries(fd.entries());
+  if (type==='channel_custom' && !d.salesId) { alert('请选择需求方'); return; }
+  if (!d.productRequirements) { alert('请填写产品要求'); return; }
+  if (!d.deadline) { alert('请选择要求完成时间'); return; }
+
+  const order = {
+    id: String(APP.nextId++),
+    type,
+    status: type==='channel_custom'?'pending_planner':'in_progress',
+    salesId: d.salesId||'', salesPerson: d.salesId?getUserName(d.salesId):'',
+    plannerId: d.plannerId||USERS.planner[0].id, plannerName: getUserName(d.plannerId||USERS.planner[0].id),
+    deadline: d.deadline,
+    productRequirements: d.productRequirements,
+    description: d.description||'',
+    referenceImages: [...refImages],
+    tasks: [],
+    logs: [{time:new Date().toISOString(),action:type==='channel_custom'?'销售提交渠道定制项目':'产品企划新建常规品设计项目',user:getCurrentUserName(),role:currentRole}],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  APP.orders.unshift(order);
+  refImages=[];
+  saveData(APP); closeM('createProjectModal'); render();
+}
+
+// ==================== PROJECT DETAIL ====================
+function openProjectDetail(pid) {
+  const order = APP.orders.find(o=>o.id===pid); if(!order)return;
+  const isChannel = order.type==='channel_custom';
+  const pst = getProjectStatusInfo(order);
+
+  const modal = document.createElement('div');
+  modal.className='modal-overlay'; modal.id='projectDetailModal';
+  modal.innerHTML = `
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <div class="modal-title">${isChannel?'📦 渠道定制项目':'🏭 常规品设计项目'} #${order.id}</div>
+        <button class="modal-close" onclick="closeM('projectDetailModal')">✕</button>
+      </div>
+      <div class="modal-body">${renderProjectDetailContent(order)}</div>
+      <div class="modal-footer" id="detailActions">${renderProjectActions(order)}</div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function renderProjectDetailContent(order) {
+  const isChannel = order.type==='channel_custom';
+  const pst = getProjectStatusInfo(order);
+  const done = order.tasks.filter(t=>t.status==='approved').length;
+  const pct = order.tasks.length ? Math.round(done/order.tasks.length*100) : 0;
+
+  return `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+      <span class="badge ${pst.cls}" style="font-size:13px;padding:5px 14px;">${pst.label}</span>
+      <span style="font-size:12px;color:var(--gray-400);">创建：${fmtDT(order.createdAt)}</span>
+      <span style="font-size:12px;color:var(--gray-400);">更新：${fmtDT(order.updatedAt)}</span>
+      ${order.tasks.length>0?`<div class="progress-bar" style="flex:1;max-width:200px;"><div class="progress-fill" style="width:${pct}%;"></div></div><span style="font-size:12px;color:var(--gray-500);">${pct}%</span>`:''}
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">📋 项目信息</div>
+      <div class="detail-grid">
+        <div class="detail-item"><div class="detail-label">项目类型</div><div class="detail-value">${isChannel?'渠道定制单':'公司常规品'}</div></div>
+        ${isChannel?`<div class="detail-item"><div class="detail-label">需求方（销售）</div><div class="detail-value">${order.salesPerson||'-'}</div></div>`:''}
+        <div class="detail-item"><div class="detail-label">产品企划</div><div class="detail-value">${order.plannerName}</div></div>
+        <div class="detail-item"><div class="detail-label">要求完成时间</div><div class="detail-value">${formatDate(order.deadline)}</div></div>
+      </div>
+      <div style="margin-top:8px;"><div class="detail-label">产品要求</div><div class="detail-value">${order.productRequirements||'-'}</div></div>
+      ${order.description?`<div style="margin-top:4px;"><div class="detail-label">细节描述</div><div class="detail-value">${order.description}</div></div>`:''}
+      ${order.referenceImages?.length?`<div style="margin-top:8px;"><div class="detail-label">参考图</div><div class="image-preview">${order.referenceImages.map(img=>`<img src="${img.data}" alt="${img.name}" title="${img.name}">`).join('')}</div></div>`:''}
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">
+        📌 子任务列表
+        <span style="font-size:12px;color:var(--gray-400);font-weight:400;">${done}/${order.tasks.length} 完成</span>
+        ${(currentRole==='planner'&&(order.status==='planner_accepted'||order.status==='in_progress'))?`<button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="addSubTask('${order.id}')">➕ 添加子任务</button>`:''}
+      </div>
+      ${order.tasks.length===0?`<div class="empty" style="padding:30px;"><div class="empty-icon">📭</div><p>暂无子任务，产品企划可在此添加</p></div>`:''}
+      ${order.tasks.map((t,i)=>renderSubTaskCard(order,t,i)).join('')}
+    </div>
+
+    ${renderProjectScoringSummary(order)}
+
+    <div class="detail-section">
+      <div class="detail-section-title">📜 操作日志</div>
+      <div class="timeline">${order.logs.map(l=>`
+        <div class="timeline-item"><div class="timeline-dot done"></div><div class="timeline-content"><div class="timeline-title">${l.action}</div><div class="timeline-time">${l.user} (${roleLabel(l.role)}) · ${fmtDT(l.time)}</div></div></div>
+      `).join('')}</div>
+    </div>`;
+}
+
+function renderSubTaskCard(order, task, idx) {
+  const tsi = getTaskStatusInfo(task);
+  const isPlanner = currentRole==='planner';
+  const myTask = isMyTask(task);
+  const designerName = task.designerName||'';
+
+  return `<div class="subtask-card">
+    <div class="subtask-header">
+      <div class="subtask-name"><span class="subtask-number">${idx+1}</span> ${task.name}</div>
+      <span class="badge ${tsi.cls}">${tsi.label}</span>
+    </div>
+    <div class="subtask-meta">
+      <div class="subtask-meta-item">👤 设计师：<strong>${designerName||'待分配'}</strong></div>
+      <div class="subtask-meta-item">📅 计划完成：<strong>${formatDate(task.plannedDate)}</strong></div>
+      ${task.actualDate?`<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(task.actualDate)}</strong></div>`:''}
+    </div>
+    ${task.details?`<div style="font-size:13px;color:var(--gray-600);margin-top:6px;">📝 ${task.details}</div>`:''}
+
+    ${task.status==='delivered'||task.status==='approved'||task.status==='rejected'?`
+    <div class="subtask-deliver">
+      ${task.deliverables?`<div class="detail-item"><div class="detail-label">交付成果</div><div class="detail-value">${task.deliverables}</div></div>`:''}
+      ${task.attachments?.length?`<div style="margin-top:6px;"><div class="detail-label">附件</div>${task.attachments.map(a=>`<div class="attachment-item"><span>📎</span><span class="attachment-name">${a.name}</span><span class="attachment-size">${fmtSize(a.size)}</span></div>`).join('')}</div>`:''}
+    </div>`:''}
+
+    ${task.reviewComments?`<div class="review-box ${task.status==='rejected'?'rejected':'approved'}"><strong>${task.status==='rejected'?'驳回意见':'验收意见'}：</strong>${task.reviewComments}</div>`:''}
+
+    ${task.scoring?renderTaskScoringMini(order, task):''}
+
+    <div class="subtask-actions">
+      ${isPlanner && task.status==='delivered'?`
+        <button class="btn btn-success btn-sm" onclick="taskApprove('${order.id}','${task.id}')">✅ 验收通过</button>
+        <button class="btn btn-danger btn-sm" onclick="taskReject('${order.id}','${task.id}')">↩️ 驳回</button>
+      `:''}
+      ${myTask && task.status==='pending'?`<button class="btn btn-primary btn-sm" onclick="taskAccept('${order.id}','${task.id}')">✅ 接单</button>`:''}
+      ${myTask && task.status==='accepted'?`<button class="btn btn-primary btn-sm" onclick="taskDeliver('${order.id}','${task.id}')">📤 交付成果</button>`:''}
+      ${myTask && task.status==='rejected'?`<button class="btn btn-warning btn-sm" onclick="taskRedeliver('${order.id}','${task.id}')">📤 重新交付</button>`:''}
+      ${isPlanner && (task.status==='pending'||task.status==='accepted')?`<button class="btn btn-outline btn-sm" onclick="editTask('${order.id}','${task.id}')">✏️ 编辑</button>`:''}
+      ${needScoringBtn(order, task)?`<button class="btn btn-warning btn-sm" onclick="openScoring('${order.id}','${task.id}')">⭐ 评分</button>`:''}
+    </div>
+  </div>`;
+}
+
+function renderProjectActions(order) {
+  let actions = '';
+  const isChannel = order.type==='channel_custom';
+  if (currentRole==='planner' && order.status==='pending_planner' && isChannel) {
+    actions += `<button class="btn btn-primary" onclick="plannerAcceptProject('${order.id}')">✅ 接单</button>`;
+  }
+  if (!actions) actions = `<span style="color:var(--gray-400);font-size:13px;">当前角色暂无项目级操作（请查看子任务操作）</span>`;
+  actions += `<button class="btn btn-outline" onclick="closeM('projectDetailModal')">关闭</button>`;
+  return actions;
+}
+
+// ==================== PLANNER ACCEPTS PROJECT ====================
+function plannerAcceptProject(pid) {
+  const order = APP.orders.find(o=>o.id===pid); if(!order)return;
+  order.status = 'planner_accepted';
+  order.updatedAt = new Date().toISOString();
+  order.logs.push({time:new Date().toISOString(),action:'产品企划接单，请添加子任务',user:getCurrentUserName(),role:currentRole});
+  saveData(APP); refreshProjectDetail(pid); render();
+}
+
+// ==================== ADD / EDIT SUB-TASK ====================
+function addSubTask(pid) {
+  const order = APP.orders.find(o=>o.id===pid); if(!order)return;
+  const designerOpts = `<option value="">请选择设计师</option>` + USERS.designer.map(u=>`
+    <option value="${u.id}">${u.name} (${u.title})</option>`).join('');
+
+  const modal = document.createElement('div');
+  modal.className='modal-overlay'; modal.id='addSubTaskModal';
+  modal.innerHTML = `
+    <div class="modal modal-lg">
+      <div class="modal-header"><div class="modal-title">➕ 添加子任务</div><button class="modal-close" onclick="closeM('addSubTaskModal')">✕</button></div>
+      <div class="modal-body">
+        <form id="addSubTaskForm">
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 子任务名称</label><input type="text" class="form-input" name="name" required placeholder="如：首页Banner设计、详情页布局..."></div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 计划要求完成时间</label><input type="date" class="form-input" name="plannedDate" required></div>
+          </div>
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 指派设计师</label>
+            <select class="form-select" name="designerId" required>${designerOpts}</select>
+          </div>
+          <div class="form-group"><label class="form-label">细节要求说明</label><textarea class="form-textarea" name="details" placeholder="子任务的具体要求说明..."></textarea></div>
+        </form>
+        <div style="margin-top:8px;padding:10px;background:var(--warning-light);border-radius:8px;font-size:12px;color:#92400E;">
+          💡 提示：可多次添加子任务。所有子任务完成后，项目才算完成。
+        </div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('addSubTaskModal')">取消</button><button class="btn btn-primary" onclick="submitAddSubTask('${pid}')">确认添加</button></div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function submitAddSubTask(pid) {
+  const order = APP.orders.find(o=>o.id===pid); if(!order)return;
+  const fd = new FormData(document.getElementById('addSubTaskForm'));
+  const d = Object.fromEntries(fd.entries());
+  if (!d.name) { alert('请填写子任务名称'); return; }
+  if (!d.plannedDate) { alert('请选择计划完成时间'); return; }
+  if (!d.designerId) { alert('请选择设计师'); return; }
+  const designerId = d.designerId;
+  const designerName = getUserName(designerId);
+
+  const task = {
+    id: genTaskId(),
+    name: d.name,
+    status: 'pending',
+    plannedDate: d.plannedDate,
+    actualDate: '',
+    designerId,
+    designerName,
+    details: d.details||'',
+    deliverables: '',
+    attachments: [],
+    reviewStatus: '',
+    reviewComments: '',
+    logs: [{time:new Date().toISOString(),action:`创建子任务：${d.name}`,user:getCurrentUserName(),role:currentRole}],
+    createdAt: new Date().toISOString(),
+  };
+  order.tasks.push(task);
+
+  if (order.status==='planner_accepted') order.status='in_progress';
+  order.updatedAt = new Date().toISOString();
+  order.logs.push({time:new Date().toISOString(),action:`添加子任务：${d.name}（指派${designerName}）`,user:getCurrentUserName(),role:currentRole});
+  saveData(APP); closeM('addSubTaskModal'); refreshProjectDetail(pid); render();
+}
+
+function editTask(pid, tid) {
+  const order = APP.orders.find(o=>o.id===pid); if(!order)return;
+  const task = order.tasks.find(t=>t.id===tid); if(!task)return;
+  const currentDesignerId = task.designerId||'';
+  const designerOpts = `<option value="">请选择设计师</option>` + USERS.designer.map(u=>`
+    <option value="${u.id}" ${currentDesignerId===u.id?'selected':''}>${u.name} (${u.title})</option>`).join('');
+
+  const modal = document.createElement('div');
+  modal.className='modal-overlay'; modal.id='editTaskModal';
+  modal.innerHTML = `
+    <div class="modal modal-lg">
+      <div class="modal-header"><div class="modal-title">✏️ 编辑子任务</div><button class="modal-close" onclick="closeM('editTaskModal')">✕</button></div>
+      <div class="modal-body">
+        <form id="editTaskForm">
+          <div class="form-group"><label class="form-label">子任务名称</label><input type="text" class="form-input" name="name" value="${escHtml(task.name)}"></div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">计划完成时间</label><input type="date" class="form-input" name="plannedDate" value="${task.plannedDate}"></div>
+          </div>
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 指派设计师</label>
+            <select class="form-select" name="designerId">${designerOpts}</select>
+          </div>
+          <div class="form-group"><label class="form-label">细节要求说明</label><textarea class="form-textarea" name="details">${escHtml(task.details)}</textarea></div>
+        </form>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('editTaskModal')">取消</button><button class="btn btn-primary" onclick="submitEditTask('${pid}','${tid}')">保存修改</button></div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function submitEditTask(pid, tid) {
+  const order = APP.orders.find(o=>o.id===pid); if(!order)return;
+  const task = order.tasks.find(t=>t.id===tid); if(!task)return;
+  const fd = new FormData(document.getElementById('editTaskForm'));
+  const d = Object.fromEntries(fd.entries());
+  if (d.name) task.name = d.name;
+  if (d.plannedDate) task.plannedDate = d.plannedDate;
+
+  if (d.designerId) {
+    task.designerId = d.designerId;
+    task.designerName = getUserName(d.designerId);
+  }
+
+  task.details = d.details||'';
+  order.updatedAt = new Date().toISOString();
+  order.logs.push({time:new Date().toISOString(),action:`编辑子任务：${task.name}`,user:getCurrentUserName(),role:currentRole});
+  saveData(APP); closeM('editTaskModal'); refreshProjectDetail(pid);
+}
+
+// ==================== TASK WORKFLOW: ACCEPT → DELIVER → REVIEW ====================
+let _attachments = [];
+let _deliverProjectId = '';
+let _deliverTaskId = '';
+
+function taskAccept(pid, tid) {
+  const order = APP.orders.find(o=>o.id===pid); if(!order)return;
+  const task = order.tasks.find(t=>t.id===tid); if(!task)return;
+
+  const modal = document.createElement('div');
+  modal.className='modal-overlay'; modal.id='taskAcceptModal';
+  modal.innerHTML = `
+    <div class="modal">
+      <div class="modal-header"><div class="modal-title">✅ 接单：${task.name}</div><button class="modal-close" onclick="closeM('taskAcceptModal')">✕</button></div>
+      <div class="modal-body">
+        <p style="margin-bottom:12px;color:var(--gray-500);">设计师：<strong>${task.designerName||'未指定'}</strong></p>
+        <form id="taskAcceptForm">
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 计划完成时间</label><input type="date" class="form-input" name="plannedDate" required value="${task.plannedDate}"></div>
+        </form>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskAcceptModal')">取消</button><button class="btn btn-primary" onclick="submitTaskAccept('${pid}','${tid}')">确认接单</button></div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function submitTaskAccept(pid, tid) {
+  const order = APP.orders.find(o=>o.id===pid); if(!order)return;
+  const task = order.tasks.find(t=>t.id===tid); if(!task)return;
+  const d = new FormData(document.getElementById('taskAcceptForm'));
+  const plannedDate = d.get('plannedDate');
+  if (!plannedDate) { alert('请选择计划完成时间'); return; }
+  task.plannedDate = plannedDate;
+  task.status = 'accepted';
+  task.logs.push({time:new Date().toISOString(),action:'设计师接单',user:getCurrentUserName(),role:currentRole});
+  order.status = 'in_progress';
+  order.updatedAt = new Date().toISOString();
+  order.logs.push({time:new Date().toISOString(),action:`子任务接单：${task.name}（${getCurrentUserName()}）`,user:getCurrentUserName(),role:currentRole});
+  saveData(APP); closeM('taskAcceptModal'); refreshProjectDetail(pid); render();
+}
+
+function taskDeliver(pid, tid) {
+  const order = APP.orders.find(o=>o.id===pid); if(!order)return;
+  const task = order.tasks.find(t=>t.id===tid); if(!task)return;
+  _attachments = []; _deliverProjectId = pid; _deliverTaskId = tid;
+  const today = new Date().toISOString().split('T')[0];
+
+  const modal = document.createElement('div');
+  modal.className='modal-overlay'; modal.id='taskDeliverModal';
+  modal.innerHTML = `
+    <div class="modal modal-lg">
+      <div class="modal-header"><div class="modal-title">📤 交付：${task.name}</div><button class="modal-close" onclick="closeM('taskDeliverModal')">✕</button></div>
+      <div class="modal-body">
+        <form id="taskDeliverForm">
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 实际完成时间</label><input type="date" class="form-input" name="actualDate" required value="${today}"></div>
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required placeholder="描述交付的设计成果..." style="min-height:100px;">${escHtml(task.deliverables)}</textarea></div>
+          <div class="form-group"><label class="form-label">附件说明</label>
+            <div class="upload-area" onclick="document.getElementById('deliverFileInput').click()"><div>📁 点击上传附件</div><input type="file" id="deliverFileInput" multiple style="display:none" onchange="hDeliverFile(this)"></div>
+            <div class="file-list" id="deliverFileList"></div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskDeliverModal')">取消</button><button class="btn btn-primary" onclick="submitTaskDeliver()">确认交付</button></div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function hDeliverFile(input) {
+  Array.from(input.files).forEach(f=>{const r=new FileReader();r.onload=function(e){_attachments.push({name:f.name,data:e.target.result,size:f.size});renderDeliverFiles();};r.readAsDataURL(f);});
+  input.value='';
+}
+function renderDeliverFiles() {
+  const c=document.getElementById('deliverFileList'); if(!c)return;
+  c.innerHTML=_attachments.map((f,i)=>`<div class="file-item"><span>📎 ${f.name}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(f.size)}</span><button class="remove-file" onclick="_attachments.splice(${i},1);renderDeliverFiles();">✕</button></div>`).join('');
+}
+
+function submitTaskDeliver() {
+  const fd = new FormData(document.getElementById('taskDeliverForm'));
+  const d = Object.fromEntries(fd.entries());
+  if (!d.actualDate) { alert('请选择实际完成时间'); return; }
+  if (!d.deliverables) { alert('请填写交付成果描述'); return; }
+
+  const order = APP.orders.find(o=>o.id===_deliverProjectId); if(!order)return;
+  const task = order.tasks.find(t=>t.id===_deliverTaskId); if(!task)return;
+  task.actualDate = d.actualDate;
+  task.deliverables = d.deliverables;
+  task.attachments = [..._attachments];
+  task.status = 'delivered';
+  task.logs.push({time:new Date().toISOString(),action:'设计师交付成果',user:getCurrentUserName(),role:currentRole});
+  order.updatedAt = new Date().toISOString();
+  order.logs.push({time:new Date().toISOString(),action:`子任务交付：${task.name}（${getCurrentUserName()}）`,user:getCurrentUserName(),role:currentRole});
+  _attachments=[]; saveData(APP); closeM('taskDeliverModal'); refreshProjectDetail(_deliverProjectId); render();
+}
+
+function taskRedeliver(pid, tid) {
+  const order = APP.orders.find(o=>o.id===pid); if(!order)return;
+  const task = order.tasks.find(t=>t.id===tid); if(!task)return;
+  _attachments = []; _deliverProjectId = pid; _deliverTaskId = tid;
+  const today = new Date().toISOString().split('T')[0];
+
+  const modal = document.createElement('div');
+  modal.className='modal-overlay'; modal.id='taskRedeliverModal';
+  modal.innerHTML = `
+    <div class="modal modal-lg">
+      <div class="modal-header"><div class="modal-title">📤 重新交付：${task.name}</div><button class="modal-close" onclick="closeM('taskRedeliverModal')">✕</button></div>
+      <div class="modal-body">
+        ${task.reviewComments?`<div class="review-box rejected" style="margin-bottom:16px;"><strong>驳回意见：</strong>${task.reviewComments}</div>`:''}
+        <form id="taskRedeliverForm">
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 实际完成时间</label><input type="date" class="form-input" name="actualDate" required value="${today}"></div>
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required style="min-height:100px;">${escHtml(task.deliverables)}</textarea></div>
+          <div class="form-group"><label class="form-label">附件说明</label>
+            <div class="upload-area" onclick="document.getElementById('redeliverFileInput').click()"><div>📁 点击上传附件</div><input type="file" id="redeliverFileInput" multiple style="display:none" onchange="hDeliverFile(this)"></div>
+            <div class="file-list" id="deliverFileList"></div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskRedeliverModal')">取消</button><button class="btn btn-primary" onclick="submitTaskRedeliver()">确认交付</button></div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function submitTaskRedeliver() {
+  const order = APP.orders.find(o=>o.id===_deliverProjectId); if(!order)return;
+  const task = order.tasks.find(t=>t.id===_deliverTaskId); if(!task)return;
+  const fd = new FormData(document.getElementById('taskRedeliverForm'));
+  const d = Object.fromEntries(fd.entries());
+  if (!d.actualDate) { alert('请选择实际完成时间'); return; }
+  if (!d.deliverables) { alert('请填写交付成果描述'); return; }
+  task.actualDate = d.actualDate;
+  task.deliverables = d.deliverables;
+  task.attachments = [..._attachments];
+  task.status = 'delivered';
+  task.reviewStatus = '';
+  task.reviewComments = '';
+  delete task.scoring;
+  task.logs.push({time:new Date().toISOString(),action:'设计师重新提交交付',user:getCurrentUserName(),role:currentRole});
+  order.updatedAt = new Date().toISOString();
+  order.logs.push({time:new Date().toISOString(),action:`子任务重新交付：${task.name}（${getCurrentUserName()}）`,user:getCurrentUserName(),role:currentRole});
+  _attachments=[]; saveData(APP); closeM('taskRedeliverModal'); refreshProjectDetail(_deliverProjectId); render();
+}
+
+// ==================== TASK REVIEW ====================
+function taskApprove(pid, tid) {
+  const order = APP.orders.find(o=>o.id===pid); if(!order)return;
+  const task = order.tasks.find(t=>t.id===tid); if(!task)return;
+
+  const modal = document.createElement('div');
+  modal.className='modal-overlay'; modal.id='taskApproveModal';
+  modal.innerHTML = `
+    <div class="modal">
+      <div class="modal-header"><div class="modal-title">✅ 验收通过：${task.name}</div><button class="modal-close" onclick="closeM('taskApproveModal')">✕</button></div>
+      <div class="modal-body">
+        <p style="margin-bottom:12px;">确认该子任务验收通过？</p>
+        <div class="form-group"><label class="form-label">验收意见（可选）</label><textarea class="form-textarea" id="approveComments" placeholder="输入验收意见..."></textarea></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskApproveModal')">取消</button><button class="btn btn-success" onclick="submitTaskApprove('${pid}','${tid}')">确认通过</button></div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function submitTaskApprove(pid, tid) {
+  const order = APP.orders.find(o=>o.id===pid); if(!order)return;
+  const task = order.tasks.find(t=>t.id===tid); if(!task)return;
+  const comments = document.getElementById('approveComments')?.value || '验收通过';
+  task.status = 'approved';
+  task.reviewStatus = 'approved';
+  task.reviewComments = comments;
+  task.logs.push({time:new Date().toISOString(),action:'验收通过，进入评分环节',user:getCurrentUserName(),role:currentRole});
+
+  const isChannel = order.type==='channel_custom';
+  task.scoring = {
+    aesthetics: {sales:null,planner:null,designer:null,superior:null},
+    innovation: {sales:null,planner:null,designer:null,superior:null},
+    weights: {sales:isChannel?0.2:0, planner:isChannel?0.3:0.4, designer:isChannel?0.2:0.3, superior:isChannel?0.3:0.3},
+    allDone: false,
+  };
+
+  const allApproved = order.tasks.every(t=>t.status==='approved');
+  if (allApproved) order.status = 'completed';
+  order.updatedAt = new Date().toISOString();
+  order.logs.push({time:new Date().toISOString(),action:`子任务验收通过：${task.name}（进入评分环节）`,user:getCurrentUserName(),role:currentRole});
+  saveData(APP); closeM('taskApproveModal'); refreshProjectDetail(pid); render();
+}
+
+function taskReject(pid, tid) {
+  const modal = document.createElement('div');
+  modal.className='modal-overlay'; modal.id='taskRejectModal';
+  modal.innerHTML = `
+    <div class="modal">
+      <div class="modal-header"><div class="modal-title">↩️ 驳回修改</div><button class="modal-close" onclick="closeM('taskRejectModal')">✕</button></div>
+      <div class="modal-body">
+        <div class="form-group"><label class="form-label"><span class="required">*</span> 修改意见</label><textarea class="form-textarea" id="rejectComments" required placeholder="请详细说明修改意见..." style="min-height:100px;"></textarea></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskRejectModal')">取消</button><button class="btn btn-danger" onclick="submitTaskReject('${pid}','${tid}')">确认驳回</button></div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function submitTaskReject(pid, tid) {
+  const comments = document.getElementById('rejectComments')?.value||'';
+  if (!comments) { alert('请填写修改意见'); return; }
+  const order = APP.orders.find(o=>o.id===pid); if(!order)return;
+  const task = order.tasks.find(t=>t.id===tid); if(!task)return;
+  task.status = 'rejected';
+  task.reviewStatus = 'rejected';
+  task.reviewComments = comments;
+  task.logs.push({time:new Date().toISOString(),action:'驳回：'+comments,user:getCurrentUserName(),role:currentRole});
+  order.updatedAt = new Date().toISOString();
+  order.logs.push({time:new Date().toISOString(),action:`子任务驳回：${task.name}（意见：${comments}）`,user:getCurrentUserName(),role:currentRole});
+  saveData(APP); closeM('taskRejectModal'); refreshProjectDetail(pid); render();
+}
+
+// ==================== SCORING (per sub-task) ====================
+function needScoringBtn(order, task) {
+  if (!task.scoring) return false;
+  const sc = task.scoring;
+  const isChannel = order.type==='channel_custom';
+  if (currentRole==='sales' && isChannel && sc.aesthetics.sales===null) return true;
+  if (currentRole==='planner' && sc.aesthetics.planner===null) return true;
+  if (currentRole==='designer' && sc.aesthetics.designer===null) return true;
+  if (currentRole==='superior' && sc.aesthetics.superior===null) return true;
+  return false;
+}
+
+function renderTaskScoringMini(order, task) {
+  const sc = task.scoring;
+  if (!sc) return '';
+  const isChannel = order.type==='channel_custom';
+  const roles = isChannel?['sales','planner','designer','superior']:['planner','designer','superior'];
+  const calcWeighted = () => {
+    let ta=0,ti=0,tw=0;
+    roles.forEach(r=>{if(sc.aesthetics[r]!==null&&sc.innovation[r]!==null){ta+=sc.aesthetics[r]*sc.weights[r];ti+=sc.innovation[r]*sc.weights[r];tw+=sc.weights[r];}});
+    if (tw===0) return null;
+    return {aesthetics:(ta/tw).toFixed(1),innovation:(ti/tw).toFixed(1),overall:((ta+ti)/(tw*2)).toFixed(1)};
+  };
+  const final = calcWeighted();
+  const allScored = roles.filter(r=>sc.aesthetics[r]!==null).length;
+  return `<div style="margin-top:10px;padding:12px;background:var(--primary-light);border-radius:8px;">
+    <div style="font-size:12px;font-weight:600;color:var(--primary);margin-bottom:6px;">⭐ 评分 (${allScored}/${roles.length}人)</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;">
+      ${roles.map(r=>`<span style="background:#fff;padding:2px 8px;border-radius:4px;">${roleLabel(r)}: ${sc.aesthetics[r]!==null?`审美${sc.aesthetics[r]} 创新${sc.innovation[r]}`:'<span style="color:var(--gray-400);">待评</span>'}</span>`).join('')}
+    </div>
+    ${final?`<div style="margin-top:8px;text-align:center;"><span style="font-size:12px;color:var(--gray-500);">综合：</span><span style="font-size:24px;font-weight:700;color:var(--primary);">${final.overall}</span></div>`:''}
+  </div>`;
+}
+
+function renderProjectScoringSummary(order) {
+  const approvedTasks = order.tasks.filter(t=>t.status==='approved'&&t.scoring);
+  if (approvedTasks.length===0) return '';
+  const allScoredTasks = approvedTasks.filter(t=>t.scoring&&t.scoring.allDone);
+  let html = `<div class="detail-section"><div class="detail-section-title">⭐ 项目评分汇总 <span style="font-size:12px;color:var(--gray-400);font-weight:400;">${allScoredTasks.length}/${approvedTasks.length} 已完成</span></div>`;
+  approvedTasks.forEach((task,i)=> {
+    const sc = task.scoring;
+    const isChannel = order.type==='channel_custom';
+    const roles = isChannel?['sales','planner','designer','superior']:['planner','designer','superior'];
+    const calcWeighted = () => {
+      let ta=0,ti=0,tw=0;
+      roles.forEach(r=>{if(sc.aesthetics[r]!==null&&sc.innovation[r]!==null){ta+=sc.aesthetics[r]*sc.weights[r];ti+=sc.innovation[r]*sc.weights[r];tw+=sc.weights[r];}});
+      if (tw===0) return null;
+      return ((ta+ti)/(tw*2)).toFixed(1);
+    };
+    const final = calcWeighted();
+    html += `<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--gray-50);border-radius:6px;margin-bottom:6px;font-size:13px;">
+      <span style="font-weight:600;">#${i+1} ${task.name}</span>
+      <span style="flex:1;"></span>
+      ${final?`<span style="font-size:16px;font-weight:700;color:var(--primary);">${final}</span>`:`<span style="color:var(--gray-400);">评分中…</span>`}
+    </div>`;
+  });
+  html += `</div>`;
+  return html;
+}
+
+function openScoring(pid, tid) {
+  const order = APP.orders.find(o=>o.id===pid); if(!order)return;
+  const task = order.tasks.find(t=>t.id===tid); if(!task||!task.scoring) return;
+  const sc = task.scoring; const isChannel = order.type==='channel_custom';
+
+  const modal = document.createElement('div');
+  modal.className='modal-overlay'; modal.id='scoringModal';
+  modal.innerHTML = `
+    <div class="modal">
+      <div class="modal-header"><div class="modal-title">⭐ 评分：${task.name}</div><button class="modal-close" onclick="closeM('scoringModal')">✕</button></div>
+      <div class="modal-body">
+        <p style="margin-bottom:8px;color:var(--gray-500);">评分人：<strong>${roleLabel(currentRole)}</strong>（${getCurrentUserName()}）</p>
+        <p style="margin-bottom:16px;color:var(--gray-500);">请对 <strong>${task.name}</strong> 的审美和创新打分（1-10分）</p>
+        <div style="display:flex;gap:24px;">
+          <div class="form-group" style="flex:1;"><label class="form-label">🎨 审美评分</label><input type="number" class="form-input" id="scoreAesthetics" min="1" max="10" step="0.5" placeholder="1-10" style="font-size:24px;text-align:center;"></div>
+          <div class="form-group" style="flex:1;"><label class="form-label">💡 创新评分</label><input type="number" class="form-input" id="scoreInnovation" min="1" max="10" step="0.5" placeholder="1-10" style="font-size:24px;text-align:center;"></div>
+        </div>
+        ${currentRole==='superior'?`<div style="margin-top:16px;padding:12px;background:var(--gray-50);border-radius:8px;"><div class="form-label" style="margin-bottom:8px;">权重配置</div><div class="weight-config">${isChannel?`<div class="weight-item"><label>需求方</label><input type="number" class="form-input" id="weightSales" value="${(sc.weights.sales*100).toFixed(0)}" min="0" max="100">%</div>`:''}<div class="weight-item"><label>产品企划</label><input type="number" class="form-input" id="weightPlanner" value="${(sc.weights.planner*100).toFixed(0)}" min="0" max="100">%</div><div class="weight-item"><label>设计师</label><input type="number" class="form-input" id="weightDesigner" value="${(sc.weights.designer*100).toFixed(0)}" min="0" max="100">%</div><div class="weight-item"><label>上级</label><input type="number" class="form-input" id="weightSuperior" value="${(sc.weights.superior*100).toFixed(0)}" min="0" max="100">%</div></div><div class="form-hint">权重总和应为100%，系统自动归一化</div></div>`:''}
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('scoringModal')">取消</button><button class="btn btn-primary" onclick="submitScoring('${pid}','${tid}')">提交评分</button></div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function submitScoring(pid, tid) {
+  const order = APP.orders.find(o=>o.id===pid); if(!order)return;
+  const task = order.tasks.find(t=>t.id===tid); if(!task||!task.scoring) return;
+  const a = parseFloat(document.getElementById('scoreAesthetics').value);
+  const i = parseFloat(document.getElementById('scoreInnovation').value);
+  if (isNaN(a)||a<1||a>10) { alert('审美评分请输入1-10'); return; }
+  if (isNaN(i)||i<1||i>10) { alert('创新评分请输入1-10'); return; }
+  task.scoring.aesthetics[currentRole] = a;
+  task.scoring.innovation[currentRole] = i;
+
+  if (currentRole==='superior') {
+    const isChannel = order.type==='channel_custom';
+    const wSales = isChannel ? (parseFloat(document.getElementById('weightSales')?.value)||20) : 0;
+    const wPlanner = parseFloat(document.getElementById('weightPlanner')?.value) || (isChannel?30:40);
+    const wDesigner = parseFloat(document.getElementById('weightDesigner')?.value) || (isChannel?20:30);
+    const wSuperior = parseFloat(document.getElementById('weightSuperior')?.value) || (isChannel?30:30);
+    const total = isChannel ? wSales+wPlanner+wDesigner+wSuperior : wPlanner+wDesigner+wSuperior;
+    task.scoring.weights = {
+      sales: isChannel ? wSales/total : 0,
+      planner: wPlanner/total,
+      designer: wDesigner/total,
+      superior: wSuperior/total,
+    };
+  }
+
+  const isChannel = order.type==='channel_custom';
+  const roles = isChannel?['sales','planner','designer','superior']:['planner','designer','superior'];
+  task.scoring.allDone = roles.every(r=>task.scoring.aesthetics[r]!==null&&task.scoring.innovation[r]!==null);
+  order.updatedAt = new Date().toISOString();
+  order.logs.push({time:new Date().toISOString(),action:`${roleLabel(currentRole)}对子任务"${task.name}"完成评分`,user:getCurrentUserName(),role:currentRole});
+  saveData(APP); closeM('scoringModal'); refreshProjectDetail(pid); render();
+}
+
+// ==================== SCORING LIST ====================
+function renderScoringList() {
+  let items = [];
+  APP.orders.forEach(proj => {
+    proj.tasks.forEach(t => {
+      if (t.status==='approved' && t.scoring && !t.scoring.allDone) {
+        const isChannel = proj.type==='channel_custom';
+        const roles = isChannel?['sales','planner','designer','superior']:['planner','designer','superior'];
+        const pending = roles.filter(r=>t.scoring.aesthetics[r]===null);
+        items.push({ task: t, project: proj, pending });
+      }
+    });
+  });
+
+  document.getElementById('mainContent').innerHTML = `
+    <h2 style="font-size:22px;margin-bottom:20px;">⭐ 待评分子任务 <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${items.length})</span></h2>
+    ${items.length===0?`<div class="empty"><div class="empty-icon">🎉</div><p>所有子任务已完成评分</p></div>`:`
+    <div class="card"><div class="table-wrap"><table>
+      <thead><tr><th>子任务</th><th>所属项目</th><th>类型</th><th>待评分角色</th><th>操作</th></tr></thead>
+      <tbody>${items.map(item=>{
+        const t = item.task; const p = item.project;
+        const isChannel = p.type==='channel_custom';
+        return `<tr><td><strong>${t.name}</strong></td><td>#${p.id} ${(p.productRequirements||'').substring(0,20)}</td><td>${isChannel?'📦 渠道定制':'🏭 常规品'}</td><td>${item.pending.map(r=>`<span class="badge badge-pending">${roleLabel(r)}</span>`).join(' ')}</td><td>${item.pending.includes(currentRole)?`<button class="btn btn-primary btn-sm" onclick="openScoring('${p.id}','${t.id}')">⭐ 评分</button>`:`<button class="btn btn-outline btn-sm" onclick="openProjectDetail('${p.id}')">查看项目</button>`}</td></tr>`;
+      }).join('')}</tbody>
+    </table></div></div>`}`;
+}
+
+// ==================== HELPERS ====================
+function closeM(id) { const m=document.getElementById(id); if(m)m.remove(); }
+function refreshProjectDetail(pid) {
+  const modal=document.getElementById('projectDetailModal'); if(!modal)return;
+  const order=APP.orders.find(o=>o.id===pid); if(!order)return;
+  modal.querySelector('.modal-body').innerHTML = renderProjectDetailContent(order);
+  modal.querySelector('#detailActions').innerHTML = renderProjectActions(order);
+}
+function formatDate(d) { return d||'-'; }
+function fmtDT(iso) { if(!iso)return'-';const d=new Date(iso);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+function fmtSize(b) { if(!b)return'0B';if(b<1024)return b+'B';if(b<1048576)return (b/1024).toFixed(1)+'KB';return (b/1048576).toFixed(1)+'MB'; }
+function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-overlay').forEach(m=>m.remove());});
+document.addEventListener('click',e=>{if(e.target.classList.contains('modal-overlay'))e.target.remove();});
+
+// ==================== RENDER ====================
+function render() {
+  updateBadges();
+  switch(currentView) {
+    case 'dashboard': renderDashboard(); break;
+    case 'orders': renderOrderList('all'); break;
+    case 'channel': renderOrderList('channel_custom'); break;
+    case 'regular': renderOrderList('regular'); break;
+    case 'tasks': renderMyTasks(); break;
+    case 'scoring': renderScoringList(); break;
+    default: renderDashboard();
+  }
+}
+
+// ==================== INIT SAMPLE DATA ====================
+if (APP.orders.length===0) {
+  const p1 = {
+    id: String(APP.nextId++), type:'channel_custom', status:'completed',
+    salesId:'sales_sun', salesPerson:'孙瑞婷',
+    plannerId:'planner_zheng', plannerName:'郑诗绚',
+    deadline:'2026-06-30',
+    productRequirements:'春节限定礼盒包装设计项目，红色主色调，融入传统元素与现代设计风格，适用于高端礼品场景。',
+    description:'目标客群25-45岁中高收入人群，需体现品质感和节日氛围。',
+    referenceImages:[],
+    tasks:[
+      {id:'T1',name:'外盒主视觉设计',status:'approved',plannedDate:'2026-06-22',actualDate:'2026-06-21',designerId:'designer_cheny',designerName:'陈月珍',details:'30x20x10cm，需提供3个方案',deliverables:'完成3套方案，含效果图和刀版图',attachments:[],reviewStatus:'approved',reviewComments:'方案B色彩搭配出色',scoring:{aesthetics:{sales:9,planner:8.5,designer:9,superior:8},innovation:{sales:8,planner:8,designer:9,superior:7.5},weights:{sales:.2,planner:.3,designer:.2,superior:.3},allDone:true},logs:[{time:'2026-06-16T10:00:00',action:'创建子任务',user:'郑诗绚',role:'planner'},{time:'2026-06-17T09:00:00',action:'设计师接单',user:'陈月珍',role:'designer'},{time:'2026-06-21T14:00:00',action:'设计师交付成果',user:'陈月珍',role:'designer'},{time:'2026-06-21T16:00:00',action:'验收通过，进入评分环节',user:'郑诗绚',role:'planner'}],createdAt:'2026-06-16T10:00:00'},
+      {id:'T2',name:'内衬结构设计',status:'approved',plannedDate:'2026-06-24',actualDate:'2026-06-22',designerId:'designer_huang',designerName:'黄海岚',details:'需匹配外盒尺寸',deliverables:'完成内衬结构设计',attachments:[],reviewStatus:'approved',reviewComments:'结构合理',scoring:{aesthetics:{sales:8.5,planner:9,designer:8,superior:8.5},innovation:{sales:7.5,planner:8,designer:7,superior:8},weights:{sales:.2,planner:.3,designer:.2,superior:.3},allDone:true},logs:[{time:'2026-06-17T10:00:00',action:'创建子任务',user:'郑诗绚',role:'planner'},{time:'2026-06-18T09:00:00',action:'设计师接单',user:'黄海岚',role:'designer'},{time:'2026-06-22T10:00:00',action:'设计师交付成果',user:'黄海岚',role:'designer'},{time:'2026-06-22T15:00:00',action:'验收通过，进入评分环节',user:'郑诗绚',role:'planner'}],createdAt:'2026-06-17T10:00:00'},
+      {id:'T3',name:'品牌标识应用设计',status:'approved',plannedDate:'2026-06-25',actualDate:'2026-06-23',designerId:'designer_huang',designerName:'黄海岚',details:'LOGO烫金工艺设计',deliverables:'完成标识工艺设计稿',attachments:[],reviewStatus:'approved',reviewComments:'工艺细节到位',scoring:{aesthetics:{sales:null,planner:null,designer:8.5,superior:null},innovation:{sales:null,planner:null,designer:9,superior:null},weights:{sales:.2,planner:.3,designer:.2,superior:.3},allDone:false},logs:[{time:'2026-06-18T10:00:00',action:'创建子任务',user:'郑诗绚',role:'planner'},{time:'2026-06-19T09:00:00',action:'设计师接单',user:'黄海岚',role:'designer'},{time:'2026-06-23T11:00:00',action:'设计师交付成果',user:'黄海岚',role:'designer'},{time:'2026-06-23T14:00:00',action:'验收通过，进入评分环节',user:'郑诗绚',role:'planner'}],createdAt:'2026-06-18T10:00:00'},
+    ],
+    logs:[{time:'2026-06-15T09:00:00',action:'销售提交渠道定制项目',user:'孙瑞婷',role:'sales'},{time:'2026-06-15T10:00:00',action:'产品企划接单，请添加子任务',user:'郑诗绚',role:'planner'},{time:'2026-06-16T10:00:00',action:'添加子任务：外盒主视觉设计（指派陈月珍）',user:'郑诗绚',role:'planner'},{time:'2026-06-17T10:00:00',action:'添加子任务：内衬结构设计（指派黄海岚）',user:'郑诗绚',role:'planner'},{time:'2026-06-18T10:00:00',action:'添加子任务：品牌标识应用设计（指派黄海岚）',user:'郑诗绚',role:'planner'},{time:'2026-06-23T14:00:00',action:'子任务验收通过：品牌标识应用设计（进入评分环节）',user:'郑诗绚',role:'planner'}],
+    createdAt:'2026-06-15T09:00:00',updatedAt:'2026-06-23T16:30:00',
+  };
+
+  const p2 = {
+    id: String(APP.nextId++), type:'regular', status:'in_progress',
+    plannerId:'planner_wu', plannerName:'吴思欣',
+    deadline:'2026-07-10',
+    productRequirements:'公司夏季新品宣传设计项目，清新自然风格，适用于线上+线下全渠道。',
+    description:'含海报、详情页、社交媒体素材等多个子任务。',
+    referenceImages:[],
+    tasks:[
+      {id:'T4',name:'主视觉海报设计',status:'accepted',plannedDate:'2026-07-01',actualDate:'',designerId:'designer_xie',designerName:'谢梓文',details:'1920x1080横版+1080x1920竖版',deliverables:'',attachments:[],reviewStatus:'',reviewComments:'',logs:[{time:'2026-06-23T10:00:00',action:'创建子任务',user:'吴思欣',role:'planner'},{time:'2026-06-23T14:00:00',action:'设计师接单',user:'谢梓文',role:'designer'}],createdAt:'2026-06-23T10:00:00'},
+      {id:'T5',name:'产品详情页设计',status:'pending',plannedDate:'2026-07-03',actualDate:'',designerId:'designer_yang',designerName:'杨炜杰',details:'移动端优先，需包含产品规格、卖点、场景图',deliverables:'',attachments:[],reviewStatus:'',reviewComments:'',logs:[{time:'2026-06-23T11:00:00',action:'创建子任务',user:'吴思欣',role:'planner'}],createdAt:'2026-06-23T11:00:00'},
+      {id:'T6',name:'社交媒体素材包',status:'pending',plannedDate:'2026-07-05',actualDate:'',designerId:'designer_zhengc',designerName:'郑彩妮',details:'小红书/抖音/朋友圈三套素材',deliverables:'',attachments:[],reviewStatus:'',reviewComments:'',logs:[{time:'2026-06-23T12:00:00',action:'创建子任务',user:'吴思欣',role:'planner'}],createdAt:'2026-06-23T12:00:00'},
+    ],
+    logs:[{time:'2026-06-23T09:00:00',action:'产品企划新建常规品设计项目',user:'吴思欣',role:'planner'},{time:'2026-06-23T10:00:00',action:'添加子任务：主视觉海报设计（指派谢梓文）',user:'吴思欣',role:'planner'},{time:'2026-06-23T11:00:00',action:'添加子任务：产品详情页设计（指派杨炜杰）',user:'吴思欣',role:'planner'},{time:'2026-06-23T12:00:00',action:'添加子任务：社交媒体素材包（指派郑彩妮）',user:'吴思欣',role:'planner'},{time:'2026-06-23T14:00:00',action:'子任务接单：主视觉海报设计（谢梓文）',user:'谢梓文',role:'designer'}],
+    createdAt:'2026-06-23T09:00:00',updatedAt:'2026-06-23T14:00:00',
+  };
+
+  APP.nextTaskId = 7;
+  APP.orders = [p1, p2];
+  saveData(APP);
+}
+
+switchRole('planner');
+</script>
+</body>
+</html>
