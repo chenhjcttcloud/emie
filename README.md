@@ -16,8 +16,13 @@
 emie/
 ├── pom.xml                          # Maven 依赖配置
 ├── mvnw                             # Maven Wrapper
-├── init.sql                         # MySQL 初始化脚本
+├── dev.sh                           # 开发启动快捷入口
 ├── .gitignore
+├── scripts/                         # 开发/运维脚本
+│   └── dev.sh                       # 开发启动脚本（核心）
+├── db/                              # 数据库脚本
+│   └── init.sql                     # MySQL 初始化脚本
+├── docs/                            # 文档（可选）
 ├── src/
 │   ├── main/
 │   │   ├── java/com/emie/designpm/
@@ -29,11 +34,13 @@ emie/
 │   │   │   │   ├── AuthController.java     # 登录/登出 API
 │   │   │   │   ├── ProjectController.java  # 项目 CRUD API
 │   │   │   │   ├── UserController.java     # 用户 API
-│   │   │   │   └── DashboardController.java# 数据统计 API
-│   │   │   ├── entity/                     # 5 个数据实体
+│   │   │   │   ├── DashboardController.java# 数据统计 API
+│   │   │   │   └── ...                     # 管理后台、文件等
+│   │   │   ├── entity/                     # 7 个数据实体
 │   │   │   ├── repository/                 # JPA 数据访问
 │   │   │   ├── service/                    # 业务逻辑
-│   │   │   └── dto/                        # 数据传输对象
+│   │   │   ├── dto/                        # 数据传输对象
+│   │   │   └── util/                       # 工具类
 │   │   └── resources/
 │   │       ├── application.yml             # 多 profile 配置
 │   │       └── static/
@@ -41,7 +48,8 @@ emie/
 │   │           ├── css/app.css             # 样式
 │   │           └── js/app.js               # 前端逻辑
 │   └── test/
-├── data/                                   # H2 数据库（运行时生成，已 gitignore）
+├── data/                                   # 运行时数据（已 gitignore）
+├── uploads/                                # 上传文件（已 gitignore）
 └── target/                                 # 编译产物（已 gitignore）
 ```
 
@@ -54,17 +62,23 @@ emie/
 ### 开发模式（H2 数据库）
 
 ```bash
-# 编译并启动
+# 使用开发脚本（推荐）
+./dev.sh start
+
+# 或直接 Maven 启动
 mvn spring-boot:run
 
 # 打开浏览器
 open http://localhost:8080
 ```
 
+> `./dev.sh` 会在首次自动编译打包，支持 `start|stop|restart|log` 四个命令。  
+> 详细说明见 `scripts/dev.sh`。
+
 ### 生产模式（MySQL）
 
 ```bash
-# 1. 先在 MySQL 中执行 init.sql
+# 1. 先在 MySQL 中执行 db/init.sql
 # 2. 用 prod profile 启动
 mvn spring-boot:run -Dspring.profiles.active=prod
 ```
