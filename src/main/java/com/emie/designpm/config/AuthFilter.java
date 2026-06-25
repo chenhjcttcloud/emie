@@ -1,0 +1,61 @@
+package com.emie.designpm.config;
+
+import com.emie.designpm.controller.AuthController;
+import jakarta.servlet.*;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+
+/**
+ * 简单认证过滤器。
+ * 对 /api/** 路径进行 token 校验，排除 /api/auth/login 和静态资源。
+ */
+@Component
+@Order(1)
+public class AuthFilter implements Filter {
+
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+
+        HttpServletRequest req = (HttpServletRequest) request;
+        HttpServletResponse res = (HttpServletResponse) response;
+        String path = req.getRequestURI();
+
+        // 允许无需认证的路径
+        if (path.equals("/api/auth/login") ||
+            path.equals("/api/auth/register") ||
+            path.equals("/api/auth/logout") ||
+            path.equals("/api/captcha/image") ||
+            path.equals("/api/sms/send") ||
+            path.equals("/api/email-code/send") ||
+            path.equals("/api/admin/public-config") ||
+            path.equals("/favicon.ico") ||
+            path.startsWith("/css/") ||
+            path.startsWith("/js/") ||
+            path.startsWith("/api/files/download/") ||
+            path.equals("/") ||
+            path.equals("/index.html") ||
+            path.equals("/h2-console") ||
+            path.startsWith("/h2-console/")) {
+            chain.doFilter(request, response);
+            return;
+        }
+
+        // 对 /api/** 路径进行认证
+        if (path.startsWith("/api/")) {
+            String token = req.getHeader("X-Auth-Token");
+            if (token == null || AuthController.validateToken(token) == null) {
+                res.setStatus(401);
+                res.setContentType("application/json;charset=UTF-8");
+                res.getWriter().write("{\"error\":\"未登录或会话已过期，请重新登录\"}");
+                return;
+            }
+        }
+
+        chain.doFilter(request, response);
+    }
+}

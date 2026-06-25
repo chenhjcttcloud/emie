@@ -1,0 +1,71 @@
+server:
+  port: 8080
+
+spring:
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 1024MB
+      max-request-size: 1024MB
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    date-format: yyyy-MM-dd'T'HH:mm:ss.SSS'Z'
+    time-zone: Asia/Shanghai
+
+app:
+  upload:
+    dir: ./uploads
+
+---
+# === 开发环境：MySQL（生产环境也是 MySQL，只是 profile 不同） ===
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: jdbc:mysql://localhost:3306/designpm?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: emie
+    password: MYSQL_emie
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+    open-in-view: true
+
+server:
+  port: 8080
+
+---
+# === 生产环境：MySQL ===
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: jdbc:mysql://localhost:3306/designpm?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: emie
+    password: MYSQL_emie
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+    open-in-view: true
+
+server:
+  port: 8080
+
+---
+# === 公共配置 ===
+spring:
+  config:
+    activate:
+      on-profile: default
