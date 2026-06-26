@@ -4,9 +4,10 @@ import com.emie.designpm.dto.ProjectDetailDTO;
 import com.emie.designpm.dto.ProjectSummaryDTO;
 import com.emie.designpm.dto.TaskDetailDTO;
 import com.emie.designpm.entity.*;
+import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.repository.ScoringRepository;
 import com.emie.designpm.service.ProjectService;
-import com.emie.designpm.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,17 +20,17 @@ import java.util.stream.Collectors;
 public class ProjectController {
 
     private final ProjectService projectService;
-    private final UserService userService;
     private final ScoringRepository scoringRepository;
+    private final ActivityLogRepository activityLogRepository;
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     public ProjectController(ProjectService projectService,
-                             UserService userService,
-                             ScoringRepository scoringRepository) {
+                             ScoringRepository scoringRepository,
+                             ActivityLogRepository activityLogRepository) {
         this.projectService = projectService;
-        this.userService = userService;
         this.scoringRepository = scoringRepository;
+        this.activityLogRepository = activityLogRepository;
     }
 
     /** 获取所有项目列表 */
@@ -67,7 +68,16 @@ public class ProjectController {
 
     /** 获取项目详情 */
     @GetMapping("/{id}")
-    public ResponseEntity<ProjectDetailDTO> getProjectDetail(@PathVariable Long id) {
+    public ResponseEntity<ProjectDetailDTO> getProjectDetail(@PathVariable Long id, HttpServletRequest request) {
+        // 记录查询日志
+        String token = request.getHeader("X-Auth-Token");
+        if (token != null) {
+            AuthController.AuthSession session = AuthController.validateToken(token);
+            if (session != null) {
+                activityLogRepository.save(new ActivityLog(
+                    "查询项目 #" + id, session.name(), session.role()));
+            }
+        }
         return projectService.getProjectById(id)
                 .map(this::toDetail)
                 .map(ResponseEntity::ok)

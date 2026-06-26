@@ -3,9 +3,7 @@ package com.emie.designpm.controller;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.repository.ProjectRepository;
 import com.emie.designpm.repository.ScoringRepository;
-import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.ProjectService;
-import com.emie.designpm.service.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,21 +14,15 @@ import java.util.*;
 public class DashboardController {
 
     private final ProjectRepository projectRepository;
-    private final SubTaskRepository subTaskRepository;
     private final ScoringRepository scoringRepository;
     private final ProjectService projectService;
-    private final UserService userService;
 
     public DashboardController(ProjectRepository projectRepository,
-                               SubTaskRepository subTaskRepository,
                                ScoringRepository scoringRepository,
-                               ProjectService projectService,
-                               UserService userService) {
+                               ProjectService projectService) {
         this.projectRepository = projectRepository;
-        this.subTaskRepository = subTaskRepository;
         this.scoringRepository = scoringRepository;
         this.projectService = projectService;
-        this.userService = userService;
     }
 
     @GetMapping("/stats")

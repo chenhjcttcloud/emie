@@ -1,7 +1,9 @@
 package com.emie.designpm.controller;
 
 import com.emie.designpm.entity.User;
+import com.emie.designpm.entity.ActivityLog;
 import com.emie.designpm.repository.UserRepository;
+import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.service.AdminService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,13 +21,15 @@ public class AuthController {
 
     private final UserRepository userRepository;
     private final AdminService adminService;
+    private final ActivityLogRepository activityLogRepository;
 
     // 简单内存 Token 管理（生产环境应使用 Redis/DB）
     private static final Map<String, AuthSession> TOKENS = new ConcurrentHashMap<>();
 
-    public AuthController(UserRepository userRepository, AdminService adminService) {
+    public AuthController(UserRepository userRepository, AdminService adminService, ActivityLogRepository activityLogRepository) {
         this.userRepository = userRepository;
         this.adminService = adminService;
+        this.activityLogRepository = activityLogRepository;
     }
 
     @PostMapping("/login")
@@ -62,6 +66,17 @@ public class AuthController {
         // 生成 token
         String token = generateToken();
         TOKENS.put(token, new AuthSession(user.getUserId(), user.getRole(), user.getName()));
+
+        // 记录登录日志
+        String roleLabel = switch (user.getRole()) {
+            case "sales" -> "销售";
+            case "planner" -> "企划";
+            case "designer" -> "设计师";
+            case "superior" -> "上级";
+            case "admin" -> "管理员";
+            default -> user.getRole();
+        };
+        activityLogRepository.save(new ActivityLog("登录系统：" + roleLabel + "·" + user.getName() + "（" + user.getUserId() + "）", user.getName(), user.getRole()));
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("token", token);
@@ -169,6 +184,23 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<Map<String, String>> logout(@RequestHeader("X-Auth-Token") String token) {
+        AuthSession session = TOKENS.get(token);
+        if (session != null) {
+            // 在删除 token 之前记录日志（需要用户信息）
+            String roleLabel = switch (session.role()) {
+                case "sales" -> "销售";
+                case "planner" -> "企划";
+                case "designer" -> "设计师";
+                case "superior" -> "上级";
+                case "admin" -> "管理员";
+                default -> session.role();
+            };
+            try {
+                activityLogRepository.save(new ActivityLog(
+                    "退出系统：" + roleLabel + "·" + session.name() + "（" + session.userId() + "）",
+                    session.name(), session.role()));
+            } catch (Exception ignored) {}
+        }
         TOKENS.remove(token);
         return ResponseEntity.ok(Map.of("message", "已退出登录"));
     }

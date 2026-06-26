@@ -28,8 +28,11 @@ public class ActivityLog {
     private LocalDateTime time;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "project_id", nullable = false)
+    @JoinColumn(name = "project_id", nullable = true)
     private Project project;
+
+    /** 关联的项目ID（冗余字段，项目删除后仍可查看日志） */
+    private Long projectRefId;
 
     public ActivityLog(String action, String username, String role, Project project) {
         this.action = action;
@@ -37,5 +40,14 @@ public class ActivityLog {
         this.role = role;
         this.time = LocalDateTime.now();
         this.project = project;
+        this.projectRefId = project != null ? project.getId() : null;
+    }
+
+    /** 无项目关联的日志（如登录、查询等系统操作） */
+    public ActivityLog(String action, String username, String role) {
+        this.action = action;
+        this.username = username;
+        this.role = role;
+        this.time = LocalDateTime.now();
     }
 }

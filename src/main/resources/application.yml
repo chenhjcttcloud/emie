@@ -16,6 +16,8 @@ spring:
 app:
   upload:
     dir: ./uploads
+  log-archive:
+    dir: ./logs/archive
 
 ---
 # === 开发环境：MySQL（生产环境也是 MySQL，只是 profile 不同） ===

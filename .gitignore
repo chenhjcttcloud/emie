@@ -26,5 +26,8 @@ application-dev.yml
 # === 运行时上传文件 ===
 uploads/
 
+# === 运行时日志归档 ===
+logs/
+
 # === Node (if any) ===
 node_modules/

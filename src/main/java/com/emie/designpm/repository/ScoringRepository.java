@@ -3,12 +3,10 @@ package com.emie.designpm.repository;
 import com.emie.designpm.entity.ScoringRecord;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
-@Repository
 public interface ScoringRepository extends JpaRepository<ScoringRecord, Long> {
 
     List<ScoringRecord> findBySubTaskId(Long subTaskId);

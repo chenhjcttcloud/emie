@@ -102,6 +102,7 @@ async function initApp() {
         currentAdminTab = 'dashboard';
         APP_CACHE = { orders: [] };
         showApp();
+        startIdleMonitor();
         return;
       }
     } catch(e) {}
@@ -352,6 +353,7 @@ async function handleLogin(event) {
     currentAdminTab = 'dashboard';
     APP_CACHE = { orders: [] };
     showApp();
+    startIdleMonitor();
   } catch (e) {
     errEl.textContent = '网络错误，请重试';
     errEl.style.display = '';
@@ -369,7 +371,96 @@ function handleLogout() {
   currentView = 'dashboard';
   currentAdminTab = 'dashboard';
   APP_CACHE = { orders: [] };
+  if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+  if (idleDisplayTimer) { clearTimeout(idleDisplayTimer); idleDisplayTimer = null; }
+  idleLastActive = 0;
+  const idleEl = document.getElementById('idleCountdown');
+  if (idleEl) idleEl.style.display = 'none';
   showLogin();
+}
+
+// ==================== 空闲自动登出 ====================
+const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 60分钟
+let idleTimer = null;
+let idleLastActive = 0;
+let idleDisplayTimer = null;
+
+function updateIdleDisplay() {
+  if (idleDisplayTimer) { clearTimeout(idleDisplayTimer); idleDisplayTimer = null; }
+  const el = document.getElementById('idleCountdown');
+  if (!el) return;
+  if (!localStorage.getItem('design_pm_token') || !idleLastActive) {
+    el.style.display = 'none';
+    return;
+  }
+  const elapsed = Date.now() - idleLastActive;
+  const remaining = Math.max(0, Math.ceil((IDLE_TIMEOUT_MS - elapsed) / 1000));
+  el.style.display = '';
+  el.textContent = '⏱ ' + remaining + 's';
+  if (remaining > 0) idleDisplayTimer = setTimeout(updateIdleDisplay, 500);
+}
+
+function resetIdleTimer() {
+  if (idleTimer) clearTimeout(idleTimer);
+  if (idleDisplayTimer) { clearTimeout(idleDisplayTimer); idleDisplayTimer = null; }
+  const token = localStorage.getItem('design_pm_token');
+  if (!token) {
+    idleLastActive = 0;
+    const el = document.getElementById('idleCountdown');
+    if (el) { el.style.display = 'none'; el.textContent = ''; }
+    return;
+  }
+  idleLastActive = Date.now();
+  // 60分钟超时不需要显示倒计时，等超时后弹窗即可
+
+  idleTimer = setTimeout(() => {
+    idleTimer = null;
+    const t = localStorage.getItem('design_pm_token');
+    if (t) fetch('/api/auth/logout', { method: 'POST', headers: { 'X-Auth-Token': t } }).catch(() => {});
+    localStorage.removeItem('design_pm_token');
+    localStorage.removeItem('design_pm_create_draft');
+    AUTH_USER = null;
+    currentView = 'dashboard';
+    currentAdminTab = 'dashboard';
+    APP_CACHE = { orders: [] };
+    // 弹窗提示，点击确定后跳转登录页
+    showIdleLogoutModal();
+  }, IDLE_TIMEOUT_MS);
+}
+
+function showIdleLogoutModal() {
+  // 移除已存在的弹窗
+  const old = document.getElementById('idleLogoutModal');
+  if (old) old.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'idleLogoutModal';
+  overlay.className = 'modal-overlay';
+  overlay.style.zIndex = '10000';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:400px;text-align:center;padding:40px 30px;">
+      <div style="font-size:48px;margin-bottom:16px;">⏰</div>
+      <div style="font-size:18px;font-weight:600;color:var(--gray-800);margin-bottom:8px;">登录超时</div>
+      <p style="font-size:14px;color:var(--gray-500);margin-bottom:24px;">长时间未操作，已自动退出登录<br>请重新登录系统</p>
+      <button class="btn btn-primary btn-lg" onclick="closeIdleLogoutModal()" style="width:100%;justify-content:center;padding:10px 0;">确 定</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function closeIdleLogoutModal() {
+  const overlay = document.getElementById('idleLogoutModal');
+  if (overlay) overlay.remove();
+  showLogin();
+}
+
+function startIdleMonitor() {
+  resetIdleTimer();
+  if (!window._idleMonitorInited) {
+    const events = ['mousedown','mousemove','keydown','scroll','touchstart','click'];
+    events.forEach(ev => document.addEventListener(ev, () => resetIdleTimer(), { passive: true }));
+    window._idleMonitorInited = true;
+  }
 }
 
 function roleLabel(r) {
@@ -656,7 +747,7 @@ async function render() {
       await renderMyTasks(main, role, uid);
     } else if (currentView === 'scoring') {
       await renderScoringView(main, role, uid);
-    } else if (currentView === 'admin') {
+    } else if (currentView === 'admin' || currentView === 'logs') {
       await renderAdmin(main, role, uid);
     }
 
@@ -2803,6 +2894,7 @@ async function renderAdmin(main, role, uid) {
         <button class="admin-tab ${currentAdminTab === 'appearance' ? 'active' : ''}" onclick="switchAdminTab('appearance')">🎨 外观</button>
         <button class="admin-tab ${currentAdminTab === 'users' ? 'active' : ''}" onclick="switchAdminTab('users')">👥 用户管理</button>
         <button class="admin-tab ${currentAdminTab === 'roles' ? 'active' : ''}" onclick="switchAdminTab('roles')">🔐 角色管理</button>
+        <button class="admin-tab ${currentAdminTab === 'logs' ? 'active' : ''}" onclick="switchAdminTab('logs')">📜 日志</button>
       </div>
       <div id="adminContent"></div>
     </div>`;
@@ -2832,6 +2924,8 @@ async function renderAdminContent() {
       await renderAdminUsers(container);
     } else if (currentAdminTab === 'roles') {
       await renderAdminRoles(container);
+    } else if (currentAdminTab === 'logs') {
+      await renderAdminLogs(container);
     }
   } catch (e) {
     container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${e.message}</p></div>`;
@@ -3612,6 +3706,55 @@ async function submitDeleteRole(roleId) {
     await renderAdminContent();
   } catch (e) {
     showAdminToast('❌ 删除失败: ' + e.message, 'error');
+  }
+}
+
+// ==================== 管理员：系统日志 ====================
+async function renderAdminLogs(container) {
+  container.innerHTML = `
+    <div class="filter-bar" style="margin-bottom:16px;">
+      <input type="date" class="form-input" id="logStartDate" style="min-width:140px;" title="开始日期">
+      <span style="color:var(--gray-400);font-size:13px;">~</span>
+      <input type="date" class="form-input" id="logEndDate" style="min-width:140px;" title="结束日期">
+      <button class="btn btn-primary btn-sm" onclick="loadAdminLogs()">🔍 查询</button>
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('logStartDate').value='';document.getElementById('logEndDate').value='';loadAdminLogs()">重置</button>
+    </div>
+    <div id="logContainer"><div class="loading">加载中</div></div>
+  `;
+  await loadAdminLogs();
+}
+
+async function loadAdminLogs() {
+  const container = document.getElementById('logContainer');
+  if (!container) return;
+  container.innerHTML = '<div class="loading">加载中</div>';
+  try {
+    const startDate = document.getElementById('logStartDate')?.value || '';
+    const endDate = document.getElementById('logEndDate')?.value || '';
+    let url = '/system/logs';
+    const params = [];
+    if (startDate) params.push('startDate=' + startDate);
+    if (endDate) params.push('endDate=' + endDate);
+    if (params.length) url += '?' + params.join('&');
+    const logs = await apiGet(url);
+    if (!logs.length) {
+      container.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><p>暂无日志记录</p></div>';
+      return;
+    }
+    container.innerHTML = '<div style="font-size:13px;color:var(--gray-400);margin-bottom:8px;">共 ' + logs.length + ' 条记录</div>' +
+      '<div class="card" style="padding:0;overflow-x:auto;"><table><thead><tr>' +
+      '<th style="width:60px;">#</th><th style="width:150px;">时间</th><th style="width:60px;">角色</th>' +
+      '<th style="width:80px;">操作人</th><th>操作内容</th><th style="width:80px;">关联项目</th></tr></thead><tbody>' +
+      logs.map(l => {
+        const rl = {sales:'销售',planner:'企划',designer:'设计师',superior:'上级',admin:'管理员'};
+        const rn = rl[l.role] || l.role;
+        const pl = l.projectId ? '<a href="javascript:void(0)" onclick="openProjectDetail(' + l.projectId + ')" style="color:var(--primary);text-decoration:none;">#' + l.projectId + '</a>' : '-';
+        return '<tr><td style="color:var(--gray-400);">' + l.id + '</td><td style="white-space:nowrap;font-size:12px;">' +
+          l.time + '</td><td><span class="badge badge-progress" style="font-size:11px;">' + rn + '</span></td><td><strong>' +
+          l.username + '</strong></td><td style="font-size:13px;">' + l.action + '</td><td>' + pl + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  } catch (e) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ' + e.message + '</p></div>';
   }
 }
 

@@ -2,12 +2,10 @@ package com.emie.designpm.repository;
 
 import com.emie.designpm.entity.SystemConfig;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
-@Repository
 public interface SystemConfigRepository extends JpaRepository<SystemConfig, Long> {
 
     /** 按配置分组查询 */
