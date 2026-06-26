@@ -98,11 +98,17 @@ async function initApp() {
       const r = await fetch('/api/auth/me', { headers: { 'X-Auth-Token': token } });
       if (r.ok) {
         AUTH_USER = await r.json();
-        currentView = 'dashboard';
-        currentAdminTab = 'dashboard';
+        // 恢复上次浏览的页面（默认工作台）
+        currentView = localStorage.getItem('design_pm_lastView') || 'dashboard';
+        currentAdminTab = localStorage.getItem('design_pm_lastAdminTab') || 'dashboard';
         APP_CACHE = { orders: [] };
+        // 重置 viewport 缩放
+        const vp = document.querySelector('meta[name="viewport"]');
+        if (vp) vp.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0';
         showApp();
         startIdleMonitor();
+        // 渲染完成后滚动到顶部
+        setTimeout(() => { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; }, 100);
         return;
       }
     } catch(e) {}
@@ -348,12 +354,16 @@ async function handleLogin(event) {
     // 登录成功
     localStorage.setItem('design_pm_token', data.token);
     AUTH_USER = { userId: data.userId, name: data.name, role: data.role, title: data.title };
+    // 重置 viewport 缩放（修复 iOS 输入框放大后不恢复的问题）
+    const vp = document.querySelector('meta[name="viewport"]');
+    if (vp) vp.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0';
     // 重置视图状态，避免不同账号切换时看到上任用户的页面
     currentView = 'dashboard';
     currentAdminTab = 'dashboard';
     APP_CACHE = { orders: [] };
     showApp();
     startIdleMonitor();
+    setTimeout(() => { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; }, 100);
   } catch (e) {
     errEl.textContent = '网络错误，请重试';
     errEl.style.display = '';
@@ -531,9 +541,16 @@ function renderSidebar() {
 // ==================== 导航 ====================
 function navigate(view) {
   currentView = view;
+  // 保存当前浏览页面（刷新后恢复）
+  localStorage.setItem('design_pm_lastView', view);
   renderSidebar();
   render();
   closeMobileSidebar();
+  // 移动端切换页面后回顶部（延迟确保渲染完成）
+  setTimeout(() => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+  }, 50);
 }
 
 // ==================== 移动端侧栏 ====================
@@ -939,12 +956,12 @@ async function renderDashboard(main, role, uid) {
       <div class="stat-card" style="cursor:pointer" onclick="navigate('tasks')"><div class="stat-icon green">✅</div><div><div class="stat-value">${stats.approvedTasks}</div><div class="stat-label">已完成子任务</div></div></div>
     </div>
     ${currentRole === 'sales'
-      ? `<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
+      ? `<div class="stats-grid sales-stats">
           <div class="stat-card" style="cursor:pointer" onclick="navigate('channel')"><div class="stat-icon blue">📦</div><div><div class="stat-value">${stats.channelProjects}</div><div class="stat-label">渠道定制单</div></div></div>
           <div class="stat-card" style="cursor:pointer" onclick="navigate('orders')"><div class="stat-icon yellow">🔄</div><div><div class="stat-value">${stats.inProgress}</div><div class="stat-label">进行中项目</div></div></div>
           <div class="stat-card" style="cursor:pointer" onclick="navigate('scoring')"><div class="stat-icon yellow">⭐</div><div><div class="stat-value">${stats.pendingScore}</div><div class="stat-label">待评分</div></div></div>
         </div>`
-      : `<div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
+      : `<div class="stats-grid four-col-stats">
           <div class="stat-card" style="cursor:pointer" onclick="navigate('channel')"><div class="stat-icon blue">📦</div><div><div class="stat-value">${stats.channelProjects}</div><div class="stat-label">渠道定制单</div></div></div>
           <div class="stat-card" style="cursor:pointer" onclick="navigate('regular')"><div class="stat-icon green">🏭</div><div><div class="stat-value">${stats.regularProjects}</div><div class="stat-label">公司常规品</div></div></div>
           <div class="stat-card" style="cursor:pointer" onclick="navigate('orders')"><div class="stat-icon yellow">🔄</div><div><div class="stat-value">${stats.inProgress}</div><div class="stat-label">进行中项目</div></div></div>
@@ -2921,6 +2938,7 @@ async function renderAdmin(main, role, uid) {
 
 async function switchAdminTab(tab) {
   currentAdminTab = tab;
+  localStorage.setItem('design_pm_lastAdminTab', tab);
   const tabs = document.querySelectorAll('.admin-tab');
   tabs.forEach(t => t.classList.remove('active'));
   const activeTab = document.querySelector(`.admin-tab[onclick*="${tab}"]`);
