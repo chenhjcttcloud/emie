@@ -98,19 +98,23 @@
 <div id="appContainer" style="display:none;">
   <div class="header">
     <div class="header-left">
-      <div class="logo">🎨 设计项目管理<span>Design Project Management</span></div>
+      <button class="hamburger" id="hamburgerBtn" onclick="toggleMobileSidebar()" aria-label="菜单">☰</button>
+      <div class="logo">🎨 <span class="logo-text">设计项目管理</span><span class="logo-sub">Design Project Management</span></div>
     </div>
     <div class="header-right">
-      <span style="font-size:13px;color:var(--gray-500);" id="userDisplay"></span>
-      <button class="btn btn-outline btn-sm" onclick="handleLogout()">退出登录</button>
+      <span class="idle-countdown" id="idleCountdown"></span>
+      <span class="user-display" id="userDisplay"></span>
+      <button class="btn btn-outline btn-sm logout-btn" onclick="handleLogout()">退出</button>
     </div>
   </div>
   <div class="app-layout">
     <aside class="sidebar" id="sidebarContainer"></aside>
+    <!-- 移动端侧栏遮罩 -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
     <main class="main-content" id="mainContent"></main>
   </div>
 </div>
 
-<script src="/js/app.js?v=69"></script>
+<script src="/js/app.js?v=70"></script>
 </body>
 </html>

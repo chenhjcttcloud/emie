@@ -533,6 +533,24 @@ function navigate(view) {
   currentView = view;
   renderSidebar();
   render();
+  closeMobileSidebar();
+}
+
+// ==================== 移动端侧栏 ====================
+function toggleMobileSidebar() {
+  const sidebar = document.getElementById('sidebarContainer');
+  const overlay = document.getElementById('sidebarOverlay');
+  if (!sidebar || !overlay) return;
+  sidebar.classList.toggle('open');
+  overlay.classList.toggle('open');
+}
+
+function closeMobileSidebar() {
+  const sidebar = document.getElementById('sidebarContainer');
+  const overlay = document.getElementById('sidebarOverlay');
+  if (!sidebar || !overlay) return;
+  sidebar.classList.remove('open');
+  overlay.classList.remove('open');
 }
 
 // ==================== 状态标签 ====================
