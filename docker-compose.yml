@@ -1,0 +1,20 @@
+services:
+  app:
+    build: .
+    container_name: emie-app
+    restart: unless-stopped
+    network_mode: "host"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:mysql://8.134.130.60:3306/designpmtest?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: mysql_nZiJw8
+      APP_UPLOAD_DIR: /app/uploads
+      APP_LOG_ARCHIVE_DIR: /app/logs/archive
+    volumes:
+      - app-uploads:/app/uploads
+      - app-logs:/app/logs/archive
+
+volumes:
+  app-uploads:
+  app-logs:

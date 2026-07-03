@@ -8,7 +8,11 @@ import java.time.LocalDateTime;
 @Data
 @NoArgsConstructor
 @Entity
-@Table(name = "sub_tasks")
+@Table(name = "sub_tasks", indexes = {
+    @Index(name = "idx_sub_task_designer", columnList = "designerId"),
+    @Index(name = "idx_sub_task_project", columnList = "project_id"),
+    @Index(name = "idx_sub_task_status", columnList = "status")
+})
 public class SubTask {
 
     @Id
@@ -18,7 +22,7 @@ public class SubTask {
     @Column(nullable = false)
     private String name;
 
-    /** pending / accepted / delivered / approved / rejected */
+    /** pending / accepted / delivered / planner_approved / rejected / scoring_planner / sales_approved / admin_approved / completed */
     @Column(nullable = false)
     private String status = "pending";
 
@@ -28,6 +32,9 @@ public class SubTask {
     private String actualDate;
     private String designerId;
     private String designerName;
+
+    /** 负责人角色类型：designer / supplychain（用于区分设计师和供应链的子任务） */
+    private String assigneeRole;
 
     @Column(columnDefinition = "TEXT")
     private String details;
@@ -45,6 +52,15 @@ public class SubTask {
 
     @Column(columnDefinition = "TEXT")
     private String reviewComments;
+
+    /** 设计师自评 - 审美评分 1-10（交付时提交），支持1位小数 */
+    private Double selfAesthetics;
+
+    /** 设计师自评 - 创新评分 1-10（交付时提交），支持1位小数 */
+    private Double selfInnovation;
+
+    /** 设计师自评综合分数（旧字段，兼容保留） */
+    private Double selfScore;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;

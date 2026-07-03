@@ -17,11 +17,15 @@ public class TaskDetailDTO {
     private String actualDate;
     private String designerId;
     private String designerName;
+    private String assigneeRole;
     private String details;
     private String deliverables;
     private String attachmentsJson;
     private String referenceImagesJson;
     private String reviewComments;
+    private Double selfScore;
+    private Double selfAesthetics;
+    private Double selfInnovation;
     private List<Map<String, Object>> scoringRecords;
     private String createdAt;
 }

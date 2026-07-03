@@ -7,8 +7,9 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @Entity
-@Table(name = "scoring_records", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"sub_task_id", "role"})
+@Table(name = "scoring_records", indexes = {
+    @Index(name = "idx_scoring_sub_task", columnList = "sub_task_id"),
+    @Index(name = "idx_scoring_role", columnList = "role")
 })
 public class ScoringRecord {
 
@@ -16,14 +17,25 @@ public class ScoringRecord {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 角色: sales / planner / designer / superior */
+    /** 角色: sales / planner / designer / supplychain / admin */
     @Column(nullable = false)
     private String role;
 
-    /** 审美评分 1-10 */
+    /** 评分类型: self=自评 planner=企划评 sales=销售评 admin=管理评 */
+    @Column(length = 20)
+    private String scoreType;
+
+    /** 单一评分 1-10（新系统使用，替代 aesthetics + innovation） */
+    private Integer score;
+
+    /** 评分备注 */
+    @Column(columnDefinition = "TEXT")
+    private String comment;
+
+    /** 审美评分 1-10（兼容旧数据） */
     private Double aesthetics;
 
-    /** 创新评分 1-10 */
+    /** 创新评分 1-10（兼容旧数据） */
     private Double innovation;
 
     /** 该角色评分权重 (0-1) */

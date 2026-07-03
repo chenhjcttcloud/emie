@@ -10,7 +10,12 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @Entity
-@Table(name = "projects")
+@Table(name = "projects", indexes = {
+    @Index(name = "idx_sales_id", columnList = "salesId"),
+    @Index(name = "idx_planner_id", columnList = "plannerId"),
+    @Index(name = "idx_project_status", columnList = "status"),
+    @Index(name = "idx_created_at", columnList = "createdAt")
+})
 public class Project {
 
     @Id
@@ -51,6 +56,25 @@ public class Project {
     /** attachments stored as JSON array string */
     @Column(columnDefinition = "LONGTEXT")
     private String attachmentsJson;
+
+    /** 产品类目 */
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "product_category_id")
+    private ProductCategory productCategory;
+
+    /** 产品类目为"其他"时的补充说明 */
+    @Column(columnDefinition = "TEXT")
+    private String productCategoryNote;
+
+    /** 目标市场：JSON数组，如 ["国内"] 或 ["国内","海外"] */
+    private String targetMarket;
+
+    /** 合规处罚：JSON数组，如 ["蓝牙","无线发射"] */
+    @Column(columnDefinition = "TEXT")
+    private String complianceItems;
+
+    /** 参考零售价 */
+    private String priceRange;
 
     /** 终止请求发起方（用于双方确认终止流程） */
     private String terminateRequester;

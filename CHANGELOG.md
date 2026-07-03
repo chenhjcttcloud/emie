@@ -1,5 +1,28 @@
 # 更新日志
 
+## v2.5 (2026-07-02)
+
+### ✨ 产品类目独立表
+
+- **实体 + Repository**：新建 `ProductCategory` 实体（id/name/sortOrder/active）及 `ProductCategoryRepository`
+- **Project 关联**：`Project.productCategory` 从 String 改为 `@ManyToOne` 关联 `ProductCategory` 实体
+- **数据种子**：启动时自动插入 5 个默认类目（灯/音响/相机/个护/其他）
+- **管理 API**：新增 `CategoryController`，提供类目 CRUD（`GET /api/categories`、`POST`、`PUT`、`DELETE`）
+- **管理后台 UI**：新增「产品类目」tab，支持在线增删改类目，修改后自动刷新前端下拉选项
+- **前端自适应**：新建项目时类目选项从 API 动态加载，不再硬编码
+
+## v2.4 (2026-07-02)
+
+### ✨ 新功能：渠道定制项目表单增强
+
+- **产品企划必选**：新建渠道定制项目时，产品企划下拉框移除"未指定"选项，必须选择一名产品企划
+- **新增产品类目选项卡**：在产品企划下方增加产品类目选择，选项包括灯、音响、相机、个护、其他；选择"其他"时弹出文字说明输入框且必填
+- **新增目标市场选项卡**：在产品类目下方增加目标市场选择，支持国内、海外多选，至少选择一个
+- **后端支持**：Project 实体新增 `productCategory`、`productCategoryNote`、`targetMarket` 字段；DTO、Controller、Service 全面对接数据存储与返回
+- **列表展示**：渠道定制单列表和工作台概览增加产品类目、目标市场两列
+- **详情展示**：项目详情页显示产品类目（含其他说明）和目标市场
+- **草稿支持**：产品类目和目标市场选择支持草稿保存与恢复
+
 ## v2.3 (2026-06-26)
 
 ### 📱 移动端适配优化

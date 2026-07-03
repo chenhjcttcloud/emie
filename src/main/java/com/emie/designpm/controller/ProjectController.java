@@ -6,6 +6,7 @@ import com.emie.designpm.dto.TaskDetailDTO;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.repository.ScoringRepository;
+import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.ProjectService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -22,18 +23,21 @@ public class ProjectController {
     private final ProjectService projectService;
     private final ScoringRepository scoringRepository;
     private final ActivityLogRepository activityLogRepository;
+    private final SubTaskRepository subTaskRepository;
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     public ProjectController(ProjectService projectService,
                              ScoringRepository scoringRepository,
-                             ActivityLogRepository activityLogRepository) {
+                             ActivityLogRepository activityLogRepository,
+                             SubTaskRepository subTaskRepository) {
         this.projectService = projectService;
         this.scoringRepository = scoringRepository;
         this.activityLogRepository = activityLogRepository;
+        this.subTaskRepository = subTaskRepository;
     }
 
-    /** 获取所有项目列表 */
+    /** 获取所有项目列表（轻量版：计数查询代替 JOIN FETCH） */
     @GetMapping
     public ResponseEntity<List<ProjectSummaryDTO>> getProjects(
             @RequestParam(required = false) String role,
@@ -43,8 +47,8 @@ public class ProjectController {
 
         List<Project> projects;
         if (role != null && userId != null) {
-            // 设计师查看渠道/常规品页面时，只显示已参与的项目
-            if (participating && "designer".equals(role)) {
+            // 设计师/供应链查看渠道/常规品页面时，只显示已参与的项目
+            if (participating && ("designer".equals(role) || "supplychain".equals(role))) {
                 projects = projectService.getDesignerParticipatingProjects(userId);
             } else {
                 projects = projectService.getProjectsByRoleAndUser(role, userId);
@@ -59,8 +63,13 @@ public class ProjectController {
                     .collect(Collectors.toList());
         }
 
+        // 批量预计算子任务计数（避免 toSummary 中逐个调用 p.getTasks()）
+        Map<Long, int[]> taskCountMap = projectService.getTaskCountMap(projects);
+        // 批量计算项目评分（1次SQL替代N×M次）
+        Map<Long, Double> scoreMap = projectService.computeProjectScoresBatch(projects);
+
         List<ProjectSummaryDTO> result = projects.stream()
-                .map(this::toSummary)
+                .map(p -> toSummary(p, taskCountMap, scoreMap))
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(result);
@@ -186,10 +195,37 @@ public class ProjectController {
         return ResponseEntity.ok(toDetail(p));
     }
 
-    /** 设计师状态看板 */
+    /** 通用角色状态看板（sales/planner/supplychain/designer） */
+    @GetMapping("/role-status")
+    public ResponseEntity<Map<String, Object>> roleStatus(@RequestParam String role) {
+        return ResponseEntity.ok(projectService.getRoleStatus(role));
+    }
+
+    /** 设计师状态看板（兼容旧版） */
     @GetMapping("/designer-status")
     public ResponseEntity<Map<String, Object>> designerStatus() {
         return ResponseEntity.ok(projectService.getDesignerStatus());
+    }
+
+    /** 徽章统计（避免前端循环 N 次 API 调用） */
+    @GetMapping("/badge-stats")
+    public ResponseEntity<Map<String, Object>> badgeStats(
+            @RequestParam String role,
+            @RequestParam String userId) {
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("myTaskCount", subTaskRepository.countByDesignerIdAndStatusIn(userId));
+
+        long pendingScoreCount;
+        if ("admin".equals(role)) {
+            pendingScoreCount = scoringRepository.countAllPendingScores();
+        } else if ("sales".equals(role) || "planner".equals(role)) {
+            pendingScoreCount = scoringRepository.countPendingByRole(role);
+        } else {
+            pendingScoreCount = 0;
+        }
+        stats.put("pendingScoreCount", pendingScoreCount);
+
+        return ResponseEntity.ok(stats);
     }
 
     /** 终止项目 */
@@ -249,9 +285,20 @@ public class ProjectController {
         }
     }
 
+    /** 删除整个项目（含子任务、日志、评分记录） */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteProject(@PathVariable Long id) {
+        try {
+            projectService.deleteProject(id);
+            return ResponseEntity.ok(Map.of("message", "项目已删除"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     // ==================== DTO Mappers ====================
 
-    private ProjectSummaryDTO toSummary(Project p) {
+    private ProjectSummaryDTO toSummary(Project p, Map<Long, int[]> taskCountMap, Map<Long, Double> scoreMap) {
         ProjectSummaryDTO dto = new ProjectSummaryDTO();
         dto.setId(p.getId());
         dto.setType(p.getType());
@@ -264,12 +311,19 @@ public class ProjectController {
         dto.setPlannerName(p.getPlannerName());
         dto.setDeadline(p.getDeadline());
         dto.setProductRequirements(p.getProductRequirements());
+        dto.setProductCategory(p.getProductCategory() != null ? p.getProductCategory().getName() : null);
+        dto.setTargetMarket(p.getTargetMarket());
+        dto.setComplianceItems(p.getComplianceItems());
+        dto.setPriceRange(p.getPriceRange());
 
-        int taskCount = p.getTasks().size();
-        long doneCount = p.getTasks().stream().filter(t -> projectService.isTaskFullyCompleted(t)).count();
+        // 使用预计算的计数，避免加载子任务
+        int[] counts = taskCountMap != null ? taskCountMap.get(p.getId()) : null;
+        int taskCount = counts != null ? counts[0] : 0;
+        int doneCount = counts != null ? counts[1] : 0;
         dto.setTaskCount(taskCount);
-        dto.setApprovedTaskCount((int) doneCount);
+        dto.setApprovedTaskCount(doneCount);
         dto.setProgressPercent(taskCount > 0 ? (int) (doneCount * 100 / taskCount) : 0);
+        dto.setScore(scoreMap != null ? scoreMap.get(p.getId()) : null);
         dto.setCreatedAt(p.getCreatedAt().format(DTF));
         dto.setUpdatedAt(p.getUpdatedAt().format(DTF));
         return dto;
@@ -291,6 +345,11 @@ public class ProjectController {
         dto.setDeadline(p.getDeadline());
         dto.setProductRequirements(p.getProductRequirements());
         dto.setDescription(p.getDescription());
+        dto.setProductCategory(p.getProductCategory() != null ? p.getProductCategory().getName() : null);
+        dto.setProductCategoryNote(p.getProductCategoryNote());
+        dto.setTargetMarket(p.getTargetMarket());
+        dto.setComplianceItems(p.getComplianceItems());
+        dto.setPriceRange(p.getPriceRange());
         dto.setReferenceImagesJson(p.getReferenceImagesJson());
         dto.setAttachmentsJson(p.getAttachmentsJson());
 
@@ -349,18 +408,27 @@ public class ProjectController {
         dto.setActualDate(t.getActualDate());
         dto.setDesignerId(t.getDesignerId());
         dto.setDesignerName(t.getDesignerName());
+        dto.setAssigneeRole(t.getAssigneeRole());
         dto.setDetails(t.getDetails());
         dto.setDeliverables(t.getDeliverables());
         dto.setAttachmentsJson(t.getAttachmentsJson());
         dto.setReferenceImagesJson(t.getReferenceImagesJson());
         dto.setReviewComments(t.getReviewComments());
+        dto.setSelfScore(t.getSelfScore());
+        dto.setSelfAesthetics(t.getSelfAesthetics());
+        dto.setSelfInnovation(t.getSelfInnovation());
         dto.setCreatedAt(t.getCreatedAt().format(DTF));
 
         // Scoring records
         List<ScoringRecord> records = scoringRepository.findBySubTaskId(t.getId());
         dto.setScoringRecords(records.stream().map(sr -> {
             Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", sr.getId());
             m.put("role", sr.getRole());
+            m.put("scoreType", sr.getScoreType());
+            m.put("score", sr.getScore());
+            m.put("comment", sr.getComment());
+            // 兼容旧数据
             m.put("aesthetics", sr.getAesthetics());
             m.put("innovation", sr.getInnovation());
             m.put("weight", sr.getWeight());

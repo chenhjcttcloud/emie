@@ -19,15 +19,21 @@ public class ProjectService {
     private final SubTaskRepository subTaskRepository;
     private final ScoringRepository scoringRepository;
     private final UserService userService;
+    private final ProductCategoryRepository productCategoryRepository;
+    private final SystemConfigRepository systemConfigRepository;
 
     public ProjectService(ProjectRepository projectRepository,
                           SubTaskRepository subTaskRepository,
                           ScoringRepository scoringRepository,
-                          UserService userService) {
+                          UserService userService,
+                          ProductCategoryRepository productCategoryRepository,
+                          SystemConfigRepository systemConfigRepository) {
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
         this.scoringRepository = scoringRepository;
         this.userService = userService;
+        this.productCategoryRepository = productCategoryRepository;
+        this.systemConfigRepository = systemConfigRepository;
     }
 
     // ==================== Query ====================
@@ -40,27 +46,45 @@ public class ProjectService {
         return projectRepository.findById(id);
     }
 
+    /** 获取项目列表（轻量版，不使用 JOIN FETCH tasks） */
     public List<Project> getProjectsByRoleAndUser(String role, String userId) {
-        if ("superior".equals(role) || "admin".equals(role)) {
-            return projectRepository.findAllWithTasks();
+        if ("admin".equals(role)) {
+            return projectRepository.findAllLight();
         }
-        if ("designer".equals(role)) {
-            return projectRepository.findByDesignerId(userId);
+        if ("designer".equals(role) || "supplychain".equals(role)) {
+            return projectRepository.findByDesignerIdLight(userId);
         }
         if ("sales".equals(role)) {
-            // 销售：只能看到自己发布的全部项目（渠道定制 + 常规品）
-            return projectRepository.findBySalesId(userId);
+            return projectRepository.findBySalesIdLight(userId);
         }
         if ("planner".equals(role)) {
-            // 企划：看到指派给自己的 + 未指定企划的渠道定制单
-            return projectRepository.findByPlannerView(userId);
+            return projectRepository.findByPlannerViewLight(userId);
         }
-        return projectRepository.findBySalesId(userId);
+        return projectRepository.findBySalesIdLight(userId);
     }
 
-    /** 设计师已参与的项目（已接单子任务，排除待认领的） */
+    /** 设计师已参与的项目（轻量版） */
     public List<Project> getDesignerParticipatingProjects(String userId) {
-        return projectRepository.findParticipatingByDesignerId(userId);
+        return projectRepository.findParticipatingByDesignerIdLight(userId);
+    }
+
+    /** 批量获取子任务统计（projectId → {taskCount, approvedCount}） */
+    public Map<Long, int[]> getTaskCountMap(List<Project> projects) {
+        if (projects == null || projects.isEmpty()) return Collections.emptyMap();
+        List<Long> ids = projects.stream().map(Project::getId).collect(Collectors.toList());
+        List<Object[]> rows = subTaskRepository.countTasksByProjectIds(ids);
+        Map<Long, int[]> map = new HashMap<>(ids.size());
+        for (Object[] row : rows) {
+            Long pid = (Long) row[0];
+            int total = ((Number) row[1]).intValue();
+            int done = ((Number) row[2]).intValue();
+            map.put(pid, new int[]{total, done});
+        }
+        // 没有子任务的项目也补 0
+        for (Project p : projects) {
+            map.putIfAbsent(p.getId(), new int[]{0, 0});
+        }
+        return map;
     }
 
     public List<Project> getProjectsByType(String type) {
@@ -128,6 +152,26 @@ public class ProjectService {
         p.setDeadline(deadline);
         p.setProductRequirements(productRequirements);
         p.setDescription(description);
+
+        // 通用字段（所有项目类型）
+        String catName = (String) body.get("productCategory");
+        if (catName != null && !catName.isBlank()) {
+            productCategoryRepository.findByName(catName).ifPresent(p::setProductCategory);
+        }
+        String note = (String) body.get("productCategoryNote");
+        if (note != null && !note.isBlank()) {
+            p.setProductCategoryNote(SecurityUtil.sanitizeText(note, 500));
+        }
+        p.setTargetMarket(SecurityUtil.sanitizeText((String) body.get("targetMarket"), 100));
+        String complianceStr = (String) body.get("complianceItems");
+        if (complianceStr != null && !complianceStr.isBlank()) {
+            p.setComplianceItems(SecurityUtil.sanitizeText(complianceStr, 500));
+        }
+        String priceRangeStr = (String) body.get("priceRange");
+        if (priceRangeStr != null && !priceRangeStr.isBlank()) {
+            p.setPriceRange(priceRangeStr);
+        }
+
         p.setReferenceImagesJson(refImagesJson);
         p.setAttachmentsJson(attsJson);
 
@@ -173,6 +217,13 @@ public class ProjectService {
             throw new RuntimeException("项目已" + ("terminated".equals(p.getStatus()) ? "终止" : "暂停") + "，无法操作");
         }
 
+        // 销售不允许创建子任务
+        // 销售不允许创建子任务
+        String role = (String) body.getOrDefault("currentRole", "");
+        if ("sales".equals(role)) {
+            throw new RuntimeException("销售无法创建子任务");
+        }
+
         String name = SecurityUtil.sanitizeText((String) body.get("name"), 200);
         String plannedDate = (String) body.get("plannedDate");
         String designerId = SecurityUtil.sanitizeText((String) body.get("designerId"), 100);
@@ -184,6 +235,9 @@ public class ProjectService {
         task.setPlannedDate(plannedDate);
         task.setDesignerId(designerId);
         task.setDesignerName(userService.getUserName(designerId));
+        // 设置负责人角色类型（designer / supplychain），默认 designer
+        String assigneeRole = (String) body.get("assigneeRole");
+        task.setAssigneeRole(assigneeRole != null && !assigneeRole.isBlank() ? assigneeRole : "designer");
         task.setDetails(details);
         task.setReferenceImagesJson(validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true));
         task.setAttachmentsJson(validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
@@ -199,8 +253,7 @@ public class ProjectService {
         }
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
-        String currentRole = (String) body.getOrDefault("currentRole", "");
-        p.getLogs().add(new ActivityLog("添加子任务：" + name, currentUser, currentRole, p));
+        p.getLogs().add(new ActivityLog("添加子任务：" + name, currentUser, role, p));
 
         return projectRepository.save(p);
     }
@@ -208,6 +261,13 @@ public class ProjectService {
     public Project updateSubTask(Long projectId, Long taskId, Map<String, Object> body) {
         Project p = projectRepository.findById(projectId)
                 .orElseThrow(() -> new RuntimeException("项目不存在"));
+
+        // 销售不允许编辑子任务
+        String currentRole = (String) body.getOrDefault("currentRole", "");
+        if ("sales".equals(currentRole)) {
+            throw new RuntimeException("销售无法编辑子任务");
+        }
+
         SubTask task = p.getTasks().stream()
                 .filter(t -> t.getId().equals(taskId))
                 .findFirst().orElseThrow(() -> new RuntimeException("子任务不存在"));
@@ -219,12 +279,14 @@ public class ProjectService {
             task.setDesignerId(did);
             task.setDesignerName(userService.getUserName(did));
         }
+        if (body.containsKey("assigneeRole")) {
+            task.setAssigneeRole((String) body.get("assigneeRole"));
+        }
         if (body.containsKey("details")) task.setDetails(SecurityUtil.sanitizeText((String) body.get("details"), 2000));
         if (body.containsKey("referenceImagesJson")) task.setReferenceImagesJson(validateAndCleanFiles((String) body.get("referenceImagesJson"), true));
         if (body.containsKey("attachmentsJson")) task.setAttachmentsJson(validateAndCleanFiles((String) body.get("attachmentsJson"), false));
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
-        String currentRole = (String) body.getOrDefault("currentRole", "");
         p.getLogs().add(new ActivityLog("编辑子任务：" + task.getName(), currentUser, currentRole, p));
 
         return projectRepository.save(p);
@@ -304,10 +366,22 @@ public class ProjectService {
         task.setActualDate((String) body.get("actualDate"));
         task.setDeliverables(SecurityUtil.sanitizeText((String) body.get("deliverables"), 5000));
         task.setAttachmentsJson(validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
+        // 设计师自评分（双维度：审美 + 创新）
+        Double selfAesthetics = body.containsKey("selfAesthetics") ? ((Number) body.get("selfAesthetics")).doubleValue() : null;
+        Double selfInnovation = body.containsKey("selfInnovation") ? ((Number) body.get("selfInnovation")).doubleValue() : null;
+        task.setSelfAesthetics(selfAesthetics);
+        task.setSelfInnovation(selfInnovation);
+        // 兼容旧字段：取平均值
+        if (selfAesthetics != null && selfInnovation != null) {
+            task.setSelfScore(Math.round((selfAesthetics + selfInnovation) / 2.0 * 10.0) / 10.0);
+        }
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
-        p.getLogs().add(new ActivityLog("子任务交付：" + task.getName(), currentUser, currentRole, p));
+        String selfScoreStr = selfAesthetics != null && selfInnovation != null
+            ? "审美" + selfAesthetics + "/创新" + selfInnovation
+            : "—";
+        p.getLogs().add(new ActivityLog("子任务交付（自评" + selfScoreStr + "）：" + task.getName(), currentUser, currentRole, p));
 
         return projectRepository.save(p);
     }
@@ -324,8 +398,16 @@ public class ProjectService {
         task.setDeliverables(SecurityUtil.sanitizeText((String) body.get("deliverables"), 5000));
         task.setAttachmentsJson(validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
         task.setReviewComments(null);
+        // 设计师自评分（双维度）
+        Double reAesthetics = body.containsKey("selfAesthetics") ? ((Number) body.get("selfAesthetics")).doubleValue() : null;
+        Double reInnovation = body.containsKey("selfInnovation") ? ((Number) body.get("selfInnovation")).doubleValue() : null;
+        task.setSelfAesthetics(reAesthetics);
+        task.setSelfInnovation(reInnovation);
+        if (reAesthetics != null && reInnovation != null) {
+            task.setSelfScore(Math.round((reAesthetics + reInnovation) / 2.0 * 10.0) / 10.0);
+        }
 
-        // Clear scoring
+        // Clear all scoring records
         scoringRepository.deleteAll(scoringRepository.findBySubTaskId(taskId));
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
@@ -344,78 +426,93 @@ public class ProjectService {
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
+        String comments = SecurityUtil.sanitizeText((String) body.getOrDefault("comments", ""), 500);
         boolean isChannel = "channel_custom".equals(p.getType());
-
-        // 评分字段（渠道定制单：审批时同时评分）
         Double aesthetics = body.containsKey("aesthetics") ? ((Number) body.get("aesthetics")).doubleValue() : null;
         Double innovation = body.containsKey("innovation") ? ((Number) body.get("innovation")).doubleValue() : null;
 
-        if (isChannel && "planner".equals(currentRole) && "delivered".equals(task.getStatus())) {
-            // 渠道定制单：企划确认验收 + 评分 → 进入 planner_approved 状态，等待销售确认评分
+        if ("delivered".equals(task.getStatus()) && "planner".equals(currentRole)) {
+            // Step 1: 企划验收 → 企划评分
             task.setStatus("planner_approved");
-            task.setReviewComments(SecurityUtil.sanitizeText((String) body.getOrDefault("comments", "企划验收通过"), 500));
-            // 创建两条评分记录（企划带分值，销售待评分）
-            createScoringRecord(task, "planner", aesthetics, innovation, p.getType());
-            createScoringRecord(task, "sales", null, null, p.getType());
-            p.getLogs().add(new ActivityLog("子任务企划确认通过并评分（待销售确认评分）：" + task.getName(), currentUser, currentRole, p));
-        } else if (isChannel && "sales".equals(currentRole) && "planner_approved".equals(task.getStatus())) {
-            // 渠道定制单：销售确认验收 + 评分 → 最终 approved
-            task.setStatus("approved");
-            task.setReviewComments(SecurityUtil.sanitizeText((String) body.getOrDefault("comments", "销售确认通过"), 500));
-            // 更新销售的评分记录（企划的已存在）
-            createScoringRecord(task, "sales", aesthetics, innovation, p.getType());
-            p.getLogs().add(new ActivityLog("子任务销售确认通过并评分：" + task.getName(), currentUser, currentRole, p));
+            task.setReviewComments(comments);
+            createScoringRecord(task, "planner", "planner", aesthetics, innovation);
+            p.getLogs().add(new ActivityLog("企划验收通过并评分：" + task.getName(), currentUser, currentRole, p));
+        } else if ("planner_approved".equals(task.getStatus()) && "sales".equals(currentRole) && isChannel) {
+            // 渠道：销售验收 → 销售评分
+            task.setStatus("sales_approved");
+            task.setReviewComments(comments);
+            createScoringRecord(task, "sales", "sales", aesthetics, innovation);
+            p.getLogs().add(new ActivityLog("销售验收通过并评分：" + task.getName(), currentUser, currentRole, p));
+        } else if ("planner_approved".equals(task.getStatus()) && "admin".equals(currentRole) && !isChannel) {
+            // 常规品：管理验收 → 管理评分
+            task.setStatus("admin_approved");
+            task.setReviewComments(comments);
+            createScoringRecord(task, "admin", "admin", aesthetics, innovation);
+            p.getLogs().add(new ActivityLog("管理验收通过并评分：" + task.getName(), currentUser, currentRole, p));
         } else {
-            // 常规品（或其他情况）：直接通过，评分后续单独填写
-            task.setStatus("approved");
-            task.setReviewComments(SecurityUtil.sanitizeText((String) body.getOrDefault("comments", "验收通过"), 500));
-            p.getLogs().add(new ActivityLog("子任务验收通过：" + task.getName(), currentUser, currentRole, p));
-            initEmptyScoringRecords(task, p.getType());
+            throw new RuntimeException("当前状态无法执行验收操作");
         }
 
-        // 只有最终 approved 状态才检查项目是否完结
-        if ("approved".equals(task.getStatus())) {
-            boolean allApproved = p.getTasks().stream().allMatch(t -> "approved".equals(t.getStatus()));
-            if (allApproved) p.setStatus("completed");
-        }
+        // 检查是否所有评分已完成
+        checkTaskCompletion(task, p);
 
         return projectRepository.save(p);
     }
 
-    private void createScoringRecord(SubTask task, String role, Double aesthetics, Double innovation, String projectType) {
-        boolean isChannel = "channel_custom".equals(projectType);
-        double weight = isChannel ? (role.equals("planner") ? 0.5 : 0.5) : 1.0;
-
-        // 检查评分记录是否已存在（渠道定制单：销售确认时，记录已在企划评分时创建）
-        ScoringRecord sr = scoringRepository.findBySubTaskIdAndRole(task.getId(), role)
-                .orElseGet(() -> {
-                    ScoringRecord newSr = new ScoringRecord();
-                    newSr.setRole(role);
-                    newSr.setSubTask(task);
-                    return newSr;
-                });
+    /** 创建评分记录（双维度：审美评分 + 创新评分） */
+    private void createScoringRecord(SubTask task, String role, String scoreType, Double aesthetics, Double innovation) {
+        ScoringRecord sr = new ScoringRecord();
+        sr.setRole(role);
+        sr.setScoreType(scoreType);
         sr.setAesthetics(aesthetics);
         sr.setInnovation(innovation);
-        sr.setWeight(weight);
+        // 同时保留 score 字段兼容（取两者平均值）
+        if (aesthetics != null && innovation != null) {
+            sr.setScore((int) Math.round((aesthetics + innovation) / 2.0));
+        }
+        // 读取对应项目类型的角色权重百分比，转为小数
+        String projectType = task.getProject() != null ? task.getProject().getType() : "regular";
+        sr.setWeight(getScoringPct(projectType, role) / 100.0);
+        sr.setSubTask(task);
         scoringRepository.save(sr);
     }
 
-    private void initEmptyScoringRecords(SubTask task, String projectType) {
-        boolean isChannel = "channel_custom".equals(projectType);
-        List<String> scorers = isChannel
-                ? List.of("sales", "planner")
-                : List.of("planner");
-        Map<String, Double> weightsMap = isChannel
-                ? Map.of("sales", 0.5, "planner", 0.5)
-                : Map.of("planner", 1.0);
-        for (String role : scorers) {
-            ScoringRecord sr = new ScoringRecord();
-            sr.setRole(role);
-            sr.setAesthetics(null);
-            sr.setInnovation(null);
-            sr.setWeight(weightsMap.getOrDefault(role, 0.25));
-            sr.setSubTask(task);
-            scoringRepository.save(sr);
+    /** 从 SystemConfig 读取评分权重百分比，按项目类型+角色 */
+    private double getScoringPct(String projectType, String role) {
+        String key = "scoring." + projectType + "." + role;
+        return systemConfigRepository.findByConfigKey(key)
+            .map(c -> { try { return Double.parseDouble(c.getConfigValue()); } catch (Exception e) { return 25.0; } })
+            .orElse(25.0);
+    }
+
+    /** 从 SystemConfig 读取评分权重，不存在则返回 1.0 */
+    private double getScoringWeight(String role) {
+        String key = "scoring.weight." + role;
+        return systemConfigRepository.findByConfigKey(key)
+            .map(c -> { try { return Double.parseDouble(c.getConfigValue()); } catch (Exception e) { return 1.0; } })
+            .orElse(1.0);
+    }
+
+    /** 检查子任务是否所有评分已完成 */
+    private void checkTaskCompletion(SubTask task, Project project) {
+        boolean isChannel = "channel_custom".equals(project.getType());
+        if (isChannel) {
+            // 渠道：企划评分 + 销售评分 → completed
+            if ("sales_approved".equals(task.getStatus())) {
+                task.setStatus("completed");
+            }
+        } else {
+            // 常规品：企划评分 + 管理评分 → completed
+            if ("admin_approved".equals(task.getStatus())) {
+                task.setStatus("completed");
+            }
+        }
+        // 检查项目是否所有子任务都已完成
+        if ("completed".equals(task.getStatus())) {
+            boolean allDone = project.getTasks().stream().allMatch(t -> "completed".equals(t.getStatus()));
+            if (allDone) {
+                project.setStatus("completed");
+            }
         }
     }
 
@@ -447,51 +544,35 @@ public class ProjectService {
                 .findFirst().orElseThrow(() -> new RuntimeException("子任务不存在"));
 
         String role = (String) body.get("role");
-        Double aesthetics = ((Number) body.get("aesthetics")).doubleValue();
-        Double innovation = ((Number) body.get("innovation")).doubleValue();
+        Double aesthetics = body.containsKey("aesthetics") ? ((Number) body.get("aesthetics")).doubleValue() : null;
+        Double innovation = body.containsKey("innovation") ? ((Number) body.get("innovation")).doubleValue() : null;
 
         ScoringRecord sr = scoringRepository.findBySubTaskIdAndRole(taskId, role)
-                .orElseThrow(() -> new RuntimeException("评分记录不存在"));
-
+                .orElseGet(() -> {
+                    ScoringRecord newSr = new ScoringRecord();
+                    newSr.setRole(role);
+                    newSr.setSubTask(task);
+                    return newSr;
+                });
         sr.setAesthetics(aesthetics);
         sr.setInnovation(innovation);
-
-        if (body.containsKey("weights")) {
-            @SuppressWarnings("unchecked")
-            Map<String, Double> newWeights = (Map<String, Double>) body.get("weights");
-            List<ScoringRecord> allRecords = scoringRepository.findBySubTaskId(taskId);
-            for (ScoringRecord record : allRecords) {
-                if (newWeights.containsKey(record.getRole())) {
-                    record.setWeight(newWeights.get(record.getRole()));
-                }
-            }
-            scoringRepository.saveAll(allRecords);
-        } else {
-            scoringRepository.save(sr);
+        if (aesthetics != null && innovation != null) {
+            sr.setScore((int) Math.round((aesthetics + innovation) / 2.0));
         }
-
-        // Check if all done
-        List<ScoringRecord> allRecords = scoringRepository.findBySubTaskId(taskId);
-        boolean allDone = allRecords.stream().allMatch(r -> r.getAesthetics() != null && r.getInnovation() != null);
-
-        if (allDone) {
-            // 检查所有子任务是否都已验收且评分完成
-            boolean allTasksApproved = p.getTasks().stream().allMatch(t -> "approved".equals(t.getStatus()));
-            boolean allApprovedScored = p.getTasks().stream()
-                .filter(t -> "approved".equals(t.getStatus()))
-                .allMatch(t -> {
-                    List<ScoringRecord> records = scoringRepository.findBySubTaskId(t.getId());
-                    return !records.isEmpty() && records.stream().allMatch(r -> r.getAesthetics() != null && r.getInnovation() != null);
-                });
-            if (allTasksApproved && allApprovedScored && !p.getTasks().isEmpty()) {
-                p.setStatus("completed");
-            }
+        sr.setScoreType(role);
+        if (body.containsKey("comment")) {
+            sr.setComment(SecurityUtil.sanitizeText((String) body.get("comment"), 500));
         }
+        scoringRepository.save(sr);
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
-        p.getLogs().add(new ActivityLog("子任务评分：" + task.getName(), currentUser, currentRole, p));
+        String scoreLabel = aesthetics != null && innovation != null
+            ? "审美" + aesthetics + "/创新" + innovation
+            : (aesthetics != null ? "审美" + aesthetics : "—");
+        p.getLogs().add(new ActivityLog("子任务评分（" + role + "：" + scoreLabel + "）：" + task.getName(), currentUser, currentRole, p));
 
+        checkTaskCompletion(task, p);
         return projectRepository.save(p);
     }
 
@@ -591,41 +672,88 @@ public class ProjectService {
         return projectRepository.save(p);
     }
 
-    // ==================== Designer Status ====================
+    // ==================== Delete ====================
 
-    public Map<String, Object> getDesignerStatus() {
-        List<User> designers = userService.getUsersByRole("designer");
+    public void deleteProject(Long projectId) {
+        scoringRepository.deleteByProjectId(projectId);
+        projectRepository.deleteById(projectId);
+    }
+
+    // ==================== Role Status Board ====================
+
+    /** 获取指定角色的状态看板（销售/企划/供应链/设计师） */
+    public Map<String, Object> getRoleStatus(String role) {
+        List<User> users = userService.getUsersByRole(role);
         Map<String, Object> result = new LinkedHashMap<>();
 
-        for (User d : designers) {
-            Map<String, Object> info = new LinkedHashMap<>();
-            info.put("id", d.getUserId());
-            info.put("name", d.getName());
-            info.put("title", d.getTitle());
+        if ("designer".equals(role) || "supplychain".equals(role)) {
+            // 批量查询所有用户的子任务（一次 SQL 替代 N 次）
+            List<String> userIds = users.stream().map(User::getUserId).collect(Collectors.toList());
+            List<SubTask> allTasks = userIds.isEmpty() ? List.of() : subTaskRepository.findByDesignerIds(userIds);
+            Map<String, List<SubTask>> tasksByUser = allTasks.stream()
+                    .collect(Collectors.groupingBy(SubTask::getDesignerId));
 
-            List<SubTask> activeTasks = subTaskRepository.findByDesignerId(d.getUserId()).stream()
-                    .filter(t -> List.of("pending", "accepted", "rejected", "delivered").contains(t.getStatus()))
-                    .collect(Collectors.toList());
+            for (User u : users) {
+                Map<String, Object> info = new LinkedHashMap<>();
+                info.put("id", u.getUserId());
+                info.put("name", u.getName());
+                info.put("title", u.getTitle());
 
-            List<SubTask> completedTasks = subTaskRepository.findByDesignerId(d.getUserId()).stream()
-                    .filter(t -> "approved".equals(t.getStatus()))
-                    .collect(Collectors.toList());
+                List<SubTask> userTasks = tasksByUser.getOrDefault(u.getUserId(), List.of());
+                List<SubTask> activeTasks = userTasks.stream()
+                        .filter(t -> List.of("pending", "accepted", "rejected", "delivered").contains(t.getStatus()))
+                        .collect(Collectors.toList());
+                List<SubTask> completedTasks = userTasks.stream()
+                        .filter(t -> "approved".equals(t.getStatus()))
+                        .collect(Collectors.toList());
 
-            info.put("activeTasks", activeTasks.stream().map(t -> {
-                Map<String, Object> tm = new LinkedHashMap<>();
-                tm.put("id", t.getId());
-                tm.put("name", t.getName());
-                tm.put("status", t.getStatus());
-                tm.put("projectId", t.getProject().getId());
-                return tm;
-            }).collect(Collectors.toList()));
+                info.put("activeTasks", activeTasks.stream().map(t -> {
+                    Map<String, Object> tm = new LinkedHashMap<>();
+                    tm.put("id", t.getId());
+                    tm.put("name", t.getName());
+                    tm.put("status", t.getStatus());
+                    tm.put("projectId", t.getProject().getId());
+                    return tm;
+                }).collect(Collectors.toList()));
+                info.put("completedTasks", completedTasks.size());
+                info.put("busy", !activeTasks.isEmpty());
+                info.put("label", "designer".equals(role) ? "设计师" : "供应链");
+                result.put(u.getUserId(), info);
+            }
+        } else if ("sales".equals(role) || "planner".equals(role)) {
+            for (User u : users) {
+                Map<String, Object> info = new LinkedHashMap<>();
+                info.put("id", u.getUserId());
+                info.put("name", u.getName());
+                info.put("title", u.getTitle());
 
-            info.put("completedTasks", completedTasks.size());
-            info.put("busy", !activeTasks.isEmpty());
-            result.put(d.getUserId(), info);
+                List<Project> projects = "sales".equals(role)
+                        ? projectRepository.findBySalesIdLight(u.getUserId())
+                        : projectRepository.findByPlannerViewLight(u.getUserId());
+                List<Project> activeProjects = projects.stream()
+                        .filter(p -> !List.of("draft", "terminated", "completed").contains(p.getStatus()))
+                        .collect(Collectors.toList());
+
+                info.put("activeProjects", activeProjects.stream().map(p -> {
+                    Map<String, Object> pm = new LinkedHashMap<>();
+                    pm.put("id", p.getId());
+                    pm.put("name", p.getProductRequirements() != null ? p.getProductRequirements().substring(0, Math.min(30, p.getProductRequirements().length())) : "未命名");
+                    pm.put("status", p.getStatus());
+                    pm.put("type", p.getType());
+                    return pm;
+                }).collect(Collectors.toList()));
+                info.put("completedProjects", projects.stream().filter(p -> "completed".equals(p.getStatus())).count());
+                info.put("busy", !activeProjects.isEmpty());
+                info.put("label", "sales".equals(role) ? "销售" : "产品企划");
+                result.put(u.getUserId(), info);
+            }
         }
-
         return result;
+    }
+
+    // 保留旧方法兼容
+    public Map<String, Object> getDesignerStatus() {
+        return getRoleStatus("designer");
     }
 
     // ==================== Project Compute Status ====================
@@ -636,8 +764,9 @@ public class ProjectService {
             return status;
         }
         if (p.getTasks().isEmpty()) return status;
-        // 所有子任务是否都已通过验收
-        boolean allApproved = p.getTasks().stream().allMatch(t -> "approved".equals(t.getStatus()));
+        // 所有子任务是否都已通过验收（兼容旧 approved 和新 completed 状态）
+        boolean allApproved = p.getTasks().stream().allMatch(t ->
+            "completed".equals(t.getStatus()) || "approved".equals(t.getStatus()));
         if (!allApproved) return "in_progress";
         // 所有子任务已通过 → 检查评分是否全部完成
         boolean allScored = p.getTasks().stream().allMatch(t -> isTaskFullyCompleted(t));
@@ -650,7 +779,8 @@ public class ProjectService {
             return status;
         }
         if (p.getTasks().isEmpty()) return status;
-        boolean allApproved = p.getTasks().stream().allMatch(t -> "approved".equals(t.getStatus()));
+        boolean allApproved = p.getTasks().stream().allMatch(t ->
+            "completed".equals(t.getStatus()) || "approved".equals(t.getStatus()));
         return allApproved ? "completed" : "in_progress";
     }
 
@@ -673,10 +803,158 @@ public class ProjectService {
      * 判断子任务是否真正完成（已验收 + 所有评分角色已评分）
      */
     public boolean isTaskFullyCompleted(SubTask task) {
-        if (!"approved".equals(task.getStatus())) return false;
-        List<ScoringRecord> records = scoringRepository.findBySubTaskId(task.getId());
-        if (records.isEmpty()) return false;
-        return records.stream().allMatch(r -> r.getAesthetics() != null && r.getInnovation() != null);
+        return "completed".equals(task.getStatus());
+    }
+
+    /**
+     * 计算项目综合得分：取所有已完成子任务的加权平均分
+     * 每个子任务得分 = Σ(角色平均分 × 角色权重) / Σ(权重)
+     * 角色平均分 = (审美 + 创新) / 2
+     */
+    public Double computeProjectScore(Project project) {
+        List<SubTask> tasks = project.getTasks();
+        if (tasks == null || tasks.isEmpty()) return null;
+        double totalScore = 0;
+        int scoredCount = 0;
+        for (SubTask task : tasks) {
+            if (!"completed".equals(task.getStatus()) && !"approved".equals(task.getStatus())) continue;
+            List<ScoringRecord> records = scoringRepository.findBySubTaskId(task.getId());
+            if (records == null || records.isEmpty()) continue;
+            double weightedSum = 0;
+            double totalWeight = 0;
+            for (ScoringRecord sr : records) {
+                if (sr.getAesthetics() != null && sr.getInnovation() != null) {
+                    double roleAvg = (sr.getAesthetics() + sr.getInnovation()) / 2.0;
+                    weightedSum += roleAvg * sr.getWeight();
+                    totalWeight += sr.getWeight();
+                }
+            }
+            if (totalWeight > 0) {
+                totalScore += (weightedSum / totalWeight);
+                scoredCount++;
+            }
+        }
+        return scoredCount > 0 ? Math.round(totalScore / scoredCount * 10.0) / 10.0 : null;
+    }
+
+    /**
+     * 批量计算项目综合得分（消除 N+1 查询）
+     * 一次 SQL 拉取所有项目的评分记录，内存中聚合计算
+     */
+    public Map<Long, Double> computeProjectScoresBatch(List<Project> projects) {
+        if (projects == null || projects.isEmpty()) return Collections.emptyMap();
+        List<Long> projectIds = projects.stream().map(Project::getId).collect(Collectors.toList());
+        // 一次 SQL 查全部
+        List<ScoringRecord> allRecords = scoringRepository.findByProjectIds(projectIds);
+        // 按 project.id 分组
+        Map<Long, List<ScoringRecord>> recordsByProject = new HashMap<>();
+        for (ScoringRecord sr : allRecords) {
+            if (sr.getSubTask() != null && sr.getSubTask().getProject() != null) {
+                Long pid = sr.getSubTask().getProject().getId();
+                recordsByProject.computeIfAbsent(pid, k -> new ArrayList<>()).add(sr);
+            }
+        }
+        // 逐项目计算
+        Map<Long, Double> result = new HashMap<>();
+        for (Project p : projects) {
+            List<SubTask> tasks = p.getTasks();
+            if (tasks == null || tasks.isEmpty()) { result.put(p.getId(), null); continue; }
+            List<ScoringRecord> records = recordsByProject.getOrDefault(p.getId(), List.of());
+            // 按子任务分组
+            Map<Long, List<ScoringRecord>> recordsByTask = new HashMap<>();
+            for (ScoringRecord sr : records) {
+                if (sr.getSubTask() != null) {
+                    recordsByTask.computeIfAbsent(sr.getSubTask().getId(), k -> new ArrayList<>()).add(sr);
+                }
+            }
+            double totalScore = 0;
+            int scoredCount = 0;
+            for (SubTask task : tasks) {
+                if (!"completed".equals(task.getStatus()) && !"approved".equals(task.getStatus())) continue;
+                List<ScoringRecord> taskRecords = recordsByTask.get(task.getId());
+                if (taskRecords == null || taskRecords.isEmpty()) continue;
+                double weightedSum = 0;
+                double totalWeight = 0;
+                for (ScoringRecord sr : taskRecords) {
+                    if (sr.getAesthetics() != null && sr.getInnovation() != null) {
+                        double roleAvg = (sr.getAesthetics() + sr.getInnovation()) / 2.0;
+                        weightedSum += roleAvg * sr.getWeight();
+                        totalWeight += sr.getWeight();
+                    }
+                }
+                if (totalWeight > 0) {
+                    totalScore += (weightedSum / totalWeight);
+                    scoredCount++;
+                }
+            }
+            result.put(p.getId(), scoredCount > 0 ? Math.round(totalScore / scoredCount * 10.0) / 10.0 : null);
+        }
+        return result;
+    }
+
+    // ==================== Pending Scoring (聚合查询) ====================
+
+    /** 获取待评分任务列表（替代前端 N+1 次循环） */
+    public List<Map<String, Object>> getPendingScoringTasks(String role, String userId) {
+        List<Project> projects = getProjectsByRoleAndUser(role, userId);
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        for (Project p : projects) {
+            String projectType = p.getType();
+            boolean isChannel = "channel_custom".equals(projectType);
+
+            for (SubTask t : p.getTasks()) {
+                List<ScoringRecord> records = scoringRepository.findBySubTaskId(t.getId());
+                String taskStatus = t.getStatus();
+
+                // 判断是否待评分
+                boolean isPending = false;
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("taskId", t.getId());
+                item.put("taskName", t.getName());
+                item.put("taskStatus", taskStatus);
+                item.put("projectId", p.getId());
+                item.put("projectType", projectType);
+                item.put("projectName", p.getProductRequirements());
+                item.put("designerId", t.getDesignerId());
+                item.put("designerName", t.getDesignerName());
+                item.put("selfScore", t.getSelfScore());
+                item.put("selfAesthetics", t.getSelfAesthetics());
+                item.put("selfInnovation", t.getSelfInnovation());
+                item.put("scoringRecords", records.stream().map(sr -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("role", sr.getRole());
+                    m.put("scoreType", sr.getScoreType());
+                    m.put("score", sr.getScore());
+                    m.put("aesthetics", sr.getAesthetics());
+                    m.put("innovation", sr.getInnovation());
+                    return m;
+                }).collect(Collectors.toList()));
+
+                if ("admin".equals(role)) {
+                    isPending = ("planner_approved".equals(taskStatus))
+                            || ("approved".equals(taskStatus) && records.stream().anyMatch(r -> r.getAesthetics() == null));
+                } else if ("sales".equals(role) && isChannel && "planner_approved".equals(taskStatus)) {
+                    isPending = true;
+                } else if (("designer".equals(role) || "supplychain".equals(role)) && t.getDesignerId() != null && t.getDesignerId().equals(userId)) {
+                    if ("approved".equals(taskStatus) && records.stream().anyMatch(r -> r.getAesthetics() == null)) {
+                        isPending = true;
+                    }
+                } else {
+                    // planner / other roles
+                    List<String> scoringRoles = isChannel ? List.of("sales", "planner") : List.of("planner");
+                    if (scoringRoles.contains(role) && "approved".equals(taskStatus)) {
+                        isPending = records.stream()
+                                .anyMatch(r -> role.equals(r.getRole()) && r.getAesthetics() == null);
+                    }
+                }
+
+                if (isPending) {
+                    result.add(item);
+                }
+            }
+        }
+        return result;
     }
 
     public static Map<String, String> getTaskStatusInfo(String status) {
@@ -684,8 +962,12 @@ public class ProjectService {
             case "pending" -> Map.of("label", "待接单", "cls", "badge-pending", "icon", "⏳");
             case "accepted" -> Map.of("label", "设计中", "cls", "badge-progress", "icon", "🎨");
             case "delivered" -> Map.of("label", "待验收", "cls", "badge-pending", "icon", "📤");
-            case "planner_approved" -> Map.of("label", "待评分", "cls", "badge-pending", "icon", "⏳");
+            case "planner_approved" -> Map.of("label", "企划已验收", "cls", "badge-progress", "icon", "✅");
+            case "scoring_planner" -> Map.of("label", "待二次验收", "cls", "badge-pending", "icon", "⏳");
+            case "sales_approved" -> Map.of("label", "销售已验收", "cls", "badge-progress", "icon", "✅");
+            case "admin_approved" -> Map.of("label", "管理已验收", "cls", "badge-progress", "icon", "✅");
             case "approved" -> Map.of("label", "已通过", "cls", "badge-completed", "icon", "✅");
+            case "completed" -> Map.of("label", "已完成", "cls", "badge-completed", "icon", "✅");
             case "rejected" -> Map.of("label", "已驳回", "cls", "badge-rejected", "icon", "↩️");
             default -> Map.of("label", status, "cls", "", "icon", "❓");
         };

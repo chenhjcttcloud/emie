@@ -14,9 +14,14 @@ public class ProjectSummaryDTO {
     private String plannerName;
     private String deadline;
     private String productRequirements;
+    private String productCategory;
+    private String targetMarket;
+    private String complianceItems;
+    private String priceRange;
     private int taskCount;
     private int approvedTaskCount;
     private int progressPercent;
+    private Double score;
     private String createdAt;
     private String updatedAt;
 }

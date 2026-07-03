@@ -26,7 +26,7 @@ public class User {
     private String name;
 
     @Column(nullable = false)
-    private String role; // sales, planner, designer, superior, admin
+    private String role; // sales, planner, designer, supplychain, admin
 
     /** 角色权限等级 0=系统管理员 1=销售 2=产品企划 3=设计师 */
     private Integer roleLevel;
@@ -48,6 +48,19 @@ public class User {
     @Builder.Default
     @Column(nullable = false)
     private String status = "active";
+
+    /** 飞书 OpenID（SSO 关联用） */
+    private String feishuOpenId;
+
+    /** 所属部门 ID */
+    private Long departmentId;
+
+    /** 直属上级 userId */
+    private String supervisorId;
+
+    /** 职级：0=组员 1=组长 2=部门负责人 */
+    @Builder.Default
+    private Integer titleLevel = 0;
 
     private LocalDateTime createdAt;
 

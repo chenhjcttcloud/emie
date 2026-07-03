@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>设计项目管理系统 - EMIE</title>
-<link rel="stylesheet" href="/css/app.css?v=7">
+<link rel="stylesheet" href="/css/app.css?v=12">
 </head>
 <body>
 
@@ -22,19 +22,35 @@
         </div>
         <div class="form-group">
           <label class="form-label">密码</label>
-          <input type="password" class="form-input" id="loginPassword" placeholder="输入密码" required autocomplete="current-password" style="text-align:center;">
+          <div class="password-wrap">
+            <input type="password" class="form-input" id="loginPassword" placeholder="输入密码" required autocomplete="current-password" style="text-align:center;padding-right:36px;">
+            <span class="password-toggle" onclick="togglePassword('loginPassword', this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;display:flex;align-items:center;padding:4px;border-radius:4px;transition:background 0.15s;user-select:none;">
+              <svg class="eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </span>
+          </div>
         </div>
         <div id="loginError" style="color:var(--danger);font-size:13px;text-align:center;margin-bottom:12px;display:none;"></div>
         <button type="submit" class="btn btn-primary btn-lg" style="width:100%;justify-content:center;">登 录</button>
       </form>
-      <div style="text-align:center;margin-top:14px;">
+      <div id="feishuLoginWrap" style="display:none;margin-top:12px;">
+        <div style="position:relative;text-align:center;margin-bottom:12px;">
+          <span style="background:#fff;padding:0 12px;font-size:12px;color:var(--gray-400);position:relative;z-index:1;">或</span>
+          <div style="position:absolute;top:50%;left:0;right:0;height:1px;background:var(--gray-200);"></div>
+        </div>
+        <button id="feishuLoginBtn" class="btn btn-outline btn-lg" style="width:100%;justify-content:center;color:#3370FF;border-color:#3370FF;" onclick="handleFeishuLogin()">
+          <svg viewBox="0 0 24 24" style="width:18px;height:18px;margin-right:4px;" fill="#3370FF"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1.41 15.41L6.41 13l1.41-1.41 3.18 3.18 5.59-5.59L18 10.59l-7.41 7.42z"/></svg>
+          飞书登录
+        </button>
+      </div>
+      <div style="text-align:center;margin-top:14px;display:none;">
         <a onclick="showRegister()" style="color:var(--primary);font-size:13px;text-decoration:none;cursor:pointer;">还没有账号？立即注册 →</a>
       </div>
     </div>
   </div>
 </div>
 
-<!-- 注册页 -->
+<!-- 注册页（已隐藏，通过飞书 SSO 自动注册） -->
 <div id="registerPage" style="display:none;">
   <div class="login-container">
     <div class="login-card" style="max-width:420px;">
@@ -56,6 +72,7 @@
             <option value="sales">销售</option>
             <option value="planner">产品企划</option>
             <option value="designer">设计师</option>
+            <option value="supplychain">供应链</option>
           </select>
         </div>
         <div class="form-group">
@@ -82,7 +99,13 @@
         </div>
         <div class="form-group">
           <label class="form-label">密码</label>
-          <input type="password" class="form-input" id="regPassword" placeholder="至少6位密码" required minlength="6" style="text-align:center;">
+          <div class="password-wrap">
+            <input type="password" class="form-input" id="regPassword" placeholder="至少6位密码" required minlength="6" style="text-align:center;padding-right:36px;">
+            <span class="password-toggle" onclick="togglePassword('regPassword', this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;display:flex;align-items:center;padding:4px;border-radius:4px;transition:background 0.15s;user-select:none;">
+              <svg class="eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </span>
+          </div>
         </div>
         <div id="registerError" style="color:var(--danger);font-size:13px;text-align:center;margin-bottom:12px;display:none;"></div>
         <button type="submit" class="btn btn-primary btn-lg" style="width:100%;justify-content:center;">注 册</button>
@@ -114,6 +137,6 @@
   </div>
 </div>
 
-<script src="/js/app.js?v=74"></script>
+<script src="/js/app.js?v=87"></script>
 </body>
 </html>

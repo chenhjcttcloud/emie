@@ -13,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,6 +29,9 @@ public class AdminService {
     private final SystemConfigRepository configRepository;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     @Value("${app.upload.dir:./uploads}")
     private String uploadDir;
@@ -54,8 +59,6 @@ public class AdminService {
     }
 
     private void initDefaultConfigs() {
-        if (configRepository.count() > 0) return;
-
         List<SystemConfig> defaults = Arrays.asList(
             // ===== SMTP 配置 =====
             SystemConfig.builder().configKey("smtp.host").configValue("").configGroup("smtp")
@@ -101,10 +104,41 @@ public class AdminService {
             SystemConfig.builder().configKey("system.version").configValue("1.0.0").configGroup("system")
                 .description("系统版本号").valueType("text").sortOrder(3).build(),
             SystemConfig.builder().configKey("system.fileUploadMaxSize").configValue("1024").configGroup("system")
-                .description("文件上传最大限制（MB）").valueType("number").sortOrder(4).build()
+                .description("文件上传最大限制（MB）").valueType("number").sortOrder(4).build(),
+
+            // ===== 飞书 SSO 登录 =====
+            SystemConfig.builder().configKey("feishu.appId").configValue("").configGroup("feishu")
+                .description("飞书应用 App ID").valueType("text").sortOrder(1).build(),
+            SystemConfig.builder().configKey("feishu.appSecret").configValue("").configGroup("feishu")
+                .description("飞书应用 App Secret").valueType("password").sortOrder(2).build(),
+            SystemConfig.builder().configKey("feishu.enabled").configValue("false").configGroup("feishu")
+                .description("启用飞书 SSO 登录").valueType("boolean").sortOrder(3).build(),
+
+            // ===== 评分权重 =====
+            SystemConfig.builder().configKey("scoring.channel_custom.planner").configValue("40").configGroup("scoring")
+                .description("渠道定制单 - 企划评分权重(%)").valueType("number").sortOrder(1).build(),
+            SystemConfig.builder().configKey("scoring.channel_custom.sales").configValue("30").configGroup("scoring")
+                .description("渠道定制单 - 销售评分权重(%)").valueType("number").sortOrder(2).build(),
+            SystemConfig.builder().configKey("scoring.channel_custom.designer").configValue("20").configGroup("scoring")
+                .description("渠道定制单 - 设计师自评权重(%)").valueType("number").sortOrder(3).build(),
+            SystemConfig.builder().configKey("scoring.channel_custom.admin").configValue("10").configGroup("scoring")
+                .description("渠道定制单 - 管理评分权重(%)").valueType("number").sortOrder(4).build(),
+            SystemConfig.builder().configKey("scoring.regular.planner").configValue("40").configGroup("scoring")
+                .description("公司常规品 - 企划评分权重(%)").valueType("number").sortOrder(5).build(),
+            SystemConfig.builder().configKey("scoring.regular.sales").configValue("10").configGroup("scoring")
+                .description("公司常规品 - 销售评分权重(%)").valueType("number").sortOrder(6).build(),
+            SystemConfig.builder().configKey("scoring.regular.designer").configValue("20").configGroup("scoring")
+                .description("公司常规品 - 设计师自评权重(%)").valueType("number").sortOrder(7).build(),
+            SystemConfig.builder().configKey("scoring.regular.admin").configValue("30").configGroup("scoring")
+                .description("公司常规品 - 管理评分权重(%)").valueType("number").sortOrder(8).build()
         );
 
-        configRepository.saveAll(defaults);
+        // 只插入缺失的配置项（不覆盖已有值）
+        for (SystemConfig cfg : defaults) {
+            if (configRepository.findByConfigKey(cfg.getConfigKey()).isEmpty()) {
+                configRepository.save(cfg);
+            }
+        }
     }
 
     // ==================== 配置管理 ====================
@@ -124,7 +158,8 @@ public class AdminService {
         Map<String, String> result = new LinkedHashMap<>();
         // 外观相关配置对外公开
         for (String key : List.of("app.title", "app.logo", "app.logoEmoji", "app.subtitle",
-                                   "login.bg", "login.bgColor", "system.version")) {
+                                   "login.bg", "login.bgColor", "system.version",
+                                   "feishu.enabled", "feishu.appId")) {
             configRepository.findByConfigKey(key).ifPresent(c ->
                 result.put(c.getConfigKey(), c.getConfigValue() != null ? c.getConfigValue() : ""));
         }
@@ -224,6 +259,7 @@ public class AdminService {
             case "sales" -> 1;
             case "planner" -> 2;
             case "designer" -> 3;
+            case "supplychain" -> 3;
             default -> null;
         };
 
@@ -231,8 +267,8 @@ public class AdminService {
             case "sales" -> "销售";
             case "planner" -> "产品企划";
             case "designer" -> "设计师";
+            case "supplychain" -> "供应链";
             case "admin" -> "系统管理员";
-            case "superior" -> "上级";
             default -> user.getTitle();
         };
 
@@ -297,8 +333,10 @@ public class AdminService {
                         throw new IllegalArgumentException("手机号「" + phone + "」已被使用");
                     });
                 }
+                user.setPhone(phone);
+            } else {
+                user.setPhone(null);
             }
-            user.setPhone(phone);
         }
 
         if (fields.containsKey("email")) {
@@ -310,8 +348,10 @@ public class AdminService {
                         throw new IllegalArgumentException("邮箱「" + email + "」已被使用");
                     });
                 }
+                user.setEmail(email);
+            } else {
+                user.setEmail(null);
             }
-            user.setEmail(email);
         }
 
         if (fields.containsKey("password")) {
@@ -330,6 +370,7 @@ public class AdminService {
                 case "sales" -> 1;
                 case "planner" -> 2;
                 case "designer" -> 3;
+            case "supplychain" -> 3;
                 default -> null;
             };
             String title = switch (newRole) {
@@ -337,7 +378,7 @@ public class AdminService {
                 case "sales" -> "销售";
                 case "planner" -> "产品企划";
                 case "designer" -> "设计师";
-                case "superior" -> "上级";
+            case "supplychain" -> "供应链";
                 default -> user.getTitle();
             };
             user.setRole(newRole);
@@ -417,6 +458,9 @@ public class AdminService {
                     "task:view","task:assign","task:approve","task:reject",
                     "scoring:view","scoring:submit","file:upload"}),
             new RoleDef("designer", "设计师", "接单执行设计任务并交付成果",
+                new String[]{"dashboard:view","project:view",
+                    "task:view","task:execute","file:upload"}),
+            new RoleDef("supplychain", "供应链", "接单执行供应链任务并交付成果",
                 new String[]{"dashboard:view","project:view",
                     "task:view","task:execute","file:upload"}),
         };
@@ -528,5 +572,130 @@ public class AdminService {
             }
         }
         return new ArrayList<>();
+    }
+
+    // ==================== 数据清除 ====================
+
+    /**
+     * 清空所有项目业务数据（新一轮测试前使用）。
+     * 按 FK 依赖从子表到父表顺序删除，保留基础数据（用户/角色/部门/系统配置）。
+     */
+    @Transactional
+    public Map<String, Object> clearAllProjectData() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        int deleted = 0;
+
+        // 按 FK 依赖顺序删除：子表 → 父表
+        try {
+            deleted += entityManager.createNativeQuery("DELETE FROM scoring_records").executeUpdate();
+            deleted += entityManager.createNativeQuery("DELETE FROM activity_logs").executeUpdate();
+            deleted += entityManager.createNativeQuery("DELETE FROM sub_tasks").executeUpdate();
+            deleted += entityManager.createNativeQuery("DELETE FROM projects").executeUpdate();
+            deleted += entityManager.createNativeQuery("DELETE FROM product_categories").executeUpdate();
+            deleted += entityManager.createNativeQuery("DELETE FROM compliance_items").executeUpdate();
+            deleted += entityManager.createNativeQuery("DELETE FROM price_ranges").executeUpdate();
+
+            result.put("success", true);
+            result.put("deletedRows", deleted);
+            result.put("message", "所有项目数据已清除（共删除 " + deleted + " 条记录）");
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("error", "清除失败: " + e.getMessage());
+        }
+        return result;
+    }
+
+    // ==================== 评分权重管理 ====================
+
+    private static final String[] SCORING_ROLES = {"planner", "sales", "designer", "admin"};
+    private static final String[] PROJECT_TYPES = {"channel_custom", "regular"};
+    private static final Map<String, String> SCORING_ROLE_LABELS = Map.of(
+        "planner", "企划", "sales", "销售", "designer", "设计师", "admin", "管理"
+    );
+    private static final Map<String, String> PROJECT_TYPE_LABELS = Map.of(
+        "channel_custom", "渠道定制单", "regular", "公司常规品"
+    );
+
+    /** 获取所有评分权重（按项目类型分组，百分比） */
+    public Map<String, Object> getScoringWeights() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        List<Map<String, Object>> types = new ArrayList<>();
+        for (String pt : PROJECT_TYPES) {
+            Map<String, Object> typeEntry = new LinkedHashMap<>();
+            typeEntry.put("type", pt);
+            typeEntry.put("label", PROJECT_TYPE_LABELS.getOrDefault(pt, pt));
+            List<Map<String, Object>> items = new ArrayList<>();
+            for (String role : SCORING_ROLES) {
+                String key = "scoring." + pt + "." + role;
+                Optional<SystemConfig> opt = configRepository.findByConfigKey(key);
+                double pct = opt.isPresent() ? Double.parseDouble(opt.get().getConfigValue()) : getDefaultWeight(pt, role);
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("role", role);
+                item.put("label", SCORING_ROLE_LABELS.getOrDefault(role, role));
+                item.put("weight", pct);
+                items.add(item);
+            }
+            typeEntry.put("weights", items);
+            types.add(typeEntry);
+        }
+        result.put("types", types);
+        return result;
+    }
+
+    private static double getDefaultWeight(String projectType, String role) {
+        if ("channel_custom".equals(projectType)) {
+            return switch (role) {
+                case "planner" -> 40;
+                case "sales" -> 30;
+                case "designer" -> 20;
+                case "admin" -> 10;
+                default -> 25;
+            };
+        } else {
+            return switch (role) {
+                case "planner" -> 40;
+                case "admin" -> 30;
+                case "designer" -> 20;
+                case "sales" -> 10;
+                default -> 25;
+            };
+        }
+    }
+
+    /** 更新评分权重（按项目类型分组，百分比） */
+    @Transactional
+    public void updateScoringWeights(Map<String, Object> body) {
+        for (String pt : PROJECT_TYPES) {
+            if (!body.containsKey(pt)) continue;
+            Object raw = body.get(pt);
+            if (!(raw instanceof Map)) continue;
+            @SuppressWarnings("unchecked")
+            Map<String, Object> roleWeights = (Map<String, Object>) raw;
+            for (Map.Entry<String, Object> entry : roleWeights.entrySet()) {
+                String role = entry.getKey();
+                if (!SCORING_ROLE_LABELS.containsKey(role)) continue;
+                double pct;
+                try {
+                    pct = ((Number) entry.getValue()).doubleValue();
+                } catch (Exception e) {
+                    continue;
+                }
+                if (pct < 0 || pct > 100) throw new IllegalArgumentException(role + " 百分比超出范围(0-100)");
+                String key = "scoring." + pt + "." + role;
+                configRepository.findByConfigKey(key).ifPresent(config -> {
+                    config.setConfigValue(String.valueOf(pct));
+                    config.setUpdatedAt(LocalDateTime.now());
+                    configRepository.save(config);
+                });
+            }
+        }
+    }
+
+    /** 获取指定项目类型的角色评分权重百分比 */
+    public double getScoringWeight(String projectType, String role) {
+        String key = "scoring." + projectType + "." + role;
+        return configRepository.findByConfigKey(key)
+            .map(c -> { try { return Double.parseDouble(c.getConfigValue()); } catch (Exception e) { return getDefaultWeight(projectType, role); } })
+            .orElseGet(() -> getDefaultWeight(projectType, role));
     }
 }

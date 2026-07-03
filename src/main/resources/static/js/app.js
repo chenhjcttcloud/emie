@@ -68,6 +68,31 @@ async function apiPut(url, data) {
   return r.json();
 }
 
+// ===== 全局防连点 =====
+
+/** 检查是否有任何弹窗已打开 */
+function isModalOpen() {
+  return !!document.querySelector('.modal-overlay');
+}
+
+/** 提交按钮防连点包装器：禁用按钮 → 执行 → 恢复 */
+async function submitGuard(btn, handler) {
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = '⏳...';
+  btn.style.opacity = '0.5';
+  try {
+    await handler();
+  } catch (e) {
+    console.error(e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+    btn.style.opacity = '';
+  }
+}
+
 async function apiDelete(url) {
   const r = await fetch(API + url, {
     method: 'DELETE',
@@ -83,14 +108,79 @@ async function apiDelete(url) {
 
 // ==================== 认证系统 ====================
 let AUTH_USER = null; // { userId, name, role, title }
+let ORIGINAL_USER = null; // 登录时的原始用户（切换视角时不变）
 let currentRole = '';
 let currentUserId = '';
 let currentView = 'dashboard';
 let currentFilter = 'all';
 let USERS = {};
+let CATEGORIES = [];
+let COMPLIANCE_ITEMS = [];
+let PRICE_RANGES = [];
+let DEPARTMENTS = [];
 let APP_CACHE = { orders: [] };
 
+// ==================== SWR 缓存（Stale While Revalidate） ====================
+const SWR_CACHE = {};
+const SWR_TTL = 30000; // 缓存有效期 30 秒
+
+/** SWR 缓存获取：先返回缓存（如有），后台静默刷新 */
+async function swrFetch(key, fetcher, ttl = SWR_TTL) {
+  const now = Date.now();
+  const cached = SWR_CACHE[key];
+
+  // 有缓存且在有效期内
+  if (cached && now - cached.timestamp < ttl) {
+    // 如果已超过静默刷新阈值（5秒），后台刷新
+    if (now - cached.timestamp > 5000) {
+      fetcher().then(data => { SWR_CACHE[key] = { data, timestamp: Date.now() }; }).catch(() => {});
+    }
+    return cached.data;
+  }
+
+  // 无缓存或已过期
+  const data = await fetcher();
+  SWR_CACHE[key] = { data, timestamp: Date.now() };
+  return data;
+}
+
+/** 清除 SWR 缓存（操作后调用） */
+function clearSWRCache(keys) {
+  if (keys) {
+    keys.forEach(k => delete SWR_CACHE[k]);
+  } else {
+    Object.keys(SWR_CACHE).forEach(k => delete SWR_CACHE[k]);
+  }
+}
+
 async function initApp() {
+  // 检查飞书 SSO 回调
+  checkFeishuCallback();
+
+  // 飞书客户端内自动静默登录（WebView 环境）
+  if (typeof tt !== 'undefined' && tt.login) {
+    try {
+      const loginRes = await new Promise((resolve, reject) => {
+        tt.login({ success: resolve, fail: reject });
+      });
+      if (loginRes && loginRes.code) {
+        const r = await fetch('/api/auth/feishu/auto-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: loginRes.code })
+        });
+        if (r.ok) {
+          const data = await r.json();
+          localStorage.setItem('design_pm_token', data.token);
+          localStorage.setItem('design_pm_user', JSON.stringify(data.user));
+          // 继续走正常登录流程
+        }
+      }
+    } catch(e) {
+      console.warn('飞书静默登录失败，回退到普通登录:', e);
+    }
+  }
+
   // 检查是否有保存的 token
   const token = localStorage.getItem('design_pm_token');
   if (token) {
@@ -98,6 +188,10 @@ async function initApp() {
       const r = await fetch('/api/auth/me', { headers: { 'X-Auth-Token': token } });
       if (r.ok) {
         AUTH_USER = await r.json();
+        // 如果有原始用户信息（模拟模式），用回原始用户判断权限
+        ORIGINAL_USER = AUTH_USER.originalUserId
+          ? { userId: AUTH_USER.originalUserId, role: AUTH_USER.originalRole }
+          : { ...AUTH_USER };
         // 恢复上次浏览的页面（默认工作台）
         currentView = localStorage.getItem('design_pm_lastView') || 'dashboard';
         currentAdminTab = localStorage.getItem('design_pm_lastAdminTab') || 'dashboard';
@@ -161,6 +255,11 @@ async function loadPublicConfig() {
         } else if (cfg['app.logoEmoji']) {
           logoEl.textContent = cfg['app.logoEmoji'];
         }
+      }
+      // 飞书 SSO 按钮
+      const feishuWrap = document.getElementById('feishuLoginWrap');
+      if (feishuWrap) {
+        feishuWrap.style.display = cfg['feishu.enabled'] === 'true' && cfg['feishu.appId'] ? 'block' : 'none';
       }
     }
   } catch(e) {
@@ -318,13 +417,42 @@ async function showApp() {
     }
   } catch(e) { /* ignore */ }
 
-  document.getElementById('userDisplay').textContent = `${AUTH_USER.name}（${AUTH_USER.role === 'sales' ? '销售' : AUTH_USER.role === 'planner' ? '产品企划' : AUTH_USER.role === 'designer' ? '设计师' : AUTH_USER.role === 'superior' ? '上级' : '管理员'}）`;
+  document.getElementById('userDisplay').textContent = `${AUTH_USER.name}（${roleLabel(AUTH_USER.role)}）`;
   currentRole = AUTH_USER.role;
   currentUserId = AUTH_USER.userId;
+
+  // 渲染角色切换器（admin 可用）
+  renderRoleSwitcher();
+
   // 加载用户列表（用于下拉框）
   try { USERS = await apiGet('/users'); } catch(e) { USERS = {}; }
+  // 加载产品类目列表
+  try { CATEGORIES = await apiGet('/categories'); } catch(e) { CATEGORIES = []; }
+  // 加载合规处罚列表
+  try { COMPLIANCE_ITEMS = await apiGet('/compliance'); } catch(e) { COMPLIANCE_ITEMS = []; }
+  // 加载参考零售价列表
+  try { PRICE_RANGES = await apiGet('/price-ranges'); } catch(e) { PRICE_RANGES = []; }
+  try { DEPARTMENTS = await apiGet('/departments'); } catch(e) { DEPARTMENTS = []; }
+  // 初始加载时也刷新用户列表（包含部门分配信息）
+  try { USERS = await apiGet('/users'); } catch(e) {}
+  // 用户列表加载后重新渲染切换器（否则下拉选项为空）
+  renderRoleSwitcher();
   renderSidebar();
   render();
+}
+
+// ===== 密码可见性切换 =====
+function togglePassword(inputId, el) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const isPassword = input.type === 'password';
+  input.type = isPassword ? 'text' : 'password';
+  const open = el.querySelector('.eye-open');
+  const closed = el.querySelector('.eye-closed');
+  if (open && closed) {
+    open.style.display = isPassword ? 'none' : '';
+    closed.style.display = isPassword ? '' : 'none';
+  }
 }
 
 async function handleLogin(event) {
@@ -354,6 +482,7 @@ async function handleLogin(event) {
     // 登录成功
     localStorage.setItem('design_pm_token', data.token);
     AUTH_USER = { userId: data.userId, name: data.name, role: data.role, title: data.title };
+    ORIGINAL_USER = { ...AUTH_USER };
     // 重置 viewport 缩放（修复 iOS 输入框放大后不恢复的问题）
     const vp = document.querySelector('meta[name="viewport"]');
     if (vp) vp.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0';
@@ -370,6 +499,43 @@ async function handleLogin(event) {
   }
 }
 
+// ==================== 飞书 SSO 登录 ====================
+function handleFeishuLogin() {
+  fetch('/api/auth/feishu/config').then(r => r.json()).then(cfg => {
+    if (cfg.enabled !== 'true' || !cfg.appId) {
+      alert('飞书登录暂未开启');
+      return;
+    }
+    const redirectUri = window.location.origin + '/api/auth/feishu/callback';
+    const url = 'https://open.feishu.cn/open-apis/authen/v1/index'
+      + '?redirect_uri=' + encodeURIComponent(redirectUri)
+      + '&app_id=' + cfg.appId
+      + '&state=' + Date.now();
+    window.location.href = url;
+  }).catch(() => alert('获取飞书配置失败'));
+}
+
+// 检测飞书 SSO 回调
+function checkFeishuCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('sso_token');
+  const error = params.get('sso_error');
+  if (error) {
+    alert('飞书登录失败: ' + error);
+    window.history.replaceState({}, document.title, window.location.pathname);
+    return;
+  }
+  if (token) {
+    const userId = params.get('userId') || '';
+    const userName = params.get('userName') || '';
+    const role = params.get('role') || '';
+    localStorage.setItem('design_pm_token', token);
+    localStorage.setItem('design_pm_user', JSON.stringify({ userId, userName, role }));
+    window.history.replaceState({}, document.title, window.location.pathname);
+    showApp();
+  }
+}
+
 function handleLogout() {
   const token = localStorage.getItem('design_pm_token');
   if (token) {
@@ -378,6 +544,7 @@ function handleLogout() {
   localStorage.removeItem('design_pm_token');
   localStorage.removeItem('design_pm_create_draft');
   AUTH_USER = null;
+  ORIGINAL_USER = null;
   currentView = 'dashboard';
   currentAdminTab = 'dashboard';
   APP_CACHE = { orders: [] };
@@ -474,7 +641,175 @@ function startIdleMonitor() {
 }
 
 function roleLabel(r) {
-  return { sales: '需求方/销售', planner: '产品企划', designer: '设计师', superior: '上级', admin: '管理员' }[r] || r;
+  return { sales: '需求方/销售', planner: '产品企划', designer: '设计师', supplychain: '供应链', admin: '管理员' }[r] || r;
+}
+
+// ==================== 用户视角切换（天花板版） ====================
+const ROLE_LABELS = { admin: '管理员', sales: '销售', planner: '企划', designer: '设计师', supplychain: '供应链' };
+const ROLE_COLORS = { admin: 'admin', sales: 'sales', planner: 'planner', designer: 'designer', supplychain: 'supplychain' };
+
+function renderRoleSwitcher() {
+  const headerRight = document.querySelector('.header-right');
+  const old = document.getElementById('identitySwitcher');
+  if (old) old.remove();
+  // 仅 admin 显示切换
+  if (!ORIGINAL_USER || (ORIGINAL_USER.role !== 'admin')) return;
+  if (!USERS || Object.keys(USERS).length === 0) return;
+
+  // 构建所有用户列表
+  const allUsers = [];
+  const roleOrder = ['sales', 'planner', 'designer', 'supplychain', 'admin'];
+  for (const role of roleOrder) {
+    const users = USERS[role];
+    if (!users || users.length === 0) continue;
+    for (const u of users) {
+      allUsers.push({ userId: u.userId, name: u.name, role });
+    }
+  }
+
+  const isSwitched = currentUserId !== ORIGINAL_USER.userId;
+  const initial = AUTH_USER.name.charAt(0);
+  const roleKey = ROLE_COLORS[AUTH_USER.role] || 'admin';
+
+  const container = document.createElement('div');
+  container.id = 'identitySwitcher';
+  container.className = 'identity-switcher';
+  container.innerHTML = `
+    <button class="identity-trigger" onclick="toggleIdentityPanel(event)" aria-label="切换用户视角" title="切换用户视角">
+      <span class="identity-avatar role-${roleKey}">${initial}</span>
+      <span class="identity-info">
+        <span class="identity-name">${AUTH_USER.name}</span>
+        <span class="identity-role-tag">${ROLE_LABELS[AUTH_USER.role] || AUTH_USER.role}</span>
+      </span>
+      <svg class="identity-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <div class="identity-panel" id="identityPanel">
+      <div class="identity-search">
+        <svg class="identity-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" id="identitySearchInput" placeholder="搜索用户..." oninput="filterUsers(this.value)" autocomplete="off">
+      </div>
+      <div class="identity-current">
+        <span>当前身份</span>
+        <span class="identity-current-line"></span>
+      </div>
+      <div class="identity-list" id="identityUserList">
+        ${renderUserList(allUsers)}
+      </div>
+      ${isSwitched ? `
+      <div style="padding:4px 10px 10px;">
+        <button class="identity-back-btn" onclick="switchToUser('${ORIGINAL_USER.userId}')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+          返回我的视角
+        </button>
+      </div>` : ''}
+    </div>
+  `;
+
+  const userDisplay = document.getElementById('userDisplay');
+  if (userDisplay && userDisplay.nextSibling) {
+    headerRight.insertBefore(container, userDisplay.nextSibling);
+  } else {
+    headerRight.appendChild(container);
+  }
+}
+
+function renderUserList(users) {
+  const groups = {};
+  for (const u of users) {
+    if (!groups[u.role]) groups[u.role] = [];
+    groups[u.role].push(u);
+  }
+  const roleOrder = ['sales', 'planner', 'designer', 'supplychain', 'admin'];
+  let html = '';
+  for (const role of roleOrder) {
+    const group = groups[role];
+    if (!group || group.length === 0) continue;
+    const label = ROLE_LABELS[role] || role;
+    const dotClass = 'g-' + (ROLE_COLORS[role] || role);
+    html += `<div class="identity-group" data-role="${role}">
+      <div class="identity-group-label">
+        <span class="identity-group-dot ${dotClass}"></span>${label}
+      </div>`;
+    for (const u of group) {
+      const isActive = u.userId === currentUserId;
+      const avatarInitial = u.name.charAt(0);
+      const uClass = 'u-' + (ROLE_COLORS[u.role] || u.role);
+      const rClass = 'r-' + (ROLE_COLORS[u.role] || u.role);
+      html += `<div class="identity-user${isActive ? ' active' : ''}" data-userid="${u.userId}" onclick="switchToUser('${u.userId}')">
+        <span class="identity-user-avatar ${uClass}">${avatarInitial}</span>
+        <span class="identity-user-info">
+          <div class="identity-user-name">${escHtml(u.name)}</div>
+          <div class="identity-user-id">${escHtml(u.userId)}</div>
+        </span>
+        <span class="identity-user-role ${rClass}">${label}</span>
+        <svg class="identity-user-check${isActive ? ' show' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>`;
+    }
+    html += '</div>';
+  }
+  return html || '<div class="identity-empty">暂无用户</div>';
+}
+
+async function switchToUser(targetUserId) {
+  if (!targetUserId || targetUserId === currentUserId) return;
+  closeIdentityPanel();
+  try {
+    const result = await apiPost('/auth/impersonate', { userId: targetUserId });
+    AUTH_USER = { userId: result.userId, name: result.name, role: result.role, title: result.title };
+    currentRole = result.role;
+    currentUserId = result.userId;
+    document.getElementById('userDisplay').textContent = `${AUTH_USER.name}（${roleLabel(AUTH_USER.role)}）`;
+    renderRoleSwitcher();
+    renderSidebar();
+    render();
+    currentView = 'dashboard';
+  } catch (e) {
+    alert(e.message || '切换失败');
+  }
+}
+
+function toggleIdentityPanel(event) {
+  event.stopPropagation();
+  const panel = document.getElementById('identityPanel');
+  const chevron = document.querySelector('.identity-chevron');
+  if (!panel) return;
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) {
+    closeIdentityPanel();
+  } else {
+    panel.classList.add('open');
+    chevron.classList.add('open');
+    // 清除搜索
+    const input = document.getElementById('identitySearchInput');
+    if (input) { input.value = ''; filterUsers(''); }
+    // 点击外部关闭
+    setTimeout(() => document.addEventListener('click', closeIdentityPanel, { once: true }), 0);
+  }
+}
+
+function closeIdentityPanel() {
+  const panel = document.getElementById('identityPanel');
+  const chevron = document.querySelector('.identity-chevron');
+  if (panel) panel.classList.remove('open');
+  if (chevron) chevron.classList.remove('open');
+}
+
+function filterUsers(query) {
+  const q = query.toLowerCase().trim();
+  const items = document.querySelectorAll('.identity-user');
+  const groups = document.querySelectorAll('.identity-group');
+  let hasVisible = false;
+  items.forEach(item => {
+    const name = item.querySelector('.identity-user-name')?.textContent.toLowerCase() || '';
+    const id = item.querySelector('.identity-user-id')?.textContent.toLowerCase() || '';
+    const match = !q || name.includes(q) || id.includes(q);
+    item.classList.toggle('hidden', !match);
+    if (match) hasVisible = true;
+  });
+  groups.forEach(g => {
+    const visible = [...g.querySelectorAll('.identity-user')].some(el => !el.classList.contains('hidden'));
+    g.classList.toggle('hidden', !visible);
+  });
 }
 
 function getCurrentUserName() {
@@ -503,10 +838,9 @@ function renderSidebar() {
   const navs = [];
 
   if (currentRole === 'sales') {
-    // 销售：工作台、渠道定制单、我的子任务、待评分
+    // 销售：工作台、渠道定制单、待评分
     navs.push({ view: 'dashboard', icon: '📊', label: '工作台', badge: '' });
     navs.push({ view: 'channel', icon: '📦', label: '渠道定制单', badge: 'badgeChannel' });
-    navs.push({ view: 'tasks', icon: '📌', label: '我的子任务', badge: 'badgeMyTasks' });
     navs.push({ view: 'scoring', icon: '⭐', label: '待评分', badge: 'badgeScoring' });
   } else if (currentRole === 'admin') {
     // 管理员：工作台 + 系统管理
@@ -603,6 +937,19 @@ function formatDate(d) {
   return m ? m[0] : d;
 }
 
+/** 渲染项目评分（带颜色） */
+function renderScore(score) {
+  if (score === null || score === undefined) return '<span style="color:var(--gray-300);">-</span>';
+  const num = parseFloat(score);
+  if (isNaN(num)) return '<span style="color:var(--gray-300);">-</span>';
+  let color;
+  if (num >= 8) color = '#3B6D11';
+  else if (num >= 6) color = '#854F0B';
+  else if (num >= 4) color = '#A32D2D';
+  else color = 'var(--gray-400)';
+  return `<span style="font-weight:600;color:${color};">${num.toFixed(1)}</span>`;
+}
+
 function fmtDT(ts) {
   if (!ts) return '-';
   const d = new Date(ts);
@@ -681,11 +1028,9 @@ function closeM(id, force) {
   document.getElementById(id)?.remove();
 }
 
-// 标记表单内容已修改（用于保存提示判断）
-function formModified() { _formModified = true; }
-
 // 安全创建模态框（防止重复点击出现多个）
 function openModal(id) {
+  if (isModalOpen()) return;
   const existing = document.getElementById(id);
   if (existing) { existing.remove(); }
   const modal = document.createElement('div');
@@ -697,6 +1042,7 @@ function openModal(id) {
 
 // 弹窗关闭确认
 function showSaveConfirmModal() {
+  if (isModalOpen()) return;
   const overlay = document.getElementById('createProjectModal');
   if (!overlay) return;
   const confirm = document.createElement('div');
@@ -750,17 +1096,125 @@ function showLoading(container) {
 }
 
 // ==================== 主渲染 ====================
+/** 操作后增量刷新（轻量版：不重拉全量列表） */
+async function refreshAfterMutation(pid) {
+  // 清除所有缓存
+  APP_CACHE.orders = [];
+  Object.keys(SWR_CACHE).forEach(k => delete SWR_CACHE[k]);
+
+  // 并发：更新徽章 + 刷新视图
+  await Promise.all([
+    // 更新侧边栏徽章
+    (async () => {
+      try {
+        const badgeStats = await apiGet(`/projects/badge-stats?role=${currentRole}&userId=${getCurrentUserId()}`);
+        const elScoring = document.getElementById('badgeScoring');
+        if (elScoring) elScoring.textContent = badgeStats.pendingScoreCount || 0;
+        const elMyTasks = document.getElementById('badgeMyTasks');
+        if (elMyTasks) elMyTasks.textContent = badgeStats.myTaskCount || 0;
+        const badgeTotal = document.getElementById('badgeTotal');
+        if (badgeTotal) badgeTotal.textContent = badgeStats.totalCount || 0;
+        const badgeChannel = document.getElementById('badgeChannel');
+        if (badgeChannel) badgeChannel.textContent = badgeStats.channelCount || 0;
+        const badgeRegular = document.getElementById('badgeRegular');
+        if (badgeRegular) badgeRegular.textContent = badgeStats.regularCount || 0;
+      } catch(e) {}
+    })(),
+
+    // 按当前视图刷新
+    (async () => {
+      if (currentView === 'tasks' || currentView === 'scoring') {
+        await render();
+      } else if (pid) {
+        try {
+          const detail = await apiGet(`/projects/${pid}`);
+          updateProjectRow(pid, detail);
+          if (document.getElementById('projectDetailModal')) {
+            closeM('projectDetailModal');
+            setTimeout(() => openProjectDetail(Number(pid)), 50);
+          }
+        } catch(e) {}
+      }
+    })(),
+  ]);
+}
+
+/** 更新列表中单个项目的行数据 */
+function updateProjectRow(pid, detail) {
+  const container = document.getElementById('projectListContainer');
+  if (!container) return;
+  // 从缓存中找到对应的项目数据并更新
+  if (APP_CACHE.currentFilterData) {
+    const idx = APP_CACHE.currentFilterData.findIndex(o => o.id === pid);
+    if (idx >= 0) {
+      // 用最新的 detail 数据合并到列表缓存中
+      const st = getProjectStatusInfo(detail.status);
+      APP_CACHE.currentFilterData[idx] = {
+        ...APP_CACHE.currentFilterData[idx],
+        status: detail.status,
+        statusLabel: st.label,
+        statusCls: st.cls,
+        taskCount: detail.tasks?.length || 0,
+        approvedTaskCount: detail.tasks?.filter(t => t.status === 'completed' || t.status === 'approved' || t.status === 'sales_approved' || t.status === 'admin_approved').length || 0,
+        progressPercent: detail.progressPercent || 0,
+        plannerName: detail.plannerName,
+        salesName: detail.salesName,
+      };
+      // 如果当前表格可见，只替换对应行
+      const rows = container.querySelectorAll('tbody tr');
+      const targetRow = Array.from(rows).find(r => r.cells[0]?.textContent?.trim() === `#${pid}`);
+      if (targetRow) {
+        // 只是重新渲染这一行
+        const newRowHtml = renderProjectRow(APP_CACHE.currentFilterData[idx]);
+        targetRow.outerHTML = newRowHtml;
+      } else {
+        // 如果找不到行，整表重绘（兜底）
+        container.innerHTML = renderProjectTable(APP_CACHE.currentFilterData);
+      }
+    }
+  }
+}
+
+/** 渲染单行项目 */
+function renderProjectRow(o) {
+  const st = getProjectStatusInfo(o.status);
+  return `<tr onclick="openProjectDetail(${o.id})" style="cursor:pointer;">
+    <td><strong>#${o.id}</strong></td>
+    <td style="font-size:12px;">${o.type === 'channel_custom' ? '📦 渠道' : '🏭 常规'}</td>
+    <td>${o.salesName || '-'}</td>
+    <td>${o.plannerName || '<span style="color:var(--gray-400);">未指定</span>'}</td>
+    <td>${o.productCategory || '-'}</td>
+    <td>${o.targetMarket ? (() => { try { return JSON.parse(o.targetMarket).join('/'); } catch(e) { return o.targetMarket; } })() : '-'}</td>
+    <td style="font-size:12px;">${o.priceRange || '-'}</td>
+    <td style="font-size:12px;">${o.approvedTaskCount}/${o.taskCount}</td>
+    <td style="font-size:12px;">${renderScore(o.score)}</td>
+    <td style="font-size:12px;">${formatDate(o.deadline)}</td>
+    <td><span class="badge ${st.cls}" style="font-size:11px;">${st.label}</span></td>
+    <td style="white-space:nowrap;">
+      <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openProjectDetail(${o.id})">查看</button>
+      ${o.status === 'pending_planner' && currentRole === 'planner' ? `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();plannerAcceptFromList(${o.id})" style="color:var(--success);border-color:var(--success);margin-left:4px;">接单</button>` : ''}
+      ${['planner_accepted','in_progress','paused'].includes(o.status) ? `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();${o.status === 'paused' ? `resumeProject(${o.id})` : `pauseProject(${o.id})`}" style="font-size:11px;margin-left:4px;color:${o.status === 'paused' ? 'var(--success)' : 'var(--primary)'};border-color:${o.status === 'paused' ? 'var(--success)' : 'var(--primary)'};">${o.status === 'paused' ? '▶ 继续' : '⏸ 暂停'}</button>` : ''}
+    </td>
+  </tr>`;
+}
+
 async function render() {
   const main = document.getElementById('mainContent');
   showLoading(main);
+
+  // 页面导航时不清空缓存（依赖 mutation 操作清空），导航切换无需重新拉取
+  // 首次加载或缓存为空时才拉取
 
   try {
     const role = currentRole;
     const uid = getCurrentUserId();
 
-    // 预加载项目列表用于徽章更新
-    let orders = [];
-    try { orders = await apiGet(`/projects?role=${role}&userId=${uid}`); } catch(e) {}
+    // 预加载项目列表（使用缓存避免重复请求）
+    let orders = APP_CACHE.orders;
+    if (!orders || !orders.length) {
+      try { orders = await apiGet(`/projects?role=${role}&userId=${uid}`); } catch(e) {}
+      APP_CACHE.orders = orders || [];
+    }
 
     // 更新基础徽章（销售角色没有 total/regular 徽章，需要判空）
     const elTotal = document.getElementById('badgeTotal');
@@ -790,53 +1244,22 @@ async function render() {
     try {
       let pendingScoreCount = 0;
       let myTaskCount = 0;
-      for (const order of orders) {
-        const detail = await apiGet(`/projects/${order.id}`);
-        if (!detail.tasks) continue;
-        for (const t of detail.tasks) {
-      // 待评分
-      if (t.status === 'approved' && t.scoringRecords) {
-        if (role === 'admin') {
-          // 管理员：统计所有未评分的记录
-          const hasPending = t.scoringRecords.some(sr => sr.aesthetics === null);
-          if (hasPending) pendingScoreCount++;
-        } else {
-          const needMe = detail.type === 'channel_custom'
-            ? (role === 'sales' || role === 'planner')
-            : (role === 'planner');
-          if (needMe) {
-            const myRecord = t.scoringRecords.find(sr => sr.role === role);
-            if (myRecord && myRecord.aesthetics === null) pendingScoreCount++;
-          }
-        }
+      // 使用批量徽章统计 API，避免 N 次详情查询
+      const badgeStats = await apiGet(`/projects/badge-stats?role=${role}&userId=${uid}`);
+      pendingScoreCount = badgeStats.pendingScoreCount || 0;
+      myTaskCount = badgeStats.myTaskCount || 0;
+
+      // 我的子任务（企划/管理员：进行中的项目数）
+      if (role !== 'sales' && role !== 'designer' && role !== 'supplychain') {
+        myTaskCount = orders.filter(o =>
+          o.status === 'in_progress' || o.status === 'planner_accepted'
+        ).length;
       }
-      // 渠道定制单：企划已评分但销售尚未确认评分 → 销售待评分
-      if (detail.type === 'channel_custom' && t.status === 'planner_approved') {
-        if (role === 'admin' || role === 'sales') {
-          pendingScoreCount++;
-        }
+      const elScoring = document.getElementById('badgeScoring');
+      if (elScoring) elScoring.textContent = pendingScoreCount;
+      if (document.getElementById('badgeMyTasks')) {
+        document.getElementById('badgeMyTasks').textContent = myTaskCount;
       }
-        // 我的子任务（销售：渠道定制单中待处理的子任务）
-        if (role === 'sales' && detail.type === 'channel_custom' && ['pending','accepted','rejected','delivered'].includes(t.status)) {
-          myTaskCount++;
-        }
-        // 我的子任务（设计师）
-        if (role === 'designer' && t.designerId === uid && ['pending','accepted','rejected'].includes(t.status)) {
-          myTaskCount++;
-        }
-      }
-    // 我的子任务（企划/上级/管理员：进行中的项目数）
-  }
-  if (role !== 'sales' && role !== 'designer') {
-    myTaskCount = orders.filter(o =>
-      o.status === 'in_progress' || o.status === 'planner_accepted'
-    ).length;
-  }
-    const elScoring = document.getElementById('badgeScoring');
-    if (elScoring) elScoring.textContent = pendingScoreCount;
-    if (document.getElementById('badgeMyTasks')) {
-      document.getElementById('badgeMyTasks').textContent = myTaskCount;
-    }
     } catch (e) {
       console.error('徽章计算错误:', e);
     }
@@ -851,7 +1274,7 @@ async function updateBadges(role, uid) {
   try {
     const orders = await apiGet(`/projects?role=${role}&userId=${uid}`);
 
-    if (role === 'designer') {
+    if (role === 'designer' || role === 'supplychain') {
       // 设计师：只统计自己有关联任务的项目数
       let designerProjectCount = 0;
       let designerTaskCount = 0;
@@ -901,7 +1324,7 @@ async function updateBadges(role, uid) {
     if (elScoring) elScoring.textContent = pendingScoreCount;
 
     let myTasks = 0;
-    if (currentRole === 'designer') {
+    if (currentRole === 'designer' || currentRole === 'supplychain') {
       const myId = getCurrentUserId();
       for (const order of orders) {
         const detail = await apiGet(`/projects/${order.id}`);
@@ -920,13 +1343,19 @@ async function updateBadges(role, uid) {
           if (['pending', 'accepted', 'rejected', 'delivered'].includes(t.status)) myTasks++;
         }
       }
+    } else if (currentRole === 'planner') {
+      // 企划：统计分配给自己的待处理子任务数
+      const myId = getCurrentUserId();
+      for (const order of orders) {
+        const detail = await apiGet(`/projects/${order.id}`);
+        if (!detail.tasks) continue;
+        for (const t of detail.tasks) {
+          if (t.designerId === myId && ['pending', 'accepted', 'rejected'].includes(t.status)) myTasks++;
+        }
+      }
     } else {
-      // 企划/上级/管理员: 显示进行中的项目数
-      myTasks = orders.filter(o =>
-        o.status === 'in_progress' || o.status === 'planner_accepted'
-      ).length;
+      document.getElementById('badgeMyTasks').textContent = myTasks;
     }
-    document.getElementById('badgeMyTasks').textContent = myTasks;
   } catch (e) {
     console.error('徽章更新失败:', e);
   }
@@ -934,17 +1363,43 @@ async function updateBadges(role, uid) {
 
 // ==================== 工作台 ====================
 async function renderDashboard(main, role, uid) {
-  const [stats, orders] = await Promise.all([
-    apiGet(`/dashboard/stats?role=${role}&userId=${uid}`),
-    apiGet(`/projects?role=${role}&userId=${uid}`),
-  ]);
+  // 使用 SWR 缓存 + 聚合端点（1次API替代8次）
+  const cacheKey = `dashboard_${role}_${uid}`;
+  const data = await swrFetch(cacheKey,
+    () => apiGet(`/dashboard/full?role=${role}&userId=${uid}`),
+    30000
+  );
+
+  const orders = data.orders || [];
+  const stats = data.stats || {};
+  const roleStatus = data.roleStatus || {};
+  DEPARTMENTS = data.departments || [];
+
+  // 更新全局缓存
+  APP_CACHE.orders = orders;
 
   const channel = orders.filter(o => o.type === 'channel_custom');
   const regular = orders.filter(o => o.type === 'regular');
 
-  let designerHtml = '';
-  if (currentRole === 'planner') {
-    designerHtml = await renderDesignerPanel();
+  // 角色状态面板（使用聚合数据中的 roleStatus）
+  let rolePanelsHtml = '';
+  const myDept = DEPARTMENTS.find(d => d.headUserId === uid);
+
+  if (currentRole === 'admin') {
+    // 管理员：显示全部四个角色面板（直接从聚合数据渲染，不额外请求）
+    const salesHtml = renderRolePanelFromData(roleStatus.sales || {}, 'sales');
+    const plannerHtml = renderRolePanelFromData(roleStatus.planner || {}, 'planner');
+    const supplyHtml = renderRolePanelFromData(roleStatus.supplychain || {}, 'supplychain');
+    const designerHtml = renderRolePanelFromData(roleStatus.designer || {}, 'designer');
+    rolePanelsHtml = salesHtml + plannerHtml + supplyHtml + designerHtml;
+  } else if (currentRole === 'planner') {
+    const deptId = myDept?.id || null;
+    const plannerHtml = renderRolePanelFromData(roleStatus.planner || {}, 'planner', deptId, uid);
+    const designerHtml = renderRolePanelFromData(roleStatus.designer || {}, 'designer');
+    const supplyHtml = renderRolePanelFromData(roleStatus.supplychain || {}, 'supplychain');
+    rolePanelsHtml = plannerHtml + designerHtml + supplyHtml;
+  } else if (myDept) {
+    rolePanelsHtml = renderRolePanelFromData(roleStatus[myDept.role] || {}, myDept.role, myDept.id, uid);
   }
 
   main.innerHTML = `
@@ -968,47 +1423,263 @@ async function renderDashboard(main, role, uid) {
           <div class="stat-card" style="cursor:pointer" onclick="navigate('scoring')"><div class="stat-icon yellow">⭐</div><div><div class="stat-value">${stats.pendingScore}</div><div class="stat-label">待评分</div></div></div>
         </div>`
     }
-    ${designerHtml}
+    ${rolePanelsHtml}
     ${orders.length === 0 ? `<div class="empty"><div class="empty-icon">📭</div><p>暂无您负责的项目</p></div>` : ''}
     ${renderProjectSummary(channel, '📦 渠道定制单')}
     ${currentRole !== 'sales' ? renderProjectSummary(regular, '🏭 公司常规品') : ''}
   `;
 }
 
-async function renderDesignerPanel() {
+/** 通用角色状态面板（支持按部门分组）
+ *  @param {string} role - 角色名
+ *  @param {number|null} deptId - 可选，部门ID，只显示该部门成员
+ *  @param {string|null} excludeUserId - 可选，排除某个用户ID（如部门负责人不显示自己）
+ */
+async function renderRolePanel(role, deptId, excludeUserId) {
+  const roleEmoji = { sales: '💼', planner: '📋', supplychain: '🛒', designer: '👥' };
+  const roleLabel_ = { sales: '销售', planner: '产品企划', supplychain: '供应链', designer: '设计师' };
   try {
-    const status = await apiGet('/projects/designer-status');
-    const designers = Object.values(status);
-    const busy = designers.filter(d => d.busy);
-    const idle = designers.filter(d => !d.busy);
+    const status = await apiGet(`/projects/role-status?role=${role}`);
+    let users = Object.values(status);
+
+    // 排除指定用户（如部门负责人不显示自己）
+    if (excludeUserId) {
+      users = users.filter(u => u.id !== excludeUserId);
+    }
+
+    // 获取最新的用户数据（包含部门分配信息）
+    let allUsersFlat;
+    if (deptId || DEPARTMENTS.length > 0) {
+      try {
+        const freshUsers = await apiGet('/users');
+        allUsersFlat = Object.values(freshUsers).flat();
+        USERS = freshUsers; // 更新全局缓存
+      } catch(e) {
+        allUsersFlat = Object.values(USERS).flat();
+      }
+    } else {
+      allUsersFlat = Object.values(USERS).flat();
+    }
+    // 如果指定了部门ID，只保留该部门的用户
+    if (deptId) {
+      users = users.filter(u => {
+        const userObj = allUsersFlat.find(us => us.userId === u.id);
+        return userObj && String(userObj.departmentId) === String(deptId);
+      });
+    }
+    const busy = users.filter(u => u.busy);
+    const idle = users.filter(u => !u.busy);
+
+    // 按部门分组（如果有组织架构）
+    const roleDepts = DEPARTMENTS.filter(d => d.role === role && d.active);
+    let bodyHtml = '';
+    if (roleDepts.length > 0) {
+      // 找出所有未分配部门的用户
+      const unknownUsers = users.filter(u => {
+        const userObj = allUsersFlat.find(us => us.userId === u.id);
+        return !userObj || !userObj.departmentId;
+      });
+      // 有部门：按部门分组展示
+      for (const dept of roleDepts) {
+        const deptUsers = users.filter(u => {
+          const userObj = allUsersFlat.find(us => us.userId === u.id);
+          return userObj && String(userObj.departmentId) === String(dept.id);
+        });
+        if (deptUsers.length > 0) {
+          bodyHtml += `
+            <div style="margin-bottom:12px;">
+              <div style="font-size:13px;font-weight:600;color:var(--gray-500);margin-bottom:8px;padding:0 4px;">
+                🏢 ${escHtml(dept.name)}
+                ${dept.headUserId ? `<span style="font-weight:400;font-size:12px;color:var(--gray-400);">（负责人：${(() => { const h = users.find(u => u.id === dept.headUserId); return h ? h.name : '—'; })()})</span>` : ''}
+              </div>
+              <div class="designer-grid">${deptUsers.map(u => renderUserCard(u)).join('')}</div>
+            </div>`;
+        }
+      }
+      // 尾部显示未分配部门的人员
+      if (unknownUsers.length > 0) {
+        bodyHtml += `
+          <div style="margin-bottom:12px;">
+            <div style="font-size:13px;font-weight:600;color:var(--gray-400);margin-bottom:8px;padding:0 4px;">📋 未分配部门</div>
+            <div class="designer-grid">${unknownUsers.map(u => renderUserCard(u)).join('')}</div>
+          </div>`;
+      }
+    } else {
+      // 无部门：平铺展示
+      bodyHtml = `<div class="designer-grid">${users.map(u => renderUserCard(u)).join('')}</div>`;
+    }
 
     return `<div class="designer-status-panel">
       <div class="card-header">
-        <div class="card-title">👥 设计师状态看板</div>
+        <div class="card-title">${roleEmoji[role] || '👤'} ${roleLabel_[role] || role}状态看板</div>
         <div style="display:flex;gap:12px;font-size:13px;">
           <span><span class="badge badge-busy" style="margin-right:4px;">🟡</span>忙碌 ${busy.length}人</span>
           <span><span class="badge badge-idle" style="margin-right:4px;">🟢</span>空闲 ${idle.length}人</span>
         </div>
       </div>
-      <div class="designer-grid">
-        ${designers.map(d => `
-        <div class="designer-card ${d.busy ? 'busy' : 'idle'}">
-          <div class="designer-avatar">${d.name.charAt(0)}</div>
-          <div class="designer-info">
-            <div class="designer-name">${d.name}</div>
-            <div class="designer-title">${d.title}</div>
-            <div class="designer-tasks">
-              ${d.busy ? `进行中：${d.activeTasks.length}个子任务` : `🟢 空闲`}
-            </div>
-            ${d.activeTasks.length > 0 ? `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;">
-              ${d.activeTasks.map(t => `<span style="font-size:10px;background:#fff;padding:1px 6px;border-radius:4px;cursor:pointer;" onclick="openProjectDetail('${t.projectId}')" title="${t.name}">${t.name.substring(0, 8)}...</span>`).join('')}
-            </div>` : ''}
-          </div>
-        </div>`).join('')}
-      </div>
+      ${bodyHtml}
     </div>`;
   } catch (e) {
     return '';
+  }
+}
+
+/** 从预取数据渲染角色面板（替代 API 调用） */
+function renderRolePanelFromData(statusData, role, deptId, excludeUserId) {
+  const roleEmoji = { sales: '💼', planner: '📋', supplychain: '🛒', designer: '👥' };
+  const roleLabel_ = { sales: '销售', planner: '产品企划', supplychain: '供应链', designer: '设计师' };
+  let users = Object.values(statusData);
+
+  // 过滤部门
+  if (deptId) {
+    const allUsers = Object.values(USERS).flat();
+    users = users.filter(u => {
+      const userObj = allUsers.find(us => us.userId === u.id);
+      return userObj && String(userObj.departmentId) === String(deptId);
+    });
+  }
+  // 排除自己
+  if (excludeUserId) {
+    users = users.filter(u => u.id !== excludeUserId);
+  }
+
+  const busy = users.filter(u => u.busy);
+  const idle = users.filter(u => !u.busy);
+
+  // 按部门分组
+  const roleDepts = DEPARTMENTS.filter(d => d.role === role && d.active);
+  let bodyHtml = '';
+  if (roleDepts.length > 0) {
+    const allUsersFlat = Object.values(USERS).flat();
+    const unknownUsers = users.filter(u => {
+      const userObj = allUsersFlat.find(us => us.userId === u.id);
+      return !userObj || !userObj.departmentId;
+    });
+    for (const dept of roleDepts) {
+      const deptUsers = users.filter(u => {
+        const userObj = allUsersFlat.find(us => us.userId === u.id);
+        return userObj && String(userObj.departmentId) === String(dept.id);
+      });
+      if (deptUsers.length > 0) {
+        bodyHtml += `<div style="margin-bottom:12px;">
+          <div style="font-size:13px;font-weight:600;color:var(--gray-500);margin-bottom:8px;padding:0 4px;">
+            🏢 ${escHtml(dept.name)}
+            ${dept.headUserId ? `<span style="font-weight:400;font-size:12px;color:var(--gray-400);">（负责人：${(() => { const h = users.find(u => u.id === dept.headUserId); return h ? h.name : '—'; })()})</span>` : ''}
+          </div>
+          <div class="designer-grid">${deptUsers.map(u => renderUserCard(u)).join('')}</div>
+        </div>`;
+      }
+    }
+    if (unknownUsers.length > 0) {
+      bodyHtml += `<div style="margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:600;color:var(--gray-400);margin-bottom:8px;padding:0 4px;">📋 未分配部门</div>
+        <div class="designer-grid">${unknownUsers.map(u => renderUserCard(u)).join('')}</div>
+      </div>`;
+    }
+  } else {
+    bodyHtml = `<div class="designer-grid">${users.map(u => renderUserCard(u)).join('')}</div>`;
+  }
+
+  return `<div class="designer-status-panel">
+    <div class="card-header">
+      <div class="card-title">${roleEmoji[role] || '👤'} ${roleLabel_[role] || role}状态看板</div>
+      <div style="display:flex;gap:12px;font-size:13px;">
+        <span><span class="badge badge-busy" style="margin-right:4px;">🟡</span>忙碌 ${busy.length}人</span>
+        <span><span class="badge badge-idle" style="margin-right:4px;">🟢</span>空闲 ${idle.length}人</span>
+      </div>
+    </div>
+    ${bodyHtml}
+  </div>`;
+}
+
+/** 渲染单个用户卡片 */
+function renderUserCard(u) {
+  // 忙碌的用户整个卡片可点击，弹出任务列表
+  const clickAttr = u.busy ? `onclick="showUserTasksPopup('${u.id}','${u.name}')" style="cursor:pointer;"` : '';
+  return `<div class="designer-card ${u.busy ? 'busy' : 'idle'}" ${clickAttr}>
+    <div class="designer-avatar">${u.name.charAt(0)}</div>
+    <div class="designer-info">
+      <div class="designer-name">${u.name}</div>
+      <div class="designer-title">${u.title}</div>
+      <div class="designer-tasks">
+        ${u.busy
+          ? (u.activeTasks
+            ? `进行中：${u.activeTasks.length}个子任务`
+            : `进行中：${u.activeProjects.length}个项目`)
+          : `🟢 空闲`}
+      </div>
+    </div>
+  </div>`;
+}
+
+/** 弹出用户任务/项目列表 */
+function showUserTasksPopup(userId, userName) {
+  if (document.getElementById('userTasksPopup')) return;
+  // 从页面上的角色状态数据中获取该用户的任务列表
+  // 重新拉取角色状态数据
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'userTasksPopup';
+  modal.onclick = function(e) { if (e.target === this) closeM('userTasksPopup'); };
+  modal.innerHTML = `
+    <button class="modal-close-float" onclick="closeM('userTasksPopup')">✕</button>
+    <div class="modal" style="max-width:500px;">
+      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📋 ${escHtml(userName)} 的进行中任务</div></div></div>
+      <div class="modal-body" id="userTasksPopupBody">
+        <div style="text-align:center;padding:20px;color:var(--gray-400);">加载中...</div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  loadUserTasksPopup(userId);
+}
+
+async function loadUserTasksPopup(userId) {
+  try {
+    // 从 USERS 缓存中找到该用户的角色
+    const allUsers = Object.values(USERS).flat();
+    const userInfo = allUsers.find(u => u.userId === userId);
+    let role = userInfo ? userInfo.role : 'designer';
+
+    const data = await apiGet(`/projects/role-status?role=${role}`);
+    const userData = Object.values(data).find(u => u.id === userId);
+    if (!userData) {
+      document.getElementById('userTasksPopupBody').innerHTML = '<div style="text-align:center;padding:20px;color:var(--gray-500);">暂无数据</div>';
+      return;
+    }
+    const tasks = userData.activeTasks || [];
+    const projects = userData.activeProjects || [];
+    const body = document.getElementById('userTasksPopupBody');
+    if (tasks.length === 0 && projects.length === 0) {
+      body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--success);">🟢 当前空闲，无进行中的任务</div>';
+      return;
+    }
+    let html = '';
+    if (tasks.length > 0) {
+      html += `<div style="font-size:13px;font-weight:600;color:var(--gray-500);margin-bottom:8px;">子任务（${tasks.length}）</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">`;
+      tasks.forEach(t => {
+        const statusLabels = { pending: '⏳ 待接单', accepted: '🔄 进行中', rejected: '↩️ 已驳回', delivered: '📤 已交付' };
+        html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;cursor:pointer;" onclick="closeM('userTasksPopup');openProjectDetail(${t.projectId})">
+          <span style="font-size:13px;">${escHtml(t.name)}</span>
+          <span style="font-size:11px;color:var(--gray-500);">${statusLabels[t.status] || t.status}</span>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+    if (projects.length > 0) {
+      html += `<div style="font-size:13px;font-weight:600;color:var(--gray-500);margin-top:12px;margin-bottom:8px;">项目（${projects.length}）</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">`;
+      projects.forEach(p => {
+        html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;cursor:pointer;" onclick="closeM('userTasksPopup');openProjectDetail(${p.id})">
+          <span style="font-size:13px;">${escHtml(p.name)}</span>
+          <span style="font-size:11px;color:var(--gray-500);">${p.type === 'channel_custom' ? '📦 渠道定制' : '🏭 常规品'}</span>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+    body.innerHTML = html;
+  } catch(e) {
+    document.getElementById('userTasksPopupBody').innerHTML = `<div style="text-align:center;padding:20px;color:var(--danger);">加载失败: ${e.message}</div>`;
   }
 }
 
@@ -1023,15 +1694,18 @@ function renderProjectSummary(projects, title) {
         </div>
         <div style="padding:0 20px 20px 20px;">
           <div class="table-wrap"><table>
-        <thead><tr><th>项目编号</th><th>需求方</th><th>产品企划</th><th>子任务数</th><th>进度</th><th>要求时间</th><th>状态</th><th>操作</th></tr></thead>
+        <thead><tr><th>项目编号</th><th>需求方</th><th>产品企划</th><th>产品类目</th><th>目标市场</th><th>子任务数</th><th>进度</th><th>评分</th><th>要求时间</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>${display.map(o => {
           const st = getProjectStatusInfo(o.status);
           return `<tr onclick="openProjectDetail(${o.id})" style="cursor:pointer;">
             <td><strong>#${o.id}</strong></td>
             <td>${o.salesName || '-'}</td>
             <td>${o.plannerName || '<span style="color:var(--gray-400);">未指定</span>'}</td>
+            <td>${o.productCategory || '-'}</td>
+            <td>${o.targetMarket ? (() => { try { return JSON.parse(o.targetMarket).join('/'); } catch(e) { return o.targetMarket; } })() : '-'}</td>
             <td>${o.taskCount}（完成${o.approvedTaskCount}）</td>
             <td><div class="progress-bar" style="width:80px;"><div class="progress-fill" style="width:${o.progressPercent}%;"></div></div></td>
+            <td>${renderScore(o.score)}</td>
             <td>${formatDate(o.deadline)}</td>
             <td><span class="badge ${st.cls}">${st.label}</span></td>
             <td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openProjectDetail(${o.id})">查看</button></td>
@@ -1044,25 +1718,31 @@ function renderProjectSummary(projects, title) {
 
 // ==================== 项目列表 ====================
 async function renderOrderList(main, type, role, uid) {
-  // 设计师查看渠道/常规品时只显示已参与的项目（已接单，排除待认领）
-  const participating = role === 'designer' ? '&participating=true' : '';
-  let orders = await apiGet(`/projects?role=${role}&userId=${uid}${participating}`);
+  // 使用缓存的项目列表
+  let orders = APP_CACHE.orders;
+  if (!orders || !orders.length) {
+    const participating = role === 'designer' || role === 'supplychain' ? '&participating=true' : '';
+    orders = await apiGet(`/projects?role=${role}&userId=${uid}${participating}`);
+    APP_CACHE.orders = orders;
+  }
   let title = '全部项目';
   if (type === 'channel_custom') { orders = orders.filter(o => o.type === 'channel_custom'); title = '📦 渠道定制单'; }
   else if (type === 'regular') { orders = orders.filter(o => o.type === 'regular'); title = '🏭 公司常规品'; }
   else title = '📋 全部项目';
 
   APP_CACHE.orders = orders;
+  // 保存当前列表的完整数据用于筛选
+  APP_CACHE.currentFilterData = [...orders];
 
   main.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-      <h2 style="font-size:22px;">${title} <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${orders.length})</span></h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2 style="font-size:20px;">${title} <span style="font-size:13px;color:var(--gray-400);font-weight:400;">（${orders.length} 个）</span></h2>
       <div style="display:flex;gap:8px;">
         ${currentRole === 'sales' ? `<button class="btn btn-primary" onclick="openCreateProject('channel_custom')">➕ 新建渠道定制项目</button>` : ''}
         ${currentRole === 'planner' && type === 'regular' ? `<button class="btn btn-primary" onclick="openCreateProject('regular')">➕ 新建常规品设计项目</button>` : ''}
       </div>
     </div>
-    <div class="filter-bar">
+    <div class="filter-bar" style="margin-bottom:16px;">
       <select class="form-select" onchange="filterProjectList()" style="min-width:120px;" id="projectStatusFilter">
         <option value="all">全部状态</option>
         <option value="in_progress">进行中</option>
@@ -1070,10 +1750,10 @@ async function renderOrderList(main, type, role, uid) {
         <option value="completed_pending_score">待评分</option>
         <option value="pending_planner">待企划接单</option>
       </select>
-      <input class="form-input" placeholder="🔍 搜索编号/描述..." oninput="filterProjectList()" style="min-width:200px;" id="searchInput">
-      <input type="date" class="form-input" id="filterDateStart" style="min-width:140px;" title="开始日期">
-      <span style="color:var(--gray-400);font-size:13px;">~</span>
-      <input type="date" class="form-input" id="filterDateEnd" style="min-width:140px;" title="结束日期">
+      <input class="form-input" placeholder="🔍 搜索编号/描述..." oninput="filterProjectList()" style="min-width:180px;" id="searchInput">
+      <input type="date" class="form-input" id="filterDateStart" style="min-width:130px;" title="开始日期">
+      <span style="color:var(--gray-400);font-size:12px;">~</span>
+      <input type="date" class="form-input" id="filterDateEnd" style="min-width:130px;" title="结束日期">
       <button class="btn btn-primary btn-sm" onclick="filterProjectList()">🔍 查询</button>
       <button class="btn btn-outline btn-sm" onclick="resetProjectFilters()">↺ 重置</button>
     </div>
@@ -1082,33 +1762,15 @@ async function renderOrderList(main, type, role, uid) {
 }
 
 function renderProjectTable(orders) {
-  if (!orders.length) return `<div class="empty"><div class="empty-icon">📭</div><p>暂无项目</p></div>`;
+  if (!orders.length) return `<div class="empty" style="padding:40px;"><div class="empty-icon">📭</div><p>暂无项目</p></div>`;
   return `<div class="table-wrap"><table>
-    <thead><tr><th>项目编号</th><th>类型</th><th>需求方</th><th>产品企划</th><th>子任务</th><th>要求时间</th><th>状态</th><th>操作</th></tr></thead>
-    <tbody>${orders.map(o => {
-      const st = getProjectStatusInfo(o.status);
-      return `<tr onclick="openProjectDetail(${o.id})" style="cursor:pointer;">
-        <td><strong>#${o.id}</strong></td>
-        <td>${o.type === 'channel_custom' ? '📦 渠道定制' : '🏭 常规品'}</td>
-        <td>${o.salesName || '-'}</td>
-        <td>${o.plannerName || '<span style="color:var(--gray-400);">未指定</span>'}</td>
-        <td>${o.approvedTaskCount}/${o.taskCount}</td>
-        <td>${formatDate(o.deadline)}</td>
-        <td><span class="badge ${st.cls}">${st.label}</span></td>
-        <td style="white-space:nowrap;">
-          <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openProjectDetail(${o.id})" style="color:#D97706;border-color:#FCD34D;">查看</button>
-          ${o.status === 'pending_planner' && currentRole === 'planner' ? `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();plannerAcceptFromList(${o.id})" style="color:var(--success);border-color:var(--success);">接单</button>` : ''}
-          ${['planner_accepted','in_progress','paused'].includes(o.status) ? `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();${o.status === 'paused' ? `resumeProject(${o.id})` : `pauseProject(${o.id})`}" style="font-size:11px;color:${o.status === 'paused' ? 'var(--success)' : 'var(--primary)'};border-color:${o.status === 'paused' ? 'var(--success)' : 'var(--primary)'};">${o.status === 'paused' ? '继续' : '暂停'}</button>` : ''}
-          ${['pending_planner','planner_accepted','in_progress','paused'].includes(o.status) ? `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();terminateProject(${o.id})" style="font-size:11px;color:var(--danger);border-color:var(--danger);">终止</button>` : ''}
-          ${o.status === 'pending_terminate' ? `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();terminateProject(${o.id})" style="font-size:11px;color:var(--danger);border-color:var(--danger);">确认终止</button><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();cancelTerminate(${o.id})" style="font-size:11px;color:var(--gray-600);border-color:var(--gray-300);">取消终止</button>` : ''}
-        </td>
-      </tr>`;
-    }).join('')}</tbody>
+    <thead><tr><th>编号</th><th>类型</th><th>需求方</th><th>产品企划</th><th>产品类目</th><th>目标市场</th><th>价格</th><th>子任务</th><th>评分</th><th>要求时间</th><th>状态</th><th>操作</th></tr></thead>
+    <tbody>${orders.map(o => renderProjectRow(o)).join('')}</tbody>
   </table></div>`;
 }
 
 function filterProjectList() {
-  let filtered = [...APP_CACHE.orders];
+  let filtered = APP_CACHE.currentFilterData || [...APP_CACHE.orders];
 
   // 状态筛选
   const currentFilter = document.getElementById('projectStatusFilter')?.value || 'all';
@@ -1151,8 +1813,8 @@ function resetProjectFilters() {
 
 // ==================== 我的子任务（企划派发任务界面） ====================
 async function renderMyTasks(main, role, uid) {
-  if (role === 'designer') {
-    // 设计师: 展示分配给自己的子任务卡片
+  if (role === 'designer' || role === 'supplychain' || role === 'planner') {
+    // 设计师/供应链/企划: 展示分配给自己的子任务卡片
     await renderDesignerTasks(main, uid);
     return;
   }
@@ -1254,94 +1916,30 @@ function resetTaskProjectFilters() {
 
 // ==================== 待评分页面 ====================
 async function renderScoringView(main, role, uid) {
-  const orders = await apiGet(`/projects?role=${role}&userId=${uid}`);
+  // 使用专用聚合端点（1 次 API 替代 N+1 次）
+  const pendingItems = await swrFetch(`scoring_${role}_${uid}`,
+    () => apiGet(`/scoring/pending?role=${role}&userId=${uid}`),
+    15000
+  );
   let pendingTasks = [];
 
-  for (const order of orders) {
-    const detail = await apiGet(`/projects/${order.id}`);
-    if (!detail.tasks) continue;
-    const isChannel = detail.type === 'channel_custom';
-
-    for (const t of detail.tasks) {
-      // 待评分展示：approved 未完成评分的任务 + 渠道定制单 planner_approved 等待销售确认的任务
-      const isPendingScore = (t.status === 'approved' && t.scoringRecords)
-        || (isChannel && t.status === 'planner_approved');
-
-      if (!isPendingScore) continue;
-
-      if (role === 'admin') {
-        // 管理员：查看所有未完成评分记录（包含待销售确认的渠道任务）
-        const anyPending = t.scoringRecords
-          ? t.scoringRecords.some(sr => sr.aesthetics === null)
-          : true;
-        if (t.status === 'planner_approved' || anyPending) {
-          pendingTasks.push({
-            ...t,
-            projectId: detail.id,
-            projectType: detail.type,
-            projectName: detail.productRequirements,
-            isPending: true,
-            isAdminView: true,
-            myRecord: null,
-          });
-        }
-      } else if (role === 'sales' && isChannel && t.status === 'planner_approved') {
-        // 销售：渠道定制单中企划已评分、待销售确认评分的任务
-        pendingTasks.push({
-          ...t,
-          projectId: detail.id,
-          projectType: detail.type,
-          projectName: detail.productRequirements,
-          isPending: true,
-          isDesignerView: true,
-          myRecord: null,
-        });
-      } else if (role === 'designer' && t.status === 'approved' && t.scoringRecords) {
-        // 设计师：只查看分配给自己的子任务的评分
-        if (t.designerId !== uid) continue;
-        const hasPending = t.scoringRecords.some(sr => sr.aesthetics === null);
-        pendingTasks.push({
-          ...t,
-          projectId: detail.id,
-          projectType: detail.type,
-          projectName: detail.productRequirements,
-          isPending: hasPending,
-          myRecord: t.scoringRecords.find(sr => sr.role === 'designer') || null,
-          isDesignerView: true,
-        });
-      } else if (t.status === 'approved' && t.scoringRecords) {
-        const hasPending = t.scoringRecords.some(sr => sr.aesthetics === null);
-        pendingTasks.push({
-          ...t,
-          projectId: detail.id,
-          projectType: detail.type,
-          projectName: detail.productRequirements,
-          isPending: hasPending,
-          myRecord: t.scoringRecords.find(sr => sr.role === 'designer') || null,
-          isDesignerView: true,
-        });
-      } else {
-        // 当前角色是否有评分权限
-        const needScoringRole = isChannel
-          ? ['sales', 'planner']
-          : ['planner'];
-        if (!needScoringRole.includes(role)) continue;
-
-        // 检查当前角色是否有评分权限且尚未评分
-        const myRecord = t.scoringRecords.find(sr => sr.role === role);
-        if (!myRecord) continue;
-        const isPending = myRecord.aesthetics === null;
-
-        pendingTasks.push({
-          ...t,
-          projectId: detail.id,
-          projectType: detail.type,
-          projectName: detail.productRequirements,
-          isPending,
-          myRecord,
-        });
-      }
-    }
+  for (const item of pendingItems) {
+    const t = {
+      id: item.taskId,
+      name: item.taskName,
+      status: item.taskStatus,
+      projectId: item.projectId,
+      projectType: item.projectType,
+      projectName: item.projectName,
+      designerId: item.designerId,
+      designerName: item.designerName,
+      selfScore: item.selfScore,
+      selfAesthetics: item.selfAesthetics,
+      selfInnovation: item.selfInnovation,
+      scoringRecords: item.scoringRecords || [],
+    };
+    const isChannel = t.projectType === 'channel_custom';
+    pendingTasks.push(t);
   }
 
   // 待评分在前，已评分在后
@@ -1456,12 +2054,17 @@ function renderScoringCards(tasks) {
 
 // 设计师视角: 展示分配给自己的子任务卡片
 async function renderDesignerTasks(main, uid) {
-  const orders = await apiGet(`/projects?role=designer&userId=${uid}`);
+  const orders = await apiGet(`/projects?role=${currentRole}&userId=${uid}`);
   let myTasks = [];
   const myId = uid;
 
-  for (const order of orders) {
-    const detail = await apiGet(`/projects/${order.id}`);
+  // 并行拉取所有项目详情
+  const details = await Promise.all(
+    orders.map(order => apiGet(`/projects/${order.id}`).catch(() => null))
+  );
+
+  for (const detail of details) {
+    if (!detail || !detail.tasks) continue;
     for (const t of detail.tasks) {
       const isMine = t.designerId === myId;
       const isUnassigned = !t.designerId || t.designerId === '';
@@ -1471,7 +2074,7 @@ async function renderDesignerTasks(main, uid) {
         myTasks.push({ ...t, projectId: detail.id, projectType: detail.type, projectName: (detail.productRequirements || '').substring(0, 30), _unassigned: true });
       }
       if (t.status === 'approved' && t.scoringRecords) {
-        const needScore = t.scoringRecords.some(sr => sr.aesthetics === null && sr.role === 'designer');
+        const needScore = t.scoringRecords.some(sr => sr.aesthetics === null && (sr.role === 'designer' || sr.role === 'supplychain'));
         if (needScore && !myTasks.find(mt => mt.id === t.id)) {
           myTasks.push({ ...t, projectId: detail.id, projectType: detail.type, projectName: (detail.productRequirements || '').substring(0, 30) });
         }
@@ -1527,7 +2130,7 @@ function renderDesignerTaskCards(tasks) {
   return `<div class="card">
       ${tasks.map(t => {
         const tsi = getTaskStatusInfo(t.status);
-        const needScore = t.scoringRecords && t.scoringRecords.some(sr => sr.aesthetics === null && sr.role === 'designer');
+        const needScore = t.scoringRecords && t.scoringRecords.some(sr => sr.aesthetics === null && (sr.role === 'designer' || sr.role === 'supplychain'));
         return `<div class="subtask-card" style="${t._unassigned ? 'border-left:3px solid var(--warning);' : ''}">
           <div class="subtask-header">
             <div class="subtask-name">${t._unassigned ? '📋' : tsi.icon} ${t.name}</div>
@@ -1535,7 +2138,7 @@ function renderDesignerTaskCards(tasks) {
           </div>
           <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">📁 项目 #${t.projectId}：${t.projectName}</div>
           <div class="subtask-meta">
-            <div class="subtask-meta-item">👤 设计师：<strong>${t.designerName || '<span style="color:var(--warning);">待认领</span>'}</strong></div>
+            <div class="subtask-meta-item">👤 负责人：<strong>${t.designerName || '<span style="color:var(--warning);">待认领</span>'}</strong>${t.assigneeRole ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;${t.assigneeRole === 'supplychain' ? 'background:#F0FDFA;color:#0D9488;' : t.assigneeRole === 'planner' ? 'background:#EFF6FF;color:#1D4ED8;' : 'background:#FEF2F2;color:#DC2626;'}">${t.assigneeRole === 'supplychain' ? '供应链' : t.assigneeRole === 'planner' ? '企划' : '设计师'}</span>` : ''}</div>
             <div class="subtask-meta-item">📅 计划完成：<strong>${formatDate(t.plannedDate)}</strong></div>
             ${t.actualDate ? `<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(t.actualDate)}</strong></div>` : ''}
           </div>
@@ -1785,7 +2388,99 @@ function handleCreateAttachments(input) { handleFileUpload(input, _createAttachm
 function handleDeliverImages(input) { handleFileUpload(input, _deliverImages, 9, '交付参考图', true); }
 function handleDeliverAttachments(input) { handleFileUpload(input, _deliverAttachments, 5, '交付附件', false); }
 
+// ==================== 产品类目 / 目标市场选择 ====================
+function onCategoryChange(sel) {
+  const wrapper = document.getElementById('categoryNoteWrapper');
+  if (sel.value === '其他') {
+    wrapper.style.display = 'block';
+  } else {
+    wrapper.style.display = 'none';
+    const ta = wrapper.querySelector('textarea');
+    if (ta) ta.value = '';
+  }
+  sel.closest('.form-group')?.querySelector('.field-error')?.remove();
+  sel.style.borderColor = '';
+  formModified();
+}
+
+function toggleMarket(el) {
+  el.classList.toggle('selected');
+  const selected = [];
+  document.querySelectorAll('#marketChips .chip.selected').forEach(c => selected.push(c.dataset.value));
+  document.getElementById('targetMarketInput').value = JSON.stringify(selected);
+  formModified();
+}
+
+function toggleCompliance(el) {
+  el.classList.toggle('selected');
+  const selected = [];
+  document.querySelectorAll('#complianceChips .chip.selected').forEach(c => selected.push(c.dataset.value));
+  document.getElementById('complianceItemsInput').value = JSON.stringify(selected);
+  formModified();
+}
+
+function togglePriceRange(el) {
+  document.querySelectorAll('#priceRangeChips .chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('priceRangeInput').value = el.dataset.value;
+  formModified();
+}
+
+// 切换子任务负责人类型（设计师/供应链）
+window.switchAssigneeType = function(prefix, role, el) {
+  // 更新 radio 选中样式
+  if (el) {
+    document.querySelectorAll(`#addSubTaskForm .checkbox-item, #editSubTaskForm .checkbox-item`).forEach(c => c.classList.remove('checked'));
+    el.classList.add('checked');
+  }
+  // 更新 hidden input
+  const hidden = document.getElementById(prefix + 'SubTaskAssigneeRole');
+  if (hidden) hidden.value = role;
+  // 切换负责人下拉选项
+  const sel = document.getElementById(prefix + 'SubTaskDesignerId');
+  if (!sel) return;
+  if (role === 'designer') {
+    sel.innerHTML = '<option value="">请选择设计师</option>' +
+      (USERS.designer || []).map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('');
+  } else if (role === 'planner') {
+    sel.innerHTML = (USERS.planner && USERS.planner.length
+      ? '<option value="">请选择企划</option>' +
+        USERS.planner.map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('')
+      : '<option value="">暂无企划人员</option>');
+  } else {
+    sel.innerHTML = (USERS.supplychain && USERS.supplychain.length
+      ? '<option value="">请选择供应链</option>' +
+        USERS.supplychain.map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('')
+      : '<option value="">暂无供应链人员</option>');
+  }
+};
+
+// 编辑子任务时切换负责人类型
+window.switchEditAssigneeType = function(role, el) {
+  document.querySelectorAll('#editSubTaskForm .checkbox-item').forEach(c => c.classList.remove('checked'));
+  el.classList.add('checked');
+  document.getElementById('editSubTaskAssigneeRole').value = role;
+  const sel = document.getElementById('editSubTaskDesignerId');
+  if (!sel) return;
+  if (role === 'designer') {
+    sel.innerHTML = '<option value="">请选择设计师</option>' +
+      (USERS.designer || []).map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('');
+  } else if (role === 'planner') {
+    sel.innerHTML = (USERS.planner && USERS.planner.length
+      ? '<option value="">请选择企划</option>' +
+        USERS.planner.map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('')
+      : '<option value="">暂无企划人员</option>');
+  } else {
+    sel.innerHTML = (USERS.supplychain && USERS.supplychain.length
+      ? '<option value="">请选择供应链</option>' +
+        USERS.supplychain.map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('')
+      : '<option value="">暂无供应链人员</option>');
+  }
+};
+
+
 function openCreateProject(type) {
+  if (isModalOpen()) return;
   if (document.getElementById('createProjectModal')) return;
   _formModified = false;
   window._createProjectType = type;
@@ -1803,10 +2498,10 @@ function openCreateProject(type) {
   const defaultPlanner = draft?.plannerId || (currentRole === 'planner' ? currentUserId : '');
   const defaultSales = draft?.salesId || (currentRole === 'sales' ? currentUserId : '');
 
-  const plannerOpts = `<option value="">未指定</option>` + USERS.planner.map(u =>
+  const plannerOpts = `<option value="">请选择产品企划</option>` + USERS.planner.map(u =>
     `<option value="${u.userId}" ${defaultPlanner === u.userId ? 'selected' : ''}>${u.name} (${u.title})</option>`
   ).join('');
-  const salesOpts = `<option value="">未指定</option>` + USERS.sales.map(u =>
+  const salesOpts = `<option value="">请选择需求方</option>` + USERS.sales.map(u =>
     `<option value="${u.userId}" ${defaultSales === u.userId ? 'selected' : ''}>${u.name} (${u.title})</option>`
   ).join('');
   const title = type === 'channel_custom' ? '新建渠道定制项目' : '新建常规品设计项目';
@@ -1828,6 +2523,36 @@ function openCreateProject(type) {
           <div class="form-group"><label class="form-label"><span class="required">*</span> 产品企划</label>
             <select class="form-select" name="plannerId" ${currentRole === 'planner' ? 'disabled' : ''} onchange="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">${plannerOpts}</select>
             ${currentRole === 'planner' ? `<input type="hidden" name="plannerId" value="${currentUserId}">` : ''}
+          </div>
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 产品类目</label>
+            <select class="form-select" name="productCategory" id="productCategorySelect" onchange="onCategoryChange(this)">
+              <option value="">请选择产品类目</option>
+              ${CATEGORIES.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}
+            </select>
+            <div id="categoryNoteWrapper" style="display:none;margin-top:8px;">
+              <textarea class="form-textarea" name="productCategoryNote" placeholder="请说明其他类目的具体内容..." oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()"></textarea>
+            </div>
+          </div>
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 参考零售价</label>
+            <div class="chip-group" id="priceRangeChips">
+              ${PRICE_RANGES.map(p => `<span class="chip" data-value="${p.name}" onclick="togglePriceRange(this)">${p.name}</span>`).join('')}
+            </div>
+            <input type="hidden" name="priceRange" id="priceRangeInput" value="">
+          </div>
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 目标市场<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选）</span></label>
+            <div class="chip-group" id="marketChips">
+              <span class="chip" data-value="国内" onclick="toggleMarket(this)">国内</span>
+              <span class="chip" data-value="海外" onclick="toggleMarket(this)">海外</span>
+            </div>
+            <input type="hidden" name="targetMarket" id="targetMarketInput" value="">
+            <div class="form-hint">可多选</div>
+          </div>
+          <div class="form-group"><label class="form-label">合规处罚<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选，非必选）</span></label>
+            <div class="chip-group" id="complianceChips">
+              ${COMPLIANCE_ITEMS.map(c => `<span class="chip" data-value="${c.name}" onclick="toggleCompliance(this)">${c.name}</span>`).join('')}
+            </div>
+            <input type="hidden" name="complianceItems" id="complianceItemsInput" value="">
+            <div class="form-hint">提醒产品企划关注相关供应商是否有相关资质</div>
           </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 要求完成时间</label>${renderDatePicker('deadline', {value: draft?.deadline || ''})}</div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 产品要求</label><textarea class="form-textarea" name="productRequirements" placeholder="产品的基本要求和目标..." oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">${escHtml(draft?.productRequirements || '')}</textarea></div>
@@ -1854,12 +2579,50 @@ function openCreateProject(type) {
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeM('createProjectModal')">取消</button>
-        <button class="btn btn-primary" onclick="submitCreateProject('${type}')">创建项目</button>
+        <button class="btn btn-primary" onclick="submitGuard(this,()=>submitCreateProject('${type}'))">创建项目</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
   if (_createRefImages.length) renderFileList(_createRefImages, '参考图片');
   if (_createAttachments.length) renderFileList(_createAttachments, '附件');
+
+  // 恢复草稿中的产品类目和目标市场
+  if (draft && type === 'channel_custom') {
+    if (draft.productCategory) {
+      const sel = document.getElementById('productCategorySelect');
+      if (sel) {
+        sel.value = draft.productCategory;
+        onCategoryChange(sel);
+      }
+    }
+    if (draft.targetMarket) {
+      try {
+        const markets = JSON.parse(draft.targetMarket);
+        markets.forEach(m => {
+          const chip = document.querySelector(`#marketChips .chip[data-value="${m}"]`);
+          if (chip) chip.classList.add('selected');
+        });
+        document.getElementById('targetMarketInput').value = draft.targetMarket;
+      } catch(e) {}
+    }
+    if (draft.complianceItems) {
+      try {
+        const items = JSON.parse(draft.complianceItems);
+        items.forEach(m => {
+          const chip = document.querySelector(`#complianceChips .chip[data-value="${m}"]`);
+          if (chip) chip.classList.add('selected');
+        });
+        document.getElementById('complianceItemsInput').value = draft.complianceItems;
+      } catch(e) {}
+    }
+    if (draft.priceRange) {
+      const chip = document.querySelector(`#priceRangeChips .chip[data-value="${draft.priceRange}"]`);
+      if (chip) {
+        chip.classList.add('selected');
+        document.getElementById('priceRangeInput').value = draft.priceRange;
+      }
+    }
+  }
 }
 
 async function submitCreateProject(type) {
@@ -1898,6 +2661,31 @@ async function submitCreateProject(type) {
 
   // 需求方（渠道定制单）
   if (type === 'channel_custom' && !data.salesId) addFieldError('salesId', '请选择需求方（销售）');
+
+  // 产品企划（必选）
+  if (!data.plannerId) addFieldError('plannerId', '请选择产品企划');
+
+  // 产品类目
+  const category = data.productCategory || '';
+  if (!category) {
+    addFieldError('productCategory', '请选择产品类目');
+  } else if (category === '其他') {
+    const note = data.productCategoryNote || '';
+    if (!note.trim()) {
+      addFieldError('productCategoryNote', '请补充其他类目的具体说明');
+    }
+  }
+
+  // 参考零售价
+  if (!data.priceRange) {
+    addFieldError('priceRange', '请选择参考零售价');
+  }
+
+  // 目标市场
+  const marketVal = data.targetMarket || '';
+  if (!marketVal || marketVal === '[]') {
+    addFieldError('targetMarket', '请选择目标市场');
+  }
 
   // 要求完成时间
   if (!data.deadline) addFieldError('deadline', '请填写要求完成时间');
@@ -1943,13 +2731,20 @@ async function submitCreateProject(type) {
 
   // 处理未指定的字段
   if (!data.plannerId) data.plannerId = '';
-  if (!data.salesId) data.salesId = '';
+  if (!data.salesId) {
+    data.salesId = currentRole === 'sales' ? currentUserId : '';
+  }
 
   try {
     await apiPost('/projects', data);
-    // 创建成功，清除草稿
+    // 创建成功，清除草稿和缓存
     sessionStorage.removeItem('design_pm_create_draft');
+    APP_CACHE.orders = []; // 清除项目列表缓存
     closeM('createProjectModal', true); // force=true 跳过保存提示
+    // 创建渠道定制项目后跳转到渠道列表视图
+    if (type === 'channel_custom') {
+      currentView = 'channel';
+    }
     render();
   } catch (e) {
     alert('创建失败: ' + e.message);
@@ -2002,20 +2797,27 @@ async function openProjectDetail(pid) {
 
 function renderProjectDetailContent(detail) {
   const isChannel = detail.type === 'channel_custom';
-  // 进度：需要考虑评分完成才算真正完成
+  // 进度：approved/completed/sales_approved/admin_approved 算完成
   const totalTasks = detail.tasks.length;
+  const doneStatuses = ['approved', 'completed', 'sales_approved', 'admin_approved'];
   const doneTasks = detail.tasks.filter(t => {
-    if (t.status !== 'approved') return false;
-    // 已验收的子任务需要所有评分角色都评完才算完成
+    if (!doneStatuses.includes(t.status)) return false;
     if (t.scoringRecords && t.scoringRecords.length > 0) {
       return t.scoringRecords.every(r => r.aesthetics !== null && r.innovation !== null);
     }
-    // 无评分记录（常规品只有企划评分的场景，评分可能还没创建）
     return false;
   }).length;
   const pct = totalTasks ? Math.round(doneTasks / totalTasks * 100) : 0;
 
   return `
+    ${detail.complianceItems ? (() => { try {
+      const items = JSON.parse(detail.complianceItems);
+      return `<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:14px;font-weight:600;color:#92400E;white-space:nowrap;">⚠️ 合规处罚提醒</span>
+        <span style="font-size:12px;color:#92400E;white-space:nowrap;">该产品涉及以下合规事项，请关注供应商资质：</span>
+        ${items.map(i => `<span style="display:inline-block;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:500;background:#FDE68A;color:#92400E;">${i}</span>`).join('')}
+      </div>`;
+    } catch(e) { return ''; } })() : ''}
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
       <span class="badge ${detail.statusCls}" style="font-size:13px;padding:5px 14px;">${detail.statusLabel}</span>
       <span style="font-size:12px;color:var(--gray-400);">创建：${fmtDT(detail.createdAt)}</span>
@@ -2029,6 +2831,10 @@ function renderProjectDetailContent(detail) {
         <div class="detail-item"><div class="detail-label">项目类型</div><div class="detail-value">${isChannel ? '渠道定制单' : '公司常规品'}</div></div>
         ${isChannel ? `<div class="detail-item"><div class="detail-label">需求方（销售）</div><div class="detail-value">${detail.salesName || '-'}</div></div>` : ''}
         <div class="detail-item"><div class="detail-label">产品企划</div><div class="detail-value">${detail.plannerName}</div></div>
+        ${detail.productCategory ? `<div class="detail-item"><div class="detail-label">产品类目</div><div class="detail-value">${detail.productCategory}${detail.productCategory === '其他' && detail.productCategoryNote ? `（${detail.productCategoryNote}）` : ''}</div></div>` : ''}
+        ${detail.priceRange ? `<div class="detail-item"><div class="detail-label">参考零售价</div><div class="detail-value">${detail.priceRange}</div></div>` : ''}
+        ${detail.targetMarket ? `<div class="detail-item"><div class="detail-label">目标市场</div><div class="detail-value">${(() => { try { return JSON.parse(detail.targetMarket).join('、'); } catch(e) { return detail.targetMarket; } })()}</div></div>` : ''}
+        ${detail.complianceItems ? `<div class="detail-item" style="grid-column:1/-1;"><div class="detail-label" style="color:var(--warning);font-weight:600;">⚠️ 合规处罚<span style="color:var(--gray-400);font-weight:400;font-size:12px;margin-left:6px;">提醒产品企划关注相关供应商是否有相关资质</span></div><div class="detail-value" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">${(() => { try { return JSON.parse(detail.complianceItems).map(i => `<span style="display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:500;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;">⚠ ${i}</span>`).join(''); } catch(e) { return detail.complianceItems; } })()}</div></div>` : ''}
         <div class="detail-item"><div class="detail-label">要求完成时间</div><div class="detail-value">${formatDate(detail.deadline)}</div></div>
       </div>
       <div style="margin-top:8px;"><div class="detail-label">产品要求</div><div class="detail-value">${detail.productRequirements || '-'}</div></div>
@@ -2041,13 +2847,20 @@ function renderProjectDetailContent(detail) {
       <div class="detail-section-title">
         📌 子任务列表
         <span style="font-size:12px;color:var(--gray-400);font-weight:400;">${doneTasks}/${detail.tasks.length} 完成</span>
-        ${((currentRole === 'planner') || (currentRole === 'sales' && (detail.type === 'channel_custom'))) && (detail.status === 'planner_accepted' || detail.status === 'in_progress' || detail.status === 'completed' || detail.status === 'completed_pending_score') ? `<button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="addSubTask(${detail.id})">➕ 添加子任务</button>` : ''}
+        ${(currentRole === 'planner') && (detail.status === 'planner_accepted' || detail.status === 'in_progress' || detail.status === 'completed' || detail.status === 'completed_pending_score') ? `<button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="addSubTask(${detail.id})">➕ 添加子任务</button>` : ''}
       </div>
-      ${detail.tasks.length === 0 ? `<div class="empty" style="padding:30px;"><div class="empty-icon">📭</div><p>暂无子任务，产品企划可在此添加</p></div>` : ''}
-      ${detail.tasks.map((t, i) => renderSubTaskCard(detail, t, i)).join('')}
+      ${detail.tasks.length === 0 ? `<div class="empty" style="padding:30px;"><div class="empty-icon">📭</div><p>暂无子任务，等待产品企划添加</p></div>` : ''}
+      ${detail.tasks.filter(t => {
+        // 设计师只看设计师的任务，供应链只看供应链的任务
+        if (currentRole === 'designer') return !t.assigneeRole || t.assigneeRole === 'designer';
+        if (currentRole === 'supplychain') return t.assigneeRole === 'supplychain';
+        return true;
+      }).map((t, i) => renderSubTaskCard(detail, t, i)).join('')}
     </div>
 
     ${renderProjectScoringSummary(detail)}
+
+    ${renderProjectPipeline(detail)}
 
     <div class="detail-section">
       <div class="detail-section-title">📜 操作日志</div>
@@ -2064,14 +2877,14 @@ function cleanLogAction(action) {
 }
 
 function renderLogLabel(l) {
-  const roleName = l.role === 'sales' ? '销售' : l.role === 'planner' ? '产品企划' : l.role === 'designer' ? '设计师' : l.role === 'superior' ? '上级' : l.role === 'admin' ? '管理员' : l.role;
+  const roleName = l.role === 'sales' ? '销售' : l.role === 'planner' ? '产品企划' : l.role === 'designer' ? '设计师' : l.role === 'supplychain' ? '供应链' : l.role === 'admin' ? '管理员' : l.role;
   const isScore = l.action && l.action.includes('评分');
   // 评分日志特殊格式
   if (isScore) {
     // 提取角色名: "子任务评分：xxx（planner已评）"
     const match = l.action.match(/（(.+?)已评/);
     const scoreRole = match ? match[1] : l.role;
-    const scoreRoleName = scoreRole === 'sales' ? '销售' : scoreRole === 'planner' ? '产品企划' : scoreRole === 'designer' ? '设计师' : scoreRole;
+    const scoreRoleName = scoreRole === 'sales' ? '销售' : scoreRole === 'planner' ? '产品企划' : scoreRole === 'designer' ? '设计师' : scoreRole === 'supplychain' ? '供应链' : scoreRole;
     return `（${scoreRoleName}：${l.user} 已评）`;
   }
   return `（${roleName}：${l.user}）`;
@@ -2080,7 +2893,7 @@ function renderLogLabel(l) {
 function renderSubTaskCard(detail, task, idx) {
   const tsi = getTaskStatusInfo(task.status);
   const isPlanner = currentRole === 'planner';
-  const myTask = currentRole === 'designer' && task.designerId === getCurrentUserId();
+  const myTask = ['designer', 'supplychain', 'planner'].includes(currentRole) && task.designerId === getCurrentUserId();
   const needScore = task.scoringRecords && task.scoringRecords.some(sr => sr.aesthetics === null && sr.role === currentRole);
 
   return `<div class="subtask-card">
@@ -2089,7 +2902,7 @@ function renderSubTaskCard(detail, task, idx) {
       <span class="badge ${tsi.cls}">${tsi.label}</span>
     </div>
     <div class="subtask-meta">
-      <div class="subtask-meta-item">👤 设计师：<strong>${task.designerName || '待分配'}</strong></div>
+      <div class="subtask-meta-item">👤 负责人：<strong>${task.designerName || '待分配'}</strong>${task.assigneeRole ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;${task.assigneeRole === 'supplychain' ? 'background:#F0FDFA;color:#0D9488;' : task.assigneeRole === 'planner' ? 'background:#EFF6FF;color:#1D4ED8;' : 'background:#FEF2F2;color:#DC2626;'}">${task.assigneeRole === 'supplychain' ? '供应链' : task.assigneeRole === 'planner' ? '企划' : '设计师'}</span>` : ''}</div>
       <div class="subtask-meta-item">📅 计划完成：<strong>${formatDate(task.plannedDate)}</strong></div>
       ${task.actualDate ? `<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(task.actualDate)}</strong></div>` : ''}
     </div>
@@ -2120,7 +2933,7 @@ function renderSubTaskCard(detail, task, idx) {
       ${myTask && task.status === 'pending' ? `<button class="btn btn-primary btn-sm" onclick="taskAccept(${detail.id},${task.id})">✅ 接单</button>` : ''}
       ${myTask && task.status === 'accepted' ? `<button class="btn btn-primary btn-sm" onclick="taskDeliver(${detail.id},${task.id})">📤 交付成果</button>` : ''}
       ${myTask && task.status === 'rejected' ? `<button class="btn btn-warning btn-sm" onclick="taskRedeliver(${detail.id},${task.id})">📤 重新交付</button>` : ''}
-      ${(isPlanner || (currentRole === 'sales' && detail.type === 'channel_custom')) && (task.status === 'pending' || task.status === 'accepted') ? `
+      ${isPlanner && (task.status === 'pending' || task.status === 'accepted') ? `
         <button class="btn btn-outline btn-sm" onclick="editTask(${detail.id},${task.id})">✏️ 编辑</button>
         <button class="btn btn-outline btn-sm" onclick="deleteTask(${detail.id},${task.id})" style="color:var(--danger);border-color:var(--danger);">🗑️ 删除</button>
       ` : ''}
@@ -2131,7 +2944,7 @@ function renderSubTaskCard(detail, task, idx) {
 
 function renderProjectActions(detail) {
   let actions = '';
-  const canManageProject = currentRole === 'planner' || currentRole === 'sales' || currentRole === 'superior' || currentRole === 'admin';
+  const canManageProject = currentRole === 'planner' || currentRole === 'sales' || currentRole === 'admin';
 
   if (currentRole === 'planner' && detail.status === 'pending_planner' && detail.type === 'channel_custom') {
     actions += `<button class="btn btn-primary" onclick="plannerAcceptProject(${detail.id})">✅ 接单</button>`;
@@ -2162,6 +2975,10 @@ function renderProjectActions(detail) {
   if (detail.status === 'terminated') {
     actions += `<span style="color:var(--danger);font-size:13px;font-weight:600;">⛔ 该项目已终止，无法进行任何操作</span>`;
   }
+  // 管理员可永久删除项目
+  if (currentRole === 'admin') {
+    actions += `<button class="btn btn-danger btn-sm" onclick="deleteProject(${detail.id})" style="margin-right:auto;" title="永久删除项目和所有关联数据">🗑️ 删除</button>`;
+  }
   actions += `<button class="btn btn-outline" onclick="closeM('projectDetailModal')">关闭</button>`;
   return actions;
 }
@@ -2170,8 +2987,7 @@ async function terminateProject(pid) {
   if (!confirm('确定要终止该项目吗？终止后项目将无法恢复。')) return;
   try {
     await apiPost(`/projects/${pid}/terminate`, { currentUser: getCurrentUserName(), currentRole: currentRole });
-    closeM('projectDetailModal');
-    render();
+    await refreshAfterMutation(pid);
   } catch(e) { alert('操作失败: ' + e.message); }
 }
 
@@ -2179,25 +2995,33 @@ async function cancelTerminate(pid) {
   if (!confirm('确定要取消终止吗？')) return;
   try {
     await apiPost(`/projects/${pid}/cancel-terminate`, { currentUser: getCurrentUserName(), currentRole: currentRole });
-    closeM('projectDetailModal');
-    render();
+    await refreshAfterMutation(pid);
   } catch(e) { alert('操作失败: ' + e.message); }
+}
+
+async function deleteProject(pid) {
+  if (!confirm('⚠️ 确定要永久删除项目 #' + pid + ' 吗？\n\n此操作不可恢复！\n子任务、日志、评分记录将一并删除。')) return;
+  try {
+    await apiDelete(`/projects/${pid}`);
+    closeM('projectDetailModal');
+    APP_CACHE.orders = [];
+    Object.keys(SWR_CACHE).forEach(k => delete SWR_CACHE[k]);
+    render();
+  } catch(e) { alert('删除失败: ' + e.message); }
 }
 
 async function pauseProject(pid) {
   if (!confirm('确定要暂停该项目吗？暂停期间无法进行任何操作。')) return;
   try {
     await apiPost(`/projects/${pid}/pause`, { currentUser: getCurrentUserName(), currentRole: currentRole });
-    closeM('projectDetailModal');
-    render();
+    await refreshAfterMutation(pid);
   } catch(e) { alert('操作失败: ' + e.message); }
 }
 
 async function resumeProject(pid) {
   try {
     await apiPost(`/projects/${pid}/resume`, { currentUser: getCurrentUserName(), currentRole: currentRole });
-    closeM('projectDetailModal');
-    render();
+    await refreshAfterMutation(pid);
   } catch(e) { alert('操作失败: ' + e.message); }
 }
 
@@ -2308,12 +3132,175 @@ function renderProjectScoringSummary(detail) {
   return html;
 }
 
-// ==================== 企划接单 ====================
+// ===== 项目进度管道 =====
+function renderProjectPipeline(detail) {
+  const isChannel = detail.type === 'channel_custom';
+  const tasks = detail.tasks || [];
+
+  // 定义一个管道的 5 个阶段
+  const stages = isChannel
+    ? [
+        { key: 'create', label: '创建项目', detail: '销售 ' + (detail.salesName || '') },
+        { key: 'accept', label: '企划接单', detail: detail.plannerName || '' },
+        { key: 'execute', label: '子任务执行', detail: '' },
+        { key: 'planner_score', label: '企划评分', detail: '' },
+        { key: 'sales_confirm', label: '销售确认', detail: '' },
+      ]
+    : [
+        { key: 'create', label: '创建项目', detail: '销售 ' + (detail.salesName || '') },
+        { key: 'accept', label: '企划接单', detail: detail.plannerName || '' },
+        { key: 'execute', label: '子任务执行', detail: '' },
+        { key: 'planner_score', label: '企划评分', detail: '' },
+        { key: 'admin_confirm', label: '管理确认', detail: '' },
+      ];
+
+  // 计算各阶段状态: done / current / pending / error
+  const status = detail.status;
+  const taskStatuses = tasks.map(t => t.status);
+
+  function stageState(key) {
+    switch (key) {
+      case 'create':
+        return 'done';
+      case 'accept':
+        return !['pending_planner'].includes(status) ? 'done' : 'current';
+      case 'execute': {
+        if (taskStatuses.length === 0) return status === 'completed' ? 'done' : 'current';
+        const allDelivered = taskStatuses.every(s => ['delivered','planner_approved','sales_approved','admin_approved','completed'].includes(s));
+        if (allDelivered) return 'done';
+        const anyActive = taskStatuses.some(s => ['accepted','delivered'].includes(s));
+        return anyActive ? 'current' : 'pending';
+      }
+      case 'planner_score': {
+        if (taskStatuses.length === 0) return 'pending';
+        const allScored = taskStatuses.every(s => ['planner_approved','sales_approved','admin_approved','completed'].includes(s));
+        if (allScored) return 'done';
+        const anyDelivered = taskStatuses.some(s => s === 'delivered');
+        return anyDelivered ? 'current' : 'pending';
+      }
+      case 'sales_confirm':
+      case 'admin_confirm': {
+        if (taskStatuses.length === 0) return 'pending';
+        const targetStatus = key === 'sales_confirm' ? 'sales_approved' : 'admin_approved';
+        const allDone = taskStatuses.every(s => s === 'completed');
+        if (allDone) return 'done';
+        const awaitingConfirm = taskStatuses.some(s => s === 'planner_approved');
+        return awaitingConfirm ? 'current' : 'pending';
+      }
+    }
+    return 'pending';
+  }
+
+  // 构建下一步提示
+  function getNextHint() {
+    if (['terminated', 'pending_terminate'].includes(status)) {
+      return { color: '#E24B4A', bg: '#FCEBEB', border: '#F7C1C1', icon: '⛔', title: '项目已终止', text: '该项目已被终止，无法继续操作。' };
+    }
+    if (status === 'paused') {
+      return { color: '#854F0B', bg: '#FAEEDA', border: '#FAC775', icon: '⏸️', title: '项目已暂停', text: '点击"继续"按钮可恢复项目。' };
+    }
+    if (status === 'completed') {
+      return { color: '#3B6D11', bg: '#EAF3DE', border: '#C0DD97', icon: '🎉', title: '项目已完成', text: '所有子任务已验收评分完毕。' };
+    }
+
+    if (status === 'pending_planner') {
+      return { color: '#854F0B', bg: '#FAEEDA', border: '#FAC775', icon: '💡', title: '等待企划接单', text: '产品企划 ' + (detail.plannerName || '待指定') + ' 需要先接单才能开始工作。' };
+    }
+
+    // 子任务层面分析
+    const pendingTasks = tasks.filter(t => t.status === 'pending');
+    const acceptedTasks = tasks.filter(t => t.status === 'accepted');
+    const deliveredTasks = tasks.filter(t => t.status === 'delivered');
+    const plannerApprovedTasks = tasks.filter(t => t.status === 'planner_approved');
+    const rejectedTasks = tasks.filter(t => t.status === 'rejected');
+
+    if (rejectedTasks.length > 0) {
+      const names = rejectedTasks.map(t => t.name).join('、');
+      return { color: '#E24B4A', bg: '#FCEBEB', border: '#F7C1C1', icon: '⚠️', title: '有子任务被驳回', text: '子任务「' + names + '」需要设计师重新交付。' };
+    }
+    // 优先级：已企划评分 → 已交付 → 执行中 → 待分配
+    if (plannerApprovedTasks.length > 0) {
+      const names = plannerApprovedTasks.map(t => t.name).join('、');
+      const confirmer = isChannel ? '销售' : '管理';
+      return { color: '#854F0B', bg: '#FAEEDA', border: '#FAC775', icon: '💡', title: '等待' + confirmer + '确认', text: '子任务「' + names + '」企划已评分通过，等待' + confirmer + '确认。' };
+    }
+    if (deliveredTasks.length > 0) {
+      const names = deliveredTasks.map(t => t.name).join('、');
+      const role = isChannel ? '企划' : '企划';
+      return { color: '#854F0B', bg: '#FAEEDA', border: '#FAC775', icon: '💡', title: '等待验收评分', text: '子任务「' + names + '」已交付，等待' + role + '验收评分。' };
+    }
+    if (acceptedTasks.length > 0) {
+      const names = acceptedTasks.map(t => t.name).join('、');
+      return { color: '#854F0B', bg: '#FAEEDA', border: '#FAC775', icon: '💡', title: '等待交付', text: '子任务「' + names + '」正在执行中，等待设计师交付成果。' };
+    }
+    if (pendingTasks.length > 0) {
+      return { color: '#854F0B', bg: '#FAEEDA', border: '#FAC775', icon: '💡', title: '等待分配子任务', text: '还有 ' + pendingTasks.length + ' 个子任务未指派，请先指派负责人。' };
+    }
+    return null;
+  }
+
+  // 生成管道圆点 HTML
+  const stageHtml = stages.map((s, i) => {
+    const st = stageState(s.key);
+    const isLast = i === stages.length - 1;
+    let dotStyle, labelColor, detailColor;
+    if (st === 'done') {
+      dotStyle = 'background:#3B6D11;';
+      labelColor = 'color:#3B6D11;';
+      detailColor = 'color:var(--color-text-tertiary);';
+    } else if (st === 'current') {
+      dotStyle = 'background:#EF9F27;box-shadow:0 0 0 4px #FAEEDA;';
+      labelColor = 'color:#854F0B;font-weight:600;';
+      detailColor = 'color:#854F0B;';
+    } else if (st === 'error') {
+      dotStyle = 'background:#E24B4A;';
+      labelColor = 'color:#A32D2D;';
+      detailColor = 'color:#A32D2D;';
+    } else {
+      dotStyle = 'background:var(--color-border-tertiary);';
+      labelColor = 'color:var(--color-text-tertiary);';
+      detailColor = 'color:var(--color-text-tertiary);';
+    }
+    const connector = !isLast ? `<div style="position:absolute;top:14px;left:56%;right:-16px;height:3px;background:${st === 'done' ? '#3B6D11' : 'var(--color-border-tertiary)'};z-index:-1;"></div>` : '';
+    const dotInner = st === 'done' ? '<span style="color:#fff;font-size:11px;">✓</span>' : st === 'current' ? '<span style="color:#fff;font-size:12px;">●</span>' : '';
+    return `<div style="flex:1;text-align:center;position:relative;">
+      <div style="width:28px;height:28px;border-radius:50%;margin:0 auto 6px;display:flex;align-items:center;justify-content:center;${dotStyle}">${dotInner}</div>
+      <div style="font-size:11px;${labelColor}">${s.label}</div>
+      <div style="font-size:10px;${detailColor};margin-top:2px;">${st === 'done' ? '已完成' : st === 'current' ? '进行中' : '待进行'}${s.detail ? ' · ' + s.detail : ''}</div>
+      ${connector}
+    </div>`;
+  }).join('');
+
+  const hint = getNextHint();
+  const hintHtml = hint ? `
+    <div style="margin-top:16px;background:${hint.bg};border-radius:8px;padding:12px 16px;border:0.5px solid ${hint.border};">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:16px;">${hint.icon}</span>
+        <div>
+          <div style="font-size:12px;font-weight:500;color:${hint.color};">${hint.title}</div>
+          <div style="font-size:12px;color:${hint.color};opacity:0.85;">${hint.text}</div>
+        </div>
+      </div>
+    </div>` : '';
+
+  return `<div class="detail-section">
+    <div class="detail-section-title">🔵 项目进度 <span style="font-size:12px;color:var(--gray-400);font-weight:400;">${isChannel ? '渠道定制单' : '公司常规品'}</span></div>
+    <div style="padding:20px 8px 8px;">
+      <div style="display:flex;gap:0;">${stageHtml}</div>
+      ${hintHtml}
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:var(--color-text-tertiary);display:flex;gap:16px;padding:0 4px;">
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3B6D11;vertical-align:middle;margin-right:4px;"></span>已完成</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#EF9F27;vertical-align:middle;margin-right:4px;"></span>进行中</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--color-border-tertiary);vertical-align:middle;margin-right:4px;"></span>待进行</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#E24B4A;vertical-align:middle;margin-right:4px;"></span>异常</span>
+    </div>
+  </div>`;
+}
 async function plannerAcceptProject(pid) {
   try {
     await apiPost(`/projects/${pid}/accept`, { currentUser: getCurrentUserName(), currentRole: currentRole, userId: getCurrentUserId() });
-    closeM('projectDetailModal');
-    render();
+    await refreshAfterMutation(pid);
   } catch (e) {
     alert('操作失败: ' + e.message);
   }
@@ -2323,7 +3310,8 @@ async function plannerAcceptProject(pid) {
 async function plannerAcceptFromList(pid) {
   try {
     await apiPost(`/projects/${pid}/accept`, { currentUser: getCurrentUserName(), currentRole: currentRole, userId: getCurrentUserId() });
-    render();
+    APP_CACHE.orders = [];
+    await refreshAfterMutation(pid);
   } catch (e) {
     alert('操作失败: ' + e.message);
   }
@@ -2348,8 +3336,17 @@ function addSubTask(pid) {
   });
   _subTaskRefImages = [];
   _subTaskAttachments = [];
-  const designerOpts = `<option value="">请选择设计师</option><option value="">未指定</option>` + USERS.designer.map(u =>
-    `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('');
+
+  const designerOpts = `<option value="">请选择设计师</option>` +
+    USERS.designer.map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('');
+  const supplychainOpts = USERS.supplychain && USERS.supplychain.length
+    ? `<option value="">请选择供应链</option>` +
+      USERS.supplychain.map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('')
+    : `<option value="">暂无供应链人员</option>`;
+  const plannerOpts = USERS.planner && USERS.planner.length
+    ? `<option value="">请选择企划</option>` +
+      USERS.planner.map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('')
+    : `<option value="">暂无企划人员</option>`;
 
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
@@ -2364,8 +3361,22 @@ function addSubTask(pid) {
           <div class="form-row">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 计划要求完成时间</label>${renderDatePicker('plannedDate', {required:true})}</div>
           </div>
-          <div class="form-group"><label class="form-label"><span class="required">*</span> 指派设计师</label>
-            <select class="form-select" name="designerId" required onchange="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor=''">${designerOpts}</select>
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 负责人类型</label>
+            <div style="display:flex;gap:16px;">
+              <label class="checkbox-item checked" style="cursor:pointer;" onclick="switchAssigneeType('add', 'designer', this)">
+                <input type="radio" name="assigneeRole" value="designer" checked onchange="switchAssigneeType('add', 'designer')" style="display:none;"> 👨‍🎨 设计师
+              </label>
+              <label class="checkbox-item" style="cursor:pointer;" onclick="switchAssigneeType('add', 'supplychain', this)">
+                <input type="radio" name="assigneeRole" value="supplychain" onchange="switchAssigneeType('add', 'supplychain')" style="display:none;"> 🛒 供应链
+              </label>
+              <label class="checkbox-item" style="cursor:pointer;" onclick="switchAssigneeType('add', 'planner', this)">
+                <input type="radio" name="assigneeRole" value="planner" onchange="switchAssigneeType('add', 'planner')" style="display:none;"> 📋 企划
+              </label>
+            </div>
+          </div>
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 指派子任务负责人</label>
+            <select class="form-select" name="designerId" id="addSubTaskDesignerId" required onchange="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor=''">${designerOpts}</select>
+            <input type="hidden" name="assigneeRole" id="addSubTaskAssigneeRole" value="designer">
           </div>
           <div class="form-group"><label class="form-label">细节要求说明</label><textarea class="form-textarea" name="details" placeholder="子任务的具体要求说明..." oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor=''"></textarea></div>
         </form>
@@ -2389,7 +3400,7 @@ function addSubTask(pid) {
           💡 提示：可多次添加子任务。所有子任务完成后，项目才算完成。
         </div>
       </div>
-      <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('addSubTaskModal')">取消</button><button class="btn btn-primary" onclick="submitAddSubTask('${pid}')">确认添加</button></div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('addSubTaskModal')">取消</button><button class="btn btn-primary" onclick="submitGuard(this,()=>submitAddSubTask('${pid}'))">确认添加</button></div>
     </div>`;
   document.body.appendChild(modal);
 }
@@ -2441,10 +3452,10 @@ async function submitAddSubTask(pid) {
     }
   }
 
-  // 设计师：未指定可以提交，但"请选择设计师"不允许
+  // 子任务负责人：未指定可以提交，但"请选择子任务负责人"不允许
   const designerSel = document.querySelector('#addSubTaskForm [name="designerId"]');
   if (designerSel && designerSel.selectedIndex === 0) {
-    showError('designerId', '请选择设计师或未指定');
+    showError('designerId', '请选择子任务负责人或未指定');
     hasErr = true;
   }
   if (hasErr) return;
@@ -2458,15 +3469,15 @@ async function submitAddSubTask(pid) {
   try {
     await apiPost(`/projects/${pid}/tasks`, data);
     closeM('addSubTaskModal');
-    // 重新加载详情
-    document.getElementById('projectDetailModal')?.remove();
-    openProjectDetail(Number(pid));
+    await refreshAfterMutation(pid);
   } catch (e) {
     alert('添加失败: ' + (e.message || '未知错误'));
   }
 }
 
 function editTask(pid, tid) {
+  if (isModalOpen()) return;
+  if (document.getElementById('editTaskModal')) return;
   apiGet(`/projects/${pid}`).then(detail => {
     const task = detail.tasks.find(t => t.id === tid);
     if (!task) return;
@@ -2480,8 +3491,18 @@ function editTask(pid, tid) {
       try { _editTaskAttachments = JSON.parse(task.attachmentsJson); } catch(e) {}
     }
 
-    const designerOpts = `<option value="">请选择设计师</option><option value="">未指定</option>` + USERS.designer.map(u =>
-      `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${u.name} (${u.title})</option>`).join('');
+    const designerOpts = task.assigneeRole === 'planner'
+      ? (USERS.planner && USERS.planner.length
+          ? '<option value="">请选择企划</option>' +
+            USERS.planner.map(u => `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${u.name} (${u.title})</option>`).join('')
+          : '<option value="">暂无企划人员</option>')
+      : task.assigneeRole === 'supplychain'
+        ? (USERS.supplychain && USERS.supplychain.length
+            ? '<option value="">请选择供应链</option>' +
+              USERS.supplychain.map(u => `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${u.name} (${u.title})</option>`).join('')
+            : '<option value="">暂无供应链人员</option>')
+        : '<option value="">请选择设计师</option>' +
+          (USERS.designer || []).map(u => `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${u.name} (${u.title})</option>`).join('');
 
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
@@ -2496,8 +3517,22 @@ function editTask(pid, tid) {
             <div class="form-row">
               <div class="form-group"><label class="form-label">计划完成时间</label>${renderDatePicker('plannedDate', {value: task.plannedDate || ''})}</div>
             </div>
-            <div class="form-group"><label class="form-label"><span class="required">*</span> 指派设计师</label>
-              <select class="form-select" name="designerId">${designerOpts}</select>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 负责人类型</label>
+              <div style="display:flex;gap:16px;">
+                <label class="checkbox-item ${task.assigneeRole !== 'supplychain' ? 'checked' : ''}" style="cursor:pointer;" onclick="switchEditAssigneeType('designer', this)">
+                  <input type="radio" name="assigneeRole" value="designer" ${task.assigneeRole !== 'supplychain' ? 'checked' : ''} style="display:none;"> 👨‍🎨 设计师
+                </label>
+                <label class="checkbox-item ${task.assigneeRole === 'supplychain' ? 'checked' : ''}" style="cursor:pointer;" onclick="switchEditAssigneeType('supplychain', this)">
+                  <input type="radio" name="assigneeRole" value="supplychain" ${task.assigneeRole === 'supplychain' ? 'checked' : ''} style="display:none;"> 🛒 供应链
+                </label>
+                <label class="checkbox-item ${task.assigneeRole === 'planner' ? 'checked' : ''}" style="cursor:pointer;" onclick="switchEditAssigneeType('planner', this)">
+                  <input type="radio" name="assigneeRole" value="planner" ${task.assigneeRole === 'planner' ? 'checked' : ''} style="display:none;"> 📋 企划
+                </label>
+              </div>
+            </div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 指派子任务负责人</label>
+              <select class="form-select" name="designerId" id="editSubTaskDesignerId">${designerOpts}</select>
+              <input type="hidden" name="assigneeRole" id="editSubTaskAssigneeRole" value="${task.assigneeRole || 'designer'}">
             </div>
             <div class="form-group"><label class="form-label">细节要求说明</label><textarea class="form-textarea" name="details">${escHtml(task.details)}</textarea></div>
           </form>
@@ -2518,7 +3553,7 @@ function editTask(pid, tid) {
             <div class="file-list" id="createAttachmentList"></div>
           </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('editTaskModal')">取消</button><button class="btn btn-primary" onclick="submitEditTask('${pid}','${tid}')">保存修改</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('editTaskModal')">取消</button><button class="btn btn-primary" onclick="submitGuard(this,()=>submitEditTask('${pid}','${tid}'))">保存修改</button></div>
       </div>`;
     document.body.appendChild(modal);
     // 渲染现有文件
@@ -2545,8 +3580,7 @@ async function submitEditTask(pid, tid) {
   try {
     await apiPut(`/projects/${pid}/tasks/${tid}`, data);
     closeM('editTaskModal');
-    document.getElementById('projectDetailModal')?.remove();
-    openProjectDetail(Number(pid));
+    await refreshAfterMutation(pid);
   } catch (e) {
     alert('编辑失败: ' + e.message);
   }
@@ -2557,8 +3591,7 @@ async function deleteTask(pid, tid) {
   try {
     await apiDelete(`/projects/${pid}/tasks/${tid}`);
     closeM('editTaskModal');
-    document.getElementById('projectDetailModal')?.remove();
-    openProjectDetail(Number(pid));
+    await refreshAfterMutation(pid);
   } catch (e) {
     alert('删除失败: ' + e.message);
   }
@@ -2580,12 +3613,12 @@ async function taskAccept(pid, tid) {
       <div class="modal">
         <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✅ 接单：${task.name}</div></div></div>
         <div class="modal-body">
-          <p style="margin-bottom:12px;color:var(--gray-500);">设计师：<strong>${task.designerName || '未指定'}</strong></p>
+          <p style="margin-bottom:12px;color:var(--gray-500);">负责人：<strong>${task.designerName || '未指定'}</strong></p>
           <form id="taskAcceptForm">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 计划完成时间</label>${renderDatePicker('plannedDate', {required:true, value: task.plannedDate || ''})}</div>
           </form>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskAcceptModal')">取消</button><button class="btn btn-primary" onclick="submitTaskAccept(${pid},${tid})">确认接单</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskAcceptModal')">取消</button><button class="btn btn-primary" onclick="submitGuard(this,()=>submitTaskAccept(${pid},${tid}))">确认接单</button></div>
       </div>`;
     document.body.appendChild(modal);
   } catch (e) {
@@ -2606,9 +3639,7 @@ async function submitTaskAccept(pid, tid) {
       designerUserId: getCurrentUserId(),
     });
     closeM('taskAcceptModal');
-    document.getElementById('projectDetailModal')?.remove();
-    openProjectDetail(Number(pid));
-    render(); // 刷新列表状态
+    await refreshAfterMutation(pid);
   } catch (e) {
     alert('操作失败: ' + e.message);
   }
@@ -2634,6 +3665,16 @@ async function taskDeliver(pid, tid) {
           <form id="taskDeliverForm">
             <input type="hidden" name="actualDate">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required placeholder="描述交付的设计成果..." style="min-height:100px;"></textarea></div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 自评分数</label>
+              <div style="display:flex;gap:16px;">
+                <div style="flex:1;"><label style="font-size:11px;color:var(--gray-400);display:block;margin-bottom:4px;">🎨 审美评分</label>
+                  <input type="number" class="form-input" name="selfAesthetics" required placeholder="1.0-10.0" min="1" max="10" step="0.1" style="text-align:center;" oninput="validateScoreInput(this)">
+                </div>
+                <div style="flex:1;"><label style="font-size:11px;color:var(--gray-400);display:block;margin-bottom:4px;">💡 创新评分</label>
+                  <input type="number" class="form-input" name="selfInnovation" required placeholder="1.0-10.0" min="1" max="10" step="0.1" style="text-align:center;" oninput="validateScoreInput(this)">
+                </div>
+              </div>
+            </div>
           </form>
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
@@ -2652,13 +3693,34 @@ async function taskDeliver(pid, tid) {
             <div class="file-list" id="deliverAttachmentList"></div>
           </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskDeliverModal')">取消</button><button class="btn btn-primary" onclick="submitTaskDeliver(${pid},${tid})">确认交付</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskDeliverModal')">取消</button><button class="btn btn-primary" onclick="submitGuard(this,()=>submitTaskDeliver(${pid},${tid}))">确认交付</button></div>
       </div>`;
     document.body.appendChild(modal);
   } catch (e) {
     alert('加载失败: ' + e.message);
   }
 }
+
+// ===== 自评分数输入校验：1.0-10.0，最多1位小数 =====
+window.validateScoreInput = function(input) {
+  let val = input.value.trim();
+  if (val === '') { input.setCustomValidity(''); return; }
+  // 允许输入中的中间态（如空、负号、小数点开头）
+  if (val === '-' || val === '.' || val === '-.') return;
+  const num = parseFloat(val);
+  if (isNaN(num) || num < 1 || num > 10) {
+    input.setCustomValidity('请输入 1.0 ~ 10.0 之间的分数');
+  } else {
+    // 检查小数位数
+    const dec = val.includes('.') ? val.split('.')[1].length : 0;
+    if (dec > 1) {
+      input.setCustomValidity('最多1位小数');
+    } else {
+      input.setCustomValidity('');
+    }
+  }
+  input.reportValidity();
+};
 
 async function submitTaskDeliver(pid, tid) {
   if (_uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
@@ -2667,6 +3729,12 @@ async function submitTaskDeliver(pid, tid) {
   // 自动填写实际完成时间为当前时间
   data.actualDate = new Date().toISOString().split('T')[0];
   if (!data.deliverables) { alert('请填写交付成果描述'); return; }
+  const selfAes = parseFloat(data.selfAesthetics);
+  const selfInn = parseFloat(data.selfInnovation);
+  if (isNaN(selfAes) || selfAes < 1 || selfAes > 10) { alert('请输入有效的审美自评分（1.0-10.0）'); return; }
+  if (isNaN(selfInn) || selfInn < 1 || selfInn > 10) { alert('请输入有效的创新自评分（1.0-10.0）'); return; }
+  data.selfAesthetics = Math.round(selfAes * 10) / 10;
+  data.selfInnovation = Math.round(selfInn * 10) / 10;
   data.currentUser = getCurrentUserName();
   data.currentRole = currentRole;
   // 组装上传文件（改用url引用）
@@ -2676,9 +3744,7 @@ async function submitTaskDeliver(pid, tid) {
     await apiPost(`/projects/${pid}/tasks/${tid}/deliver`, data);
     closeM('taskDeliverModal');
     document.getElementById('projectDetailModal')?.remove();
-    openProjectDetail(Number(pid));
-    // 也刷新页面（确保导航栏和任务列表状态同步）
-    render();
+    await refreshAfterMutation(pid);
   } catch (e) {
     alert('交付失败: ' + e.message);
   }
@@ -2705,6 +3771,16 @@ async function taskRedeliver(pid, tid) {
           <form id="taskRedeliverForm">
             <input type="hidden" name="actualDate">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required style="min-height:100px;"></textarea></div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 自评分数</label>
+              <div style="display:flex;gap:16px;">
+                <div style="flex:1;"><label style="font-size:11px;color:var(--gray-400);display:block;margin-bottom:4px;">🎨 审美评分</label>
+                  <input type="number" class="form-input" name="selfAesthetics" required placeholder="1.0-10.0" min="1" max="10" step="0.1" style="text-align:center;" oninput="validateScoreInput(this)">
+                </div>
+                <div style="flex:1;"><label style="font-size:11px;color:var(--gray-400);display:block;margin-bottom:4px;">💡 创新评分</label>
+                  <input type="number" class="form-input" name="selfInnovation" required placeholder="1.0-10.0" min="1" max="10" step="0.1" style="text-align:center;" oninput="validateScoreInput(this)">
+                </div>
+              </div>
+            </div>
           </form>
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
@@ -2723,7 +3799,7 @@ async function taskRedeliver(pid, tid) {
             <div class="file-list" id="deliverAttachmentList"></div>
           </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskRedeliverModal')">取消</button><button class="btn btn-primary" onclick="submitTaskRedeliver(${pid},${tid})">确认交付</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskRedeliverModal')">取消</button><button class="btn btn-primary" onclick="submitGuard(this,()=>submitTaskRedeliver(${pid},${tid}))">确认交付</button></div>
       </div>`;
     document.body.appendChild(modal);
   } catch (e) {
@@ -2738,6 +3814,12 @@ async function submitTaskRedeliver(pid, tid) {
   // 自动填写实际完成时间为当前时间
   data.actualDate = new Date().toISOString().split('T')[0];
   if (!data.deliverables) { alert('请填写交付成果描述'); return; }
+  const reAes = parseFloat(data.selfAesthetics);
+  const reInn = parseFloat(data.selfInnovation);
+  if (isNaN(reAes) || reAes < 1 || reAes > 10) { alert('请输入有效的审美自评分（1.0-10.0）'); return; }
+  if (isNaN(reInn) || reInn < 1 || reInn > 10) { alert('请输入有效的创新自评分（1.0-10.0）'); return; }
+  data.selfAesthetics = Math.round(reAes * 10) / 10;
+  data.selfInnovation = Math.round(reInn * 10) / 10;
   data.currentUser = getCurrentUserName();
   data.currentRole = currentRole;
   data.attachmentsJson = JSON.stringify([..._deliverImages.map(i => ({ name: i.name, url: i.url, size: i.size, storedName: i.storedName })), ..._deliverAttachments]);
@@ -2745,9 +3827,7 @@ async function submitTaskRedeliver(pid, tid) {
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/redeliver`, data);
     closeM('taskRedeliverModal');
-    document.getElementById('projectDetailModal')?.remove();
-    openProjectDetail(Number(pid));
-    render();
+    await refreshAfterMutation(pid);
   } catch (e) {
     alert('交付失败: ' + e.message);
   }
@@ -2785,55 +3865,53 @@ function taskApprove(pid, tid, projectType) {
           </div>` : ''}
           <div class="form-group"><label class="form-label">验收意见（可选）</label><textarea class="form-textarea" id="approveComments" placeholder="输入验收意见..."></textarea></div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskApproveModal')">取消</button><button class="btn btn-success" onclick="submitTaskApprove(${pid},${tid},'${projectType}')">${isChannel ? '确认通过并评分' : '确认通过'}</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskApproveModal')">取消</button><button class="btn btn-success" onclick="submitGuard(this,()=>submitTaskApprove(${pid},${tid},'${projectType}'))">${isChannel ? '确认通过并评分' : '确认通过'}</button></div>
       </div>`;
     document.body.appendChild(modal);
   });
 }
 
-async function submitTaskApprove(pid, tid, projectType) {
-  const comments = document.getElementById('approveComments')?.value || '验收通过';
-
-  const data = {
-    comments,
-    currentUser: getCurrentUserName(),
-    currentRole: currentRole,
-    projectType: projectType || 'regular',
-  };
-
-  // 渠道定制单：审批时同时提交评分
-  if (projectType === 'channel_custom') {
-    const aesthetics = parseFloat(document.getElementById('approveAesthetics').value);
-    const innovation = parseFloat(document.getElementById('approveInnovation').value);
+async function submitTaskApprove(pid, tid) {
+  const aesthetics = parseFloat(document.getElementById('approveAesthetics')?.value);
+  const innovation = parseFloat(document.getElementById('approveInnovation')?.value);
+  // 常规品非渠道项目没有评分输入框，不走评分验证
+  const hasScoreFields = document.getElementById('approveAesthetics') && document.getElementById('approveInnovation');
+  if (hasScoreFields) {
     if (isNaN(aesthetics) || aesthetics < 1 || aesthetics > 10) { alert('请输入有效的审美评分（1-10）'); return; }
     if (isNaN(innovation) || innovation < 1 || innovation > 10) { alert('请输入有效的创新评分（1-10）'); return; }
-    data.aesthetics = aesthetics;
-    data.innovation = innovation;
   }
+  const comments = document.getElementById('approveComments')?.value || '';
+
+  const data = {
+    comments: comments,
+    aesthetics: hasScoreFields ? aesthetics : null,
+    innovation: hasScoreFields ? innovation : null,
+    currentUser: getCurrentUserName(),
+    currentRole: currentRole,
+  };
 
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/approve`, data);
     closeM('taskApproveModal');
-    document.getElementById('projectDetailModal')?.remove();
-    openProjectDetail(Number(pid));
-    // 刷新导航栏徽章
-    updateBadges(currentRole, getCurrentUserId());
+    await refreshAfterMutation(pid);
   } catch (e) {
-    alert('操作失败: ' + e.message);
+    alert('操作失败: ' + (e.message || '未知错误'));
   }
 }
 
+
 function taskReject(pid, tid) {
+  if (document.getElementById('taskRejectModal')) return;
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'taskRejectModal';
   modal.innerHTML = `
     <div class="modal">
-      <div class="modal-header"><button class="modal-close" onclick="closeM('taskRejectModal')">✕</button><div class="modal-header-left"><div class="modal-title">↩️ 驳回修改</div></div></div>
+      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">↩️ 驳回修改</div></div></div>
       <div class="modal-body">
         <div class="form-group"><label class="form-label"><span class="required">*</span> 修改意见</label><textarea class="form-textarea" id="rejectComments" required placeholder="请详细说明修改意见..." style="min-height:100px;"></textarea></div>
       </div>
-      <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskRejectModal')">取消</button><button class="btn btn-danger" onclick="submitTaskReject(${pid},${tid})">确认驳回</button></div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskRejectModal')">取消</button><button class="btn btn-danger" onclick="submitGuard(this,()=>submitTaskReject(${pid},${tid}))">确认驳回</button></div>
     </div>`;
   document.body.appendChild(modal);
 }
@@ -2848,8 +3926,7 @@ async function submitTaskReject(pid, tid) {
       currentRole: currentRole,
     });
     closeM('taskRejectModal');
-    document.getElementById('projectDetailModal')?.remove();
-    openProjectDetail(Number(pid));
+    await refreshAfterMutation(pid);
   } catch (e) {
     alert('操作失败: ' + e.message);
   }
@@ -2878,7 +3955,7 @@ function openScoring(pid, tid) {
             <div class="form-group" style="flex:1;"><label class="form-label">💡 创新评分</label><input type="number" class="form-input" id="scoreInnovation" min="1" max="10" step="0.5" placeholder="1-10" style="font-size:24px;text-align:center;"></div>
           </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('scoringModal')">取消</button><button class="btn btn-primary" onclick="submitScoring(${pid},${tid})">提交评分</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('scoringModal')">取消</button><button class="btn btn-primary" onclick="submitGuard(this,()=>submitScoring(${pid},${tid}))">提交评分</button></div>
       </div>`;
     document.body.appendChild(modal);
   });
@@ -2902,12 +3979,7 @@ async function submitScoring(pid, tid) {
     await apiPost(`/projects/${pid}/tasks/${tid}/score`, data);
     closeM('scoringModal');
     document.getElementById('projectDetailModal')?.remove();
-    // 如果在待评分页面，刷新列表；否则刷新项目详情
-    if (currentView === 'scoring') {
-      render();
-    } else {
-      openProjectDetail(Number(pid));
-    }
+    await refreshAfterMutation(pid);
   } catch (e) {
     alert('评分提交失败: ' + e.message);
   }
@@ -2929,6 +4001,11 @@ async function renderAdmin(main, role, uid) {
         <button class="admin-tab ${currentAdminTab === 'appearance' ? 'active' : ''}" onclick="switchAdminTab('appearance')">🎨 外观</button>
         <button class="admin-tab ${currentAdminTab === 'users' ? 'active' : ''}" onclick="switchAdminTab('users')">👥 用户管理</button>
         <button class="admin-tab ${currentAdminTab === 'roles' ? 'active' : ''}" onclick="switchAdminTab('roles')">🔐 角色管理</button>
+        <button class="admin-tab ${currentAdminTab === 'categories' ? 'active' : ''}" onclick="switchAdminTab('categories')">📂 产品类目</button>
+        <button class="admin-tab ${currentAdminTab === 'compliance' ? 'active' : ''}" onclick="switchAdminTab('compliance')">⚖️ 合规处罚</button>
+        <button class="admin-tab ${currentAdminTab === 'priceRanges' ? 'active' : ''}" onclick="switchAdminTab('priceRanges')">💰 参考零售价</button>
+        <button class="admin-tab ${currentAdminTab === 'org' ? 'active' : ''}" onclick="switchAdminTab('org')">🏢 组织架构</button>
+        <button class="admin-tab ${currentAdminTab === 'scoring' ? 'active' : ''}" onclick="switchAdminTab('scoring')">⭐ 评分管理</button>
         <button class="admin-tab ${currentAdminTab === 'logs' ? 'active' : ''}" onclick="switchAdminTab('logs')">📜 日志</button>
       </div>
       <div id="adminContent"></div>
@@ -2960,6 +4037,16 @@ async function renderAdminContent() {
       await renderAdminUsers(container);
     } else if (currentAdminTab === 'roles') {
       await renderAdminRoles(container);
+    } else if (currentAdminTab === 'categories') {
+      await renderAdminCategories(container);
+    } else if (currentAdminTab === 'compliance') {
+      await renderAdminCompliance(container);
+    } else if (currentAdminTab === 'priceRanges') {
+      await renderAdminPriceRanges(container);
+    } else if (currentAdminTab === 'org') {
+      await renderAdminOrg(container);
+    } else if (currentAdminTab === 'scoring') {
+      await renderAdminScoring(container);
     } else if (currentAdminTab === 'logs') {
       await renderAdminLogs(container);
     }
@@ -3014,7 +4101,7 @@ async function renderAdminDashboard(container) {
 }
 
 function groupLabel(group) {
-  return { smtp: '📧 SMTP 邮件', appearance: '🎨 外观设置', security: '🔒 安全设置', system: '💻 系统信息' }[group] || group;
+  return { smtp: '📧 SMTP 邮件', appearance: '🎨 外观设置', security: '🔒 安全设置', system: '💻 系统信息', feishu: '💬 飞书 SSO 登录' }[group] || group;
 }
 
 // ===== Admin: 系统配置 =====
@@ -3041,7 +4128,12 @@ async function renderAdminConfig(container) {
                   ? `<input type="password" class="config-input" data-key="${item.configKey}" value="${escHtml(item.configValue || '')}" placeholder="${item.description}" autocomplete="off">`
                   : item.valueType === 'number'
                     ? `<input type="number" class="config-input" data-key="${item.configKey}" value="${escHtml(item.configValue || '')}" placeholder="${item.description}">`
-                    : `<input type="text" class="config-input" data-key="${item.configKey}" value="${escHtml(item.configValue || '')}" placeholder="${item.description}">`
+                    : item.valueType === 'boolean'
+                      ? `<select class="config-input" data-key="${item.configKey}">
+                           <option value="true" ${item.configValue === 'true' ? 'selected' : ''}>开</option>
+                           <option value="false" ${item.configValue === 'false' ? 'selected' : ''}>关</option>
+                         </select>`
+                      : `<input type="text" class="config-input" data-key="${item.configKey}" value="${escHtml(item.configValue || '')}" placeholder="${item.description}">`
                 }
               </div>
             `).join('')}
@@ -3216,7 +4308,7 @@ async function renderAdminUsers(container) {
   let users = [];
   try { users = await apiGet('/admin/users'); } catch(e) { /* ignore */ }
 
-  const roleLabels = { sales: '销售', planner: '产品企划', designer: '设计师', superior: '上级', admin: '管理员' };
+  const roleLabels = { sales: '销售', planner: '产品企划', designer: '设计师', supplychain: '供应链', admin: '管理员' };
 
   container.innerHTML = `
     <div class="config-card">
@@ -3231,11 +4323,13 @@ async function renderAdminUsers(container) {
           <input type="text" id="userSearchInput" placeholder="🔍 搜索用户ID/姓名..." oninput="filterAdminUsers()" style="flex:1;max-width:300px;">
           <select id="userRoleFilter" onchange="filterAdminUsers()">
             <option value="">全部角色</option>
-            <option value="admin">管理员</option>
+            <option value="supplychain">供应链</option>
+<option value="admin">管理员</option>
             <option value="sales">销售</option>
             <option value="planner">产品企划</option>
             <option value="designer">设计师</option>
-            <option value="superior">上级</option>
+            <option value="supplychain">供应链</option>
+<option value="admin">管理员</option>
           </select>
           <select id="userStatusFilter" onchange="filterAdminUsers()">
             <option value="">全部状态</option>
@@ -3313,6 +4407,7 @@ function filterAdminUsers() {
 
 // ===== Admin: 编辑用户弹窗 =====
 function openEditUserModal(userData) {
+  if (isModalOpen()) return;
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'editUserModal';
@@ -3354,14 +4449,14 @@ function openEditUserModal(userData) {
         </div>
         <div style="background:var(--gray-50);padding:12px 16px;border-radius:8px;margin-top:8px;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <span style="font-size:13px;color:var(--gray-500);">当前角色：<span class="admin-user-role-badge role-${userData.role}">${({sales:'销售',planner:'产品企划',designer:'设计师',superior:'上级',admin:'管理员'})[userData.role] || userData.role}</span></span>
+            <span style="font-size:13px;color:var(--gray-500);">当前角色：<span class="admin-user-role-badge role-${userData.role}">${({sales:'销售',planner:'产品企划',designer:'设计师',supplychain:'供应链',admin:'管理员'})[userData.role] || userData.role}</span></span>
             <span style="font-size:13px;color:var(--gray-500);">当前状态：<span class="admin-user-status-badge status-${userData.status || 'active'}">${(userData.status === 'disabled') ? '❌ 停用' : '✅ 启用'}</span></span>
           </div>
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeM('editUserModal')">取消</button>
-        <button class="btn btn-primary" onclick="submitEditUser(${userData.id})">💾 保存修改</button>
+        <button class="btn btn-primary" onclick="submitGuard(this,()=>submitEditUser(${userData.id}))">💾 保存修改</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -3420,7 +4515,8 @@ function refreshUserList() {
 }
 
 function openChangeRoleModal(userId, currentRole, userName) {
-  const roleOptions = { admin: '管理员', sales: '销售', planner: '产品企划', designer: '设计师', superior: '上级' };
+  if (isModalOpen()) return;
+  const roleOptions = { admin: '管理员', sales: '销售', planner: '产品企划', designer: '设计师', supplychain: '供应链' };
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'changeRoleModal';
@@ -3443,7 +4539,7 @@ function openChangeRoleModal(userId, currentRole, userName) {
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeM('changeRoleModal')">取消</button>
-        <button class="btn btn-primary" onclick="submitChangeRole(${userId})">确认修改</button>
+        <button class="btn btn-primary" onclick="submitGuard(this,()=>submitChangeRole(${userId}))">确认修改</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -3462,6 +4558,7 @@ async function submitChangeRole(userId) {
 }
 
 function openResetPwdModal(userId, userName) {
+  if (isModalOpen()) return;
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'resetPwdModal';
@@ -3481,7 +4578,7 @@ function openResetPwdModal(userId, userName) {
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeM('resetPwdModal')">取消</button>
-        <button class="btn btn-warning" onclick="submitResetPwd(${userId})">确认重置</button>
+        <button class="btn btn-warning" onclick="submitGuard(this,()=>submitResetPwd(${userId}))">确认重置</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -3622,6 +4719,7 @@ function openEditRoleModal(id, name, displayName, description, permissions) {
 }
 
 async function loadPermDefsAndOpenModal(editData) {
+  if (isModalOpen()) return;
   const permDefs = await apiGet('/admin/permission-defs').catch(() => []);
   const groups = {};
   permDefs.forEach(p => {
@@ -3745,7 +4843,680 @@ async function submitDeleteRole(roleId) {
   }
 }
 
-// ==================== 管理员：系统日志 ====================
+// ==================== 管理员：产品类目管理 ====================
+async function renderAdminCategories(container) {
+  async function loadAndRender() {
+    const cats = await apiGet('/categories/all');
+    const nameList = cats.map(c => c.name).join(', ');
+    container.innerHTML = `
+      <div class="config-card">
+        <div class="config-card-header">
+          <h3>📂 产品类目管理</h3>
+          <button class="btn btn-primary btn-sm" onclick="addCategory()">➕ 新增类目</button>
+        </div>
+        <div class="config-card-body">
+          <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">当前类目（顺序按排序号）：${nameList}</p>
+          <div class="table-wrap"><table>
+            <thead><tr><th>ID</th><th>名称</th><th>排序</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>${cats.map(c => `
+              <tr>
+                <td>${c.id}</td>
+                <td><strong>${c.name}</strong></td>
+                <td>${c.sortOrder}</td>
+                <td><span class="badge ${c.active ? 'badge-completed' : 'badge-rejected'}">${c.active ? '启用' : '禁用'}</span></td>
+                <td style="white-space:nowrap;">
+                  <button class="btn btn-outline btn-sm" onclick="editCategory(${c.id}, '${escHtml(c.name)}', ${c.sortOrder}, ${c.active})">✏️ 编辑</button>
+                  <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="deleteCategory(${c.id})">🗑️ 删除</button>
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table></div>
+        </div>
+      </div>`;
+  }
+  container.innerHTML = `<div class="loading">加载中</div>`;
+  await loadAndRender();
+}
+
+// ==================== 新增类目弹窗 ====================
+window.addCategory = function() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'categoryEditModal';
+  overlay.innerHTML = `
+    <button class="modal-close-float" onclick="closeM('categoryEditModal')">✕</button>
+    <div class="modal">
+      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📂 新增产品类目</div></div></div>
+      <div class="modal-body">
+        <div class="form-group"><label class="form-label"><span class="required">*</span> 类目名称</label><input class="form-input" id="catName" placeholder="如：灯、音响..."></div>
+        <div class="form-group"><label class="form-label">排序号</label><input class="form-input" id="catOrder" type="number" value="0" placeholder="数字越小越靠前"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeM('categoryEditModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveCategory(null)">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+};
+
+window.editCategory = function(id, name, order, active) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'categoryEditModal';
+  overlay.innerHTML = `
+    <button class="modal-close-float" onclick="closeM('categoryEditModal')">✕</button>
+    <div class="modal">
+      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✏️ 编辑产品类目</div></div></div>
+      <div class="modal-body">
+        <div class="form-group"><label class="form-label"><span class="required">*</span> 类目名称</label><input class="form-input" id="catName" value="${name}"></div>
+        <div class="form-group"><label class="form-label">排序号</label><input class="form-input" id="catOrder" type="number" value="${order}"></div>
+        <div class="form-group"><label class="form-label">状态</label>
+          <select class="form-select" id="catActive">
+            <option value="true" ${active ? 'selected' : ''}>启用</option>
+            <option value="false" ${!active ? 'selected' : ''}>禁用</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeM('categoryEditModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveCategory(${id})">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+};
+
+window.saveCategory = async function(id) {
+  const name = document.getElementById('catName')?.value?.trim();
+  if (!name) { alert('请输入类目名称'); return; }
+  const sortOrder = parseInt(document.getElementById('catOrder')?.value) || 0;
+  const body = { name, sortOrder };
+  if (id) {
+    const active = document.getElementById('catActive')?.value === 'true';
+    body.active = String(active);
+    await apiPut(`/categories/${id}`, body);
+  } else {
+    await apiPost('/categories', body);
+  }
+  closeM('categoryEditModal');
+  // 刷新类目列表和主界面
+  try { CATEGORIES = await apiGet('/categories'); } catch(e) {}
+  switchAdminTab('categories');
+};
+
+window.deleteCategory = async function(id) {
+  if (!confirm('确定删除该类目？已关联的项目不受影响。')) return;
+  await apiDelete(`/categories/${id}`);
+  try { CATEGORIES = await apiGet('/categories'); } catch(e) {}
+  switchAdminTab('categories');
+};
+
+// ==================== 管理员：合规处罚管理 ====================
+async function renderAdminCompliance(container) {
+  async function loadAndRender() {
+    const items = await apiGet('/compliance/all');
+    container.innerHTML = `
+      <div class="config-card">
+        <div class="config-card-header">
+          <h3>⚖️ 合规处罚管理</h3>
+          <button class="btn btn-primary btn-sm" onclick="addCompliance()">➕ 新增合规项</button>
+        </div>
+        <div class="config-card-body">
+          <div class="table-wrap"><table>
+            <thead><tr><th>ID</th><th>名称</th><th>排序</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>${items.map(c => `
+              <tr>
+                <td>${c.id}</td>
+                <td><strong>${c.name}</strong></td>
+                <td>${c.sortOrder}</td>
+                <td><span class="badge ${c.active ? 'badge-completed' : 'badge-rejected'}">${c.active ? '启用' : '禁用'}</span></td>
+                <td style="white-space:nowrap;">
+                  <button class="btn btn-outline btn-sm" onclick="editCompliance(${c.id}, '${escHtml(c.name)}', ${c.sortOrder}, ${c.active})">✏️ 编辑</button>
+                  <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="deleteCompliance(${c.id})">🗑️ 删除</button>
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table></div>
+        </div>
+      </div>`;
+  }
+  container.innerHTML = `<div class="loading">加载中</div>`;
+  await loadAndRender();
+}
+
+window.addCompliance = function() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'complianceEditModal';
+  overlay.innerHTML = `
+    <button class="modal-close-float" onclick="closeM('complianceEditModal')">✕</button>
+    <div class="modal">
+      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">⚖️ 新增合规处罚项</div></div></div>
+      <div class="modal-body">
+        <div class="form-group"><label class="form-label"><span class="required">*</span> 名称</label><input class="form-input" id="compName" placeholder="如：蓝牙、无线发射..."></div>
+        <div class="form-group"><label class="form-label">排序号</label><input class="form-input" id="compOrder" type="number" value="0" placeholder="数字越小越靠前"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeM('complianceEditModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveCompliance(null)">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+};
+
+window.editCompliance = function(id, name, order, active) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'complianceEditModal';
+  overlay.innerHTML = `
+    <button class="modal-close-float" onclick="closeM('complianceEditModal')">✕</button>
+    <div class="modal">
+      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✏️ 编辑合规处罚项</div></div></div>
+      <div class="modal-body">
+        <div class="form-group"><label class="form-label"><span class="required">*</span> 名称</label><input class="form-input" id="compName" value="${name}"></div>
+        <div class="form-group"><label class="form-label">排序号</label><input class="form-input" id="compOrder" type="number" value="${order}"></div>
+        <div class="form-group"><label class="form-label">状态</label>
+          <select class="form-select" id="compActive">
+            <option value="true" ${active ? 'selected' : ''}>启用</option>
+            <option value="false" ${!active ? 'selected' : ''}>禁用</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeM('complianceEditModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveCompliance(${id})">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+};
+
+window.saveCompliance = async function(id) {
+  const name = document.getElementById('compName')?.value?.trim();
+  if (!name) { alert('请输入名称'); return; }
+  const sortOrder = parseInt(document.getElementById('compOrder')?.value) || 0;
+  const body = { name, sortOrder };
+  if (id) {
+    const active = document.getElementById('compActive')?.value === 'true';
+    body.active = String(active);
+    await apiPut(`/compliance/${id}`, body);
+  } else {
+    await apiPost('/compliance', body);
+  }
+  closeM('complianceEditModal');
+  try { COMPLIANCE_ITEMS = await apiGet('/compliance'); } catch(e) {}
+  switchAdminTab('compliance');
+};
+
+window.deleteCompliance = async function(id) {
+  if (!confirm('确定删除该合规项？')) return;
+  await apiDelete(`/compliance/${id}`);
+  try { COMPLIANCE_ITEMS = await apiGet('/compliance'); } catch(e) {}
+  switchAdminTab('compliance');
+};
+
+// ==================== 管理员：参考零售价管理 ====================
+async function renderAdminPriceRanges(container) {
+  async function loadAndRender() {
+    const items = await apiGet('/price-ranges/all');
+    container.innerHTML = `
+      <div class="config-card">
+        <div class="config-card-header">
+          <h3>💰 参考零售价管理</h3>
+          <button class="btn btn-primary btn-sm" onclick="addPriceRange()">➕ 新增价格</button>
+        </div>
+        <div class="config-card-body">
+          <div class="table-wrap"><table>
+            <thead><tr><th>ID</th><th>名称</th><th>排序</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>${items.map(c => `
+              <tr>
+                <td>${c.id}</td>
+                <td><strong>${c.name}</strong></td>
+                <td>${c.sortOrder}</td>
+                <td><span class="badge ${c.active ? 'badge-completed' : 'badge-rejected'}">${c.active ? '启用' : '禁用'}</span></td>
+                <td style="white-space:nowrap;">
+                  <button class="btn btn-outline btn-sm" onclick="editPriceRange(${c.id}, '${escHtml(c.name)}', ${c.sortOrder}, ${c.active})">✏️ 编辑</button>
+                  <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="deletePriceRange(${c.id})">🗑️ 删除</button>
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table></div>
+        </div>
+      </div>`;
+  }
+  container.innerHTML = `<div class="loading">加载中</div>`;
+  await loadAndRender();
+}
+
+window.addPriceRange = function() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'priceRangeEditModal';
+  overlay.innerHTML = `
+    <button class="modal-close-float" onclick="closeM('priceRangeEditModal')">✕</button>
+    <div class="modal">
+      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">💰 新增参考零售价</div></div></div>
+      <div class="modal-body">
+        <div class="form-group"><label class="form-label"><span class="required">*</span> 名称</label><input class="form-input" id="prName" placeholder="如：100元以下、150元以下..."></div>
+        <div class="form-group"><label class="form-label">排序号</label><input class="form-input" id="prOrder" type="number" value="0" placeholder="数字越小越靠前"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeM('priceRangeEditModal')">取消</button>
+        <button class="btn btn-primary" onclick="savePriceRange(null)">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+};
+
+window.editPriceRange = function(id, name, order, active) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'priceRangeEditModal';
+  overlay.innerHTML = `
+    <button class="modal-close-float" onclick="closeM('priceRangeEditModal')">✕</button>
+    <div class="modal">
+      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✏️ 编辑参考零售价</div></div></div>
+      <div class="modal-body">
+        <div class="form-group"><label class="form-label"><span class="required">*</span> 名称</label><input class="form-input" id="prName" value="${name}"></div>
+        <div class="form-group"><label class="form-label">排序号</label><input class="form-input" id="prOrder" type="number" value="${order}"></div>
+        <div class="form-group"><label class="form-label">状态</label>
+          <select class="form-select" id="prActive">
+            <option value="true" ${active ? 'selected' : ''}>启用</option>
+            <option value="false" ${!active ? 'selected' : ''}>禁用</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeM('priceRangeEditModal')">取消</button>
+        <button class="btn btn-primary" onclick="savePriceRange(${id})">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+};
+
+window.savePriceRange = async function(id) {
+  const name = document.getElementById('prName')?.value?.trim();
+  if (!name) { alert('请输入名称'); return; }
+  const sortOrder = parseInt(document.getElementById('prOrder')?.value) || 0;
+  const body = { name, sortOrder };
+  if (id) {
+    const active = document.getElementById('prActive')?.value === 'true';
+    body.active = String(active);
+    await apiPut(`/price-ranges/${id}`, body);
+  } else {
+    await apiPost('/price-ranges', body);
+  }
+  closeM('priceRangeEditModal');
+  try { PRICE_RANGES = await apiGet('/price-ranges'); } catch(e) {}
+  switchAdminTab('priceRanges');
+};
+
+window.deletePriceRange = async function(id) {
+  if (!confirm('确定删除该价格？')) return;
+  await apiDelete(`/price-ranges/${id}`);
+  try { PRICE_RANGES = await apiGet('/price-ranges'); } catch(e) {}
+  switchAdminTab('priceRanges');
+};
+
+/** 刷新组织架构及用户数据 */
+async function refreshOrgData() {
+  try {
+    const [users, depts] = await Promise.all([
+      apiGet('/users'),
+      apiGet('/departments'),
+    ]);
+    USERS = users;
+    DEPARTMENTS = depts;
+  } catch(e) {}
+}
+
+  // ==================== 管理员：组织架构管理 ====================
+async function renderAdminOrg(container) {
+  const [depts, usersData] = await Promise.all([
+    apiGet('/departments'),
+    apiGet('/users'),
+  ]);
+  // 展平所有用户
+  const allUsers = Object.values(usersData).flat();
+
+  // 确保部门负责人也计入部门成员（即使 departmentId 未同步）
+  for (const d of depts) {
+    if (d.headUserId) {
+      const headUser = allUsers.find(u => u.userId === d.headUserId);
+      if (headUser && !headUser.departmentId) {
+        headUser.departmentId = String(d.id);
+      }
+    }
+  }
+
+  container.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 style="font-size:16px;margin:0;">🏢 组织架构</h3>
+      <button class="btn btn-primary btn-sm" onclick="openCreateDeptModal()">➕ 新建部门</button>
+    </div>
+    ${depts.length === 0 ? `<div class="empty"><div class="empty-icon">🏢</div><p>暂无部门，点击上方按钮创建</p></div>` : `
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      ${depts.map(d => {
+        const headUser = allUsers.find(u => u.userId === d.headUserId);
+        const members = allUsers.filter(u => u.departmentId === String(d.id));
+        const roleLabel_ = {sales:'销售',planner:'产品企划',designer:'设计师',supplychain:'供应链'}[d.role] || d.role;
+        return `<div class="card" style="padding:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div>
+              <strong style="font-size:15px;">${escHtml(d.name)}</strong>
+              <span class="admin-user-role-badge role-${d.role}" style="margin-left:8px;font-size:11px;">${roleLabel_}</span>
+              ${!d.active ? `<span style="color:var(--danger);font-size:12px;margin-left:8px;">⛔ 已停用</span>` : ''}
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-outline btn-sm" onclick="editDept(${JSON.stringify(d).replace(/"/g,"'")})">✏️ 编辑</button>
+              <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="deleteDept(${d.id})">🗑️ 删除</button>
+            </div>
+          </div>
+          <div style="font-size:13px;color:var(--gray-500);margin-bottom:8px;">
+            ${headUser ? `👤 部门负责人：<strong>${escHtml(headUser.name)}</strong>` : `<span style="color:var(--warning);">⚠️ 未设置负责人</span>`}
+            ｜ 👥 ${members.length} 人
+          </div>
+          ${members.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">
+            ${members.map(u => {
+              const titleLevelLabel = u.titleLevel === '2' ? '（负责人）' : u.titleLevel === '1' ? '（组长）' : '';
+              const isHeadUser = d.headUserId === u.userId;
+              return `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;font-size:12px;">
+                ${escHtml(u.name)}${titleLevelLabel}
+                ${isHeadUser ? '<span style="color:var(--gray-300);font-size:11px;" title="部门负责人不可移出">🔒</span>' : `<span style="cursor:pointer;color:var(--gray-400);font-size:11px;" onclick="removeUserFromDept('${u.userId}')" title="移出部门">✕</span>`}
+              </span>`;
+            }).join('')}
+          </div>` : '<div style="font-size:12px;color:var(--gray-400);">暂无成员</div>'}
+        </div>`;
+      }).join('')}
+    </div>`}
+    <div class="card" style="padding:16px;margin-top:16px;">
+      <h4 style="margin:0 0 8px 0;font-size:14px;">未分配部门的用户</h4>
+      ${allUsers.filter(u => !u.departmentId && u.role !== 'admin').map(u =>
+        `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;font-size:12px;margin:3px;">
+          ${escHtml(u.name)}（${u.role}）
+          <span style="cursor:pointer;color:var(--primary);font-size:11px;" onclick="openAssignUserDept('${u.userId}')" title="分配到部门">📂</span>
+        </span>`
+      ).join('') || '<span style="font-size:12px;color:var(--gray-400);">全部已分配</span>'}
+    </div>
+  `;
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function openCreateDeptModal() {
+  if (isModalOpen()) return;
+  const roles = ['sales','planner','designer','supplychain'];
+  const allUsers = Object.values(await apiGet('/users')).flat();
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'createDeptModal';
+  modal.innerHTML = `
+    <button class="modal-close-float" onclick="closeM('createDeptModal')">✕</button>
+    <div class="modal">
+      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">➕ 新建部门</div></div></div>
+      <div class="modal-body">
+        <form id="createDeptForm">
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 部门名称</label>
+            <input type="text" class="form-input" name="name" placeholder="如：设计一部" required>
+          </div>
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 关联角色</label>
+            <select class="form-select" name="role" id="deptRoleSelect">
+              ${roles.map(r => `<option value="${r}">${({sales:'销售',planner:'产品企划',designer:'设计师',supplychain:'供应链'})[r]}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">部门负责人</label>
+            <select class="form-select" name="headUserId" id="deptHeadSelect">
+              <option value="">未设置</option>
+            </select>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeM('createDeptModal')">取消</button>
+        <button class="btn btn-primary" onclick="submitGuard(this,()=>submitCreateDept())">确认创建</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  // 根据选择角色动态更新负责人选项
+  document.getElementById('deptRoleSelect').onchange = function() {
+    const role = this.value;
+    const sel = document.getElementById('deptHeadSelect');
+    const filtered = allUsers.filter(u => u.role === role);
+    sel.innerHTML = '<option value="">未设置</option>' +
+      filtered.map(u => `<option value="${u.userId}">${u.name}</option>`).join('');
+  };
+  document.getElementById('deptRoleSelect').dispatchEvent(new Event('change'));
+}
+
+async function submitCreateDept() {
+  const fd = new FormData(document.getElementById('createDeptForm'));
+  const data = Object.fromEntries(fd.entries());
+  if (!data.name) return alert('请填写部门名称');
+  await apiPost('/departments', data);
+  closeM('createDeptModal');
+  await refreshOrgData();
+  switchAdminTab('org');
+}
+
+async function editDept(d) {
+  if (isModalOpen()) return;
+  const roles = ['sales','planner','designer','supplychain'];
+  const allUsers = Object.values(await apiGet('/users')).flat();
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'editDeptModal';
+  modal.innerHTML = `
+    <button class="modal-close-float" onclick="closeM('editDeptModal')">✕</button>
+    <div class="modal">
+      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✏️ 编辑部门</div></div></div>
+      <div class="modal-body">
+        <form id="editDeptForm">
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 部门名称</label>
+            <input type="text" class="form-input" name="name" value="${escHtml(d.name)}" required>
+          </div>
+          <div class="form-group"><label class="form-label">关联角色</label>
+            <select class="form-select" name="role" id="editDeptRoleSelect">
+              ${roles.map(r => `<option value="${r}" ${r === d.role ? 'selected' : ''}>${({sales:'销售',planner:'产品企划',designer:'设计师',supplychain:'供应链'})[r]}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">部门负责人</label>
+            <select class="form-select" name="headUserId" id="editDeptHeadSelect"></select>
+          </div>
+          <div class="form-group"><label class="form-label">状态</label>
+            <select class="form-select" name="active">
+              <option value="true" ${d.active ? 'selected' : ''}>启用</option>
+              <option value="false" ${!d.active ? 'selected' : ''}>停用</option>
+            </select>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeM('editDeptModal')">取消</button>
+        <button class="btn btn-primary" onclick="submitGuard(this,()=>submitEditDept(${d.id}))">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const updateHeadSelect = () => {
+    const role = document.getElementById('editDeptRoleSelect').value;
+    const sel = document.getElementById('editDeptHeadSelect');
+    sel.innerHTML = '<option value="">未设置</option>' +
+      allUsers.filter(u => u.role === role).map(u =>
+        `<option value="${u.userId}" ${u.userId === d.headUserId ? 'selected' : ''}>${u.name}</option>`
+      ).join('');
+  };
+  document.getElementById('editDeptRoleSelect').onchange = updateHeadSelect;
+  updateHeadSelect();
+}
+
+async function submitEditDept(id) {
+  const fd = new FormData(document.getElementById('editDeptForm'));
+  const data = Object.fromEntries(fd.entries());
+  data.active = data.active === 'true';
+  await apiPut(`/departments/${id}`, data);
+  closeM('editDeptModal');
+  await refreshOrgData();
+  switchAdminTab('org');
+}
+
+async function deleteDept(id) {
+  if (!confirm('确定删除该部门？')) return;
+  await apiDelete(`/departments/${id}`);
+  await refreshOrgData();
+  switchAdminTab('org');
+}
+
+async function openAssignUserDept(userId) {
+  if (isModalOpen()) return;
+  const [depts, usersData] = await Promise.all([
+    apiGet('/departments'),
+    apiGet('/users'),
+  ]);
+  const allUsers = Object.values(usersData).flat();
+  const user = allUsers.find(u => u.userId === userId);
+  if (!user) return;
+  // 按角色过滤可选部门
+  const roleDepts = depts.filter(d => d.role === user.role && d.active);
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'assignDeptModal';
+  modal.innerHTML = `
+    <button class="modal-close-float" onclick="closeM('assignDeptModal')">✕</button>
+    <div class="modal" style="max-width:400px;">
+      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📂 分配部门：${escHtml(user.name)}</div></div></div>
+      <div class="modal-body">
+        ${roleDepts.length === 0 ? `<p style="color:var(--gray-500)">没有可分配的 ${user.role} 部门，请先创建</p>` : `
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${roleDepts.map(d => `
+            <label style="display:flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid var(--gray-200);border-radius:8px;cursor:pointer;">
+              <input type="radio" name="deptId" value="${d.id}">
+              <div><strong>${escHtml(d.name)}</strong><div style="font-size:12px;color:var(--gray-500);">负责人：${allUsers.find(u2 => u2.userId === d.headUserId)?.name || '未设置'}</div></div>
+            </label>
+          `).join('')}
+        </div>`}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeM('assignDeptModal')">取消</button>
+        ${roleDepts.length > 0 ? `<button class="btn btn-primary" onclick="submitGuard(this,()=>submitAssignDept('${userId}'))">确认分配</button>` : ''}
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function submitAssignDept(userId) {
+  const sel = document.querySelector('input[name="deptId"]:checked');
+  if (!sel) return alert('请选择一个部门');
+  await apiPut(`/users/org/${userId}`, { departmentId: parseInt(sel.value) });
+  closeM('assignDeptModal');
+  await refreshOrgData();
+  switchAdminTab('org');
+}
+
+async function removeUserFromDept(userId) {
+  // 检查是否为部门负责人，负责人不能移出
+  const isHead = DEPARTMENTS.some(d => d.headUserId === userId);
+  if (isHead) {
+    alert('该用户是部门负责人，无法直接移出。请先更换部门负责人或删除部门。');
+    return;
+  }
+  if (!confirm('确定将该用户移出部门？')) return;
+  await apiPut(`/users/org/${userId}`, { departmentId: null });
+  await refreshOrgData();
+  switchAdminTab('org');
+}
+
+// ==================== 评分权重管理 ====================
+async function renderAdminScoring(container) {
+  container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--gray-400);">加载中...</div>`;
+  try {
+    const data = await apiGet('/admin/scoring-weights');
+    const types = data.types || [];
+    container.innerHTML = `
+      <div style="max-width:760px;margin:0 auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+          <div>
+            <h2 style="font-size:18px;margin:0 0 4px;">⭐ 评分权重管理</h2>
+            <p style="font-size:13px;color:var(--gray-400);margin:0;">按项目类型分别设置各角色评分权重（百分比）</p>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="resetScoringWeights()" style="color:var(--gray-500);">↺ 重置默认</button>
+        </div>
+        ${types.map((t, ti) => `
+          <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:20px;margin-bottom:16px;">
+            <h3 style="font-size:14px;font-weight:500;margin:0 0 16px;">${t.label}</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              ${t.weights.map(w => `
+                <div style="background:var(--bg-secondary,#F9FAFB);border-radius:8px;padding:12px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span style="font-size:13px;font-weight:500;">${w.label}</span>
+                    <span style="font-size:20px;font-weight:600;" id="sd_${t.type}_${w.role}">${Math.round(w.weight)}</span>
+                    <span style="font-size:12px;color:var(--gray-400);">%</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="range" min="0" max="100" step="1" value="${Math.round(w.weight)}" style="flex:1;" oninput="updateScoringPct('${t.type}','${w.role}',this.value)">
+                    <input type="number" class="form-input" value="${Math.round(w.weight)}" min="0" max="100" step="1" style="width:55px;text-align:center;padding:4px 6px;" onchange="updateScoringPct('${t.type}','${w.role}',this.value)">
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+              <span style="color:var(--gray-400);">合计：<strong style="font-size:16px;" id="sum_${t.type}">${t.weights.reduce((s,w) => s + Math.round(w.weight), 0)}</strong>%</span>
+            </div>
+          </div>
+        `).join('')}
+        <div style="text-align:right;">
+          <button class="btn btn-primary" onclick="saveScoringWeights()">💾 保存权重</button>
+        </div>
+        <div style="margin-top:16px;padding:12px;background:var(--warning-light,#FFFBEB);border-radius:8px;font-size:12px;color:#92400E;">
+          💡 权重为百分比（0~100%），建议各项目类型的权重合计为 100%。综合分 = Σ(角色评分 × 权重%) ÷ Σ(权重%)。修改仅影响新建评分，历史评分不受影响。
+        </div>
+      </div>`;
+    window._scoringWeights = {};
+    types.forEach(t => {
+      window._scoringWeights[t.type] = {};
+      t.weights.forEach(w => { window._scoringWeights[t.type][w.role] = Math.round(w.weight); });
+    });
+  } catch (e) {
+    container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger);">加载失败: ${e.message}</div>`;
+  }
+}
+
+function roleColor(role) {
+  const colors = { planner: '#534AB7', sales: '#378ADD', designer: '#639922', admin: '#D85A30' };
+  return colors[role] || '#888780';
+}
+
+window.updateScoringPct = function(type, role, val) {
+  const num = Math.round(parseFloat(val || 0));
+  const clamped = Math.max(0, Math.min(100, num));
+  if (!window._scoringWeights) window._scoringWeights = {};
+  if (!window._scoringWeights[type]) window._scoringWeights[type] = {};
+  window._scoringWeights[type][role] = clamped;
+  const display = document.getElementById('sd_' + type + '_' + role);
+  if (display) display.textContent = clamped;
+  const weights = window._scoringWeights[type] || {};
+  const sum = Object.values(weights).reduce((a, b) => a + b, 0);
+  const sumEl = document.getElementById('sum_' + type);
+  if (sumEl) {
+    sumEl.textContent = sum;
+    sumEl.style.color = sum === 100 ? 'var(--success,#059669)' : sum > 100 ? 'var(--danger)' : 'var(--warning,#D97706)';
+  }
+};
+
+window.saveScoringWeights = async function() {
+  if (!window._scoringWeights) return;
+  try {
+    await apiPut('/admin/scoring-weights', window._scoringWeights);
+    alert('评分权重已保存');
+  } catch (e) {
+    alert('保存失败: ' + e.message);
+  }
+};
+
+window.resetScoringWeights = async function() {
+  if (!confirm('确定重置所有权重为默认值？')) return;
+  window.location.reload();
+};
+
 async function renderAdminLogs(container) {
   container.innerHTML = `
     <div class="filter-bar" style="margin-bottom:16px;">
@@ -3782,7 +5553,7 @@ async function loadAdminLogs() {
       '<th style="width:60px;">#</th><th style="width:150px;">时间</th><th style="width:60px;">角色</th>' +
       '<th style="width:80px;">操作人</th><th>操作内容</th><th style="width:80px;">关联项目</th></tr></thead><tbody>' +
       logs.map(l => {
-        const rl = {sales:'销售',planner:'企划',designer:'设计师',superior:'上级',admin:'管理员'};
+        const rl = {sales:'销售',planner:'企划',designer:'设计师',supplychain:'供应链',admin:'管理员'};
         const rn = rl[l.role] || l.role;
         const pl = l.projectId ? '<a href="javascript:void(0)" onclick="openProjectDetail(' + l.projectId + ')" style="color:var(--primary);text-decoration:none;">#' + l.projectId + '</a>' : '-';
         return '<tr><td style="color:var(--gray-400);">' + l.id + '</td><td style="white-space:nowrap;font-size:12px;">' +

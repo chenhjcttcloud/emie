@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id     VARCHAR(100) NOT NULL UNIQUE COMMENT '登录ID',
     name        VARCHAR(100) NOT NULL,
-    role        VARCHAR(50)  NOT NULL COMMENT 'sales/planner/designer/superior/admin',
-    role_level  INT COMMENT '权限等级 0=admin 1=sales 2=planner 3=designer',
+    role        VARCHAR(50)  NOT NULL COMMENT 'sales/planner/designer/supplychain/admin',
+    role_level  INT COMMENT '权限等级 0=admin 1=sales 2=planner 3=designer/supplychain',
     title       VARCHAR(100),
     password    VARCHAR(255),
     phone       VARCHAR(20) COMMENT '手机号',
@@ -135,11 +135,9 @@ INSERT INTO users (id, name, role, title, password) VALUES
 ('designer_caim',   '蔡萌',   'designer', '设计师', '2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e'),
 ('designer_zhengc', '郑彩妮', 'designer', '设计师', '3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f');
 
--- 上级
-INSERT INTO users (id, name, role, title, password) VALUES
-('superior_chen', 'joy', 'superior', '设计总监', '4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a');
-
 -- 管理员
+INSERT INTO users (id, name, role, title, password) VALUES
+('admin_liu', '刘海娇', 'admin', '管理员', '1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f');-- 管理员
 INSERT INTO users (id, name, role, title, password) VALUES
 ('admin_liu', '刘海娇', 'admin', '管理员', '5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b');
 

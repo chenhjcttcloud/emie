@@ -72,7 +72,7 @@ public class AuthController {
             case "sales" -> "销售";
             case "planner" -> "企划";
             case "designer" -> "设计师";
-            case "superior" -> "上级";
+            case "supplychain" -> "供应链";
             case "admin" -> "管理员";
             default -> user.getRole();
         };
@@ -160,6 +160,7 @@ public class AuthController {
                     case "sales" -> "销售";
                     case "planner" -> "产品企划";
                     case "designer" -> "设计师";
+            case "supplychain" -> "供应链";
                     default -> "";
                 })
                 .password(sha256(password))
@@ -191,7 +192,7 @@ public class AuthController {
                 case "sales" -> "销售";
                 case "planner" -> "企划";
                 case "designer" -> "设计师";
-                case "superior" -> "上级";
+            case "supplychain" -> "供应链";
                 case "admin" -> "管理员";
                 default -> session.role();
             };
@@ -211,11 +212,63 @@ public class AuthController {
         if (session == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未登录或会话已过期"));
         }
-        return ResponseEntity.ok(Map.of(
-            "userId", session.userId,
-            "name", session.name,
-            "role", session.role
-        ));
+        // 返回当前模拟用户信息 + 原始用户信息
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("userId", session.userId);
+        result.put("name", session.name);
+        result.put("role", session.role);
+        result.put("originalUserId", session.originalUserId);
+        result.put("originalRole", session.originalRole);
+        return ResponseEntity.ok(result);
+    }
+
+    /** 模拟用户视角（仅 admin 可使用，不修改数据库，仅更新当前会话） */
+    @PostMapping("/impersonate")
+    public ResponseEntity<Map<String, Object>> impersonate(
+            @RequestHeader("X-Auth-Token") String token,
+            @RequestBody Map<String, String> body) {
+        AuthSession session = TOKENS.get(token);
+        if (session == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "未登录或会话已过期"));
+        }
+
+        // 用原始角色进行鉴权（即使已经在模拟其他用户，也允许继续切换）
+        String effectiveRole = session.originalRole();
+        if (!"admin".equals(effectiveRole)) {
+            return ResponseEntity.status(403).body(Map.of("error", "无权切换用户视角"));
+        }
+
+        String targetUserId = body.get("userId");
+        if (targetUserId == null || targetUserId.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "请指定目标用户ID"));
+        }
+
+        // 查找目标用户
+        User target = userRepository.findByUserId(targetUserId).orElse(null);
+        if (target == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "目标用户不存在"));
+        }
+
+        // 替换当前会话为目标用户信息，保留原始登录用户信息
+        TOKENS.put(token, new AuthSession(
+            target.getUserId(), target.getRole(), target.getName(),
+            session.originalUserId(), session.originalRole()));
+
+        // 记录操作日志
+        try {
+            activityLogRepository.save(new ActivityLog(
+                "模拟用户：" + session.originalUserId() + " 切换到 " + target.getName() + "（" + target.getUserId() + "）",
+                session.originalUserId(), effectiveRole));
+        } catch (Exception ignored) {}
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("token", token);
+        result.put("userId", target.getUserId());
+        result.put("name", target.getName());
+        result.put("role", target.getRole());
+        result.put("title", target.getTitle());
+        result.put("roleLevel", target.getRoleLevel());
+        return ResponseEntity.ok(result);
     }
 
     /** 获取当前用户权限列表 */
@@ -244,7 +297,11 @@ public class AuthController {
 
     // ==================== 内部类 ====================
 
-    public record AuthSession(String userId, String role, String name) {}
+    public record AuthSession(String userId, String role, String name, String originalUserId, String originalRole) {
+        public AuthSession(String userId, String role, String name) {
+            this(userId, role, name, userId, role);
+        }
+    }
 
     // ==================== 工具方法 ====================
 
@@ -254,6 +311,13 @@ public class AuthController {
         StringBuilder sb = new StringBuilder();
         for (byte b : bytes) sb.append(String.format("%02x", b));
         return sb.toString();
+    }
+
+    /** 供 Feishu SSO 使用：生成 token 并存入会话 */
+    public static String generateToken(String userId, String role, String name) {
+        String token = generateToken();
+        TOKENS.put(token, new AuthSession(userId, role, name));
+        return token;
     }
 
     public static String sha256(String input) {

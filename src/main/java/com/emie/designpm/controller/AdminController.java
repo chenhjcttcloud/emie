@@ -80,7 +80,7 @@ public class AdminController {
             @RequestBody Map<String, String> body,
             @RequestHeader("X-Auth-Token") String token) {
         String newRole = body.get("role");
-        if (newRole == null || !List.of("sales", "planner", "designer", "superior", "admin").contains(newRole)) {
+        if (newRole == null || !List.of("sales", "planner", "designer", "supplychain", "admin").contains(newRole)) {
             return ResponseEntity.badRequest().body(Map.of("error", "无效的角色"));
         }
         String updatedBy = getUserFromToken(token);
@@ -201,6 +201,45 @@ public class AdminController {
             return ResponseEntity.ok(Map.of("message", "角色已删除"));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ==================== 评分权重管理 ====================
+
+    /** 获取评分权重配置 */
+    @GetMapping("/scoring-weights")
+    public ResponseEntity<Map<String, Object>> getScoringWeights() {
+        return ResponseEntity.ok(adminService.getScoringWeights());
+    }
+
+    /** 更新评分权重 */
+    @PutMapping("/scoring-weights")
+    public ResponseEntity<Map<String, Object>> updateScoringWeights(
+            @RequestBody Map<String, Object> body) {
+        try {
+            adminService.updateScoringWeights(body);
+            return ResponseEntity.ok(Map.of("success", true, "message", "评分权重已更新"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ==================== 数据清除 ====================
+
+    /** 清空所有项目业务数据（测试用，保留用户/角色/部门/系统配置） */
+    @DeleteMapping("/clear-data")
+    public ResponseEntity<Map<String, Object>> clearAllProjectData(
+            @RequestHeader("X-Auth-Token") String token) {
+        // 仅 admin 可用
+        AuthController.AuthSession session = AuthController.validateToken(token);
+        if (session == null || !"admin".equals(session.role())) {
+            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可执行此操作"));
+        }
+        Map<String, Object> result = adminService.clearAllProjectData();
+        if (Boolean.TRUE.equals(result.get("success"))) {
+            return ResponseEntity.ok(result);
+        } else {
+            return ResponseEntity.internalServerError().body(result);
         }
     }
 

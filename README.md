@@ -102,7 +102,6 @@ JDBC URL: jdbc:h2:file:./data/designpm
 | 郑诗绚 | planner_zheng | 产品企划 |
 | 吴思欣 | planner_wu | 产品企划 |
 | 陈月珍 | designer_cheny | 设计师 |
-| joy | superior_chen | 上级 |
 | 刘海娇 | admin_liu | 管理员 |
 
 ## API 接口

@@ -1,0 +1,10 @@
+target/
+.workbuddy/
+.idea/
+*.iml
+.git/
+.gitignore
+*.md
+data/
+logs/
+uploads/

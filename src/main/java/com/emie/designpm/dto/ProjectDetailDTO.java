@@ -19,6 +19,11 @@ public class ProjectDetailDTO {
     private String deadline;
     private String productRequirements;
     private String description;
+    private String productCategory;
+    private String productCategoryNote;
+    private String targetMarket;
+    private String complianceItems;
+    private String priceRange;
     private String referenceImagesJson;
     private String attachmentsJson;
     private List<Map<String, Object>> logs;

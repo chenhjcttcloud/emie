@@ -29,6 +29,9 @@ public class AuthFilter implements Filter {
         if (path.equals("/api/auth/login") ||
             path.equals("/api/auth/register") ||
             path.equals("/api/auth/logout") ||
+            path.equals("/api/auth/feishu/callback") ||
+            path.equals("/api/auth/feishu/config") ||
+            path.equals("/api/auth/feishu/auto-login") ||
             path.equals("/api/captcha/image") ||
             path.equals("/api/sms/send") ||
             path.equals("/api/email-code/send") ||

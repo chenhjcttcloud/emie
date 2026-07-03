@@ -39,7 +39,7 @@ public class UserService {
         userRepository.save(User.builder().userId("planner_wu").name("吴思欣").role("planner").roleLevel(2).title("产品企划").password(pwd("planner_wu")).build());
         userRepository.save(User.builder().userId("designer_cheny").name("陈月珍").role("designer").roleLevel(3).title("设计师").password(pwd("designer_cheny")).build());
         userRepository.save(User.builder().userId("designer_huang").name("黄海岚").role("designer").roleLevel(3).title("设计师").password(pwd("designer_huang")).build());
-        userRepository.save(User.builder().userId("superior_chen").name("joy").role("superior").roleLevel(null).title("设计总监").password(pwd("superior_chen")).build());
+        userRepository.save(User.builder().userId("supplychain_01").name("供应链01").role("supplychain").roleLevel(3).title("供应链").password(pwd("supplychain_01")).build());
         refreshCache();
     }
 
@@ -65,6 +65,16 @@ public class UserService {
         return userRepository.findAll();
     }
 
+    public User saveUser(User user) {
+        User saved = userRepository.save(user);
+        refreshCache();
+        return saved;
+    }
+
+    public List<User> getUsersByDepartmentId(Long departmentId) {
+        return userRepository.findByDepartmentId(departmentId);
+    }
+
     /** 刷新用户缓存（管理员添加用户后调用） */
     public void refreshCache() {
         List<User> all = userRepository.findAll();
@@ -81,7 +91,7 @@ public class UserService {
             case "sales" -> "需求方/销售";
             case "planner" -> "产品企划";
             case "designer" -> "设计师";
-            case "superior" -> "上级";
+            case "supplychain" -> "供应链";
             case "admin" -> "管理员";
             default -> role;
         };
