@@ -8,6 +8,7 @@ import com.emie.designpm.repository.ProjectRepository;
 import com.emie.designpm.repository.ScoringRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.ProjectService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -49,7 +50,11 @@ public class DashboardController {
     @GetMapping("/full")
     public ResponseEntity<Map<String, Object>> getFullDashboard(
             @RequestParam String role,
-            @RequestParam String userId) {
+            @RequestParam String userId,
+            HttpServletRequest request) {
+        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        role = session.role();
+        userId = session.userId();
 
         Map<String, Object> result = new LinkedHashMap<>();
 
@@ -168,14 +173,12 @@ public class DashboardController {
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Object>> getStats(
             @RequestParam(required = false) String role,
-            @RequestParam(required = false) String userId) {
-
-        List<Project> projects;
-        if (role != null && userId != null) {
-            projects = projectService.getProjectsByRoleAndUser(role, userId);
-        } else {
-            projects = projectRepository.findAll();
-        }
+            @RequestParam(required = false) String userId,
+            HttpServletRequest request) {
+        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        role = session.role();
+        userId = session.userId();
+        List<Project> projects = projectService.getProjectsByRoleAndUser(role, userId);
 
         return ResponseEntity.ok(computeStats(projects));
     }

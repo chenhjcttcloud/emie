@@ -1,4 +1,4 @@
-/* ==================== 设计项目管理系统 - 样式 ==================== */
+/* ==================== 产品管理系统 - 样式 ==================== */
 
 :root {
   --primary: #4F46E5; --primary-light: #EEF2FF;
@@ -439,6 +439,11 @@ select.form-select:disabled::-ms-expand { display: none; }
 
 /* Subtask card */
 .subtask-card { border:1px solid var(--gray-200); border-radius:var(--radius); padding:16px; margin-bottom:10px; background:#fff; transition:all .15s; }
+.subtask-card.completed { background:#F0FDF4; border:1px solid #86EFAC; border-left:4px solid #16A34A; }
+.subtask-card.completed .subtask-number { background:#16A34A; }
+.subtask-card.completed .subtask-name { color:#166534; }
+.subtask-card.completed .subtask-deliver { background:#DCFCE7; border-color:#86EFAC; }
+.subtask-card.completed .review-box.approved { background:#DCFCE7; border-color:#86EFAC; }
 .subtask-card:last-child { margin-bottom:0; }
 .subtask-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; }
 .subtask-name { font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px; }
@@ -605,6 +610,7 @@ select.form-select:disabled::-ms-expand { display: none; }
 
   /* 子任务卡片 */
   .subtask-card { padding:12px; }
+  .subtask-card.completed { border-left-width:4px; }
   .subtask-header { flex-direction:column; gap:6px; }
   .subtask-name { font-size:14px; }
   .subtask-actions { gap:6px; }

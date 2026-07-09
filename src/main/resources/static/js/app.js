@@ -1,4 +1,4 @@
-// ==================== 设计项目管理系统 - 应用逻辑 ====================
+// ==================== 产品管理系统 - 应用逻辑 ====================
 
 const API = '/api';
 
@@ -31,6 +31,11 @@ async function apiPost(url, data) {
 
 // 文件上传（XMLHttpRequest 流式上传，支持进度条）
 function uploadFile(file, onProgress) {
+  // 客户端前置检查：限制 200MB
+  const MAX_BYTES = 200 * 1024 * 1024;
+  if (file.size > MAX_BYTES) {
+    return Promise.reject(new Error('文件大小超过限制（最大 200MB），当前文件 ' + (file.size / 1024 / 1024).toFixed(1) + 'MB'));
+  }
   return new Promise((resolve, reject) => {
     const fd = new FormData();
     fd.append('file', file);
@@ -64,11 +69,30 @@ async function apiPut(url, data) {
     body: JSON.stringify(data),
   });
   if (r.status === 401) { handleLogout(); throw new Error('登录已过期'); }
-  if (!r.ok) throw new Error(`PUT ${url} failed: ${r.status}`);
+  if (!r.ok) {
+    let msg = `PUT ${url} failed`;
+    try { const err = await r.json(); if (err.error) msg = err.error; } catch(e) {}
+    throw new Error(msg);
+  }
   return r.json();
 }
 
 // ===== 全局防连点 =====
+
+/** 正在异步打开中的弹窗 ID 集合（防 await 期间重复点击） */
+const _modalOpening = new Set();
+
+/** 安全尝试打开弹窗：检查是否已存在或正在打开 */
+function tryOpenModal(id) {
+  if (document.getElementById(id) || _modalOpening.has(id)) return false;
+  _modalOpening.add(id);
+  return true;
+}
+
+/** 弹窗打开完成（成功或失败都要调） */
+function doneOpenModal(id) {
+  _modalOpening.delete(id);
+}
 
 /** 检查是否有任何弹窗已打开 */
 function isModalOpen() {
@@ -256,10 +280,10 @@ async function loadPublicConfig() {
           logoEl.textContent = cfg['app.logoEmoji'];
         }
       }
-      // 飞书 SSO 按钮
+      // 飞书 SSO 按钮（始终显示，点击时再校验配置）
       const feishuWrap = document.getElementById('feishuLoginWrap');
       if (feishuWrap) {
-        feishuWrap.style.display = cfg['feishu.enabled'] === 'true' && cfg['feishu.appId'] ? 'block' : 'none';
+        feishuWrap.style.display = 'block';
       }
     }
   } catch(e) {
@@ -288,49 +312,7 @@ function refreshCaptcha() {
 
 // 发送邮箱验证码
 function sendEmailCode() {
-  const email = document.getElementById('regEmail').value.trim();
-  if (!/^[\w.-]+@[\w.-]+\.\w{2,}$/.test(email)) {
-    alert('请输入正确的邮箱地址'); return;
-  }
-  const captchaKey = document.getElementById('captchaImg').dataset.key;
-  const captchaCode = document.getElementById('regCaptcha').value.trim();
-  if (!captchaCode) {
-    alert('请先输入图形验证码'); return;
-  }
-
-  const btn = document.getElementById('emailBtn');
-  btn.disabled = true;
-  btn.textContent = '发送中...';
-
-  fetch('/api/email-code/send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, captchaKey, captchaCode }),
-  }).then(r => r.json()).then(d => {
-    if (d.error) {
-      alert(d.error);
-      btn.disabled = false;
-      btn.textContent = '获取验证码';
-      refreshCaptcha();
-    } else {
-      let sec = 60;
-      btn.textContent = sec + 's';
-      const timer = setInterval(() => {
-        sec--;
-        if (sec <= 0) {
-          clearInterval(timer);
-          btn.disabled = false;
-          btn.textContent = '重新获取';
-        } else {
-          btn.textContent = sec + 's';
-        }
-      }, 1000);
-    }
-  }).catch(() => {
-    alert('网络错误');
-    btn.disabled = false;
-    btn.textContent = '获取验证码';
-  });
+  alert('邮箱验证码功能已下线，请直接输入图形验证码后注册');
 }
 
 // 注册
@@ -345,12 +327,13 @@ async function handleRegister(event) {
     role: document.getElementById('regRole').value,
     phone: document.getElementById('regPhone').value.trim(),
     email: document.getElementById('regEmail').value.trim(),
-    emailCode: document.getElementById('regEmailCode').value.trim(),
+    captchaKey: document.getElementById('captchaImg').dataset.key,
+    captchaCode: document.getElementById('regCaptcha').value.trim(),
     password: document.getElementById('regPassword').value,
   };
 
   // ========== 前端校验 ==========
-  if (!data.id || !data.name || !data.phone || !data.email || !data.emailCode || !data.password) {
+  if (!data.id || !data.name || !data.phone || !data.email || !data.captchaCode || !data.password) {
     errEl.textContent = '请填写所有必填项'; errEl.style.display = ''; return;
   }
   if (!/^[a-zA-Z0-9_]{3,30}$/.test(data.id)) {
@@ -365,8 +348,8 @@ async function handleRegister(event) {
   if (!/^[\w.-]+@[\w.-]+\.\w{2,}$/.test(data.email)) {
     errEl.textContent = '邮箱格式不正确'; errEl.style.display = ''; return;
   }
-  if (!/^\d{6}$/.test(data.emailCode)) {
-    errEl.textContent = '邮箱验证码为6位数字'; errEl.style.display = ''; return;
+  if (!/^\d{4}$/.test(data.captchaCode)) {
+    errEl.textContent = '图形验证码为4位数字'; errEl.style.display = ''; return;
   }
   if (data.password.length < 6 || data.password.length > 30) {
     errEl.textContent = '密码长度6-30位'; errEl.style.display = ''; return;
@@ -382,6 +365,7 @@ async function handleRegister(event) {
     if (!r.ok) {
       errEl.textContent = result.error || '注册失败';
       errEl.style.display = '';
+      refreshCaptcha();
       return;
     }
     // 注册成功，自动登录
@@ -391,6 +375,7 @@ async function handleRegister(event) {
   } catch (e) {
     errEl.textContent = '网络错误，请重试';
     errEl.style.display = '';
+    refreshCaptcha();
   }
 }
 
@@ -407,11 +392,11 @@ async function showApp() {
       const logoEl = document.querySelector('.logo');
       if (logoEl) {
         if (cfg['app.logo']) {
-          logoEl.innerHTML = `<img src="${cfg['app.logo']}" style="height:32px;width:auto;vertical-align:middle;margin-right:8px;" alt="logo"><span>${cfg['app.title'] || '设计项目管理'}</span>`;
+          logoEl.innerHTML = `<img src="${cfg['app.logo']}" style="height:32px;width:auto;vertical-align:middle;margin-right:8px;" alt="logo"><span>${cfg['app.title'] || '产品管理系统'}</span>`;
         } else if (cfg['app.logoEmoji']) {
-          logoEl.innerHTML = `${cfg['app.logoEmoji']} ${cfg['app.title'] || '设计项目管理'}<span>${cfg['app.subtitle'] || 'Design Project Management'}</span>`;
+          logoEl.innerHTML = `${cfg['app.logoEmoji']} ${cfg['app.title'] || '产品管理系统'}<span>${cfg['app.subtitle'] || 'Product Management'}</span>`;
         } else {
-          logoEl.innerHTML = `🎨 ${cfg['app.title'] || '设计项目管理'}<span>${cfg['app.subtitle'] || 'Design Project Management'}</span>`;
+          logoEl.innerHTML = `🎨 ${cfg['app.title'] || '产品管理系统'}<span>${cfg['app.subtitle'] || 'Product Management'}</span>`;
         }
       }
     }
@@ -537,6 +522,8 @@ function checkFeishuCallback() {
 }
 
 function handleLogout() {
+  // 关闭所有弹窗
+  document.querySelectorAll('.modal-overlay').forEach(el => el.remove());
   const token = localStorage.getItem('design_pm_token');
   if (token) {
     fetch('/api/auth/logout', { method: 'POST', headers: { 'X-Auth-Token': token } }).catch(() => {});
@@ -838,9 +825,11 @@ function renderSidebar() {
   const navs = [];
 
   if (currentRole === 'sales') {
-    // 销售：工作台、渠道定制单、待评分
+    // 销售：工作台、全部项目、渠道定制单、公司常规品、待评分
     navs.push({ view: 'dashboard', icon: '📊', label: '工作台', badge: '' });
+    navs.push({ view: 'orders', icon: '📋', label: '全部项目', badge: 'badgeTotal' });
     navs.push({ view: 'channel', icon: '📦', label: '渠道定制单', badge: 'badgeChannel' });
+    navs.push({ view: 'regular', icon: '🏭', label: '公司常规品', badge: 'badgeRegular' });
     navs.push({ view: 'scoring', icon: '⭐', label: '待评分', badge: 'badgeScoring' });
   } else if (currentRole === 'admin') {
     // 管理员：工作台 + 系统管理
@@ -925,7 +914,10 @@ function getTaskStatusInfo(status) {
     accepted: { label: '设计中', cls: 'badge-progress', icon: '🎨' },
     delivered: { label: '待验收', cls: 'badge-pending', icon: '📤' },
     planner_approved: { label: '待评分', cls: 'badge-pending', icon: '⏳' },
+    sales_approved: { label: '待确认', cls: 'badge-pending', icon: '⏳' },
+    admin_approved: { label: '待确认', cls: 'badge-pending', icon: '⏳' },
     approved: { label: '已通过', cls: 'badge-completed', icon: '✅' },
+    completed: { label: '已完成', cls: 'badge-completed', icon: '✅' },
     rejected: { label: '已驳回', cls: 'badge-rejected', icon: '↩️' },
   }[status] || { label: status, cls: '', icon: '❓' };
 }
@@ -1026,6 +1018,7 @@ function closeM(id, force) {
     }
   }
   document.getElementById(id)?.remove();
+  doneOpenModal(id);
 }
 
 // 安全创建模态框（防止重复点击出现多个）
@@ -1130,8 +1123,10 @@ async function refreshAfterMutation(pid) {
           const detail = await apiGet(`/projects/${pid}`);
           updateProjectRow(pid, detail);
           if (document.getElementById('projectDetailModal')) {
-            closeM('projectDetailModal');
-            setTimeout(() => openProjectDetail(Number(pid)), 50);
+            const body = document.querySelector('#projectDetailModal .modal-body');
+            const footer = document.getElementById('detailActions');
+            if (body) body.innerHTML = renderProjectDetailContent(detail);
+            if (footer) footer.innerHTML = renderProjectActions(detail);
           }
         } catch(e) {}
       }
@@ -1178,7 +1173,7 @@ function updateProjectRow(pid, detail) {
 /** 渲染单行项目 */
 function renderProjectRow(o) {
   const st = getProjectStatusInfo(o.status);
-  return `<tr onclick="openProjectDetail(${o.id})" style="cursor:pointer;">
+  return `<tr style="cursor:pointer;">
     <td><strong>#${o.id}</strong></td>
     <td style="font-size:12px;">${o.type === 'channel_custom' ? '📦 渠道' : '🏭 常规'}</td>
     <td>${o.salesName || '-'}</td>
@@ -1316,7 +1311,7 @@ async function updateBadges(role, uid) {
             : (role === 'planner');
           if (!needMe) continue;
           const myRecord = t.scoringRecords.find(sr => sr.role === role);
-          if (myRecord && myRecord.aesthetics === null) pendingScoreCount++;
+          if (myRecord && myRecord.score == null) pendingScoreCount++;
         }
       }
     }
@@ -1426,8 +1421,93 @@ async function renderDashboard(main, role, uid) {
     ${rolePanelsHtml}
     ${orders.length === 0 ? `<div class="empty"><div class="empty-icon">📭</div><p>暂无您负责的项目</p></div>` : ''}
     ${renderProjectSummary(channel, '📦 渠道定制单')}
-    ${currentRole !== 'sales' ? renderProjectSummary(regular, '🏭 公司常规品') : ''}
+    ${renderProjectSummary(regular, '🏭 公司常规品')}
+    <div id="dashboardWorkloadSection"></div>
   `;
+  // 仅 admin 可见工作量概览
+  if (currentRole === 'admin') {
+    loadDashboardWorkloadSection();
+  }
+}
+
+/** 在 dashboard 底部加载工作量看板 */
+let dashboardWorkloadRange = 'month';
+async function loadDashboardWorkloadSection() {
+  const container = document.getElementById('dashboardWorkloadSection');
+  if (!container) return;
+  try {
+    const data = await apiGet('/admin/workload/timeline?range=' + dashboardWorkloadRange);
+    const summary = data._summary || {};
+
+    const rangeOpts = [
+      { k: 'day', l: '今日' }, { k: 'week', l: '本周' }, { k: 'month', l: '本月' },
+      { k: 'quarter', l: '本季度' }, { k: 'half-year', l: '本半年' }, { k: 'year', l: '本年度' }
+    ];
+
+    const isWorker = r => r === 'designer' || r === 'supplychain';
+    const roleOrder = ['sales', 'planner', 'designer', 'supplychain'];
+
+    let html = `<div style="margin-top:24px;border-top:2px solid var(--gray-200);padding-top:20px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <span style="font-size:16px;font-weight:600;color:#1f2937;">📊 工作量概览</span>
+        <span style="font-size:12px;color:var(--gray-400);margin-left:4px;">时间范围:</span>
+        ${rangeOpts.map(o => `
+          <button onclick="switchDashWorkload('${o.k}')"
+            style="padding:4px 12px;border-radius:6px;border:${o.k === dashboardWorkloadRange ? '2px solid #3370FF' : '1px solid var(--gray-200)'};
+            background:${o.k === dashboardWorkloadRange ? '#E6F1FB' : '#fff'};
+            color:${o.k === dashboardWorkloadRange ? '#1E40AF' : '#374151'};
+            font-size:12px;cursor:pointer;">${o.l}</button>
+        `).join('')}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;">
+        <div class="stat-card" style="cursor:default;"><div class="stat-icon blue">📁</div><div><div class="stat-value">${summary.totalProjectsCreated}</div><div class="stat-label">新建项目</div></div></div>
+        <div class="stat-card" style="cursor:default;"><div class="stat-icon green">✅</div><div><div class="stat-value">${summary.totalProjectsCompleted}</div><div class="stat-label">完成项目</div></div></div>
+        <div class="stat-card" style="cursor:default;"><div class="stat-icon blue">📌</div><div><div class="stat-value">${summary.totalTasksAssigned}</div><div class="stat-label">新分任务</div></div></div>
+        <div class="stat-card" style="cursor:default;"><div class="stat-icon green">✅</div><div><div class="stat-value">${summary.totalTasksCompleted}</div><div class="stat-label">完成任务</div></div></div>
+      </div>`;
+
+    for (const role of roleOrder) {
+      const r = data[role];
+      if (!r || !r.users || r.users.length === 0) continue;
+      const w = isWorker(role);
+      html += `<div class="card" style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--gray-200);">
+          <div><span style="font-size:15px;margin-right:4px;">${r.icon||'👤'}</span><strong style="font-size:14px;">${r.label||role}</strong>
+          <span style="font-size:12px;color:var(--gray-400);margin-left:6px;">${r.totalUsers} 人</span></div>
+        </div>
+        <div style="display:flex;padding:6px 16px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-100);">
+          <div style="min-width:120px;">姓名</div>
+          <div style="flex:1;display:flex;gap:12px;"><span style="width:50px;">${w?'新分配':'新建'}</span><span style="width:50px;">完成</span><span style="width:50px;">完成率</span></div>
+        </div>`;
+      for (const u of r.users) {
+        const cr = u.created || u.assigned || 0;
+        const cp = u.completed || 0;
+        const rate = cr > 0 ? Math.round((cp / cr) * 100) + '%' : '-';
+        html += `<div style="display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid var(--gray-100);">
+          <div style="min-width:120px;flex-shrink:0;">
+            <div style="font-size:13px;font-weight:500;color:#1f2937;">${escHtml(u.name)}</div>
+            <div style="font-size:11px;color:var(--gray-400);">${escHtml(u.userId)}</div>
+          </div>
+          <div style="flex:1;display:flex;gap:12px;align-items:center;">
+            <span style="width:50px;font-size:13px;font-weight:600;">${cr}</span>
+            <span style="width:50px;font-size:13px;font-weight:600;color:#065F46;">${cp}</span>
+            <span style="width:50px;font-size:12px;color:${rate === '-' ? 'var(--gray-400)' : '#374151'};">${rate}</span>
+          </div>
+          <div style="flex:1;max-width:100px;background:var(--gray-200);border-radius:4px;height:6px;overflow:hidden;">
+            <div style="background:#639922;width:${cr > 0 ? Math.min(100, (cp / cr) * 100) : 0}%;height:100%;border-radius:4px;"></div>
+          </div>
+        </div>`;
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    container.innerHTML = html;
+  } catch(e) { /* silently ignore - workload section is optional */ }
+}
+
+function switchDashWorkload(range) {
+  dashboardWorkloadRange = range;
+  loadDashboardWorkloadSection();
 }
 
 /** 通用角色状态面板（支持按部门分组）
@@ -1697,7 +1777,7 @@ function renderProjectSummary(projects, title) {
         <thead><tr><th>项目编号</th><th>需求方</th><th>产品企划</th><th>产品类目</th><th>目标市场</th><th>子任务数</th><th>进度</th><th>评分</th><th>要求时间</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>${display.map(o => {
           const st = getProjectStatusInfo(o.status);
-          return `<tr onclick="openProjectDetail(${o.id})" style="cursor:pointer;">
+          return `<tr style="cursor:pointer;">
             <td><strong>#${o.id}</strong></td>
             <td>${o.salesName || '-'}</td>
             <td>${o.plannerName || '<span style="color:var(--gray-400);">未指定</span>'}</td>
@@ -1738,7 +1818,7 @@ async function renderOrderList(main, type, role, uid) {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <h2 style="font-size:20px;">${title} <span style="font-size:13px;color:var(--gray-400);font-weight:400;">（${orders.length} 个）</span></h2>
       <div style="display:flex;gap:8px;">
-        ${currentRole === 'sales' ? `<button class="btn btn-primary" onclick="openCreateProject('channel_custom')">➕ 新建渠道定制项目</button>` : ''}
+        ${currentRole === 'sales' && type === 'channel_custom' ? `<button class="btn btn-primary" onclick="openCreateProject('channel_custom')">➕ 新建渠道定制项目</button>` : ''}
         ${currentRole === 'planner' && type === 'regular' ? `<button class="btn btn-primary" onclick="openCreateProject('regular')">➕ 新建常规品设计项目</button>` : ''}
       </div>
     </div>
@@ -1931,14 +2011,15 @@ async function renderScoringView(main, role, uid) {
       projectId: item.projectId,
       projectType: item.projectType,
       projectName: item.projectName,
+      plannedDate: item.plannedDate,
       designerId: item.designerId,
       designerName: item.designerName,
       selfScore: item.selfScore,
       selfAesthetics: item.selfAesthetics,
       selfInnovation: item.selfInnovation,
       scoringRecords: item.scoringRecords || [],
+      isPending: !!item.isPending,
     };
-    const isChannel = t.projectType === 'channel_custom';
     pendingTasks.push(t);
   }
 
@@ -2036,9 +2117,9 @@ function renderScoringCards(tasks) {
           <div style="font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:6px;">评分状态</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             ${allRoles.map(r => {
-              const scored = r.aesthetics !== null;
+              const scored = r.score != null;
               return `<span style="padding:4px 10px;border-radius:6px;font-size:12px;background:${scored ? 'var(--success-light)' : 'var(--warning-light)'};color:${scored ? 'var(--success)' : 'var(--warning)'};">
-                ${roleLabel(r.role)}: ${scored ? `✅ ${r.aesthetics}/${r.innovation}` : '⏳ 待评分'}
+                ${roleLabel(r.role)}: ${scored ? `✅ ${r.score}分` : '⏳ 待评分'}
               </span>`;
             }).join('')}
           </div>
@@ -2073,8 +2154,8 @@ async function renderDesignerTasks(main, uid) {
       } else if (isUnassigned && t.status === 'pending') {
         myTasks.push({ ...t, projectId: detail.id, projectType: detail.type, projectName: (detail.productRequirements || '').substring(0, 30), _unassigned: true });
       }
-      if (t.status === 'approved' && t.scoringRecords) {
-        const needScore = t.scoringRecords.some(sr => sr.aesthetics === null && (sr.role === 'designer' || sr.role === 'supplychain'));
+      if ((t.status === 'approved' || t.status === 'completed') && t.scoringRecords) {
+        const needScore = t.scoringRecords.some(sr => sr.score == null && (sr.role === 'designer' || sr.role === 'supplychain'));
         if (needScore && !myTasks.find(mt => mt.id === t.id)) {
           myTasks.push({ ...t, projectId: detail.id, projectType: detail.type, projectName: (detail.productRequirements || '').substring(0, 30) });
         }
@@ -2130,7 +2211,7 @@ function renderDesignerTaskCards(tasks) {
   return `<div class="card">
       ${tasks.map(t => {
         const tsi = getTaskStatusInfo(t.status);
-        const needScore = t.scoringRecords && t.scoringRecords.some(sr => sr.aesthetics === null && (sr.role === 'designer' || sr.role === 'supplychain'));
+        const needScore = t.scoringRecords && t.scoringRecords.some(sr => sr.score == null && (sr.role === 'designer' || sr.role === 'supplychain'));
         return `<div class="subtask-card" style="${t._unassigned ? 'border-left:3px solid var(--warning);' : ''}">
           <div class="subtask-header">
             <div class="subtask-name">${t._unassigned ? '📋' : tsi.icon} ${t.name}</div>
@@ -2158,27 +2239,35 @@ function renderDesignerTaskCards(tasks) {
     </div>`;
 }
 
-function renderScoringMini(task) {
+function renderScoringMini(task, isDone) {
   if (!task.scoringRecords || !task.scoringRecords.length) return '';
   const records = task.scoringRecords;
-  const allScored = records.filter(r => r.aesthetics !== null).length;
-
-  let ta = 0, ti = 0, tw = 0;
+      const allScored = records.filter(r => r.score != null).length;
+  let ta = 0, tw = 0;
   records.forEach(r => {
-    if (r.aesthetics !== null && r.innovation !== null) {
-      ta += r.aesthetics * r.weight;
-      ti += r.innovation * r.weight;
+    if (r.score != null) {
+      ta += r.score * r.weight;
       tw += r.weight;
     }
   });
-  const overall = tw > 0 ? ((ta + ti) / (tw * 2)).toFixed(1) : null;
+  const overall = tw > 0 ? (ta / tw).toFixed(0) : null;
+
+  if (isDone) {
+    return `<div style="margin-top:10px;padding:12px;background:#DCFCE7;border-radius:8px;border:1px solid #86EFAC;">
+      <div style="font-size:12px;font-weight:600;color:#166534;margin-bottom:6px;">⭐ 评分 (${allScored}/${records.length}人)</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;">
+        ${records.map(r => `<span style="background:#fff;padding:2px 8px;border-radius:4px;">${roleLabel(r.role)}: ${r.score != null ? `✅ ${r.score}分` : '<span style="color:var(--gray-400);">⏳ 待评</span>'}</span>`).join('')}
+      </div>
+      ${overall ? `<div style="margin-top:8px;text-align:center;"><span style="font-size:12px;color:#15803D;">加权综合：</span><span style="font-size:24px;font-weight:700;color:#16A34A;">${overall}分</span></div>` : ''}
+    </div>`;
+  }
 
   return `<div style="margin-top:10px;padding:12px;background:var(--primary-light);border-radius:8px;">
     <div style="font-size:12px;font-weight:600;color:var(--primary);margin-bottom:6px;">⭐ 评分 (${allScored}/${records.length}人)</div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;">
-      ${records.map(r => `<span style="background:#fff;padding:2px 8px;border-radius:4px;">${roleLabel(r.role)}: ${r.aesthetics !== null ? `✅ ${r.aesthetics}/${r.innovation}` : '<span style="color:var(--gray-400);">⏳ 待评</span>'}</span>`).join('')}
+      ${records.map(r => `<span style="background:#fff;padding:2px 8px;border-radius:4px;">${roleLabel(r.role)}: ${r.score != null ? `✅ ${r.score}分` : '<span style="color:var(--gray-400);">⏳ 待评</span>'}</span>`).join('')}
     </div>
-    ${overall ? `<div style="margin-top:8px;text-align:center;"><span style="font-size:12px;color:var(--gray-500);">综合：</span><span style="font-size:24px;font-weight:700;color:var(--primary);">${overall}</span></div>` : ''}
+    ${overall ? `<div style="margin-top:8px;text-align:center;"><span style="font-size:12px;color:var(--gray-500);">加权综合：</span><span style="font-size:24px;font-weight:700;color:var(--primary);">${overall}分</span></div>` : ''}
   </div>`;
 }
 
@@ -2358,15 +2447,20 @@ function renderFileList(list, typeLabel) {
   if (!c) return;
   if (!list.length) { c.innerHTML = ''; return; }
 
+  // 为图片 URL 追加 token（<img> 标签无法发送 X-Auth-Token 头）
+  const token = localStorage.getItem('design_pm_token');
+  const authUrl = u => u + (u.includes('?') ? '&' : '?') + 'token=' + token;
+
   if (isImage) {
     c.innerHTML = `<div class="image-preview">${list.map((img, i) =>
       `<div style="position:relative;display:inline-block;">
-        <img src="${img.url}" alt="${img.name}" class="img-clickable" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+        <img src="${authUrl(img.url)}" alt="${img.name}" class="img-clickable" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+        <button onclick="event.stopPropagation();showDownloadOptions('${escHtml(img.url)}','${escHtml(img.name)}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:20px;height:20px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
         <button style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onclick="removeFileItem('${suffix}',${i},${isImage})">✕</button>
       </div>`).join('')}</div>`;
   } else {
     c.innerHTML = list.map((f, i) =>
-      `<div class="file-item"><span>📎 ${f.name}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(f.size)}</span><button class="remove-file" onclick="removeFileItem('${suffix}',${i},${isImage})">✕</button></div>`
+      `<div class="file-item"><span>📎 ${f.name}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(f.size)}</span><button style="margin-left:4px;padding:2px 6px;border-radius:4px;background:var(--primary-light);color:var(--primary);font-size:12px;border:none;cursor:pointer;" onclick="showDownloadOptions('${escHtml(f.url)}','${escHtml(f.name)}',${f.size || 0})" title="下载选项">⬇</button><button class="remove-file" onclick="removeFileItem('${suffix}',${i},${isImage})">✕</button></div>`
     ).join('');
   }
 }
@@ -2380,12 +2474,12 @@ function removeFileItem(suffix, idx, isImage) {
     else _deliverAttachments.splice(idx, 1);
   }
   renderFileList(isImage ? (suffix === 'Create' ? _createRefImages : _deliverImages) : (suffix === 'Create' ? _createAttachments : _deliverAttachments),
-    isImage ? (suffix === 'Create' ? '参考图片' : '交付参考图') : '附件');
+    isImage ? (suffix === 'Create' ? '参考图片' : '交付参考图片') : '附件');
 }
 
 function handleCreateRefImages(input) { handleFileUpload(input, _createRefImages, 9, '参考图片', true); }
 function handleCreateAttachments(input) { handleFileUpload(input, _createAttachments, 5, '附件', false); }
-function handleDeliverImages(input) { handleFileUpload(input, _deliverImages, 9, '交付参考图', true); }
+function handleDeliverImages(input) { handleFileUpload(input, _deliverImages, 9, '交付参考图片', true); }
 function handleDeliverAttachments(input) { handleFileUpload(input, _deliverAttachments, 5, '交付附件', false); }
 
 // ==================== 产品类目 / 目标市场选择 ====================
@@ -2457,7 +2551,7 @@ window.switchAssigneeType = function(prefix, role, el) {
 
 // 编辑子任务时切换负责人类型
 window.switchEditAssigneeType = function(role, el) {
-  document.querySelectorAll('#editSubTaskForm .checkbox-item').forEach(c => c.classList.remove('checked'));
+  document.querySelectorAll('#editTaskForm .checkbox-item').forEach(c => c.classList.remove('checked'));
   el.classList.add('checked');
   document.getElementById('editSubTaskAssigneeRole').value = role;
   const sel = document.getElementById('editSubTaskDesignerId');
@@ -2773,7 +2867,7 @@ window.addEventListener('beforeunload', function() {
 
 // ==================== 项目详情 ====================
 async function openProjectDetail(pid) {
-  if (document.getElementById('projectDetailModal')) return;
+  if (!tryOpenModal('projectDetailModal')) return;
   try {
     const detail = await apiGet(`/projects/${pid}`);
 
@@ -2790,7 +2884,9 @@ async function openProjectDetail(pid) {
         <div class="modal-footer" id="detailActions">${renderProjectActions(detail)}</div>
       </div>`;
     document.body.appendChild(modal);
+    doneOpenModal('projectDetailModal');
   } catch (e) {
+    doneOpenModal('projectDetailModal');
     alert('加载失败: ' + e.message);
   }
 }
@@ -2803,7 +2899,7 @@ function renderProjectDetailContent(detail) {
   const doneTasks = detail.tasks.filter(t => {
     if (!doneStatuses.includes(t.status)) return false;
     if (t.scoringRecords && t.scoringRecords.length > 0) {
-      return t.scoringRecords.every(r => r.aesthetics !== null && r.innovation !== null);
+      return t.scoringRecords.every(r => r.score != null);
     }
     return false;
   }).length;
@@ -2894,9 +2990,11 @@ function renderSubTaskCard(detail, task, idx) {
   const tsi = getTaskStatusInfo(task.status);
   const isPlanner = currentRole === 'planner';
   const myTask = ['designer', 'supplychain', 'planner'].includes(currentRole) && task.designerId === getCurrentUserId();
-  const needScore = task.scoringRecords && task.scoringRecords.some(sr => sr.aesthetics === null && sr.role === currentRole);
+  const needScore = task.scoringRecords && task.scoringRecords.some(sr => sr.score == null && sr.role === currentRole);
+  const doneStatuses = ['approved', 'completed', 'sales_approved', 'admin_approved'];
+  const isDone = doneStatuses.includes(task.status);
 
-  return `<div class="subtask-card">
+  return `<div class="subtask-card${isDone ? ' completed' : ''}">
     <div class="subtask-header">
       <div class="subtask-name"><span class="subtask-number">${idx + 1}</span> ${task.name}</div>
       <span class="badge ${tsi.cls}">${tsi.label}</span>
@@ -2910,14 +3008,14 @@ function renderSubTaskCard(detail, task, idx) {
     ${task.referenceImagesJson ? renderSubTaskImages(task.referenceImagesJson) : ''}
     ${task.attachmentsJson ? renderTaskAttachments(task.attachmentsJson) : ''}
 
-    ${task.status === 'delivered' || task.status === 'planner_approved' || task.status === 'approved' || task.status === 'rejected' ? `
+    ${task.status === 'delivered' || task.status === 'planner_approved' || task.status === 'sales_approved' || task.status === 'admin_approved' || task.status === 'approved' || task.status === 'completed' || task.status === 'rejected' ? `
     <div class="subtask-deliver">
       ${task.deliverables ? `<div class="detail-item"><div class="detail-label">交付成果</div><div class="detail-value">${task.deliverables}</div></div>` : ''}
     </div>` : ''}
 
     ${task.reviewComments ? `<div class="review-box ${task.status === 'rejected' ? 'rejected' : 'approved'}"><strong>${task.status === 'rejected' ? '驳回意见' : '验收意见'}：</strong>${task.reviewComments}</div>` : ''}
 
-    ${task.scoringRecords && (task.status === 'approved' || task.status === 'planner_approved') ? renderScoringMini(task) : ''}
+    ${task.scoringRecords && ['planner_approved', 'sales_approved', 'admin_approved', 'approved', 'completed'].includes(task.status) ? renderScoringMini(task, isDone) : ''}
 
     <div class="subtask-actions">
       ${/* 企划验收（首轮）：常规品直接通过；渠道定制单进入企划确认状态 */''}
@@ -2928,6 +3026,10 @@ function renderSubTaskCard(detail, task, idx) {
       ${/* 渠道定制单：销售第二轮确认 */''}
       ${currentRole === 'sales' && detail.type === 'channel_custom' && task.status === 'planner_approved' ? `
         <button class="btn btn-success btn-sm" onclick="taskApprove(${detail.id},${task.id},'channel_custom')">✅ 销售确认通过</button>
+        <button class="btn btn-danger btn-sm" onclick="taskReject(${detail.id},${task.id})">↩️ 驳回</button>
+      ` : ''}
+      ${currentRole === 'admin' && detail.type !== 'channel_custom' && task.status === 'planner_approved' ? `
+        <button class="btn btn-success btn-sm" onclick="taskApprove(${detail.id},${task.id},'regular')">✅ 管理确认通过</button>
         <button class="btn btn-danger btn-sm" onclick="taskReject(${detail.id},${task.id})">↩️ 驳回</button>
       ` : ''}
       ${myTask && task.status === 'pending' ? `<button class="btn btn-primary btn-sm" onclick="taskAccept(${detail.id},${task.id})">✅ 接单</button>` : ''}
@@ -2977,8 +3079,9 @@ function renderProjectActions(detail) {
   }
   // 管理员可永久删除项目
   if (currentRole === 'admin') {
-    actions += `<button class="btn btn-danger btn-sm" onclick="deleteProject(${detail.id})" style="margin-right:auto;" title="永久删除项目和所有关联数据">🗑️ 删除</button>`;
+    actions += `<button class="btn btn-danger btn-sm" onclick="deleteProject(${detail.id})" title="永久删除项目和所有关联数据">🗑️ 删除</button>`;
   }
+  actions += `<button class="btn btn-outline btn-sm" onclick="shareProject(${detail.id})">🔗 分享</button>`;
   actions += `<button class="btn btn-outline" onclick="closeM('projectDetailModal')">关闭</button>`;
   return actions;
 }
@@ -3031,11 +3134,13 @@ function renderProjectReferenceImages(detail) {
   let imgs;
   try { imgs = JSON.parse(detail.referenceImagesJson); } catch(e) { return ''; }
   if (!imgs || !imgs.length) return '';
+  const token = localStorage.getItem('design_pm_token');
+  const authUrl = u => u + (u.includes('?') ? '&' : '?') + 'token=' + token;
   return `<div style="margin-top:8px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => `<div style="position:relative;display:inline-block;">
-          <img src="${img.url}" alt="${img.name || ''}" title="${img.name || ''}" class="img-clickable" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
-          <a href="${img.url}" download="${img.name || 'image.png'}" title="下载 ${img.name || ''}" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;" onclick="event.stopPropagation();">⬇</a>
+          <img src="${authUrl(img.url)}" alt="${img.name || ''}" title="${img.name || ''}" class="img-clickable" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+          <button onclick="event.stopPropagation();showDownloadOptions('${img.url}','${escHtml(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>`).join('')}
     </div></div>`;
 }
@@ -3046,11 +3151,13 @@ function renderSubTaskImages(jsonStr) {
   let imgs;
   try { imgs = JSON.parse(jsonStr); } catch(e) { return ''; }
   if (!imgs || !imgs.length) return '';
+  const token = localStorage.getItem('design_pm_token');
+  const authUrl = u => u + (u.includes('?') ? '&' : '?') + 'token=' + token;
   return `<div style="margin-top:8px;padding-left:4px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => `<div style="position:relative;display:inline-block;">
-          <img src="${img.url}" alt="${img.name || ''}" class="img-clickable" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--gray-200);cursor:pointer;">
-          <a href="${img.url}" download="${img.name || 'image.png'}" title="下载 ${img.name || ''}" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;" onclick="event.stopPropagation();">⬇</a>
+          <img src="${authUrl(img.url)}" alt="${img.name || ''}" class="img-clickable" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--gray-200);cursor:pointer;">
+          <button onclick="event.stopPropagation();showDownloadOptions('${img.url}','${escHtml(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>`).join('')}
     </div></div>`;
 }
@@ -3065,7 +3172,7 @@ function renderProjectAttachments(detail) {
     ${atts.map(a => `<div class="attachment-item" style="margin-top:4px;display:flex;align-items:center;gap:8px;">
       <span>📎</span><span class="attachment-name" style="flex:1;">${a.name}</span>
       ${a.size ? `<span class="attachment-size">${fmtSize(a.size)}</span>` : ''}
-      <a href="${a.url}" download="${a.name}" style="text-decoration:none;padding:2px 8px;border-radius:4px;background:var(--primary-light);color:var(--primary);font-size:12px;white-space:nowrap;">⬇ 下载</a>
+      <button onclick="showDownloadOptions('${a.url}','${escHtml(a.name)}',${a.size || 0})" style="padding:2px 8px;border-radius:4px;background:var(--primary-light);color:var(--primary);font-size:12px;white-space:nowrap;border:none;cursor:pointer;">⬇ 下载</button>
     </div>`).join('')}
     </div>`;
 }
@@ -3082,13 +3189,15 @@ function renderTaskAttachments(jsonStr) {
   const files = atts.filter(a => !a.name || !a.name.match(/\.(png|jpe?g|gif|webp|svg|bmp)$/i));
 
   let html = '';
+  const token = localStorage.getItem('design_pm_token');
+  const authUrl = u => u + (u.includes('?') ? '&' : '?') + 'token=' + token;
   // 图片预览
   if (images.length) {
     html += `<div style="margin-top:8px;"><div class="detail-label">🖼️ 交付图片</div>
       <div class="image-preview" style="margin-top:4px;">
         ${images.map(img => `<div style="position:relative;display:inline-block;">
-            <img src="${img.url}" alt="${img.name || ''}" class="img-clickable" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
-            <a href="${img.url}" download="${img.name || 'image.png'}" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;" onclick="event.stopPropagation();">⬇</a>
+            <img src="${authUrl(img.url)}" alt="${img.name || ''}" class="img-clickable" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+            <button onclick="event.stopPropagation();showDownloadOptions('${img.url}','${escHtml(img.name || 'image.png')}',${img.size || 0})" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
         </div>`).join('')}
       </div></div>`;
   }
@@ -3098,7 +3207,7 @@ function renderTaskAttachments(jsonStr) {
       ${files.map(a => `<div class="attachment-item" style="margin-top:4px;display:flex;align-items:center;gap:8px;">
         <span>📎</span><span class="attachment-name" style="flex:1;">${a.name}</span>
         ${a.size ? `<span class="attachment-size">${fmtSize(a.size)}</span>` : ''}
-        <a href="${a.url}" download="${a.name}" style="text-decoration:none;padding:2px 8px;border-radius:4px;background:var(--primary-light);color:var(--primary);font-size:12px;white-space:nowrap;">⬇ 下载</a>
+        <button onclick="showDownloadOptions('${a.url}','${escHtml(a.name)}',${a.size || 0})" style="padding:2px 8px;border-radius:4px;background:var(--primary-light);color:var(--primary);font-size:12px;white-space:nowrap;border:none;cursor:pointer;">⬇ 下载</button>
       </div>`).join('')}
       </div>`;
   }
@@ -3106,26 +3215,25 @@ function renderTaskAttachments(jsonStr) {
 }
 
 function renderProjectScoringSummary(detail) {
-  const approvedTasks = detail.tasks.filter(t => t.status === 'approved' && t.scoringRecords && t.scoringRecords.length > 0);
+  const approvedTasks = detail.tasks.filter(t => ['approved', 'completed', 'sales_approved', 'admin_approved'].includes(t.status) && t.scoringRecords && t.scoringRecords.length > 0);
   if (approvedTasks.length === 0) return '';
-  const allScoredTasks = approvedTasks.filter(t => t.scoringRecords.every(sr => sr.aesthetics !== null));
+  const allScoredTasks = approvedTasks.filter(t => t.scoringRecords.every(sr => sr.score != null));
 
   let html = `<div class="detail-section"><div class="detail-section-title">⭐ 项目评分汇总 <span style="font-size:12px;color:var(--gray-400);font-weight:400;">${allScoredTasks.length}/${approvedTasks.length} 已完成</span></div>`;
   approvedTasks.forEach((task, i) => {
     const records = task.scoringRecords;
-    let ta = 0, ti = 0, tw = 0;
+    let ta = 0, tw = 0;
     records.forEach(r => {
-      if (r.aesthetics !== null && r.innovation !== null) {
-        ta += r.aesthetics * r.weight;
-        ti += r.innovation * r.weight;
+      if (r.score != null) {
+        ta += r.score * r.weight;
         tw += r.weight;
       }
     });
-    const final = tw > 0 ? ((ta + ti) / (tw * 2)).toFixed(1) : null;
+    const final = tw > 0 ? (ta / tw).toFixed(0) : null;
     html += `<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--gray-50);border-radius:6px;margin-bottom:6px;font-size:13px;">
       <span style="font-weight:600;">#${i + 1} ${task.name}</span>
       <span style="flex:1;"></span>
-      ${final ? `<span style="font-size:16px;font-weight:700;color:var(--primary);">${final}</span>` : `<span style="color:var(--gray-400);">评分中…</span>`}
+      ${final ? `<span style="font-size:16px;font-weight:700;color:var(--primary);">${final}分</span>` : `<span style="color:var(--gray-400);">评分中…</span>`}
     </div>`;
   });
   html += `</div>`;
@@ -3209,6 +3317,7 @@ function renderProjectPipeline(detail) {
 
     // 子任务层面分析
     const pendingTasks = tasks.filter(t => t.status === 'pending');
+    const unassignedTasks = tasks.filter(t => t.status === 'pending' && (!t.designerId || t.designerId === ''));
     const acceptedTasks = tasks.filter(t => t.status === 'accepted');
     const deliveredTasks = tasks.filter(t => t.status === 'delivered');
     const plannerApprovedTasks = tasks.filter(t => t.status === 'planner_approved');
@@ -3233,8 +3342,8 @@ function renderProjectPipeline(detail) {
       const names = acceptedTasks.map(t => t.name).join('、');
       return { color: '#854F0B', bg: '#FAEEDA', border: '#FAC775', icon: '💡', title: '等待交付', text: '子任务「' + names + '」正在执行中，等待设计师交付成果。' };
     }
-    if (pendingTasks.length > 0) {
-      return { color: '#854F0B', bg: '#FAEEDA', border: '#FAC775', icon: '💡', title: '等待分配子任务', text: '还有 ' + pendingTasks.length + ' 个子任务未指派，请先指派负责人。' };
+    if (unassignedTasks.length > 0) {
+      return { color: '#854F0B', bg: '#FAEEDA', border: '#FAC775', icon: '💡', title: '等待分配子任务', text: '还有 ' + unassignedTasks.length + ' 个子任务未指派，请先指派负责人。' };
     }
     return null;
   }
@@ -3476,11 +3585,10 @@ async function submitAddSubTask(pid) {
 }
 
 function editTask(pid, tid) {
-  if (isModalOpen()) return;
-  if (document.getElementById('editTaskModal')) return;
+  if (!tryOpenModal('editTaskModal')) return;
   apiGet(`/projects/${pid}`).then(detail => {
     const task = detail.tasks.find(t => t.id === tid);
-    if (!task) return;
+    if (!task) { doneOpenModal('editTaskModal'); return; }
     // 加载现有图片和附件
     _editTaskRefImages = [];
     _editTaskAttachments = [];
@@ -3519,8 +3627,8 @@ function editTask(pid, tid) {
             </div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 负责人类型</label>
               <div style="display:flex;gap:16px;">
-                <label class="checkbox-item ${task.assigneeRole !== 'supplychain' ? 'checked' : ''}" style="cursor:pointer;" onclick="switchEditAssigneeType('designer', this)">
-                  <input type="radio" name="assigneeRole" value="designer" ${task.assigneeRole !== 'supplychain' ? 'checked' : ''} style="display:none;"> 👨‍🎨 设计师
+                <label class="checkbox-item ${task.assigneeRole === 'designer' || !task.assigneeRole ? 'checked' : ''}" style="cursor:pointer;" onclick="switchEditAssigneeType('designer', this)">
+                  <input type="radio" name="assigneeRole" value="designer" ${task.assigneeRole === 'designer' || !task.assigneeRole ? 'checked' : ''} style="display:none;"> 👨‍🎨 设计师
                 </label>
                 <label class="checkbox-item ${task.assigneeRole === 'supplychain' ? 'checked' : ''}" style="cursor:pointer;" onclick="switchEditAssigneeType('supplychain', this)">
                   <input type="radio" name="assigneeRole" value="supplychain" ${task.assigneeRole === 'supplychain' ? 'checked' : ''} style="display:none;"> 🛒 供应链
@@ -3556,10 +3664,11 @@ function editTask(pid, tid) {
         <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('editTaskModal')">取消</button><button class="btn btn-primary" onclick="submitGuard(this,()=>submitEditTask('${pid}','${tid}'))">保存修改</button></div>
       </div>`;
     document.body.appendChild(modal);
+    doneOpenModal('editTaskModal');
     // 渲染现有文件
     if (_editTaskRefImages.length) renderFileList(_editTaskRefImages, '编辑参考图片');
     if (_editTaskAttachments.length) renderFileList(_editTaskAttachments, '编辑附件');
-  });
+  }).catch(() => doneOpenModal('editTaskModal'));
 }
 
 let _editTaskRefImages = [];
@@ -3621,7 +3730,9 @@ async function taskAccept(pid, tid) {
         <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskAcceptModal')">取消</button><button class="btn btn-primary" onclick="submitGuard(this,()=>submitTaskAccept(${pid},${tid}))">确认接单</button></div>
       </div>`;
     document.body.appendChild(modal);
+    doneOpenModal('taskDeliverModal');
   } catch (e) {
+    doneOpenModal('taskDeliverModal');
     alert('加载失败: ' + e.message);
   }
 }
@@ -3646,7 +3757,7 @@ async function submitTaskAccept(pid, tid) {
 }
 
 async function taskDeliver(pid, tid) {
-  if (document.getElementById('taskDeliverModal')) return;
+  if (!tryOpenModal('taskDeliverModal')) return;
   try {
     const detail = await apiGet(`/projects/${pid}`);
     const task = detail.tasks.find(t => t.id === tid);
@@ -3666,13 +3777,9 @@ async function taskDeliver(pid, tid) {
             <input type="hidden" name="actualDate">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required placeholder="描述交付的设计成果..." style="min-height:100px;"></textarea></div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 自评分数</label>
-              <div style="display:flex;gap:16px;">
-                <div style="flex:1;"><label style="font-size:11px;color:var(--gray-400);display:block;margin-bottom:4px;">🎨 审美评分</label>
-                  <input type="number" class="form-input" name="selfAesthetics" required placeholder="1.0-10.0" min="1" max="10" step="0.1" style="text-align:center;" oninput="validateScoreInput(this)">
-                </div>
-                <div style="flex:1;"><label style="font-size:11px;color:var(--gray-400);display:block;margin-bottom:4px;">💡 创新评分</label>
-                  <input type="number" class="form-input" name="selfInnovation" required placeholder="1.0-10.0" min="1" max="10" step="0.1" style="text-align:center;" oninput="validateScoreInput(this)">
-                </div>
+              <div style="max-width:200px;">
+                <input type="number" class="form-input" name="selfScore" required placeholder="1-100" min="1" max="100" step="1" style="text-align:center;font-size:18px;" oninput="validateScoreInput(this)">
+                <div style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:4px;">总分100分，填写1-100的整数</div>
               </div>
             </div>
           </form>
@@ -3701,20 +3808,17 @@ async function taskDeliver(pid, tid) {
   }
 }
 
-// ===== 自评分数输入校验：1.0-10.0，最多1位小数 =====
+// ===== 自评分数输入校验：1-100，整数 =====
 window.validateScoreInput = function(input) {
   let val = input.value.trim();
   if (val === '') { input.setCustomValidity(''); return; }
-  // 允许输入中的中间态（如空、负号、小数点开头）
-  if (val === '-' || val === '.' || val === '-.') return;
-  const num = parseFloat(val);
-  if (isNaN(num) || num < 1 || num > 10) {
-    input.setCustomValidity('请输入 1.0 ~ 10.0 之间的分数');
+  const num = parseInt(val);
+  if (isNaN(num) || num < 1 || num > 100) {
+    input.setCustomValidity('请输入 1 ~ 100 之间的整数分数');
   } else {
-    // 检查小数位数
-    const dec = val.includes('.') ? val.split('.')[1].length : 0;
-    if (dec > 1) {
-      input.setCustomValidity('最多1位小数');
+    // 检查是否为整数（不允许小数）
+    if (val.includes('.') || val.includes(',')) {
+      input.setCustomValidity('不允许小数点，请输入整数');
     } else {
       input.setCustomValidity('');
     }
@@ -3726,24 +3830,20 @@ async function submitTaskDeliver(pid, tid) {
   if (_uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
   const fd = new FormData(document.getElementById('taskDeliverForm'));
   const data = Object.fromEntries(fd.entries());
-  // 自动填写实际完成时间为当前时间
   data.actualDate = new Date().toISOString().split('T')[0];
   if (!data.deliverables) { alert('请填写交付成果描述'); return; }
-  const selfAes = parseFloat(data.selfAesthetics);
-  const selfInn = parseFloat(data.selfInnovation);
-  if (isNaN(selfAes) || selfAes < 1 || selfAes > 10) { alert('请输入有效的审美自评分（1.0-10.0）'); return; }
-  if (isNaN(selfInn) || selfInn < 1 || selfInn > 10) { alert('请输入有效的创新自评分（1.0-10.0）'); return; }
-  data.selfAesthetics = Math.round(selfAes * 10) / 10;
-  data.selfInnovation = Math.round(selfInn * 10) / 10;
+  const selfScore = parseInt(data.selfScore);
+  if (isNaN(selfScore) || selfScore < 1 || selfScore > 100) { alert('请输入有效的自评分（1-100分）'); return; }
+  data.selfScore = selfScore;
   data.currentUser = getCurrentUserName();
   data.currentRole = currentRole;
-  // 组装上传文件（改用url引用）
-  data.attachmentsJson = JSON.stringify([..._deliverImages.map(i => ({ name: i.name, url: i.url, size: i.size, storedName: i.storedName })), ..._deliverAttachments]);
+  data.currentUserId = currentUserId;
+  data.referenceImagesJson = JSON.stringify(_deliverImages.map(i => ({ name: i.name, url: i.url, size: i.size, storedName: i.storedName })));
+  data.attachmentsJson = JSON.stringify(_deliverAttachments);
 
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/deliver`, data);
     closeM('taskDeliverModal');
-    document.getElementById('projectDetailModal')?.remove();
     await refreshAfterMutation(pid);
   } catch (e) {
     alert('交付失败: ' + e.message);
@@ -3751,7 +3851,7 @@ async function submitTaskDeliver(pid, tid) {
 }
 
 async function taskRedeliver(pid, tid) {
-  if (document.getElementById('taskRedeliverModal')) return;
+  if (!tryOpenModal('taskRedeliverModal')) return;
   try {
     const detail = await apiGet(`/projects/${pid}`);
     const task = detail.tasks.find(t => t.id === tid);
@@ -3772,13 +3872,9 @@ async function taskRedeliver(pid, tid) {
             <input type="hidden" name="actualDate">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required style="min-height:100px;"></textarea></div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 自评分数</label>
-              <div style="display:flex;gap:16px;">
-                <div style="flex:1;"><label style="font-size:11px;color:var(--gray-400);display:block;margin-bottom:4px;">🎨 审美评分</label>
-                  <input type="number" class="form-input" name="selfAesthetics" required placeholder="1.0-10.0" min="1" max="10" step="0.1" style="text-align:center;" oninput="validateScoreInput(this)">
-                </div>
-                <div style="flex:1;"><label style="font-size:11px;color:var(--gray-400);display:block;margin-bottom:4px;">💡 创新评分</label>
-                  <input type="number" class="form-input" name="selfInnovation" required placeholder="1.0-10.0" min="1" max="10" step="0.1" style="text-align:center;" oninput="validateScoreInput(this)">
-                </div>
+              <div style="max-width:200px;">
+                <input type="number" class="form-input" name="selfScore" required placeholder="1-100" min="1" max="100" step="1" style="text-align:center;font-size:18px;" oninput="validateScoreInput(this)">
+                <div style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:4px;">总分100分，填写1-100的整数</div>
               </div>
             </div>
           </form>
@@ -3802,7 +3898,9 @@ async function taskRedeliver(pid, tid) {
         <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskRedeliverModal')">取消</button><button class="btn btn-primary" onclick="submitGuard(this,()=>submitTaskRedeliver(${pid},${tid}))">确认交付</button></div>
       </div>`;
     document.body.appendChild(modal);
+    doneOpenModal('taskRedeliverModal');
   } catch (e) {
+    doneOpenModal('taskRedeliverModal');
     alert('加载失败: ' + e.message);
   }
 }
@@ -3811,18 +3909,16 @@ async function submitTaskRedeliver(pid, tid) {
   if (_uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
   const fd = new FormData(document.getElementById('taskRedeliverForm'));
   const data = Object.fromEntries(fd.entries());
-  // 自动填写实际完成时间为当前时间
   data.actualDate = new Date().toISOString().split('T')[0];
   if (!data.deliverables) { alert('请填写交付成果描述'); return; }
-  const reAes = parseFloat(data.selfAesthetics);
-  const reInn = parseFloat(data.selfInnovation);
-  if (isNaN(reAes) || reAes < 1 || reAes > 10) { alert('请输入有效的审美自评分（1.0-10.0）'); return; }
-  if (isNaN(reInn) || reInn < 1 || reInn > 10) { alert('请输入有效的创新自评分（1.0-10.0）'); return; }
-  data.selfAesthetics = Math.round(reAes * 10) / 10;
-  data.selfInnovation = Math.round(reInn * 10) / 10;
+  const selfScore = parseInt(data.selfScore);
+  if (isNaN(selfScore) || selfScore < 1 || selfScore > 100) { alert('请输入有效的自评分（1-100分）'); return; }
+  data.selfScore = selfScore;
   data.currentUser = getCurrentUserName();
   data.currentRole = currentRole;
-  data.attachmentsJson = JSON.stringify([..._deliverImages.map(i => ({ name: i.name, url: i.url, size: i.size, storedName: i.storedName })), ..._deliverAttachments]);
+  data.currentUserId = currentUserId;
+  data.referenceImagesJson = JSON.stringify(_deliverImages.map(i => ({ name: i.name, url: i.url, size: i.size, storedName: i.storedName })));
+  data.attachmentsJson = JSON.stringify(_deliverAttachments);
 
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/redeliver`, data);
@@ -3835,14 +3931,18 @@ async function submitTaskRedeliver(pid, tid) {
 
 // ==================== 验收 ====================
 function taskApprove(pid, tid, projectType) {
-  if (document.getElementById('taskApproveModal')) return;
+  if (!tryOpenModal('taskApproveModal')) return;
   apiGet(`/projects/${pid}`).then(detail => {
     const task = detail.tasks.find(t => t.id === tid);
     if (!task) return;
 
     const isChannel = projectType === 'channel_custom';
     const isSalesConfirm = currentRole === 'sales';
-    const title = isSalesConfirm ? '✅ 销售确认评分通过' : (isChannel ? '👍 企划确认评分通过' : '✅ 验收通过');
+    const isAdminConfirm = currentRole === 'admin' && !isChannel;
+    const needsScore = currentRole === 'planner' || isSalesConfirm || isAdminConfirm;
+    const title = isSalesConfirm
+      ? '✅ 销售确认评分通过'
+      : (isAdminConfirm ? '✅ 管理确认评分通过' : (isChannel ? '👍 企划确认评分通过' : '✅ 验收评分通过'));
 
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
@@ -3851,41 +3951,32 @@ function taskApprove(pid, tid, projectType) {
       <div class="modal">
         <div class="modal-header"><div class="modal-header-left"><div class="modal-title">${title}：${task.name}</div></div></div>
         <div class="modal-body">
-          <p style="margin-bottom:12px;">${isSalesConfirm ? '销售确认该子任务通过并评分？' : (isChannel ? '企划确认该子任务通过并评分？之后需销售再次确认评分。' : '确认该子任务验收通过？')}</p>
-          ${isChannel ? `
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label"><span class="required">*</span> 审美评分</label>
-              <input type="number" class="form-input" id="approveAesthetics" min="1" max="10" step="0.1" placeholder="1-10" required>
-            </div>
-            <div class="form-group">
-              <label class="form-label"><span class="required">*</span> 创新评分</label>
-              <input type="number" class="form-input" id="approveInnovation" min="1" max="10" step="0.1" placeholder="1-10" required>
-            </div>
-          </div>` : ''}
+          <p style="margin-bottom:12px;">${isSalesConfirm ? '销售确认该子任务通过并评分？' : (isAdminConfirm ? '管理确认该子任务通过并评分？' : (isChannel ? '企划确认该子任务通过并评分？之后需销售再次确认评分。' : '企划确认该子任务验收通过并评分？之后需管理再次确认。'))}</p>
+          ${needsScore ? `
+          <div class="form-group">
+              <label class="form-label"><span class="required">*</span> 综合评分</label>
+              <input type="number" class="form-input" id="approveScore" min="1" max="100" step="1" placeholder="1-100" required style="max-width:200px;text-align:center;">
+              <div style="font-size:11px;color:var(--gray-400);margin-top:4px;">总分100分，填写1-100的整数</div>
+            </div>` : ''}
           <div class="form-group"><label class="form-label">验收意见（可选）</label><textarea class="form-textarea" id="approveComments" placeholder="输入验收意见..."></textarea></div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskApproveModal')">取消</button><button class="btn btn-success" onclick="submitGuard(this,()=>submitTaskApprove(${pid},${tid},'${projectType}'))">${isChannel ? '确认通过并评分' : '确认通过'}</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('taskApproveModal')">取消</button><button class="btn btn-success" onclick="submitGuard(this,()=>submitTaskApprove(${pid},${tid},'${projectType}'))">${needsScore ? '确认通过并评分' : '确认通过'}</button></div>
       </div>`;
     document.body.appendChild(modal);
   });
 }
 
 async function submitTaskApprove(pid, tid) {
-  const aesthetics = parseFloat(document.getElementById('approveAesthetics')?.value);
-  const innovation = parseFloat(document.getElementById('approveInnovation')?.value);
-  // 常规品非渠道项目没有评分输入框，不走评分验证
-  const hasScoreFields = document.getElementById('approveAesthetics') && document.getElementById('approveInnovation');
+  const scoreVal = parseInt(document.getElementById('approveScore')?.value);
+  const hasScoreFields = document.getElementById('approveScore') !== null;
   if (hasScoreFields) {
-    if (isNaN(aesthetics) || aesthetics < 1 || aesthetics > 10) { alert('请输入有效的审美评分（1-10）'); return; }
-    if (isNaN(innovation) || innovation < 1 || innovation > 10) { alert('请输入有效的创新评分（1-10）'); return; }
+    if (isNaN(scoreVal) || scoreVal < 1 || scoreVal > 100) { alert('请输入有效的评分（1-100）'); return; }
   }
   const comments = document.getElementById('approveComments')?.value || '';
 
   const data = {
     comments: comments,
-    aesthetics: hasScoreFields ? aesthetics : null,
-    innovation: hasScoreFields ? innovation : null,
+    score: hasScoreFields ? scoreVal : null,
     currentUser: getCurrentUserName(),
     currentRole: currentRole,
   };
@@ -3934,7 +4025,7 @@ async function submitTaskReject(pid, tid) {
 
 // ==================== 评分 ====================
 function openScoring(pid, tid) {
-  if (document.getElementById('scoringModal')) return;
+  if (!tryOpenModal('scoringModal')) return;
   apiGet(`/projects/${pid}`).then(detail => {
     const task = detail.tasks.find(t => t.id === tid);
     if (!task || !task.scoringRecords) return;
@@ -3949,10 +4040,9 @@ function openScoring(pid, tid) {
         <div class="modal-header"><button class="modal-close" onclick="closeM('scoringModal')">✕</button><div class="modal-header-left"><div class="modal-title">⭐ 评分：${task.name}</div></div></div>
         <div class="modal-body">
           <p style="margin-bottom:8px;color:var(--gray-500);">评分人：<strong>${roleLabel(currentRole)}</strong>（${getCurrentUserName()}）</p>
-          <p style="margin-bottom:16px;color:var(--gray-500);">请对 <strong>${task.name}</strong> 的审美和创新打分（1-10分）</p>
-          <div style="display:flex;gap:24px;">
-            <div class="form-group" style="flex:1;"><label class="form-label">🎨 审美评分</label><input type="number" class="form-input" id="scoreAesthetics" min="1" max="10" step="0.5" placeholder="1-10" style="font-size:24px;text-align:center;"></div>
-            <div class="form-group" style="flex:1;"><label class="form-label">💡 创新评分</label><input type="number" class="form-input" id="scoreInnovation" min="1" max="10" step="0.5" placeholder="1-10" style="font-size:24px;text-align:center;"></div>
+          <p style="margin-bottom:16px;color:var(--gray-500);">请对 <strong>${task.name}</strong> 进行评分（1-100分）</p>
+          <div>
+            <div class="form-group"><label class="form-label">⭐ 综合评分</label><input type="number" class="form-input" id="scoreValue" min="1" max="100" step="1" placeholder="1-100" value="${myRecord.score ?? ''}" style="font-size:24px;text-align:center;max-width:200px;margin:0 auto;"></div>
           </div>
         </div>
         <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('scoringModal')">取消</button><button class="btn btn-primary" onclick="submitGuard(this,()=>submitScoring(${pid},${tid}))">提交评分</button></div>
@@ -3962,15 +4052,12 @@ function openScoring(pid, tid) {
 }
 
 async function submitScoring(pid, tid) {
-  const aesthetics = parseFloat(document.getElementById('scoreAesthetics').value);
-  const innovation = parseFloat(document.getElementById('scoreInnovation').value);
-  if (isNaN(aesthetics) || aesthetics < 1 || aesthetics > 10) { alert('请输入有效的审美评分（1-10）'); return; }
-  if (isNaN(innovation) || innovation < 1 || innovation > 10) { alert('请输入有效的创新评分（1-10）'); return; }
+  const score = parseInt(document.getElementById('scoreValue').value);
+  if (isNaN(score) || score < 1 || score > 100) { alert('请输入有效的评分（1-100分）'); return; }
 
   const data = {
     role: currentRole,
-    aesthetics,
-    innovation,
+    score,
     currentUser: getCurrentUserName(),
     currentRole,
   };
@@ -3978,11 +4065,108 @@ async function submitScoring(pid, tid) {
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/score`, data);
     closeM('scoringModal');
-    document.getElementById('projectDetailModal')?.remove();
     await refreshAfterMutation(pid);
   } catch (e) {
     alert('评分提交失败: ' + e.message);
   }
+}
+
+// ==================== 分享链接 ====================
+
+async function shareProject(projectId) {
+  document.getElementById('shareModal')?.remove();
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'shareModal';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:520px;">
+      <div class="modal-header">
+        <div class="modal-title">🔗 分享此项目</div>
+      </div>
+      <div class="modal-body">
+        <div id="shareForm">
+          <div class="form-group">
+            <label class="form-label">过期时间</label>
+            <select class="form-select" id="shareExpires">
+              <option value="3600">1 小时后</option>
+              <option value="86400">24 小时后</option>
+              <option value="604800" selected>7 天后</option>
+              <option value="2592000">30 天后</option>
+              <option value="">永不过期</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">访问密码（可选）</label>
+            <input type="text" class="form-input" id="sharePassword" placeholder="留空则无需密码" style="text-align:center;">
+          </div>
+          <div id="shareCreateArea">
+            <button class="btn btn-primary btn-lg" onclick="doCreateShareLink('project', ${projectId})" style="width:100%;justify-content:center;">生成分享链接</button>
+          </div>
+          <div id="shareResultArea" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">分享链接</label>
+              <div style="display:flex;gap:8px;">
+                <input type="text" class="form-input" id="shareUrl" readonly style="text-align:center;flex:1;background:#f9fafb;">
+                <button class="btn btn-primary" onclick="copyShareUrl()">复制</button>
+              </div>
+            </div>
+            <div id="shareStatus" style="font-size:13px;color:var(--gray-500);text-align:center;margin-top:8px;"></div>
+          </div>
+        </div>
+        <div id="shareLoading" style="display:none;text-align:center;padding:40px;color:var(--gray-400);">生成中...</div>
+        <div id="shareError" style="color:var(--danger);font-size:13px;text-align:center;margin-top:12px;display:none;"></div>
+      </div>
+      <div class="modal-footer" style="justify-content:center;">
+        <button class="btn btn-outline" onclick="closeM('shareModal')">关闭</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function doCreateShareLink(targetType, targetId) {
+  const expiresEl = document.getElementById('shareExpires');
+  const passwordEl = document.getElementById('sharePassword');
+  const errEl = document.getElementById('shareError');
+  const loadingEl = document.getElementById('shareLoading');
+  const formEl = document.getElementById('shareForm');
+  const createArea = document.getElementById('shareCreateArea');
+  const resultArea = document.getElementById('shareResultArea');
+  const urlInput = document.getElementById('shareUrl');
+  const statusEl = document.getElementById('shareStatus');
+
+  errEl.style.display = 'none';
+  loadingEl.style.display = '';
+  createArea.style.display = 'none';
+  resultArea.style.display = 'none';
+
+  try {
+    const expiresIn = expiresEl.value ? parseInt(expiresEl.value) : null;
+    const password = passwordEl.value.trim() || null;
+    const result = await apiPost('/share', { targetType, targetId, expiresIn, password });
+    const fullUrl = window.location.origin + result.url;
+    urlInput.value = fullUrl;
+    resultArea.style.display = '';
+    try {
+      await navigator.clipboard.writeText(fullUrl);
+      statusEl.innerHTML = '✅ 已复制到剪贴板';
+    } catch(e) {
+      statusEl.innerHTML = '';
+    }
+  } catch(e) {
+    errEl.textContent = e.message || '生成失败';
+    errEl.style.display = '';
+    createArea.style.display = '';
+  } finally {
+    loadingEl.style.display = 'none';
+  }
+}
+
+function copyShareUrl() {
+  const input = document.getElementById('shareUrl');
+  input.select();
+  document.execCommand('copy');
+  const status = document.getElementById('shareStatus');
+  status.innerHTML = '✅ 已复制到剪贴板';
 }
 
 // ==================== 后台管理 ====================
@@ -4007,6 +4191,9 @@ async function renderAdmin(main, role, uid) {
         <button class="admin-tab ${currentAdminTab === 'org' ? 'active' : ''}" onclick="switchAdminTab('org')">🏢 组织架构</button>
         <button class="admin-tab ${currentAdminTab === 'scoring' ? 'active' : ''}" onclick="switchAdminTab('scoring')">⭐ 评分管理</button>
         <button class="admin-tab ${currentAdminTab === 'logs' ? 'active' : ''}" onclick="switchAdminTab('logs')">📜 日志</button>
+        <button class="admin-tab ${currentAdminTab === 'shares' ? 'active' : ''}" onclick="switchAdminTab('shares')">🔗 分享管理</button>
+        <button class="admin-tab ${currentAdminTab === 'filestorage' ? 'active' : ''}" onclick="switchAdminTab('filestorage')">📦 文件存储</button>
+        <button class="admin-tab ${currentAdminTab === 'workload' ? 'active' : ''}" onclick="switchAdminTab('workload')">📊 工作量</button>
       </div>
       <div id="adminContent"></div>
     </div>`;
@@ -4049,6 +4236,12 @@ async function renderAdminContent() {
       await renderAdminScoring(container);
     } else if (currentAdminTab === 'logs') {
       await renderAdminLogs(container);
+    } else if (currentAdminTab === 'shares') {
+      await renderAdminShares(container);
+    } else if (currentAdminTab === 'filestorage') {
+      await renderAdminFileStorage(container);
+    } else if (currentAdminTab === 'workload') {
+      await renderAdminWorkload(container);
     }
   } catch (e) {
     container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${e.message}</p></div>`;
@@ -4101,7 +4294,7 @@ async function renderAdminDashboard(container) {
 }
 
 function groupLabel(group) {
-  return { smtp: '📧 SMTP 邮件', appearance: '🎨 外观设置', security: '🔒 安全设置', system: '💻 系统信息', feishu: '💬 飞书 SSO 登录' }[group] || group;
+  return { appearance: '🎨 外观设置', security: '🔒 安全设置', system: '💻 系统信息', feishu: '💬 飞书 SSO 登录', nas: '🗄️ NAS 归档', feishu_base: '📊 飞书多维表格' }[group] || group;
 }
 
 // ===== Admin: 系统配置 =====
@@ -5563,6 +5756,482 @@ async function loadAdminLogs() {
   } catch (e) {
     container.innerHTML = '<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ' + e.message + '</p></div>';
   }
+}
+
+// ===== Admin: 分享管理 =====
+async function renderAdminShares(container) {
+  container.innerHTML = `<div class="loading">加载中</div>`;
+  try {
+    const shares = await apiGet('/share/admin/all');
+    if (!shares || shares.length === 0) {
+      container.innerHTML = `<div class="empty"><div class="empty-icon">🔗</div><p>暂无分享链接</p></div>`;
+      return;
+    }
+    const statusLabel = s => ({ active: '有效', expired: '已过期', revoked: '已收回' }[s] || s);
+    const statusCls = s => ({ active: 'badge-completed', expired: 'badge-pending', revoked: 'badge-rejected' }[s] || '');
+    const typeLabel = t => ({ project: '项目', sub_task: '子任务' }[t] || t);
+
+    container.innerHTML = `
+      <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--gray-200);">
+          <h3 style="font-size:15px;font-weight:600;">🔗 全部分享链接</h3>
+          <span style="font-size:12px;color:var(--gray-500);">共 ${shares.length} 条</span>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">ID</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">类型</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">目标</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">创建人</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">创建时间</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">过期</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">状态</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">访问</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">操作</th>
+            </tr></thead>
+            <tbody>
+              ${shares.map(s => {
+                const isActive = s.status === 'active';
+                return '<tr>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);">' + s.id + '</td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);">' + typeLabel(s.targetType) + '</td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);"><a href="javascript:void(0)" onclick="openProjectDetail(' + s.targetId + ')" style="color:var(--primary);text-decoration:none;">#' + s.targetId + '</a></td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);">' + (s.createdByName || s.createdBy || '-') + '</td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);font-size:12px;">' + (s.createdAt ? s.createdAt.substring(0,16) : '-') + '</td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);font-size:12px;">' + (s.expiresAt ? s.expiresAt.substring(0,10) : '永不过期') + '</td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);"><span class="badge ' + statusCls(s.status) + '">' + statusLabel(s.status) + '</span></td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);font-size:12px;">' + (s.viewCount || 0) + ' 次</td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);white-space:nowrap;">' +
+                    (isActive
+                      ? '<button class="btn btn-outline btn-sm" onclick="adminEditShare(' + s.id + ')" style="margin-right:4px;">编辑</button>' +
+                        '<button class="btn btn-danger btn-sm" onclick="adminRevokeShare(' + s.id + ')">收回</button>'
+                      : '<span style="font-size:12px;color:var(--gray-400);">-</span>') +
+                  '</td></tr>';
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  } catch (e) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${e.message}</p></div>`;
+  }
+}
+
+async function adminEditShare(id) {
+  document.getElementById('shareEditModal')?.remove();
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'shareEditModal';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:420px;">
+      <div class="modal-header">
+        <div class="modal-title">✏️ 编辑分享链接 #${id}</div>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">过期时间</label>
+          <select class="form-select" id="editShareExpires">
+            <option value="3600">1 小时后</option>
+            <option value="86400">24 小时后</option>
+            <option value="604800" selected>7 天后</option>
+            <option value="2592000">30 天后</option>
+            <option value="-1">永不过期</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">访问密码</label>
+          <input type="text" class="form-input" id="editSharePassword" placeholder="留空不修改，输入新密码覆盖" style="text-align:center;">
+          <div style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:4px;">留空 = 不修改密码 / 清空输入框内容并保存 = 清除密码</div>
+        </div>
+        <div id="editShareError" style="color:var(--danger);font-size:13px;text-align:center;margin-top:12px;display:none;"></div>
+      </div>
+      <div class="modal-footer" style="justify-content:center;">
+        <button class="btn btn-primary" onclick="doAdminUpdateShare(${id})">💾 保存</button>
+        <button class="btn btn-outline" onclick="closeM('shareEditModal')">取消</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function doAdminUpdateShare(id) {
+  const expiresEl = document.getElementById('editShareExpires');
+  const passwordEl = document.getElementById('editSharePassword');
+  const errEl = document.getElementById('editShareError');
+  errEl.style.display = 'none';
+
+  const expiresVal = expiresEl.value;
+  const expiresIn = expiresVal === '-1' ? -1 : parseInt(expiresVal);
+  // password：空字符串表示留空不传（不修改），有值表示修改
+  const password = passwordEl.value;
+
+  try {
+    await apiPut('/share/admin/' + id, { expiresIn, password: password || null });
+    showAdminToast('✅ 更新成功', 'success');
+    closeM('shareEditModal');
+    await renderAdminShares(document.getElementById('adminContent'));
+  } catch(e) {
+    errEl.textContent = e.message || '更新失败';
+    errEl.style.display = '';
+  }
+}
+
+async function adminRevokeShare(id) {
+  if (!confirm('确定要收回此分享链接吗？收回后原链接将无法访问。')) return;
+  try {
+    const r = await apiPost('/share/admin/' + id + '/revoke', {});
+    showAdminToast('✅ ' + (r.message || '已收回'), 'success');
+    await renderAdminShares(document.getElementById('adminContent'));
+  } catch(e) {
+    alert('操作失败: ' + e.message);
+  }
+}
+
+// ===== Admin: 文件存储 =====
+async function renderAdminFileStorage(container) {
+  container.innerHTML = `<div class="loading">加载中</div>`;
+  try {
+    const [stats, archived] = await Promise.all([
+      apiGet('/admin/files/stats'),
+      apiGet('/admin/files/archived'),
+    ]);
+
+    function fmt(s) {
+      if (!s) return '0 B';
+      if (s >= 1073741824) return (s / 1073741824).toFixed(1) + ' GB';
+      if (s >= 1048576) return (s / 1048576).toFixed(1) + ' MB';
+      if (s >= 1024) return (s / 1024).toFixed(0) + ' KB';
+      return s + ' B';
+    }
+
+    const diskPercent = stats.diskTotalBytes ? ((stats.diskUsedBytes / stats.diskTotalBytes) * 100).toFixed(0) : 0;
+
+    container.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px;">
+        <div class="admin-stat-card">
+          <div class="admin-stat-icon">💾</div>
+          <div class="admin-stat-value">${fmt(stats.localSizeBytes)}</div>
+          <div class="admin-stat-label">本地文件</div>
+        </div>
+        <div class="admin-stat-card">
+          <div class="admin-stat-icon">📦</div>
+          <div class="admin-stat-value">${stats.archivedCount || 0} 个</div>
+          <div class="admin-stat-label">已归档</div>
+        </div>
+        <div class="admin-stat-card">
+          <div class="admin-stat-icon">🗄️</div>
+          <div class="admin-stat-value">${fmt(stats.diskUsedBytes)} / ${fmt(stats.diskTotalBytes)}</div>
+          <div class="admin-stat-label">磁盘使用</div>
+        </div>
+        <div class="admin-stat-card">
+          <div class="admin-stat-icon">${stats.nasEnabled ? '✅' : '❌'}</div>
+          <div class="admin-stat-value">${stats.nasHost || '未配置'}</div>
+          <div class="admin-stat-label">NAS 状态</div>
+        </div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <div style="background:var(--gray-200);border-radius:8px;height:12px;overflow:hidden;">
+          <div style="background:${diskPercent > 80 ? 'var(--danger)' : diskPercent > 60 ? '#EF9F27' : '#639922'};width:${diskPercent}%;height:100%;border-radius:8px;transition:width 0.3s;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-500);margin-top:4px;">
+          <span>已用 ${diskPercent}%</span>
+          <span>剩余 ${fmt(stats.diskFreeBytes)}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <button class="btn btn-primary" onclick="manualArchive()">📤 立即归档</button>
+      </div>
+      <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--gray-200);">
+          <h3 style="font-size:15px;font-weight:600;">📦 已归档文件</h3>
+          <span style="font-size:12px;color:var(--gray-500);">共 ${archived.length} 个</span>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">原始文件名</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">原始大小</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">压缩后</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">归档时间</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">操作</th>
+            </tr></thead>
+            <tbody>
+              ${archived.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--gray-400);">暂无归档文件</td></tr>' :
+                archived.map(f => '<tr>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(f.originalName) + '">' + escHtml(f.originalName) + '</td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);">' + fmt(f.fileSize) + '</td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);">' + fmt(f.archiveSize) + '</td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);font-size:12px;">' + (f.archivedAt ? f.archivedAt.substring(0,16) : '-') + '</td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);"><button class="btn btn-outline btn-sm" onclick="restoreArchivedFile(' + f.id + ')">恢复本地</button></td>' +
+                '</tr>').join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  } catch(e) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${e.message}</p></div>`;
+  }
+}
+
+async function manualArchive() {
+  if (!confirm('确定要手动归档过期文件吗？超过 90 天的文件将被压缩并推送到 NAS。')) return;
+  try {
+    const r = await apiPost('/admin/files/archive', {});
+    showAdminToast('✅ 归档完成: 成功 ' + (r.success || 0) + ' 个, 失败 ' + (r.fail || 0) + ' 个', r.fail > 0 ? 'warning' : 'success');
+    await renderAdminFileStorage(document.getElementById('adminContent'));
+  } catch(e) {
+    alert('归档失败: ' + e.message);
+  }
+}
+
+async function restoreArchivedFile(fileId) {
+  if (!confirm('确定要从 NAS 恢复此文件到本地吗？')) return;
+  try {
+    await apiPost('/admin/files/restore/' + fileId, {});
+    showAdminToast('✅ 文件已恢复', 'success');
+    await renderAdminFileStorage(document.getElementById('adminContent'));
+  } catch(e) {
+    alert('恢复失败: ' + e.message);
+  }
+}
+
+// ==================== 文件下载选项 ====================
+
+/** 显示文件下载选项面板（直接下载 / 复制链接） */
+function showDownloadOptions(fileUrl, fileName, fileSize) {
+  // 移除已有面板
+  document.getElementById('downloadOptionPanel')?.remove();
+
+  function fmtSize(bytes) {
+    if (!bytes) return '';
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+    if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KB';
+    return bytes + ' B';
+  }
+
+  const ext = fileName ? fileName.split('.').pop().toUpperCase() : '';
+  const token = localStorage.getItem('design_pm_token') || '';
+  const fullUrl = (fileUrl.startsWith('http') ? fileUrl : window.location.origin + fileUrl)
+    + (fileUrl.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+
+  const panel = document.createElement('div');
+  panel.id = 'downloadOptionPanel';
+  panel.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:10000;display:flex;align-items:center;justify-content:center;';
+  panel.innerHTML = `
+    <div onclick="closeDownloadOptions()" style="position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);"></div>
+    <div style="position:relative;background:#fff;border-radius:16px;width:420px;max-width:90vw;box-shadow:0 8px 40px rgba(0,0,0,0.15);overflow:hidden;">
+      <div style="padding:24px 24px 0;">
+        <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:20px;">
+          <div style="width:48px;height:48px;border-radius:12px;background:#E6F1FB;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">📄</div>
+          <div style="min-width:0;flex:1;">
+            <p style="font-weight:600;font-size:14px;color:#1f2937;margin:0 0 4px 0;word-break:break-all;line-height:1.4;">${escHtml(fileName || '')}</p>
+            <p style="font-size:12px;color:#6b7280;margin:0;">${fileSize ? fmtSize(fileSize) + ' · ' : ''}${ext}</p>
+          </div>
+          <button onclick="closeDownloadOptions()" style="background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;padding:4px;line-height:1;">✕</button>
+        </div>
+      </div>
+      <div style="padding:0 24px 24px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+          <button onclick="doDirectDownload('${escHtml(fullUrl)}');closeDownloadOptions();"
+            style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:14px;color:#1f2937;transition:background 0.15s;"
+            onmouseenter="this.style.background='#f9fafb'" onmouseleave="this.style.background='#fff'">
+            <span style="font-size:18px;">⬇️</span> 直接下载
+          </button>
+          <button onclick="doCopyDownloadLink('${escHtml(fullUrl)}', this);"
+            style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:14px;color:#1f2937;transition:background 0.15s;"
+            onmouseenter="this.style.background='#f9fafb'" onmouseleave="this.style.background='#fff'">
+            <span style="font-size:18px;">🔗</span> <span id="copyBtnLabel">复制下载地址</span>
+          </button>
+        </div>
+        <div style="padding:10px 14px;background:#f9fafb;border-radius:10px;font-size:12px;color:#9ca3af;display:flex;align-items:center;gap:8px;">
+          <span style="flex-shrink:0;">🔗</span>
+          <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(fullUrl)}">${escHtml(fullUrl)}</span>
+          <button onclick="copyUrlOnly('${escHtml(fullUrl)}', this)" style="background:none;border:none;cursor:pointer;font-size:12px;color:#3370FF;padding:2px 6px;border-radius:4px;flex-shrink:0;">复制</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(panel);
+}
+
+function closeDownloadOptions() {
+  document.getElementById('downloadOptionPanel')?.remove();
+}
+
+/** 直接下载：添加 ?download=true 参数触发浏览器保存 */
+function doDirectDownload(url) {
+  const link = document.createElement('a');
+  link.href = url + (url.includes('?') ? '&' : '?') + 'download=true';
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.click();
+}
+
+/** 给 URL 追加 ?download=true 参数 */
+function appendDownloadParam(url) {
+  return url + (url.includes('?') ? '&' : '?') + 'download=true';
+}
+
+/** 复制下载链接（自动带上 ?download=true，粘贴到浏览器直接触发下载） */
+async function doCopyDownloadLink(url, btn) {
+  const dlUrl = appendDownloadParam(url);
+  try {
+    await navigator.clipboard.writeText(dlUrl);
+    const label = btn.querySelector('#copyBtnLabel') || btn.querySelector('span:last-child');
+    if (label) {
+      const orig = label.textContent;
+      label.textContent = '✅ 已复制';
+      setTimeout(() => label.textContent = orig, 2000);
+    }
+  } catch(e) {
+    // fallback
+    const ta = document.createElement('textarea');
+    ta.value = dlUrl;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    const label = btn.querySelector('#copyBtnLabel') || btn.querySelector('span:last-child');
+    if (label) {
+      const orig = label.textContent;
+      label.textContent = '✅ 已复制';
+      setTimeout(() => label.textContent = orig, 2000);
+    }
+  }
+}
+
+/** 复制带下载参数的链接（底部栏） */
+async function copyUrlOnly(url, btn) {
+  const dlUrl = appendDownloadParam(url);
+  try {
+    await navigator.clipboard.writeText(dlUrl);
+    btn.textContent = '✅';
+    setTimeout(() => btn.textContent = '复制', 2000);
+  } catch(e) {
+    const ta = document.createElement('textarea');
+    ta.value = dlUrl;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    btn.textContent = '✅';
+    setTimeout(() => btn.textContent = '复制', 2000);
+  }
+}
+
+/** 生成文件操作按钮 HTML（用于嵌入到列表/卡片中） */
+function renderFileActions(fileUrl, fileName, fileSize) {
+  const fullUrl = fileUrl.startsWith('http') ? fileUrl : window.location.origin + fileUrl;
+  return `<button class="btn btn-outline btn-sm" onclick="showDownloadOptions('${escHtml(fullUrl)}','${escHtml(fileName || '')}',${fileSize || 0})" title="下载选项">⬇️</button>`;
+}
+
+// ===== Admin: 工作量 =====
+let currentWorkloadRange = 'month';
+
+async function renderAdminWorkload(container) {
+  container.innerHTML = `<div class="loading">加载中</div>`;
+  try {
+    const data = await apiGet('/admin/workload/timeline?range=' + currentWorkloadRange);
+    const summary = data._summary || {};
+    const rangeLabel = summary.rangeLabel || '本月';
+    const rangeOptions = [
+      { key: 'day', label: '今日', icon: '☀️' },
+      { key: 'week', label: '本周', icon: '📅' },
+      { key: 'month', label: '本月', icon: '📆' },
+      { key: 'quarter', label: '本季度', icon: '🗓️' },
+      { key: 'half-year', label: '本半年', icon: '📋' },
+      { key: 'year', label: '本年度', icon: '📊' },
+    ];
+
+    container.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <span style="font-size:14px;font-weight:500;color:#374151;">📊 工作量看板</span>
+        <span style="font-size:12px;color:var(--gray-400);margin-right:4px;">时间范围:</span>
+        ${rangeOptions.map(o => `
+          <button onclick="switchWorkloadRange('${o.key}')"
+            style="padding:5px 14px;border-radius:8px;border:${o.key === currentWorkloadRange ? '2px solid #3370FF' : '1px solid var(--gray-200)'};
+            background:${o.key === currentWorkloadRange ? '#E6F1FB' : '#fff'};
+            color:${o.key === currentWorkloadRange ? '#1E40AF' : '#374151'};
+            font-size:13px;cursor:pointer;white-space:nowrap;">${o.icon} ${o.label}</button>
+        `).join('')}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;">
+        <div class="admin-stat-card">
+          <div class="admin-stat-icon">📁</div>
+          <div class="admin-stat-value">${summary.totalProjectsCreated || 0}</div>
+          <div class="admin-stat-label">新建项目</div>
+        </div>
+        <div class="admin-stat-card">
+          <div class="admin-stat-icon">✅</div>
+          <div class="admin-stat-value">${summary.totalProjectsCompleted || 0}</div>
+          <div class="admin-stat-label">完成项目</div>
+        </div>
+        <div class="admin-stat-card">
+          <div class="admin-stat-icon">📝</div>
+          <div class="admin-stat-value">${summary.totalTasksAssigned || 0}</div>
+          <div class="admin-stat-label">新分子任务</div>
+        </div>
+        <div class="admin-stat-card">
+          <div class="admin-stat-icon">✅</div>
+          <div class="admin-stat-value">${summary.totalTasksCompleted || 0}</div>
+          <div class="admin-stat-label">完成任务</div>
+        </div>
+      </div>`;
+
+    const roleOrder = ['sales', 'planner', 'designer', 'supplychain'];
+
+    for (const role of roleOrder) {
+      const r = data[role];
+      if (!r || !r.users || r.users.length === 0) continue;
+
+      let html = '<div class="card" style="margin-bottom:16px;">';
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--gray-200);">
+        <div><span style="font-size:16px;margin-right:6px;">${r.icon || '👤'}</span><strong style="font-size:15px;">${r.label || role}</strong>
+        <span style="font-size:12px;color:var(--gray-500);margin-left:8px;">${r.totalUsers} 人</span></div></div>`;
+
+      // 表头
+      const isWorker = (role === 'designer' || role === 'supplychain');
+      html += `<div style="display:flex;padding:8px 16px;font-size:11px;color:var(--gray-500);border-bottom:1px solid var(--gray-100);">
+        <div style="min-width:140px;">姓名</div>
+        <div style="flex:1;display:flex;gap:16px;">
+          <span style="width:60px;">${isWorker ? '新分配' : '新建'}</span>
+          <span style="width:60px;">完成</span>
+          <span style="width:60px;">完成率</span>
+        </div>
+      </div>`;
+
+      for (const u of r.users) {
+        const created = u.created || u.assigned || 0;
+        const completed = u.completed || 0;
+        const rate = created > 0 ? Math.round((completed / created) * 100) + '%' : '-';
+
+        html += `<div style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid var(--gray-100);">
+          <div style="min-width:140px;flex-shrink:0;">
+            <div style="font-size:13px;font-weight:500;color:#1f2937;">${escHtml(u.name)}</div>
+            <div style="font-size:11px;color:var(--gray-400);">${escHtml(u.userId)}</div>
+          </div>
+          <div style="flex:1;display:flex;gap:16px;align-items:center;">
+            <span style="width:60px;font-size:13px;font-weight:600;color:#374151;">${created}</span>
+            <span style="width:60px;font-size:13px;font-weight:600;color:#065F46;">${completed}</span>
+            <span style="width:60px;font-size:12px;color:${rate === '-' ? 'var(--gray-400)' : '#374151'};">${rate}</span>
+          </div>
+          <!-- 进度条 -->
+          <div style="flex:1;max-width:120px;background:var(--gray-200);border-radius:6px;height:8px;overflow:hidden;">
+            <div style="background:${created > 0 ? '#639922' : '#e5e7eb'};width:${created > 0 ? Math.min(100, (completed / created) * 100) : 0}%;height:100%;border-radius:6px;transition:width 0.3s;"></div>
+          </div>
+        </div>`;
+      }
+      html += '</div>';
+      container.innerHTML += html;
+    }
+  } catch (e) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${e.message}</p></div>`;
+  }
+}
+
+function switchWorkloadRange(range) {
+  currentWorkloadRange = range;
+  const container = document.getElementById('adminContent');
+  if (container) renderAdminWorkload(container);
 }
 
 // ==================== 启动 ====================

@@ -43,18 +43,19 @@ public class ProjectController {
             @RequestParam(required = false) String role,
             @RequestParam(required = false) String userId,
             @RequestParam(required = false) String type,
-            @RequestParam(required = false, defaultValue = "false") boolean participating) {
+            @RequestParam(required = false, defaultValue = "false") boolean participating,
+            HttpServletRequest request) {
+
+        AuthController.AuthSession session = getSession(request);
+        role = session.role();
+        userId = session.userId();
 
         List<Project> projects;
-        if (role != null && userId != null) {
-            // 设计师/供应链查看渠道/常规品页面时，只显示已参与的项目
-            if (participating && ("designer".equals(role) || "supplychain".equals(role))) {
-                projects = projectService.getDesignerParticipatingProjects(userId);
-            } else {
-                projects = projectService.getProjectsByRoleAndUser(role, userId);
-            }
+        // 设计师/供应链查看渠道/常规品页面时，只显示已参与的项目
+        if (participating && ("designer".equals(role) || "supplychain".equals(role))) {
+            projects = projectService.getDesignerParticipatingProjects(userId);
         } else {
-            projects = projectService.getAllProjects();
+            projects = projectService.getProjectsByRoleAndUser(role, userId);
         }
 
         if (type != null) {
@@ -78,37 +79,42 @@ public class ProjectController {
     /** 获取项目详情 */
     @GetMapping("/{id}")
     public ResponseEntity<ProjectDetailDTO> getProjectDetail(@PathVariable Long id, HttpServletRequest request) {
+        AuthController.AuthSession session = getSession(request);
         // 记录查询日志
-        String token = request.getHeader("X-Auth-Token");
-        if (token != null) {
-            AuthController.AuthSession session = AuthController.validateToken(token);
-            if (session != null) {
-                activityLogRepository.save(new ActivityLog(
-                    "查询项目 #" + id, session.name(), session.role()));
-            }
+        activityLogRepository.save(new ActivityLog(
+            "查询项目 #" + id, session.name(), session.role()));
+        Optional<Project> projectOpt = projectService.getProjectById(id);
+        if (projectOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
         }
-        return projectService.getProjectById(id)
-                .map(this::toDetail)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        if (!canAccessProject(projectOpt.get(), session)) {
+            return ResponseEntity.status(403).build();
+        }
+        return ResponseEntity.ok(toDetail(projectOpt.get()));
     }
 
     /** 新建项目 */
     @PostMapping
-    public ResponseEntity<ProjectDetailDTO> createProject(@RequestBody Map<String, Object> body) {
-        Project p = projectService.createProject(body);
-        return ResponseEntity.ok(toDetail(p));
+    public ResponseEntity<?> createProject(@RequestBody Map<String, Object> body, HttpServletRequest request) {
+        try {
+            Project p = projectService.createProject(withSessionContext(body, request));
+            return ResponseEntity.ok(toDetail(p));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     /** 企划接单 */
     @PostMapping("/{id}/accept")
     public ResponseEntity<ProjectDetailDTO> plannerAccept(
             @PathVariable Long id,
-            @RequestBody Map<String, String> body) {
+            @RequestBody Map<String, String> body,
+            HttpServletRequest request) {
+        Map<String, Object> safeBody = withSessionContext(new LinkedHashMap<>(body), request);
         Project p = projectService.plannerAccept(id,
-                body.getOrDefault("currentUser", ""),
-                body.getOrDefault("currentRole", ""),
-                body.getOrDefault("userId", ""));
+                (String) safeBody.getOrDefault("currentUser", ""),
+                (String) safeBody.getOrDefault("currentRole", ""),
+                (String) safeBody.getOrDefault("userId", ""));
         return ResponseEntity.ok(toDetail(p));
     }
 
@@ -116,19 +122,25 @@ public class ProjectController {
     @PostMapping("/{id}/tasks")
     public ResponseEntity<ProjectDetailDTO> addTask(
             @PathVariable Long id,
-            @RequestBody Map<String, Object> body) {
-        Project p = projectService.addSubTask(id, body);
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        Project p = projectService.addSubTask(id, withSessionContext(body, request));
         return ResponseEntity.ok(toDetail(p));
     }
 
     /** 编辑子任务 */
     @PutMapping("/{projectId}/tasks/{taskId}")
-    public ResponseEntity<ProjectDetailDTO> updateTask(
+    public ResponseEntity<?> updateTask(
             @PathVariable Long projectId,
             @PathVariable Long taskId,
-            @RequestBody Map<String, Object> body) {
-        Project p = projectService.updateSubTask(projectId, taskId, body);
-        return ResponseEntity.ok(toDetail(p));
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        try {
+            Project p = projectService.updateSubTask(projectId, taskId, withSessionContext(body, request));
+            return ResponseEntity.ok(toDetail(p));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     /** 设计师接单 */
@@ -136,9 +148,10 @@ public class ProjectController {
     public ResponseEntity<?> taskAccept(
             @PathVariable Long projectId,
             @PathVariable Long taskId,
-            @RequestBody Map<String, Object> body) {
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
         try {
-            Project p = projectService.taskAccept(projectId, taskId, body);
+            Project p = projectService.taskAccept(projectId, taskId, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -147,52 +160,77 @@ public class ProjectController {
 
     /** 设计师交付 */
     @PostMapping("/{projectId}/tasks/{taskId}/deliver")
-    public ResponseEntity<ProjectDetailDTO> taskDeliver(
+    public ResponseEntity<?> taskDeliver(
             @PathVariable Long projectId,
             @PathVariable Long taskId,
-            @RequestBody Map<String, Object> body) {
-        Project p = projectService.taskDeliver(projectId, taskId, body);
-        return ResponseEntity.ok(toDetail(p));
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        try {
+            Project p = projectService.taskDeliver(projectId, taskId, withSessionContext(body, request));
+            return ResponseEntity.ok(toDetail(p));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     /** 设计师重新交付 */
     @PostMapping("/{projectId}/tasks/{taskId}/redeliver")
-    public ResponseEntity<ProjectDetailDTO> taskRedeliver(
+    public ResponseEntity<?> taskRedeliver(
             @PathVariable Long projectId,
             @PathVariable Long taskId,
-            @RequestBody Map<String, Object> body) {
-        Project p = projectService.taskRedeliver(projectId, taskId, body);
-        return ResponseEntity.ok(toDetail(p));
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        try {
+            Project p = projectService.taskRedeliver(projectId, taskId, withSessionContext(body, request));
+            return ResponseEntity.ok(toDetail(p));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     /** 验收通过 */
     @PostMapping("/{projectId}/tasks/{taskId}/approve")
-    public ResponseEntity<ProjectDetailDTO> taskApprove(
+    public ResponseEntity<?> taskApprove(
             @PathVariable Long projectId,
             @PathVariable Long taskId,
-            @RequestBody Map<String, Object> body) {
-        Project p = projectService.taskApprove(projectId, taskId, body);
-        return ResponseEntity.ok(toDetail(p));
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        try {
+            Project p = projectService.taskApprove(projectId, taskId, withSessionContext(body, request));
+            return ResponseEntity.ok(toDetail(p));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     /** 驳回 */
     @PostMapping("/{projectId}/tasks/{taskId}/reject")
-    public ResponseEntity<ProjectDetailDTO> taskReject(
+    public ResponseEntity<?> taskReject(
             @PathVariable Long projectId,
             @PathVariable Long taskId,
-            @RequestBody Map<String, Object> body) {
-        Project p = projectService.taskReject(projectId, taskId, body);
-        return ResponseEntity.ok(toDetail(p));
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        try {
+            Project p = projectService.taskReject(projectId, taskId, withSessionContext(body, request));
+            return ResponseEntity.ok(toDetail(p));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     /** 提交评分 */
     @PostMapping("/{projectId}/tasks/{taskId}/score")
-    public ResponseEntity<ProjectDetailDTO> submitScore(
+    public ResponseEntity<?> submitScore(
             @PathVariable Long projectId,
             @PathVariable Long taskId,
-            @RequestBody Map<String, Object> body) {
-        Project p = projectService.submitScoring(projectId, taskId, body);
-        return ResponseEntity.ok(toDetail(p));
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        try {
+            Project p = projectService.submitScoring(projectId, taskId, withSessionContext(body, request));
+            return ResponseEntity.ok(toDetail(p));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     /** 通用角色状态看板（sales/planner/supplychain/designer） */
@@ -211,7 +249,11 @@ public class ProjectController {
     @GetMapping("/badge-stats")
     public ResponseEntity<Map<String, Object>> badgeStats(
             @RequestParam String role,
-            @RequestParam String userId) {
+            @RequestParam String userId,
+            HttpServletRequest request) {
+        AuthController.AuthSession session = getSession(request);
+        role = session.role();
+        userId = session.userId();
         Map<String, Object> stats = new LinkedHashMap<>();
         stats.put("myTaskCount", subTaskRepository.countByDesignerIdAndStatusIn(userId));
 
@@ -230,9 +272,9 @@ public class ProjectController {
 
     /** 终止项目 */
     @PostMapping("/{id}/terminate")
-    public ResponseEntity<?> terminateProject(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> terminateProject(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
-            Project p = projectService.terminateProject(id, body);
+            Project p = projectService.terminateProject(id, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -241,9 +283,9 @@ public class ProjectController {
 
     /** 暂停项目 */
     @PostMapping("/{id}/pause")
-    public ResponseEntity<?> pauseProject(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> pauseProject(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
-            Project p = projectService.pauseProject(id, body);
+            Project p = projectService.pauseProject(id, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -252,9 +294,9 @@ public class ProjectController {
 
     /** 取消终止 */
     @PostMapping("/{id}/cancel-terminate")
-    public ResponseEntity<?> cancelTerminate(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> cancelTerminate(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
-            Project p = projectService.cancelTerminate(id, body);
+            Project p = projectService.cancelTerminate(id, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -263,9 +305,9 @@ public class ProjectController {
 
     /** 继续项目 */
     @PostMapping("/{id}/resume")
-    public ResponseEntity<?> resumeProject(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> resumeProject(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
-            Project p = projectService.resumeProject(id, body);
+            Project p = projectService.resumeProject(id, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -371,7 +413,11 @@ public class ProjectController {
         if (!taskIds.isEmpty()) {
             scoringRepository.findBySubTaskIds(taskIds).forEach(sr -> {
                 Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", sr.getId());
                 m.put("role", sr.getRole());
+                m.put("scoreType", sr.getScoreType());
+                m.put("score", sr.getScore());
+                m.put("comment", sr.getComment());
                 m.put("aesthetics", sr.getAesthetics());
                 m.put("innovation", sr.getInnovation());
                 m.put("weight", sr.getWeight());
@@ -436,5 +482,44 @@ public class ProjectController {
         }).collect(Collectors.toList()));
 
         return dto;
+    }
+
+    private AuthController.AuthSession getSession(HttpServletRequest request) {
+        return (AuthController.AuthSession) request.getAttribute("authSession");
+    }
+
+    private Map<String, Object> withSessionContext(Map<String, Object> body, HttpServletRequest request) {
+        Map<String, Object> safeBody = new LinkedHashMap<>();
+        if (body != null) {
+            safeBody.putAll(body);
+        }
+        AuthController.AuthSession session = getSession(request);
+        safeBody.put("currentUser", session.name());
+        safeBody.put("currentRole", session.role());
+        safeBody.put("currentUserId", session.userId());
+        safeBody.put("userId", session.userId());
+        safeBody.put("role", session.role());
+        if (safeBody.containsKey("designerUserId") || "designer".equals(session.role())
+                || "supplychain".equals(session.role()) || "planner".equals(session.role())) {
+            safeBody.put("designerUserId", session.userId());
+        }
+        return safeBody;
+    }
+
+    private boolean canAccessProject(Project project, AuthController.AuthSession session) {
+        if (project == null || session == null) {
+            return false;
+        }
+        if ("admin".equals(session.role())) {
+            return true;
+        }
+        if ("sales".equals(session.role())) {
+            return Objects.equals(session.userId(), project.getSalesId());
+        }
+        if ("planner".equals(session.role())) {
+            return Objects.equals(session.userId(), project.getPlannerId())
+                    || project.getTasks().stream().anyMatch(t -> Objects.equals(session.userId(), t.getDesignerId()));
+        }
+        return project.getTasks().stream().anyMatch(t -> Objects.equals(session.userId(), t.getDesignerId()));
     }
 }

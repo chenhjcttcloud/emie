@@ -19,7 +19,7 @@ public class SystemConfig {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 配置键，如 smtp.host, app.logo, login.bg */
+    /** 配置键，如 app.logo, login.bg, feishu.base.appToken */
     @Column(nullable = false, unique = true)
     private String configKey;
 

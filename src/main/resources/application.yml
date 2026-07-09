@@ -9,8 +9,8 @@ spring:
   servlet:
     multipart:
       enabled: true
-      max-file-size: 1024MB
-      max-request-size: 1024MB
+      max-file-size: 200MB
+      max-request-size: 200MB
   jackson:
     serialization:
       write-dates-as-timestamps: false
@@ -24,15 +24,15 @@ app:
     dir: ./logs/archive
 
 ---
-# === 开发环境：MySQL（生产环境也是 MySQL，只是 profile 不同） ===
+# === 开发环境：远程测试 MySQL（47.119.179.230） ===
 spring:
   config:
     activate:
       on-profile: dev
   datasource:
-    url: jdbc:mysql://localhost:3306/designpm?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+    url: jdbc:mysql://47.119.179.230:3306/designpmtest?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
     driver-class-name: com.mysql.cj.jdbc.Driver
-    username: emie
+    username: emietest
     password: MYSQL_emie
     hikari:
       maximum-pool-size: 20
@@ -53,15 +53,37 @@ spring:
         order_updates: true
     open-in-view: true
 
-server:
-  port: 8080
-  compression:
-    enabled: true
-    mime-types: application/json,application/javascript,text/javascript,text/css,text/html,text/xml,application/xml
-    min-response-size: 512
+---
+# === 本地开发测试：远程 MySQL（47.119.179.230） ===
+spring:
+  config:
+    activate:
+      on-profile: local
+  datasource:
+    url: jdbc:mysql://47.119.179.230:3306/designpmtest?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: emietest
+    password: MYSQL_emie
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 3
+      connection-timeout: 5000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+        jdbc.batch_size: 50
+        order_inserts: true
+        order_updates: true
+    open-in-view: true
 
 ---
-# === 生产环境：云服务器 MySQL ===
 spring:
   config:
     activate:

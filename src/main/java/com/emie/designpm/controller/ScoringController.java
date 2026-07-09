@@ -1,6 +1,7 @@
 package com.emie.designpm.controller;
 
 import com.emie.designpm.service.ProjectService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,7 +23,11 @@ public class ScoringController {
     @GetMapping("/pending")
     public ResponseEntity<List<Map<String, Object>>> getPendingScores(
             @RequestParam String role,
-            @RequestParam String userId) {
+            @RequestParam String userId,
+            HttpServletRequest request) {
+        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        role = session.role();
+        userId = session.userId();
         return ResponseEntity.ok(projectService.getPendingScoringTasks(role, userId));
     }
 }

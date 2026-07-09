@@ -75,6 +75,13 @@
             <version>2.7.3</version>
         </dependency>
 
+        <!-- SFTP (NAS 归档/恢复) -->
+        <dependency>
+            <groupId>com.github.mwiede</groupId>
+            <artifactId>jsch</artifactId>
+            <version>0.2.16</version>
+        </dependency>
+
         <!-- Spring Boot DevTools (开发热重载) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

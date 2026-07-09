@@ -16,6 +16,7 @@ import java.util.List;
     @Index(name = "idx_project_status", columnList = "status"),
     @Index(name = "idx_created_at", columnList = "createdAt")
 })
+@EntityListeners(com.emie.designpm.service.ProjectSyncListener.class)
 public class Project {
 
     @Id

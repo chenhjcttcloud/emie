@@ -243,6 +243,29 @@ public class AdminController {
         }
     }
 
+    // ==================== 工作量统计 ====================
+
+    @GetMapping("/workload")
+    public ResponseEntity<Map<String, Object>> getWorkload(
+            @RequestHeader("X-Auth-Token") String token) {
+        AuthController.AuthSession session = AuthController.validateToken(token);
+        if (session == null || !"admin".equals(session.role())) {
+            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可查看工作量"));
+        }
+        return ResponseEntity.ok(adminService.getWorkloadStats());
+    }
+
+    @GetMapping("/workload/timeline")
+    public ResponseEntity<Map<String, Object>> getWorkloadTimeline(
+            @RequestParam(value = "range", defaultValue = "month") String range,
+            @RequestHeader("X-Auth-Token") String token) {
+        AuthController.AuthSession session = AuthController.validateToken(token);
+        if (session == null || !"admin".equals(session.role())) {
+            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可查看工作量"));
+        }
+        return ResponseEntity.ok(adminService.getWorkloadTimeline(range));
+    }
+
     // ==================== 辅助方法 ====================
 
     private String getUserFromToken(String token) {

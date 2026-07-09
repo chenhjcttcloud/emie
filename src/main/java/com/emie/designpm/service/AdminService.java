@@ -60,22 +60,8 @@ public class AdminService {
 
     private void initDefaultConfigs() {
         List<SystemConfig> defaults = Arrays.asList(
-            // ===== SMTP 配置 =====
-            SystemConfig.builder().configKey("smtp.host").configValue("").configGroup("smtp")
-                .description("SMTP 服务器地址").valueType("text").sortOrder(1).build(),
-            SystemConfig.builder().configKey("smtp.port").configValue("587").configGroup("smtp")
-                .description("SMTP 端口").valueType("number").sortOrder(2).build(),
-            SystemConfig.builder().configKey("smtp.username").configValue("").configGroup("smtp")
-                .description("SMTP 用户名").valueType("text").sortOrder(3).build(),
-            SystemConfig.builder().configKey("smtp.password").configValue("").configGroup("smtp")
-                .description("SMTP 密码/授权码").valueType("password").sortOrder(4).build(),
-            SystemConfig.builder().configKey("smtp.from").configValue("").configGroup("smtp")
-                .description("发件人邮箱地址").valueType("text").sortOrder(5).build(),
-            SystemConfig.builder().configKey("smtp.fromName").configValue("EMIE 设计项目管理系统").configGroup("smtp")
-                .description("发件人显示名称").valueType("text").sortOrder(6).build(),
-
             // ===== 外观配置 =====
-            SystemConfig.builder().configKey("app.title").configValue("设计项目管理系统").configGroup("appearance")
+            SystemConfig.builder().configKey("app.title").configValue("产品管理系统").configGroup("appearance")
                 .description("系统标题").valueType("text").sortOrder(1).build(),
             SystemConfig.builder().configKey("app.logo").configValue("").configGroup("appearance")
                 .description("系统 Logo（上传图片后自动填充路径）").valueType("image").sortOrder(2).build(),
@@ -130,7 +116,33 @@ public class AdminService {
             SystemConfig.builder().configKey("scoring.regular.designer").configValue("20").configGroup("scoring")
                 .description("公司常规品 - 设计师自评权重(%)").valueType("number").sortOrder(7).build(),
             SystemConfig.builder().configKey("scoring.regular.admin").configValue("30").configGroup("scoring")
-                .description("公司常规品 - 管理评分权重(%)").valueType("number").sortOrder(8).build()
+                .description("公司常规品 - 管理评分权重(%)").valueType("number").sortOrder(8).build(),
+
+            // ===== NAS 归档 =====
+            SystemConfig.builder().configKey("nas.enabled").configValue("false").configGroup("nas")
+                .description("启用 NAS 归档").valueType("boolean").sortOrder(1).build(),
+            SystemConfig.builder().configKey("nas.host").configValue("").configGroup("nas")
+                .description("NAS IP 地址").valueType("text").sortOrder(2).build(),
+            SystemConfig.builder().configKey("nas.user").configValue("root").configGroup("nas")
+                .description("NAS SSH 用户名").valueType("text").sortOrder(3).build(),
+            SystemConfig.builder().configKey("nas.password").configValue("").configGroup("nas")
+                .description("NAS SSH 密码").valueType("password").sortOrder(4).build(),
+            SystemConfig.builder().configKey("nas.path").configValue("/volume1/emie-archive").configGroup("nas")
+                .description("NAS 存储路径").valueType("text").sortOrder(5).build(),
+
+            // ===== 飞书多维表格同步 =====
+            SystemConfig.builder().configKey("feishu.base.syncEnabled").configValue("false").configGroup("feishu_base")
+                .description("启用飞书多维表格同步").valueType("boolean").sortOrder(1).build(),
+            SystemConfig.builder().configKey("feishu.base.appToken").configValue("").configGroup("feishu_base")
+                .description("飞书 Base App Token").valueType("text").sortOrder(2).build(),
+            SystemConfig.builder().configKey("feishu.base.tableProjects").configValue("").configGroup("feishu_base")
+                .description("项目总表 Table ID").valueType("text").sortOrder(3).build(),
+            SystemConfig.builder().configKey("feishu.base.tableTasks").configValue("").configGroup("feishu_base")
+                .description("子任务表 Table ID").valueType("text").sortOrder(4).build(),
+            SystemConfig.builder().configKey("feishu.base.tableScoring").configValue("").configGroup("feishu_base")
+                .description("评分记录表 Table ID").valueType("text").sortOrder(5).build(),
+            SystemConfig.builder().configKey("feishu.base.tableLogs").configValue("").configGroup("feishu_base")
+                .description("操作日志表 Table ID").valueType("text").sortOrder(6).build()
         );
 
         // 只插入缺失的配置项（不覆盖已有值）
@@ -146,7 +158,9 @@ public class AdminService {
     /** 获取所有配置，按分组 */
     public Map<String, List<SystemConfig>> getAllConfigs() {
         List<SystemConfig> all = configRepository.findAll();
-        return all.stream().collect(Collectors.groupingBy(
+        return all.stream()
+                .filter(config -> !"smtp".equals(config.getConfigGroup()))
+                .collect(Collectors.groupingBy(
             SystemConfig::getConfigGroup,
             LinkedHashMap::new,
             Collectors.toList()
@@ -697,5 +711,262 @@ public class AdminService {
         return configRepository.findByConfigKey(key)
             .map(c -> { try { return Double.parseDouble(c.getConfigValue()); } catch (Exception e) { return getDefaultWeight(projectType, role); } })
             .orElseGet(() -> getDefaultWeight(projectType, role));
+    }
+
+    // ==================== 工作量统计 ====================
+
+    /** 获取各角色各员工的工作量统计 */
+    public Map<String, Object> getWorkloadStats() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        List<User> allUsers = userRepository.findAll();
+
+        // 按角色分组
+        Map<String, List<User>> byRole = allUsers.stream()
+                .filter(u -> !"admin".equals(u.getRole()))
+                .filter(u -> !"disabled".equals(u.getStatus()))
+                .collect(Collectors.groupingBy(User::getRole));
+
+        // 定义角色显示信息
+        Map<String, String> roleLabels = Map.of(
+                "sales", "销售", "planner", "产品企划",
+                "designer", "设计师", "supplychain", "供应链"
+        );
+        Map<String, String> roleIcons = Map.of(
+                "sales", "📊", "planner", "📋",
+                "designer", "🎨", "supplychain", "📦"
+        );
+
+        for (Map.Entry<String, List<User>> entry : byRole.entrySet()) {
+            String role = entry.getKey();
+            List<User> users = entry.getValue();
+
+            List<Map<String, Object>> userStats = new ArrayList<>();
+            for (User u : users) {
+                Map<String, Object> us = new LinkedHashMap<>();
+                us.put("userId", u.getUserId());
+                us.put("name", u.getName());
+                us.put("title", u.getTitle() != null ? u.getTitle() : "");
+
+                // 按角色类型聚合
+                switch (role) {
+                    case "sales" -> {
+                        List<Object[]> byStatus = entityManager
+                                .createNativeQuery("SELECT p.status, COUNT(*) FROM projects p WHERE p.sales_id = ?1 GROUP BY p.status")
+                                .setParameter(1, u.getUserId())
+                                .getResultList();
+                        Map<String, Object> counts = new LinkedHashMap<>();
+                        int total = 0;
+                        for (Object[] row : byStatus) {
+                            String s = (String) row[0];
+                            long c = ((Number) row[1]).longValue();
+                            counts.put(s, c);
+                            total += c;
+                        }
+                        us.put("totalProjects", total);
+                        us.put("projectCounts", counts);
+                    }
+                    case "planner" -> {
+                        List<Object[]> byStatus = entityManager
+                                .createNativeQuery("SELECT p.status, COUNT(*) FROM projects p WHERE p.planner_id = ?1 GROUP BY p.status")
+                                .setParameter(1, u.getUserId())
+                                .getResultList();
+                        Map<String, Object> counts = new LinkedHashMap<>();
+                        int total = 0;
+                        for (Object[] row : byStatus) {
+                            String s = (String) row[0];
+                            long c = ((Number) row[1]).longValue();
+                            counts.put(s, c);
+                            total += c;
+                        }
+                        us.put("totalProjects", total);
+                        us.put("projectCounts", counts);
+                    }
+                    case "designer", "supplychain" -> {
+                        List<Object[]> byStatus = entityManager
+                                .createNativeQuery("SELECT t.status, COUNT(*) FROM sub_tasks t WHERE t.designer_id = ?1 GROUP BY t.status")
+                                .setParameter(1, u.getUserId())
+                                .getResultList();
+                        Map<String, Object> counts = new LinkedHashMap<>();
+                        int total = 0;
+                        for (Object[] row : byStatus) {
+                            String s = (String) row[0];
+                            long c = ((Number) row[1]).longValue();
+                            counts.put(s, c);
+                            total += c;
+                        }
+                        us.put("totalTasks", total);
+                        us.put("taskCounts", counts);
+                    }
+                }
+
+                userStats.add(us);
+            }
+
+            // 用户按总量排序
+            Map<String, Object> roleEntry = new LinkedHashMap<>();
+            roleEntry.put("label", roleLabels.getOrDefault(role, role));
+            roleEntry.put("icon", roleIcons.getOrDefault(role, "👤"));
+            roleEntry.put("totalUsers", users.size());
+            roleEntry.put("users", userStats);
+            result.put(role, roleEntry);
+        }
+
+        // 汇总统计
+        long totalProjects = ((Number) entityManager
+                .createNativeQuery("SELECT COUNT(*) FROM projects").getSingleResult()).longValue();
+        long totalTasks = ((Number) entityManager
+                .createNativeQuery("SELECT COUNT(*) FROM sub_tasks").getSingleResult()).longValue();
+        long activeProjects = ((Number) entityManager
+                .createNativeQuery("SELECT COUNT(*) FROM projects WHERE status NOT IN ('completed','terminated','draft')")
+                .getSingleResult()).longValue();
+        long pendingTasks = ((Number) entityManager
+                .createNativeQuery("SELECT COUNT(*) FROM sub_tasks WHERE status IN ('pending','accepted','delivered')")
+                .getSingleResult()).longValue();
+
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("totalUsers", allUsers.size());
+        summary.put("totalProjects", totalProjects);
+        summary.put("totalTasks", totalTasks);
+        summary.put("activeProjects", activeProjects);
+        summary.put("pendingTasks", pendingTasks);
+        result.put("_summary", summary);
+
+        return result;
+    }
+
+    /** 获取指定时间范围内各角色的工作量统计 */
+    public Map<String, Object> getWorkloadTimeline(String range) {
+        // 计算截止时间
+        LocalDateTime cutoff = switch (range) {
+            case "day" -> LocalDateTime.now().minusDays(1);
+            case "week" -> LocalDateTime.now().minusDays(7);
+            case "month" -> LocalDateTime.now().minusDays(30);
+            case "quarter" -> LocalDateTime.now().minusDays(90);
+            case "half-year" -> LocalDateTime.now().minusDays(180);
+            case "year" -> LocalDateTime.now().minusDays(365);
+            default -> LocalDateTime.now().minusDays(30);
+        };
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        List<User> allUsers = userRepository.findAll();
+
+        Map<String, List<User>> byRole = allUsers.stream()
+                .filter(u -> !"admin".equals(u.getRole()))
+                .filter(u -> !"disabled".equals(u.getStatus()))
+                .collect(Collectors.groupingBy(User::getRole));
+
+        Map<String, String> roleLabels = Map.of(
+                "sales", "销售", "planner", "产品企划",
+                "designer", "设计师", "supplychain", "供应链"
+        );
+        Map<String, String> roleIcons = Map.of(
+                "sales", "📊", "planner", "📋",
+                "designer", "🎨", "supplychain", "📦"
+        );
+
+        for (Map.Entry<String, List<User>> entry : byRole.entrySet()) {
+            String role = entry.getKey();
+            List<User> users = entry.getValue();
+
+            List<Map<String, Object>> userStats = new ArrayList<>();
+            for (User u : users) {
+                Map<String, Object> us = new LinkedHashMap<>();
+                us.put("userId", u.getUserId());
+                us.put("name", u.getName());
+                us.put("title", u.getTitle() != null ? u.getTitle() : "");
+
+                switch (role) {
+                    case "sales" -> {
+                        // 销售：创建的渠道定制单数
+                        long created = ((Number) entityManager
+                                .createNativeQuery("SELECT COUNT(*) FROM projects p WHERE p.sales_id = ?1 AND p.created_at >= ?2")
+                                .setParameter(1, u.getUserId())
+                                .setParameter(2, cutoff)
+                                .getSingleResult()).longValue();
+                        long completed = ((Number) entityManager
+                                .createNativeQuery("SELECT COUNT(*) FROM projects p WHERE p.sales_id = ?1 AND p.status = 'completed' AND p.updated_at >= ?2")
+                                .setParameter(1, u.getUserId())
+                                .setParameter(2, cutoff)
+                                .getSingleResult()).longValue();
+                        us.put("created", created);
+                        us.put("completed", completed);
+                    }
+                    case "planner" -> {
+                        long created = ((Number) entityManager
+                                .createNativeQuery("SELECT COUNT(*) FROM projects p WHERE p.planner_id = ?1 AND p.created_at >= ?2")
+                                .setParameter(1, u.getUserId())
+                                .setParameter(2, cutoff)
+                                .getSingleResult()).longValue();
+                        long completed = ((Number) entityManager
+                                .createNativeQuery("SELECT COUNT(*) FROM projects p WHERE p.planner_id = ?1 AND p.status = 'completed' AND p.updated_at >= ?2")
+                                .setParameter(1, u.getUserId())
+                                .setParameter(2, cutoff)
+                                .getSingleResult()).longValue();
+                        us.put("created", created);
+                        us.put("completed", completed);
+                    }
+                    case "designer", "supplychain" -> {
+                        long assigned = ((Number) entityManager
+                                .createNativeQuery("SELECT COUNT(*) FROM sub_tasks t WHERE t.designer_id = ?1 AND t.created_at >= ?2")
+                                .setParameter(1, u.getUserId())
+                                .setParameter(2, cutoff)
+                                .getSingleResult()).longValue();
+                        long completed = ((Number) entityManager
+                                .createNativeQuery("SELECT COUNT(*) FROM sub_tasks t WHERE t.designer_id = ?1 AND t.status = 'approved' AND t.created_at >= ?2")
+                                .setParameter(1, u.getUserId())
+                                .setParameter(2, cutoff)
+                                .getSingleResult()).longValue();
+                        us.put("assigned", assigned);
+                        us.put("completed", completed);
+                    }
+                }
+                userStats.add(us);
+            }
+
+            Map<String, Object> roleEntry = new LinkedHashMap<>();
+            roleEntry.put("label", roleLabels.getOrDefault(role, role));
+            roleEntry.put("icon", roleIcons.getOrDefault(role, "👤"));
+            roleEntry.put("totalUsers", users.size());
+            roleEntry.put("users", userStats);
+            result.put(role, roleEntry);
+        }
+
+        // 汇总
+        long totalCreated = ((Number) entityManager
+                .createNativeQuery("SELECT COUNT(*) FROM projects WHERE created_at >= ?1")
+                .setParameter(1, cutoff)
+                .getSingleResult()).longValue();
+        long totalCompleted = ((Number) entityManager
+                .createNativeQuery("SELECT COUNT(*) FROM projects WHERE status = 'completed' AND updated_at >= ?1")
+                .setParameter(1, cutoff)
+                .getSingleResult()).longValue();
+        long totalTasksAssigned = ((Number) entityManager
+                .createNativeQuery("SELECT COUNT(*) FROM sub_tasks WHERE created_at >= ?1")
+                .setParameter(1, cutoff)
+                .getSingleResult()).longValue();
+        long totalTasksCompleted = ((Number) entityManager
+                .createNativeQuery("SELECT COUNT(*) FROM sub_tasks WHERE status = 'approved' AND created_at >= ?1")
+                .setParameter(1, cutoff)
+                .getSingleResult()).longValue();
+
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("range", range);
+        summary.put("rangeLabel", switch (range) {
+            case "day" -> "今日";
+            case "week" -> "本周";
+            case "month" -> "本月";
+            case "quarter" -> "本季度";
+            case "half-year" -> "本半年";
+            case "year" -> "本年度";
+            default -> range;
+        });
+        summary.put("cutoff", cutoff.toString());
+        summary.put("totalProjectsCreated", totalCreated);
+        summary.put("totalProjectsCompleted", totalCompleted);
+        summary.put("totalTasksAssigned", totalTasksAssigned);
+        summary.put("totalTasksCompleted", totalTasksCompleted);
+        result.put("_summary", summary);
+
+        return result;
     }
 }

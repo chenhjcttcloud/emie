@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
     @Index(name = "idx_scoring_sub_task", columnList = "sub_task_id"),
     @Index(name = "idx_scoring_role", columnList = "role")
 })
+@EntityListeners(com.emie.designpm.service.ScoringSyncListener.class)
 public class ScoringRecord {
 
     @Id

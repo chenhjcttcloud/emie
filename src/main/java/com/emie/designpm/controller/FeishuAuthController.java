@@ -157,6 +157,12 @@ public class FeishuAuthController {
             userRepository.save(user);
         }
 
+        // 保存 userAccessToken 供飞书 Base 同步使用
+        SystemConfig tokenConfig = configRepository.findByConfigKey("feishu.userAccessToken")
+                .orElse(SystemConfig.builder().configKey("feishu.userAccessToken").configGroup("feishu").build());
+        tokenConfig.setConfigValue(userAccessToken);
+        configRepository.save(tokenConfig);
+
         return user;
     }
 }

@@ -37,9 +37,10 @@ public interface SubTaskRepository extends JpaRepository<SubTask, Long> {
     @Query("SELECT t.status, COUNT(t) FROM SubTask t WHERE t.project.id IN (?1) GROUP BY t.status")
     List<Object[]> countStatusByProjectIds(List<Long> projectIds);
 
-    /** 统计待评分的子任务数（approved 状态且有未完成评分） */
+    /** 统计待评分的子任务数（已完成但存在未完成评分） */
     @Query("SELECT COUNT(DISTINCT t.id) FROM SubTask t JOIN ScoringRecord s ON s.subTask.id = t.id " +
-           "WHERE t.project.id IN (?1) AND t.status = 'approved' AND (s.aesthetics IS NULL OR s.innovation IS NULL)")
+           "WHERE t.project.id IN (?1) AND t.status IN ('completed','approved') " +
+           "AND s.score IS NULL AND (s.aesthetics IS NULL OR s.innovation IS NULL)")
     long countPendingScoresByProjectIds(List<Long> projectIds);
 
     /** 批量查询多个设计师/供应链的子任务（减少 N+1） */

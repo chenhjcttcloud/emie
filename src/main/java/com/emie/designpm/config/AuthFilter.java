@@ -39,7 +39,7 @@ public class AuthFilter implements Filter {
             path.equals("/favicon.ico") ||
             path.startsWith("/css/") ||
             path.startsWith("/js/") ||
-            path.startsWith("/api/files/download/") ||
+            path.startsWith("/api/files/download/admin/") ||
             path.equals("/") ||
             path.equals("/index.html") ||
             path.equals("/h2-console") ||
@@ -51,10 +51,23 @@ public class AuthFilter implements Filter {
         // 对 /api/** 路径进行认证
         if (path.startsWith("/api/")) {
             String token = req.getHeader("X-Auth-Token");
-            if (token == null || AuthController.validateToken(token) == null) {
+            // 允许 token 通过查询参数传递（用于 <img> 等无法设置 Header 的场景）
+            if (token == null || token.isBlank()) {
+                token = req.getParameter("token");
+            }
+            AuthController.AuthSession session = AuthController.validateToken(token);
+            if (token == null || session == null) {
                 res.setStatus(401);
                 res.setContentType("application/json;charset=UTF-8");
                 res.getWriter().write("{\"error\":\"未登录或会话已过期，请重新登录\"}");
+                return;
+            }
+            req.setAttribute("authSession", session);
+            if (path.startsWith("/api/admin/") && !path.equals("/api/admin/public-config")
+                    && !"admin".equals(session.role())) {
+                res.setStatus(403);
+                res.setContentType("application/json;charset=UTF-8");
+                res.getWriter().write("{\"error\":\"仅管理员可访问\"}");
                 return;
             }
         }

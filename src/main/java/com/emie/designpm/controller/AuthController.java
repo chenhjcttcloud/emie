@@ -56,6 +56,9 @@ public class AuthController {
         if (user == null) {
             return ResponseEntity.status(401).body(Map.of("error", "账号不存在"));
         }
+        if ("disabled".equalsIgnoreCase(user.getStatus())) {
+            return ResponseEntity.status(403).body(Map.of("error", "账号已停用，请联系管理员"));
+        }
 
         // 验证密码
         String hashed = sha256(password);
@@ -122,7 +125,8 @@ public class AuthController {
         String password = body.get("password");
         String phone = body.get("phone");
         String email = body.get("email");
-        String emailCode = body.get("emailCode");
+        String captchaKey = body.get("captchaKey");
+        String captchaCode = body.get("captchaCode");
         String role = body.get("role");
 
         // 字段校验
@@ -137,10 +141,12 @@ public class AuthController {
         if (password == null || password.length() < 6 || password.length() > 30)
             return ResponseEntity.badRequest().body(Map.of("error", "密码长度6-30位"));
         if (role == null) role = "sales";
+        if (!List.of("sales", "planner", "designer", "supplychain").contains(role)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "无效的注册角色"));
+        }
 
-        // 验证邮箱验证码
-        if (!EmailController.verifyCode(email, emailCode)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "邮箱验证码错误或已过期"));
+        if (!CaptchaController.verifyCaptcha(captchaKey, captchaCode)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "图形验证码错误或已过期"));
         }
 
         // 检查唯一性
