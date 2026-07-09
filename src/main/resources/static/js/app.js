@@ -2897,11 +2897,7 @@ function renderProjectDetailContent(detail) {
   const totalTasks = detail.tasks.length;
   const doneStatuses = ['approved', 'completed', 'sales_approved', 'admin_approved'];
   const doneTasks = detail.tasks.filter(t => {
-    if (!doneStatuses.includes(t.status)) return false;
-    if (t.scoringRecords && t.scoringRecords.length > 0) {
-      return t.scoringRecords.every(r => r.score != null);
-    }
-    return false;
+    return doneStatuses.includes(t.status);
   }).length;
   const pct = totalTasks ? Math.round(doneTasks / totalTasks * 100) : 0;
 
@@ -3035,7 +3031,7 @@ function renderSubTaskCard(detail, task, idx) {
       ${myTask && task.status === 'pending' ? `<button class="btn btn-primary btn-sm" onclick="taskAccept(${detail.id},${task.id})">✅ 接单</button>` : ''}
       ${myTask && task.status === 'accepted' ? `<button class="btn btn-primary btn-sm" onclick="taskDeliver(${detail.id},${task.id})">📤 交付成果</button>` : ''}
       ${myTask && task.status === 'rejected' ? `<button class="btn btn-warning btn-sm" onclick="taskRedeliver(${detail.id},${task.id})">📤 重新交付</button>` : ''}
-      ${isPlanner && (task.status === 'pending' || task.status === 'accepted') ? `
+      ${isPlanner && detail.status !== 'paused' && (task.status === 'pending' || task.status === 'accepted') ? `
         <button class="btn btn-outline btn-sm" onclick="editTask(${detail.id},${task.id})">✏️ 编辑</button>
         <button class="btn btn-outline btn-sm" onclick="deleteTask(${detail.id},${task.id})" style="color:var(--danger);border-color:var(--danger);">🗑️ 删除</button>
       ` : ''}
@@ -3086,39 +3082,68 @@ function renderProjectActions(detail) {
   return actions;
 }
 
+// 飞书兼容的确认弹窗
+function showConfirmDialog(message, onConfirm, confirmText, cancelText) {
+  if (document.getElementById('confirmDialogOverlay')) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'confirmDialogOverlay';
+  overlay.style.zIndex = '300';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:380px;">
+      <div class="modal-header">
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+        <div class="modal-header-left"><div class="modal-title">⚠️ 确认操作</div></div>
+      </div>
+      <div class="modal-body" style="text-align:center;padding:28px 20px;">
+        <p style="font-size:14px;color:var(--gray-700);margin:0;line-height:1.6;">${message}</p>
+      </div>
+      <div class="modal-footer" style="justify-content:center;gap:12px;padding:12px 20px;">
+        <button class="btn btn-outline" onclick="this.closest('.modal-overlay').remove()" style="padding:8px 20px;">${cancelText || '取消'}</button>
+        <button class="btn btn-danger" id="confirmDialogOk" style="padding:8px 20px;">${confirmText || '确定'}</button>
+      </div>
+    </div>`;
+  overlay.querySelector('#confirmDialogOk').onclick = function() { overlay.remove(); onConfirm(); };
+  document.body.appendChild(overlay);
+}
+
 async function terminateProject(pid) {
-  if (!confirm('确定要终止该项目吗？终止后项目将无法恢复。')) return;
-  try {
-    await apiPost(`/projects/${pid}/terminate`, { currentUser: getCurrentUserName(), currentRole: currentRole });
-    await refreshAfterMutation(pid);
-  } catch(e) { alert('操作失败: ' + e.message); }
+  showConfirmDialog('确定要终止该项目吗？终止后项目将无法恢复。', async () => {
+    try {
+      await apiPost(`/projects/${pid}/terminate`, { currentUser: getCurrentUserName(), currentRole: currentRole });
+      await refreshAfterMutation(pid);
+    } catch(e) { alert('操作失败: ' + e.message); }
+  });
 }
 
 async function cancelTerminate(pid) {
-  if (!confirm('确定要取消终止吗？')) return;
-  try {
-    await apiPost(`/projects/${pid}/cancel-terminate`, { currentUser: getCurrentUserName(), currentRole: currentRole });
-    await refreshAfterMutation(pid);
-  } catch(e) { alert('操作失败: ' + e.message); }
+  showConfirmDialog('确定要取消终止吗？', async () => {
+    try {
+      await apiPost(`/projects/${pid}/cancel-terminate`, { currentUser: getCurrentUserName(), currentRole: currentRole });
+      await refreshAfterMutation(pid);
+    } catch(e) { alert('操作失败: ' + e.message); }
+  });
 }
 
 async function deleteProject(pid) {
-  if (!confirm('⚠️ 确定要永久删除项目 #' + pid + ' 吗？\n\n此操作不可恢复！\n子任务、日志、评分记录将一并删除。')) return;
-  try {
-    await apiDelete(`/projects/${pid}`);
-    closeM('projectDetailModal');
-    APP_CACHE.orders = [];
-    Object.keys(SWR_CACHE).forEach(k => delete SWR_CACHE[k]);
-    render();
-  } catch(e) { alert('删除失败: ' + e.message); }
+  showConfirmDialog('⚠️ 确定要永久删除项目 #' + pid + ' 吗？<br>此操作不可恢复！<br>子任务、日志、评分记录将一并删除。', async () => {
+    try {
+      await apiDelete(`/projects/${pid}`);
+      closeM('projectDetailModal');
+      APP_CACHE.orders = [];
+      Object.keys(SWR_CACHE).forEach(k => delete SWR_CACHE[k]);
+      render();
+    } catch(e) { alert('删除失败: ' + e.message); }
+  });
 }
 
 async function pauseProject(pid) {
-  if (!confirm('确定要暂停该项目吗？暂停期间无法进行任何操作。')) return;
-  try {
-    await apiPost(`/projects/${pid}/pause`, { currentUser: getCurrentUserName(), currentRole: currentRole });
-    await refreshAfterMutation(pid);
-  } catch(e) { alert('操作失败: ' + e.message); }
+  showConfirmDialog('确定要暂停该项目吗？暂停期间无法进行任何操作。', async () => {
+    try {
+      await apiPost(`/projects/${pid}/pause`, { currentUser: getCurrentUserName(), currentRole: currentRole });
+      await refreshAfterMutation(pid);
+    } catch(e) { alert('操作失败: ' + e.message); }
+  });
 }
 
 async function resumeProject(pid) {
@@ -3139,7 +3164,7 @@ function renderProjectReferenceImages(detail) {
   return `<div style="margin-top:8px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => `<div style="position:relative;display:inline-block;">
-          <img src="${authUrl(img.url)}" alt="${img.name || ''}" title="${img.name || ''}" class="img-clickable" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+          <img src="${authUrl(img.url)}" alt="${img.name || ''}" title="${img.name || ''}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
           <button onclick="event.stopPropagation();showDownloadOptions('${img.url}','${escHtml(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>`).join('')}
     </div></div>`;
@@ -3156,7 +3181,7 @@ function renderSubTaskImages(jsonStr) {
   return `<div style="margin-top:8px;padding-left:4px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => `<div style="position:relative;display:inline-block;">
-          <img src="${authUrl(img.url)}" alt="${img.name || ''}" class="img-clickable" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--gray-200);cursor:pointer;">
+          <img src="${authUrl(img.url)}" alt="${img.name || ''}" class="img-clickable" loading="lazy" decoding="async" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--gray-200);cursor:pointer;">
           <button onclick="event.stopPropagation();showDownloadOptions('${img.url}','${escHtml(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>`).join('')}
     </div></div>`;

@@ -330,6 +330,9 @@ public class ProjectService {
         if (!List.of("pending", "pending_planner").contains(p.getStatus()) && !"pending".equals(task.getStatus())) {
             throw new RuntimeException("项目已进入工作流程，无法删除子任务");
         }
+        if ("paused".equals(p.getStatus())) {
+            throw new RuntimeException("项目已暂停，无法删除子任务");
+        }
 
         // 删除关联的评分记录，并同步删除飞书记录
         List<ScoringRecord> scoringRecords = scoringRepository.findBySubTaskId(taskId);

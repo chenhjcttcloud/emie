@@ -31,7 +31,7 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     List<Project> findByDesignerId(String designerId);
 
     /** 销售：查看自己发布的全部项目（无 JOIN FETCH，配合计数查询优化） */
-    @Query("SELECT p FROM Project p ORDER BY p.createdAt DESC")
+    @Query("SELECT p FROM Project p WHERE p.salesId = ?1 ORDER BY p.createdAt DESC")
     List<Project> findBySalesIdLight(String salesId);
 
     /** 企划视图：查看指派给自己的项目（无 JOIN FETCH） */

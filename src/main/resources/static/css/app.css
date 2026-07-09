@@ -509,8 +509,8 @@ select.form-select:disabled::-ms-expand { display: none; }
 .attachment-item { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--gray-50); border-radius:6px; margin-bottom:6px; }
 .attachment-name { font-size:13px; flex:1; }
 .attachment-size { font-size:11px; color:var(--gray-400); }
-.image-preview { display:flex; gap:8px; flex-wrap:wrap; }
-.image-preview img { width:80px; height:80px; object-fit:cover; border-radius:6px; border:1px solid var(--gray-200); }
+.image-preview { display:flex; gap:8px; flex-wrap:wrap; max-height:200px; overflow-y:auto; contain:content; }
+.image-preview img { width:80px; height:80px; object-fit:cover; border-radius:6px; border:1px solid var(--gray-200); content-visibility:auto; contain-intrinsic-size:80px; }
 
 /* Weight config */
 .weight-config { display:flex; gap:24px; align-items:center; flex-wrap:wrap; }
