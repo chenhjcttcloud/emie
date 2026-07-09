@@ -2135,7 +2135,9 @@ function renderScoringCards(tasks) {
 
 // 设计师视角: 展示分配给自己的子任务卡片
 async function renderDesignerTasks(main, uid) {
-  const orders = await apiGet(`/projects?role=${currentRole}&userId=${uid}`);
+  // 企划可能作为子任务负责人而非项目负责人，需查全部项目
+  const roleParam = currentRole === 'planner' ? 'admin' : currentRole;
+  const orders = await apiGet(`/projects?role=${roleParam}&userId=${uid}`);
   let myTasks = [];
   const myId = uid;
 
@@ -2895,7 +2897,7 @@ function renderProjectDetailContent(detail) {
   const isChannel = detail.type === 'channel_custom';
   // 进度：approved/completed/sales_approved/admin_approved 算完成
   const totalTasks = detail.tasks.length;
-  const doneStatuses = ['approved', 'completed', 'sales_approved', 'admin_approved', 'delivered'];
+  const doneStatuses = ['delivered', 'planner_approved', 'sales_approved', 'admin_approved', 'completed'];
   const doneTasks = detail.tasks.filter(t => {
     return doneStatuses.includes(t.status);
   }).length;
@@ -2987,7 +2989,7 @@ function renderSubTaskCard(detail, task, idx) {
   const isPlanner = currentRole === 'planner';
   const myTask = ['designer', 'supplychain', 'planner'].includes(currentRole) && task.designerId === getCurrentUserId();
   const needScore = task.scoringRecords && task.scoringRecords.some(sr => sr.score == null && sr.role === currentRole);
-  const doneStatuses = ['approved', 'completed', 'sales_approved', 'admin_approved', 'delivered'];
+  const doneStatuses = ['delivered', 'planner_approved', 'sales_approved', 'admin_approved', 'completed'];
   const isDone = doneStatuses.includes(task.status);
 
   return `<div class="subtask-card${isDone ? ' completed' : ''}">

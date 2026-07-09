@@ -432,7 +432,7 @@ public class ProjectController {
 
         // Progress（基于子任务完成状态，不依赖评分完成度）
         int taskCount = p.getTasks().size();
-        long doneCount = p.getTasks().stream().filter(t -> List.of("delivered", "completed", "approved", "sales_approved", "admin_approved").contains(t.getStatus())).count();
+        long doneCount = p.getTasks().stream().filter(t -> List.of("delivered", "planner_approved", "sales_approved", "admin_approved", "completed").contains(t.getStatus())).count();
         dto.setProgressPercent(taskCount > 0 ? (int) (doneCount * 100 / taskCount) : 0);
 
         dto.setCreatedAt(p.getCreatedAt().format(DTF));
