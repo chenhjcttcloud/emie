@@ -3,18 +3,15 @@ services:
     build: .
     container_name: emie-app
     restart: unless-stopped
-    network_mode: "host"
+    network_mode: host
     environment:
-      SPRING_PROFILES_ACTIVE: prod
-      SPRING_DATASOURCE_URL: jdbc:mysql://8.134.130.60:3306/designpmtest?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: mysql_nZiJw8
-      APP_UPLOAD_DIR: /app/uploads
-      APP_LOG_ARCHIVE_DIR: /app/logs/archive
+      SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/designpm?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: emie
+      SPRING_DATASOURCE_PASSWORD: MYSQL_emie
+      JAVA_TOOL_OPTIONS: -Xmx384m -Xms256m -XX:+UseSerialGC -Xss512k -XX:MaxMetaspaceSize=96m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/app/logs/heapdump.hprof
+    mem_limit: 640m
+    mem_reservation: 512m
     volumes:
-      - app-uploads:/app/uploads
-      - app-logs:/app/logs/archive
-
-volumes:
-  app-uploads:
-  app-logs:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+      - /root/.lark-cli:/root/.lark-cli
