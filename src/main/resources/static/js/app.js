@@ -3781,6 +3781,15 @@ async function submitTaskAccept(pid, tid) {
   const fd = new FormData(document.getElementById('taskAcceptForm'));
   const plannedDate = fd.get('plannedDate');
   if (!plannedDate) { alert('请选择计划完成时间'); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(plannedDate) || isNaN(new Date(plannedDate).getTime())) {
+    alert('日期格式不正确（yyyy-mm-dd）');
+    return;
+  }
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  if (new Date(plannedDate) < today) {
+    alert('计划完成时间不能早于今天');
+    return;
+  }
 
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/accept`, {
