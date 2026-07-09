@@ -973,6 +973,7 @@ function triggerDatePicker(btn) {
 
   const temp = document.createElement('input');
   temp.type = 'date';
+  temp.min = new Date().toISOString().split('T')[0];
   const rect = btn.getBoundingClientRect();
   temp.style.cssText = 'position:fixed;left:' + (rect.left + window.scrollX) + 'px;top:' + (rect.top + window.scrollY) + 'px;width:40px;height:38px;opacity:0.01;z-index:9999;';
   btn.parentNode.appendChild(temp);
@@ -3707,6 +3708,18 @@ async function submitEditTask(pid, tid) {
   if (_uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
   const fd = new FormData(document.getElementById('editTaskForm'));
   const data = Object.fromEntries(fd.entries());
+
+  // 验证计划时间不能早于今天
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (data.plannedDate && /^\d{4}-\d{2}-\d{2}$/.test(data.plannedDate)) {
+    const selected = new Date(data.plannedDate);
+    if (selected < today) {
+      alert('计划完成时间不能早于今天');
+      return;
+    }
+  }
+
   data.currentUser = getCurrentUserName();
   data.currentRole = currentRole;
   // 始终提交当前图片和附件列表（包含已有的和新上传的）
