@@ -2895,7 +2895,7 @@ function renderProjectDetailContent(detail) {
   const isChannel = detail.type === 'channel_custom';
   // 进度：approved/completed/sales_approved/admin_approved 算完成
   const totalTasks = detail.tasks.length;
-  const doneStatuses = ['approved', 'completed', 'sales_approved', 'admin_approved'];
+  const doneStatuses = ['approved', 'completed', 'sales_approved', 'admin_approved', 'delivered'];
   const doneTasks = detail.tasks.filter(t => {
     return doneStatuses.includes(t.status);
   }).length;
@@ -2987,7 +2987,7 @@ function renderSubTaskCard(detail, task, idx) {
   const isPlanner = currentRole === 'planner';
   const myTask = ['designer', 'supplychain', 'planner'].includes(currentRole) && task.designerId === getCurrentUserId();
   const needScore = task.scoringRecords && task.scoringRecords.some(sr => sr.score == null && sr.role === currentRole);
-  const doneStatuses = ['approved', 'completed', 'sales_approved', 'admin_approved'];
+  const doneStatuses = ['approved', 'completed', 'sales_approved', 'admin_approved', 'delivered'];
   const isDone = doneStatuses.includes(task.status);
 
   return `<div class="subtask-card${isDone ? ' completed' : ''}">
@@ -3365,7 +3365,7 @@ function renderProjectPipeline(detail) {
     }
     if (acceptedTasks.length > 0) {
       const names = acceptedTasks.map(t => t.name).join('、');
-      return { color: '#854F0B', bg: '#FAEEDA', border: '#FAC775', icon: '💡', title: '等待交付', text: '子任务「' + names + '」正在执行中，等待设计师交付成果。' };
+      return { color: '#854F0B', bg: '#FAEEDA', border: '#FAC775', icon: '💡', title: '等待交付', text: '子任务「' + names + '」正在执行中，等待子任务负责人交付成果。' };
     }
     if (unassignedTasks.length > 0) {
       return { color: '#854F0B', bg: '#FAEEDA', border: '#FAC775', icon: '💡', title: '等待分配子任务', text: '还有 ' + unassignedTasks.length + ' 个子任务未指派，请先指派负责人。' };

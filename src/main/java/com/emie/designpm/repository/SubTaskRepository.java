@@ -29,7 +29,7 @@ public interface SubTaskRepository extends JpaRepository<SubTask, Long> {
 
     /** 批量统计项目子任务数及完成数（避免 JOIN FETCH 加载全部子任务） */
     @Query("SELECT t.project.id, COUNT(t), " +
-           "SUM(CASE WHEN t.status IN ('completed','approved','sales_approved','admin_approved') THEN 1 ELSE 0 END) " +
+           "SUM(CASE WHEN t.status IN ('delivered','completed','approved','sales_approved','admin_approved') THEN 1 ELSE 0 END) " +
            "FROM SubTask t WHERE t.project.id IN (?1) GROUP BY t.project.id")
     List<Object[]> countTasksByProjectIds(List<Long> projectIds);
 
