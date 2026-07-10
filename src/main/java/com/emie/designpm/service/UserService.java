@@ -48,7 +48,15 @@ public class UserService {
     }
 
     public List<User> getUsersByRole(String role) {
-        return roleCache.computeIfAbsent(role, r -> userRepository.findByRole(r));
+        // 用户管理、组织架构和管理员视角切换都要求读取最新数据。
+        // 不能使用长期缓存，否则新增用户、角色变更或部门变更后，
+        // /api/users 会继续返回旧的角色列表。
+        List<User> users = userRepository.findByRole(role);
+        roleCache.put(role, users);
+        for (User user : users) {
+            userCache.put(user.getUserId(), user);
+        }
+        return users;
     }
 
     public User getUserByUserId(String userId) {

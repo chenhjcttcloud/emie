@@ -9,7 +9,7 @@ function authHeaders() {
 }
 
 async function apiGet(url) {
-  const r = await fetch(API + url, { headers: authHeaders() });
+  const r = await fetch(API + url, { headers: authHeaders(), cache: 'no-store' });
   if (r.status === 401) { handleLogout(); throw new Error('登录已过期'); }
   if (!r.ok) throw new Error(`GET ${url} failed: ${r.status}`);
   return r.json();
@@ -407,7 +407,7 @@ async function showApp() {
   currentUserId = AUTH_USER.userId;
 
   // 渲染角色切换器（admin 可用）
-  renderRoleSwitcher();
+  await renderRoleSwitcher();
 
   // 加载用户列表（用于下拉框）
   try { USERS = await apiGet('/users'); } catch(e) { USERS = {}; }
@@ -421,7 +421,7 @@ async function showApp() {
   // 初始加载时也刷新用户列表（包含部门分配信息）
   try { USERS = await apiGet('/users'); } catch(e) {}
   // 用户列表加载后重新渲染切换器（否则下拉选项为空）
-  renderRoleSwitcher();
+  await renderRoleSwitcher();
   renderSidebar();
   render();
 }
@@ -635,12 +635,14 @@ function roleLabel(r) {
 const ROLE_LABELS = { admin: '管理员', sales: '销售', planner: '企划', designer: '设计师', supplychain: '供应链' };
 const ROLE_COLORS = { admin: 'admin', sales: 'sales', planner: 'planner', designer: 'designer', supplychain: 'supplychain' };
 
-function renderRoleSwitcher() {
+async function renderRoleSwitcher() {
   const headerRight = document.querySelector('.header-right');
   const old = document.getElementById('identitySwitcher');
   if (old) old.remove();
   // 仅 admin 显示切换
   if (!ORIGINAL_USER || (ORIGINAL_USER.role !== 'admin')) return;
+  // 刷新用户列表，确保新增/角色变更及时同步
+  try { USERS = await apiGet('/users'); } catch(e) {}
   if (!USERS || Object.keys(USERS).length === 0) return;
 
   // 构建所有用户列表
@@ -746,7 +748,7 @@ async function switchToUser(targetUserId) {
     currentRole = result.role;
     currentUserId = result.userId;
     document.getElementById('userDisplay').textContent = `${AUTH_USER.name}（${roleLabel(AUTH_USER.role)}）`;
-    renderRoleSwitcher();
+    await renderRoleSwitcher();
     renderSidebar();
     render();
     currentView = 'dashboard';
@@ -755,17 +757,27 @@ async function switchToUser(targetUserId) {
   }
 }
 
-function toggleIdentityPanel(event) {
+async function toggleIdentityPanel(event) {
   event.stopPropagation();
-  const panel = document.getElementById('identityPanel');
-  const chevron = document.querySelector('.identity-chevron');
+  let panel = document.getElementById('identityPanel');
   if (!panel) return;
   const isOpen = panel.classList.contains('open');
   if (isOpen) {
     closeIdentityPanel();
   } else {
+    // 管理员可能在其他页面/窗口新增用户或修改角色，打开面板时重新拉取。
+    if (ORIGINAL_USER?.role === 'admin') {
+      try {
+        await renderRoleSwitcher();
+        panel = document.getElementById('identityPanel');
+      } catch (e) {
+        console.warn('刷新用户切换列表失败', e);
+      }
+    }
+    if (!panel) return;
+    const chevron = document.querySelector('.identity-chevron');
     panel.classList.add('open');
-    chevron.classList.add('open');
+    if (chevron) chevron.classList.add('open');
     // 清除搜索
     const input = document.getElementById('identitySearchInput');
     if (input) { input.value = ''; filterUsers(''); }
@@ -800,11 +812,16 @@ function filterUsers(query) {
 }
 
 function getCurrentUserName() {
+  // currentUserId 使用的是业务 userId（如 admin_liu），而不是数据库数字主键 id。
+  // 优先使用当前会话，避免工作台错误显示该角色列表中的第一个用户。
+  if (AUTH_USER?.userId === currentUserId && AUTH_USER.name) {
+    return AUTH_USER.name;
+  }
   if (currentUserId && USERS[currentRole]) {
-    const u = USERS[currentRole].find(x => x.id === currentUserId);
+    const u = USERS[currentRole].find(x => x.userId === currentUserId);
     if (u) return u.name;
   }
-  return USERS[currentRole]?.[0]?.name || '未知';
+  return AUTH_USER?.name || USERS[currentRole]?.[0]?.name || '未知';
 }
 
 function getCurrentUserId() {
@@ -4731,6 +4748,8 @@ async function submitEditUser(userId) {
     await apiPut(`/admin/users/${userId}`, body);
     showAdminToast('✅ 用户资料已更新', 'success');
     closeM('editUserModal');
+    USERS = await apiGet('/users');
+    await renderRoleSwitcher();
     await renderAdminContent();
   } catch (e) {
     errEl.textContent = e.message;
@@ -4746,14 +4765,18 @@ async function toggleUserStatus(userId, userName, currentStatus) {
   try {
     const result = await apiPut(`/admin/users/${userId}/toggle-status`, {});
     showAdminToast(`✅ 用户「${userName}」已${result.status === 'active' ? '启用' : '停用'}`, 'success');
+    USERS = await apiGet('/users');
+    await renderRoleSwitcher();
     await renderAdminContent();
   } catch (e) {
     showAdminToast('❌ 操作失败: ' + e.message, 'error');
   }
 }
 
-function refreshUserList() {
-  renderAdminContent();
+async function refreshUserList() {
+  USERS = await apiGet('/users');
+  await renderRoleSwitcher();
+  await renderAdminContent();
 }
 
 function openChangeRoleModal(userId, currentRole, userName) {
@@ -4793,6 +4816,8 @@ async function submitChangeRole(userId) {
     await apiPut(`/admin/users/${userId}/role`, { role: newRole });
     showAdminToast('✅ 角色已更新', 'success');
     closeM('changeRoleModal');
+    USERS = await apiGet('/users');
+    await renderRoleSwitcher();
     await renderAdminContent();
   } catch (e) {
     showAdminToast('❌ 更新失败: ' + e.message, 'error');
@@ -4859,6 +4884,8 @@ async function submitDeleteUser(userId) {
   try {
     await apiDelete(`/admin/users/${userId}`);
     showAdminToast('✅ 用户已删除', 'success');
+    USERS = await apiGet('/users');
+    await renderRoleSwitcher();
     await renderAdminContent();
   } catch (e) {
     showAdminToast('❌ 删除失败: ' + e.message, 'error');
@@ -5416,6 +5443,9 @@ async function renderAdminOrg(container) {
     apiGet('/departments'),
     apiGet('/users'),
   ]);
+  // 同步全局数据，避免组织架构操作继续使用进入页面前的旧列表。
+  DEPARTMENTS = depts;
+  USERS = usersData;
   // 展平所有用户
   const allUsers = Object.values(usersData).flat();
 

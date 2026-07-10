@@ -18,6 +18,7 @@ data/
 application-local.yml
 application-dev.yml
 *.local.yml
+.server.local.env
 
 # === 工作空间/工具 ===
 .workbuddy/

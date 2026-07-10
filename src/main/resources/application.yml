@@ -84,15 +84,16 @@ spring:
     open-in-view: true
 
 ---
+# === 生产环境：正式 MySQL ===
 spring:
   config:
     activate:
       on-profile: prod
   datasource:
-    url: jdbc:mysql://8.134.130.60:3306/designpmtest?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+    url: jdbc:mysql://47.119.179.230:3306/designpm?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
     driver-class-name: com.mysql.cj.jdbc.Driver
-    username: root
-    password: mysql_nZiJw8
+    username: emie
+    password: MYSQL_emie
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
@@ -118,16 +119,16 @@ server:
     min-response-size: 512
 
 ---
-# === 默认环境：云服务器 MySQL ===
+# === 默认环境：正式 MySQL ===
 spring:
   config:
     activate:
       on-profile: default
   datasource:
-    url: jdbc:mysql://8.134.130.60:3306/designpmtest?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+    url: jdbc:mysql://47.119.179.230:3306/designpm?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
     driver-class-name: com.mysql.cj.jdbc.Driver
-    username: root
-    password: mysql_nZiJw8
+    username: emie
+    password: MYSQL_emie
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
