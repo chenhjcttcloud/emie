@@ -73,7 +73,7 @@ public class FileArchiveService {
     @Transactional
     public FileRecord recordUpload(String storedName, String originalName,
                                    long fileSize, String mimeType,
-                                   String targetType, Long targetId) {
+                                   String targetType, Long targetId, String ownerUserId) {
         FileRecord record = FileRecord.builder()
                 .storedName(storedName)
                 .originalName(originalName)
@@ -81,6 +81,7 @@ public class FileArchiveService {
                 .mimeType(mimeType)
                 .targetType(targetType)
                 .targetId(targetId)
+                .ownerUserId(ownerUserId)
                 .storageTier("local")
                 .createdAt(LocalDateTime.now())
                 .build();

@@ -134,7 +134,9 @@ public class ProjectService {
     public Project createProject(Map<String, Object> body) {
         String type = (String) body.get("type");
         String currentRole = (String) body.getOrDefault("currentRole", "");
+        String currentUserId = (String) body.getOrDefault("currentUserId", "");
         String plannerId = SecurityUtil.sanitizeText((String) body.get("plannerId"), 100);
+        String salesId = SecurityUtil.sanitizeText((String) body.get("salesId"), 100);
         String deadline = (String) body.get("deadline");
         String productRequirements = SecurityUtil.sanitizeText((String) body.get("productRequirements"), 2000);
         String description = SecurityUtil.sanitizeText((String) body.getOrDefault("description", ""), 2000);
@@ -144,6 +146,14 @@ public class ProjectService {
         }
         if ("regular".equals(type) && !List.of("planner", "admin").contains(currentRole)) {
             throw new RuntimeException("仅企划或管理员可创建常规品项目");
+        }
+
+        // 普通用户只能把项目归属到自己；管理员才可以代其他成员创建。
+        if ("sales".equals(currentRole) && "channel_custom".equals(type)) {
+            salesId = currentUserId;
+        }
+        if ("planner".equals(currentRole) && "regular".equals(type)) {
+            plannerId = currentUserId;
         }
 
         // 验证并清理文件上传
@@ -156,8 +166,8 @@ public class ProjectService {
         p.setPlannerName(plannerId != null && !plannerId.isEmpty() ? userService.getUserName(plannerId) : "");
 
         if ("channel_custom".equals(type)) {
-            p.setSalesId((String) body.get("salesId"));
-            p.setSalesName(userService.getUserName((String) body.get("salesId")));
+            p.setSalesId(salesId);
+            p.setSalesName(userService.getUserName(salesId));
             p.setStatus("pending_planner");
         } else {
             p.setStatus("planner_accepted");
@@ -240,6 +250,9 @@ public class ProjectService {
         if (!List.of("planner", "admin").contains(role)) {
             throw new RuntimeException("仅企划或管理员可创建子任务");
         }
+        if ("planner".equals(role) && !isProjectPlanner(p, body)) {
+            throw new RuntimeException("仅项目负责人企划可创建子任务");
+        }
 
         String name = SecurityUtil.sanitizeText((String) body.get("name"), 200);
         String plannedDate = (String) body.get("plannedDate");
@@ -290,6 +303,9 @@ public class ProjectService {
         String currentRole = (String) body.getOrDefault("currentRole", "");
         if (!List.of("planner", "admin").contains(currentRole)) {
             throw new RuntimeException("仅企划或管理员可编辑子任务");
+        }
+        if ("planner".equals(currentRole) && !isProjectPlanner(p, body)) {
+            throw new RuntimeException("仅项目负责人企划可编辑子任务");
         }
 
         SubTask task = p.getTasks().stream()
@@ -497,9 +513,14 @@ public class ProjectService {
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
+        String currentUserId = (String) body.getOrDefault("currentUserId", "");
         String comments = SecurityUtil.sanitizeText((String) body.getOrDefault("comments", ""), 500);
         boolean isChannel = "channel_custom".equals(p.getType());
         Integer score = parseOptionalScore(body.get("score"));
+
+        if (!canReviewTask(p, task, currentRole, currentUserId)) {
+            throw new RuntimeException("当前用户无权验收该子任务");
+        }
 
         if ("delivered".equals(task.getStatus()) && "planner".equals(currentRole)) {
             // Step 1: 企划验收 → 企划评分
@@ -607,12 +628,21 @@ public class ProjectService {
                 .filter(t -> t.getId().equals(taskId))
                 .findFirst().orElseThrow(() -> new RuntimeException("子任务不存在"));
 
-        task.setStatus("rejected");
         String comments = SecurityUtil.sanitizeText((String) body.get("comments"), 500);
-        task.setReviewComments(comments);
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
+        String currentUserId = (String) body.getOrDefault("currentUserId", "");
+        boolean canReject = ("planner".equals(currentRole) && "delivered".equals(task.getStatus()))
+                || ("sales".equals(currentRole) && "channel_custom".equals(p.getType())
+                    && "planner_approved".equals(task.getStatus()))
+                || ("admin".equals(currentRole) && !"channel_custom".equals(p.getType())
+                    && "planner_approved".equals(task.getStatus()));
+        if (!canReject || !canReviewTask(p, task, currentRole, currentUserId)) {
+            throw new RuntimeException("当前角色或任务状态无法驳回");
+        }
+        task.setStatus("rejected");
+        task.setReviewComments(comments);
         p.getLogs().add(new ActivityLog("子任务驳回：" + task.getName() + "（意见：" + comments + "）", currentUser, currentRole, p));
 
         return projectRepository.save(p);
@@ -633,6 +663,17 @@ public class ProjectService {
                 .findFirst().orElseThrow(() -> new RuntimeException("子任务不存在"));
 
         String role = (String) body.get("role");
+        String currentRole = (String) body.getOrDefault("currentRole", "");
+        String currentUserId = (String) body.getOrDefault("currentUserId", "");
+        if (!List.of("planner", "sales", "admin").contains(role)
+                || !role.equals(currentRole)
+                || ("sales".equals(role) && !"channel_custom".equals(p.getType()))
+                || ("admin".equals(role) && "channel_custom".equals(p.getType()))) {
+            throw new RuntimeException("当前角色不能提交该项目评分");
+        }
+        if (!canReviewTask(p, task, currentRole, currentUserId)) {
+            throw new RuntimeException("当前用户无权提交该项目评分");
+        }
         Integer score = parseOptionalScore(body.get("score"));
         validateScoreRequired(score, "评分");
 
@@ -655,7 +696,6 @@ public class ProjectService {
         scoringRepository.save(sr);
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
-        String currentRole = (String) body.getOrDefault("currentRole", "");
         p.getLogs().add(new ActivityLog("子任务评分（" + role + "：" + score + "分）：" + task.getName(), currentUser, currentRole, p));
 
         checkTaskCompletion(task, p);
@@ -911,11 +951,14 @@ public class ProjectService {
     public Double computeProjectScore(Project project) {
         List<SubTask> tasks = project.getTasks();
         if (tasks == null || tasks.isEmpty()) return null;
+        Map<Long, List<ScoringRecord>> recordsByTask = scoringRepository.findBySubTaskIds(
+                        tasks.stream().map(SubTask::getId).toList())
+                .stream().collect(Collectors.groupingBy(sr -> sr.getSubTask().getId()));
         double totalScore = 0;
         int scoredCount = 0;
         for (SubTask task : tasks) {
             if (!"completed".equals(task.getStatus()) && !"approved".equals(task.getStatus())) continue;
-            List<ScoringRecord> records = scoringRepository.findBySubTaskId(task.getId());
+            List<ScoringRecord> records = recordsByTask.getOrDefault(task.getId(), List.of());
             if (records == null || records.isEmpty()) continue;
             double weightedSum = 0;
             double totalWeight = 0;
@@ -995,10 +1038,15 @@ public class ProjectService {
     public List<Map<String, Object>> getPendingScoringTasks(String role, String userId) {
         List<Project> projects = getProjectsByRoleAndUser(role, userId);
         List<Map<String, Object>> result = new ArrayList<>();
+        List<Long> taskIds = projects.stream().flatMap(p -> p.getTasks().stream())
+                .map(SubTask::getId).toList();
+        Map<Long, List<ScoringRecord>> recordsByTask = taskIds.isEmpty() ? Map.of()
+                : scoringRepository.findBySubTaskIds(taskIds).stream()
+                .collect(Collectors.groupingBy(sr -> sr.getSubTask().getId()));
 
         for (Project p : projects) {
             for (SubTask t : p.getTasks()) {
-                List<ScoringRecord> records = scoringRepository.findBySubTaskId(t.getId());
+                List<ScoringRecord> records = recordsByTask.getOrDefault(t.getId(), List.of());
                 Optional<ScoringRecord> myRecord = records.stream()
                         .filter(sr -> role.equals(sr.getRole()))
                         .findFirst();
@@ -1034,6 +1082,23 @@ public class ProjectService {
             }
         }
         return result;
+    }
+
+    private boolean isProjectPlanner(Project project, Map<String, Object> body) {
+        String userId = (String) body.getOrDefault("currentUserId", "");
+        return userId != null && !userId.isBlank() && Objects.equals(userId, project.getPlannerId());
+    }
+
+    /** 验收和评分必须同时满足角色、项目归属，不能仅由请求体中的 role 决定。 */
+    private boolean canReviewTask(Project project, SubTask task, String role, String userId) {
+        if (project == null || task == null || userId == null || userId.isBlank()) return false;
+        if ("admin".equals(role)) return true;
+        if ("planner".equals(role)) {
+            return Objects.equals(userId, project.getPlannerId());
+        }
+        return "sales".equals(role)
+                && "channel_custom".equals(project.getType())
+                && Objects.equals(userId, project.getSalesId());
     }
 
     private Integer parseOptionalScore(Object rawScore) {

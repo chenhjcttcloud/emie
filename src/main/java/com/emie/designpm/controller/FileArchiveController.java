@@ -25,7 +25,7 @@ public class FileArchiveController {
         try {
             return ResponseEntity.ok(fileArchiveService.getStorageStats());
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("error", "获取存储统计失败"));
         }
     }
 
@@ -51,7 +51,7 @@ public class FileArchiveController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of("error", "恢复失败: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("error", "恢复失败，请稍后重试"));
         }
     }
 }

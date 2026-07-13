@@ -80,9 +80,6 @@ public class ProjectController {
     @GetMapping("/{id}")
     public ResponseEntity<ProjectDetailDTO> getProjectDetail(@PathVariable Long id, HttpServletRequest request) {
         AuthController.AuthSession session = getSession(request);
-        // 记录查询日志
-        activityLogRepository.save(new ActivityLog(
-            "查询项目 #" + id, session.name(), session.role()));
         Optional<Project> projectOpt = projectService.getProjectById(id);
         if (projectOpt.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -90,6 +87,9 @@ public class ProjectController {
         if (!canAccessProject(projectOpt.get(), session)) {
             return ResponseEntity.status(403).build();
         }
+        // 仅记录成功访问，避免把未授权探测误记为正常查询。
+        activityLogRepository.save(new ActivityLog(
+            "查询项目 #" + id, session.name(), session.role()));
         return ResponseEntity.ok(toDetail(projectOpt.get()));
     }
 
@@ -274,6 +274,9 @@ public class ProjectController {
     @PostMapping("/{id}/terminate")
     public ResponseEntity<?> terminateProject(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
+            AuthController.AuthSession session = getSession(request);
+            Project project = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
+            if (!canManageProject(project, session)) return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
             Project p = projectService.terminateProject(id, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
@@ -285,6 +288,9 @@ public class ProjectController {
     @PostMapping("/{id}/pause")
     public ResponseEntity<?> pauseProject(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
+            AuthController.AuthSession session = getSession(request);
+            Project project = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
+            if (!canManageProject(project, session)) return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
             Project p = projectService.pauseProject(id, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
@@ -296,6 +302,9 @@ public class ProjectController {
     @PostMapping("/{id}/cancel-terminate")
     public ResponseEntity<?> cancelTerminate(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
+            AuthController.AuthSession session = getSession(request);
+            Project project = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
+            if (!canManageProject(project, session)) return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
             Project p = projectService.cancelTerminate(id, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
@@ -307,6 +316,9 @@ public class ProjectController {
     @PostMapping("/{id}/resume")
     public ResponseEntity<?> resumeProject(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
+            AuthController.AuthSession session = getSession(request);
+            Project project = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
+            if (!canManageProject(project, session)) return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
             Project p = projectService.resumeProject(id, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
@@ -318,8 +330,15 @@ public class ProjectController {
     @DeleteMapping("/{projectId}/tasks/{taskId}")
     public ResponseEntity<?> deleteTask(
             @PathVariable Long projectId,
-            @PathVariable Long taskId) {
+            @PathVariable Long taskId,
+            HttpServletRequest request) {
         try {
+            AuthController.AuthSession session = getSession(request);
+            Project project = projectService.getProjectById(projectId).orElseThrow(() -> new RuntimeException("项目不存在"));
+            if (session == null || !("admin".equals(session.role()) ||
+                    ("planner".equals(session.role()) && Objects.equals(session.userId(), project.getPlannerId())))) {
+                return ResponseEntity.status(403).body(Map.of("error", "仅项目企划或管理员可删除子任务"));
+            }
             Project p = projectService.deleteSubTask(projectId, taskId);
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
@@ -329,8 +348,9 @@ public class ProjectController {
 
     /** 删除整个项目（含子任务、日志、评分记录） */
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteProject(@PathVariable Long id) {
+    public ResponseEntity<?> deleteProject(@PathVariable Long id, HttpServletRequest request) {
         try {
+            if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可删除项目"));
             projectService.deleteProject(id);
             return ResponseEntity.ok(Map.of("message", "项目已删除"));
         } catch (Exception e) {
@@ -465,22 +485,6 @@ public class ProjectController {
         dto.setSelfInnovation(t.getSelfInnovation());
         dto.setCreatedAt(t.getCreatedAt().format(DTF));
 
-        // Scoring records
-        List<ScoringRecord> records = scoringRepository.findBySubTaskId(t.getId());
-        dto.setScoringRecords(records.stream().map(sr -> {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("id", sr.getId());
-            m.put("role", sr.getRole());
-            m.put("scoreType", sr.getScoreType());
-            m.put("score", sr.getScore());
-            m.put("comment", sr.getComment());
-            // 兼容旧数据
-            m.put("aesthetics", sr.getAesthetics());
-            m.put("innovation", sr.getInnovation());
-            m.put("weight", sr.getWeight());
-            return m;
-        }).collect(Collectors.toList()));
-
         return dto;
     }
 
@@ -518,8 +522,26 @@ public class ProjectController {
         }
         if ("planner".equals(session.role())) {
             return Objects.equals(session.userId(), project.getPlannerId())
+                    || ("channel_custom".equals(project.getType()) && "pending_planner".equals(project.getStatus()))
                     || project.getTasks().stream().anyMatch(t -> Objects.equals(session.userId(), t.getDesignerId()));
         }
-        return project.getTasks().stream().anyMatch(t -> Objects.equals(session.userId(), t.getDesignerId()));
+        return project.getTasks().stream().anyMatch(t -> Objects.equals(session.userId(), t.getDesignerId())
+                || (t.getDesignerId() == null && "pending".equals(t.getStatus())
+                    && (t.getAssigneeRole() == null || t.getAssigneeRole().isBlank()
+                        || t.getAssigneeRole().equals(session.role()))));
+    }
+
+    /** 项目级写操作权限，和现有工作台按钮角色保持一致。 */
+    private boolean canManageProject(Project project, AuthController.AuthSession session) {
+        if (project == null || session == null) return false;
+        if ("admin".equals(session.role())) return true;
+        if ("sales".equals(session.role())) {
+            return Objects.equals(session.userId(), project.getSalesId());
+        }
+        if ("planner".equals(session.role())) {
+            return Objects.equals(session.userId(), project.getPlannerId())
+                    || ("channel_custom".equals(project.getType()) && "pending_planner".equals(project.getStatus()));
+        }
+        return false;
     }
 }

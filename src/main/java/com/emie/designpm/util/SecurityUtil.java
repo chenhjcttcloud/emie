@@ -9,11 +9,11 @@ import java.util.List;
 public class SecurityUtil {
 
     // 允许上传的图片扩展名
-    private static final List<String> ALLOWED_IMAGE_EXTS = Arrays.asList("jpg", "jpeg", "png", "gif", "bmp", "webp", "svg");
+    private static final List<String> ALLOWED_IMAGE_EXTS = Arrays.asList("jpg", "jpeg", "png", "gif", "bmp", "webp");
 
     // 允许上传的附件扩展名（办公文档 + 图片 + PDF）
     private static final List<String> ALLOWED_ATTACHMENT_EXTS = Arrays.asList(
-        "jpg", "jpeg", "png", "gif", "bmp", "webp", "svg",
+        "jpg", "jpeg", "png", "gif", "bmp", "webp",
         "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
         "txt", "csv", "zip", "rar", "7z"
     );

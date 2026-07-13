@@ -3,6 +3,7 @@ package com.emie.designpm.controller;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.DepartmentRepository;
 import com.emie.designpm.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -64,7 +65,9 @@ public class UserController {
 
     /** 更新用户部门/职级/主管信息 */
     @PutMapping("/org/{userId}")
-    public ResponseEntity<?> updateOrgInfo(@PathVariable String userId, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> updateOrgInfo(@PathVariable String userId, @RequestBody Map<String, Object> body,
+                                           HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
         User u = userService.getUserByUserId(userId);
         if (u == null) return ResponseEntity.notFound().build();
         if (body.containsKey("departmentId")) {

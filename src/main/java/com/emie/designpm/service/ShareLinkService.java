@@ -16,9 +16,16 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 @Service
 public class ShareLinkService {
+
+    private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
+    private static final int MAX_PASSWORD_ATTEMPTS = 10;
+    private static final long PASSWORD_WINDOW_MS = 60_000L;
+    private final Map<String, AttemptWindow> passwordAttempts = new ConcurrentHashMap<>();
 
     private final ShareLinkRepository shareLinkRepository;
     private final ProjectRepository projectRepository;
@@ -50,7 +57,7 @@ public class ShareLinkService {
                 ? LocalDateTime.now().plusSeconds(expiresInSec)
                 : null;
         String passwordHash = rawPassword != null && !rawPassword.isBlank()
-                ? AuthController.sha256(rawPassword)
+                ? PASSWORD_ENCODER.encode(rawPassword)
                 : null;
 
         ShareLink link = ShareLink.builder()
@@ -102,9 +109,19 @@ public class ShareLinkService {
             if (password == null || password.isBlank()) {
                 return Map.of("needPassword", true, "token", token);
             }
-            String inputHash = AuthController.sha256(password);
-            if (!inputHash.equals(link.getPassword())) {
+            checkPasswordRateLimit(token);
+            String storedPassword = link.getPassword();
+            boolean matches = storedPassword.startsWith("$2")
+                    ? PASSWORD_ENCODER.matches(password, storedPassword)
+                    : AuthController.sha256(password).equals(storedPassword);
+            if (!matches) {
+                registerPasswordFailure(token);
                 throw new IllegalArgumentException("密码错误");
+            }
+            passwordAttempts.remove(token);
+            if (!storedPassword.startsWith("$2")) {
+                link.setPassword(PASSWORD_ENCODER.encode(password));
+                shareLinkRepository.save(link);
             }
         }
 
@@ -126,6 +143,26 @@ public class ShareLinkService {
                 "viewCount", link.getViewCount()
         ));
         return data;
+    }
+
+    private void checkPasswordRateLimit(String token) {
+        AttemptWindow window = passwordAttempts.get(token);
+        if (window != null && window.isActive() && window.attempts >= MAX_PASSWORD_ATTEMPTS) {
+            throw new IllegalArgumentException("尝试过于频繁，请稍后再试");
+        }
+    }
+
+    private void registerPasswordFailure(String token) {
+        passwordAttempts.compute(token, (key, current) -> {
+            if (current == null || !current.isActive()) return new AttemptWindow(1, System.currentTimeMillis());
+            return new AttemptWindow(current.attempts + 1, current.startedAt);
+        });
+    }
+
+    private record AttemptWindow(int attempts, long startedAt) {
+        boolean isActive() {
+            return System.currentTimeMillis() - startedAt < PASSWORD_WINDOW_MS;
+        }
     }
 
     /** 获取当前用户创建的所有分享链接 */
@@ -186,7 +223,7 @@ public class ShareLinkService {
             if (rawPassword.isBlank()) {
                 link.setPassword(null);
             } else {
-                link.setPassword(AuthController.sha256(rawPassword));
+                link.setPassword(PASSWORD_ENCODER.encode(rawPassword));
             }
         }
         shareLinkRepository.save(link);

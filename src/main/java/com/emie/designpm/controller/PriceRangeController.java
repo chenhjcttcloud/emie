@@ -4,6 +4,7 @@ import com.emie.designpm.entity.PriceRange;
 import com.emie.designpm.repository.PriceRangeRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.List;
 import java.util.Map;
@@ -27,7 +28,8 @@ public class PriceRangeController {
     }
 
     @PostMapping
-    public ResponseEntity<PriceRange> create(@RequestBody Map<String, String> body) {
+    public ResponseEntity<PriceRange> create(@RequestBody Map<String, String> body, HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
         String name = body.get("name");
         if (name == null || name.isBlank()) return ResponseEntity.badRequest().build();
         int sortOrder = 0;
@@ -38,7 +40,8 @@ public class PriceRangeController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<PriceRange> update(@PathVariable Long id, @RequestBody Map<String, String> body) {
+    public ResponseEntity<PriceRange> update(@PathVariable Long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
         PriceRange item = repo.findById(id).orElse(null);
         if (item == null) return ResponseEntity.notFound().build();
         if (body.containsKey("name")) item.setName(body.get("name").trim());
@@ -50,7 +53,8 @@ public class PriceRangeController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable Long id, HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
         if (!repo.existsById(id)) return ResponseEntity.notFound().build();
         repo.deleteById(id);
         return ResponseEntity.ok().build();

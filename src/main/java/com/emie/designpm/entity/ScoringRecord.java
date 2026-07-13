@@ -9,7 +9,9 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(name = "scoring_records", indexes = {
     @Index(name = "idx_scoring_sub_task", columnList = "sub_task_id"),
-    @Index(name = "idx_scoring_role", columnList = "role")
+    @Index(name = "idx_scoring_role", columnList = "role"),
+    @Index(name = "idx_scoring_role_score", columnList = "role,score"),
+    @Index(name = "idx_scoring_task_role", columnList = "sub_task_id,role")
 })
 @EntityListeners(com.emie.designpm.service.ScoringSyncListener.class)
 public class ScoringRecord {

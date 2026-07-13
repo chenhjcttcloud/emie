@@ -15,6 +15,9 @@ target/
 data/
 
 # === 环境配置（含密码）===
+.env
+.env.*
+!.env.example
 application-local.yml
 application-dev.yml
 *.local.yml

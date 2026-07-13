@@ -58,13 +58,14 @@ public class FileController {
     }
 
     @PostMapping("/upload")
-    public ResponseEntity<Map<String, Object>> uploadFile(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<Map<String, Object>> uploadFile(@RequestParam("file") MultipartFile file,
+                                                          HttpServletRequest request) {
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "文件为空"));
         }
 
         String originalName = file.getOriginalFilename();
-        if (originalName == null || !SecurityUtil.isValidFileName(originalName)) {
+        if (originalName == null || !SecurityUtil.isValidAttachmentFile(originalName)) {
             return ResponseEntity.badRequest().body(Map.of("error", "不允许上传此类型文件"));
         }
 
@@ -83,7 +84,9 @@ public class FileController {
             String mimeType = URLConnection.guessContentTypeFromName(originalName);
             fileArchiveService.recordUpload(storedName, originalName, file.getSize(),
                     mimeType != null ? mimeType : "application/octet-stream",
-                    null, null);
+                    null, null,
+                    Optional.ofNullable((AuthController.AuthSession) request.getAttribute("authSession"))
+                            .map(AuthController.AuthSession::userId).orElse(null));
 
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("name", originalName);
@@ -92,7 +95,7 @@ public class FileController {
             result.put("url", "/api/files/download/" + storedName);
             return ResponseEntity.ok(result);
         } catch (IOException e) {
-            return ResponseEntity.internalServerError().body(Map.of("error", "文件保存失败: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("error", "文件保存失败，请稍后重试"));
         }
     }
 
@@ -161,7 +164,12 @@ public class FileController {
 
     /** 获取文件基本信息（不含文件内容） */
     @GetMapping("/info/{fileName}")
-    public ResponseEntity<Map<String, Object>> fileInfo(@PathVariable String fileName) {
+    public ResponseEntity<Map<String, Object>> fileInfo(@PathVariable String fileName,
+                                                        HttpServletRequest request) {
+        ResponseEntity<Object> authResult = checkDownloadAccess(null, fileName, request);
+        if (authResult != null) {
+            return ResponseEntity.status(authResult.getStatusCode()).body(Map.of("error", "无权访问该文件"));
+        }
         try {
             Path filePath = fileArchiveService.resolveFile(fileName);
             String mimeType = URLConnection.guessContentTypeFromName(fileName);
@@ -199,9 +207,9 @@ public class FileController {
     private boolean canAccessFile(AuthController.AuthSession session, String storedName, String relativePath) {
         return fileRecordRepository.findByStoredName(storedName)
                 .map(record -> {
-                    // 尚未绑定到任何业务对象的文件（上传后、创建项目前预览），允许访问
+                    // 尚未绑定到业务对象的文件只允许上传者预览
                     if (record.getTargetType() == null && record.getTargetId() == null) {
-                        return true;
+                        return session.userId().equals(record.getOwnerUserId());
                     }
                     return canAccessBoundTarget(session, record.getTargetType(), record.getTargetId())
                             || isFileVisibleInAccessibleProjects(session, storedName, relativePath);

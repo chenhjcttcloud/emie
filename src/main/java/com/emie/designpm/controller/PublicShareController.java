@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletResponse;
 
 import java.util.List;
 import java.util.Map;
@@ -28,7 +29,10 @@ public class PublicShareController {
 
     @GetMapping(value = "/share/{token}", produces = MediaType.TEXT_HTML_VALUE + ";charset=UTF-8")
     public String viewShare(@PathVariable String token,
-                            @RequestParam(value = "password", required = false) String password) {
+                            @RequestParam(value = "password", required = false) String password,
+                            HttpServletResponse response) {
+        response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        response.setHeader("Pragma", "no-cache");
         try {
             Map<String, Object> data = shareLinkService.resolveShare(token, password);
 
@@ -42,7 +46,7 @@ public class PublicShareController {
             if ("密码错误".equals(e.getMessage())) {
                 return renderPasswordPage(token, e.getMessage());
             }
-            return renderErrorPage(e.getMessage());
+            return renderErrorPage("分享链接无效或已失效");
         } catch (Exception e) {
             log.error("分享页渲染失败 token={}", token, e);
             return renderErrorPage("页面加载失败，请重试");
@@ -51,8 +55,9 @@ public class PublicShareController {
 
     @PostMapping(value = "/share/{token}", produces = MediaType.TEXT_HTML_VALUE + ";charset=UTF-8")
     public String viewShareWithPassword(@PathVariable String token,
-                                        @RequestParam("password") String password) {
-        return viewShare(token, password);
+                                        @RequestParam("password") String password,
+                                        HttpServletResponse response) {
+        return viewShare(token, password, response);
     }
 
     // ==================== HTML 渲染 ====================

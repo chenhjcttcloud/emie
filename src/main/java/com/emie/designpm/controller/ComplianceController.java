@@ -4,6 +4,7 @@ import com.emie.designpm.entity.ComplianceItem;
 import com.emie.designpm.repository.ComplianceItemRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.List;
 import java.util.Map;
@@ -29,7 +30,8 @@ public class ComplianceController {
     }
 
     @PostMapping
-    public ResponseEntity<ComplianceItem> create(@RequestBody Map<String, String> body) {
+    public ResponseEntity<ComplianceItem> create(@RequestBody Map<String, String> body, HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
         String name = body.get("name");
         if (name == null || name.isBlank()) {
             return ResponseEntity.badRequest().build();
@@ -43,7 +45,8 @@ public class ComplianceController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ComplianceItem> update(@PathVariable Long id, @RequestBody Map<String, String> body) {
+    public ResponseEntity<ComplianceItem> update(@PathVariable Long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
         ComplianceItem item = repo.findById(id).orElse(null);
         if (item == null) return ResponseEntity.notFound().build();
 
@@ -56,7 +59,8 @@ public class ComplianceController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable Long id, HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
         if (!repo.existsById(id)) return ResponseEntity.notFound().build();
         repo.deleteById(id);
         return ResponseEntity.ok().build();

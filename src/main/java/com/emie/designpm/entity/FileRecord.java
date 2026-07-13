@@ -16,7 +16,8 @@ import java.time.LocalDateTime;
 @Table(name = "file_records", indexes = {
     @Index(name = "idx_file_tier", columnList = "storageTier"),
     @Index(name = "idx_file_created", columnList = "createdAt"),
-    @Index(name = "idx_file_stored", columnList = "storedName")
+    @Index(name = "idx_file_stored", columnList = "storedName"),
+    @Index(name = "idx_file_owner", columnList = "ownerUserId")
 })
 public class FileRecord {
 
@@ -46,6 +47,10 @@ public class FileRecord {
 
     /** 关联的目标 ID */
     private Long targetId;
+
+    /** 上传者账号，用于文件尚未绑定业务对象时限制预览权限 */
+    @Column(length = 100)
+    private String ownerUserId;
 
     /**
      * 存储层级：

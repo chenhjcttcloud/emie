@@ -4,6 +4,7 @@ import com.emie.designpm.entity.ProductCategory;
 import com.emie.designpm.repository.ProductCategoryRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.List;
 import java.util.Map;
@@ -32,7 +33,8 @@ public class CategoryController {
 
     /** 新增类目 */
     @PostMapping
-    public ResponseEntity<ProductCategory> create(@RequestBody Map<String, String> body) {
+    public ResponseEntity<ProductCategory> create(@RequestBody Map<String, String> body, HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
         String name = body.get("name");
         if (name == null || name.isBlank()) {
             return ResponseEntity.badRequest().build();
@@ -47,7 +49,8 @@ public class CategoryController {
 
     /** 更新类目 */
     @PutMapping("/{id}")
-    public ResponseEntity<ProductCategory> update(@PathVariable Long id, @RequestBody Map<String, String> body) {
+    public ResponseEntity<ProductCategory> update(@PathVariable Long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
         ProductCategory cat = repo.findById(id).orElse(null);
         if (cat == null) return ResponseEntity.notFound().build();
 
@@ -61,7 +64,8 @@ public class CategoryController {
 
     /** 删除类目 */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable Long id, HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
         if (!repo.existsById(id)) return ResponseEntity.notFound().build();
         repo.deleteById(id);
         return ResponseEntity.ok().build();

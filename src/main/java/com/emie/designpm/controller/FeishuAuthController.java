@@ -9,13 +9,19 @@ import com.emie.designpm.repository.SystemConfigRepository;
 import com.emie.designpm.repository.UserRepository;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.net.URI;
 import java.util.Map;
+import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/api/auth/feishu")
 public class FeishuAuthController {
+
+    private static final Logger log = LoggerFactory.getLogger(FeishuAuthController.class);
 
     private final SystemConfigRepository configRepository;
     private final UserRepository userRepository;
@@ -28,18 +34,30 @@ public class FeishuAuthController {
 
     /** 获取飞书 App ID（供前端跳转用） */
     @GetMapping("/config")
-    public ResponseEntity<Map<String, String>> getFeishuConfig() {
+    public ResponseEntity<Map<String, String>> getFeishuConfig(HttpServletRequest request) {
         String appId = configRepository.findByConfigKey("feishu.appId")
                 .map(SystemConfig::getConfigValue).orElse("");
         String enabled = configRepository.findByConfigKey("feishu.enabled")
                 .map(SystemConfig::getConfigValue).orElse("false");
-        return ResponseEntity.ok(Map.of("appId", appId, "enabled", enabled));
+        String state = UUID.randomUUID().toString();
+        request.getSession(true).setAttribute("feishu_oauth_state", state);
+        return ResponseEntity.ok(Map.of("appId", appId, "enabled", enabled, "state", state));
     }
 
     /** 飞书 OAuth 登录回调（使用官方 SDK） */
     @GetMapping("/callback")
-    public ResponseEntity<?> callback(@RequestParam("code") String code) {
+    public ResponseEntity<?> callback(@RequestParam("code") String code,
+                                      @RequestParam("state") String state,
+                                      HttpServletRequest request) {
         try {
+            Object savedState = request.getSession(false) != null
+                    ? request.getSession(false).getAttribute("feishu_oauth_state") : null;
+            request.getSession(false).removeAttribute("feishu_oauth_state");
+            if (savedState == null || !savedState.toString().equals(state)) {
+                return ResponseEntity.status(HttpStatus.FOUND)
+                        .location(URI.create("/?sso_error=飞书登录请求已失效，请重新发起登录"))
+                        .build();
+            }
             User user = processFeishuCode(code);
             if (user == null) {
                 return ResponseEntity.status(HttpStatus.FOUND)
@@ -61,8 +79,9 @@ public class FeishuAuthController {
                     .build();
 
         } catch (Exception e) {
+            log.error("飞书 OAuth 回调处理失败", e);
             return ResponseEntity.status(HttpStatus.FOUND)
-                    .location(URI.create("/?sso_error=" + e.getMessage()))
+                    .location(URI.create("/?sso_error=飞书登录失败，请稍后重试"))
                     .build();
         }
     }
@@ -92,7 +111,8 @@ public class FeishuAuthController {
             return ResponseEntity.ok(Map.of("token", token, "user", userData));
 
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            log.error("飞书内嵌免登处理失败", e);
+            return ResponseEntity.badRequest().body(Map.of("error", "飞书登录失败，请稍后重试"));
         }
     }
 
@@ -106,7 +126,7 @@ public class FeishuAuthController {
         if (appId.isEmpty() || appSecret.isEmpty()) return null;
 
         Client client = Client.newBuilder(appId, appSecret)
-                .logReqAtDebug(true)
+                .logReqAtDebug(false)
                 .requestTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
                 .build();
 
@@ -130,9 +150,7 @@ public class FeishuAuthController {
 
         GetUserInfoRespBody userInfo = userInfoResp.getData();
         String openId = userInfo.getOpenId();
-        String userName = userInfo.getName();
         String email = userInfo.getEmail();
-        String mobile = userInfo.getMobile();
 
         // 查找或创建用户
         User user = userRepository.findByFeishuOpenId(openId).orElse(null);
@@ -141,27 +159,12 @@ public class FeishuAuthController {
         }
 
         if (user == null) {
-            String userId = "feishu_" + openId.substring(0, Math.min(8, openId.length()));
-            user = User.builder()
-                    .userId(userId)
-                    .name(userName != null ? userName : "飞书用户")
-                    .role("sales")
-                    .feishuOpenId(openId)
-                    .email(email)
-                    .phone(mobile)
-                    .status("active")
-                    .build();
-            userRepository.save(user);
+            // 飞书身份必须先由管理员创建/绑定，禁止通过 SSO 自动获得业务账号和角色。
+            return null;
         } else if (user.getFeishuOpenId() == null) {
             user.setFeishuOpenId(openId);
             userRepository.save(user);
         }
-
-        // 保存 userAccessToken 供飞书 Base 同步使用
-        SystemConfig tokenConfig = configRepository.findByConfigKey("feishu.userAccessToken")
-                .orElse(SystemConfig.builder().configKey("feishu.userAccessToken").configGroup("feishu").build());
-        tokenConfig.setConfigValue(userAccessToken);
-        configRepository.save(tokenConfig);
 
         return user;
     }

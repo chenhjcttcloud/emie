@@ -44,7 +44,7 @@ public class UserService {
     }
 
     private String pwd(String id) {
-        return AuthController.sha256(id);
+        return AuthController.hashPassword(id);
     }
 
     public List<User> getUsersByRole(String role) {
@@ -61,7 +61,14 @@ public class UserService {
 
     public User getUserByUserId(String userId) {
         if (userId == null) return null;
-        return userCache.computeIfAbsent(userId, id -> userRepository.findByUserId(id).orElse(null));
+        // 管理员可直接修改用户资料，不能返回旧的姓名、角色或组织信息。
+        User user = userRepository.findByUserId(userId).orElse(null);
+        if (user != null) {
+            userCache.put(userId, user);
+        } else {
+            userCache.remove(userId);
+        }
+        return user;
     }
 
     public String getUserName(String userId) {

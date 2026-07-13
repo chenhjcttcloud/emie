@@ -34,8 +34,8 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     @Query("SELECT p FROM Project p WHERE p.salesId = ?1 ORDER BY p.createdAt DESC")
     List<Project> findBySalesIdLight(String salesId);
 
-    /** 企划视图：查看指派给自己的项目（无 JOIN FETCH） */
-    @Query("SELECT p FROM Project p WHERE p.plannerId = ?1 ORDER BY p.createdAt DESC")
+    /** 企划视图：查看指派给自己的项目及待认领的渠道定制单（无 JOIN FETCH） */
+    @Query("SELECT p FROM Project p WHERE p.plannerId = ?1 OR (p.type = 'channel_custom' AND (p.plannerId IS NULL OR p.plannerId = '')) ORDER BY p.createdAt DESC")
     List<Project> findByPlannerViewLight(String plannerId);
 
     /** 设计师视图：包含待认领 + 已指派子任务的项目（无 JOIN FETCH） */

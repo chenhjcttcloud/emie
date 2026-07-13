@@ -25,6 +25,15 @@ public class AuthFilter implements Filter {
         HttpServletResponse res = (HttpServletResponse) response;
         String path = req.getRequestURI();
 
+        // 统一安全响应头；不设置严格 CSP，避免破坏现有前端内联脚本和资源加载。
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.setHeader("X-Frame-Options", "SAMEORIGIN");
+        res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+        if (path.startsWith("/api/")) {
+            res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+            res.setHeader("Pragma", "no-cache");
+        }
+
         // 允许无需认证的路径
         if (path.equals("/api/auth/login") ||
             path.equals("/api/auth/register") ||
@@ -41,9 +50,7 @@ public class AuthFilter implements Filter {
             path.startsWith("/js/") ||
             path.startsWith("/api/files/download/admin/") ||
             path.equals("/") ||
-            path.equals("/index.html") ||
-            path.equals("/h2-console") ||
-            path.startsWith("/h2-console/")) {
+            path.equals("/index.html")) {
             chain.doFilter(request, response);
             return;
         }
@@ -70,6 +77,12 @@ public class AuthFilter implements Filter {
                 res.getWriter().write("{\"error\":\"仅管理员可访问\"}");
                 return;
             }
+        }
+
+        // H2 Console 仅用于开发诊断，不对应用路由开放，避免误暴露数据库管理入口。
+        if (path.equals("/h2-console") || path.startsWith("/h2-console/")) {
+            res.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            return;
         }
 
         chain.doFilter(request, response);

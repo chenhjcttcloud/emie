@@ -1,6 +1,6 @@
--- EMIE 数据库初始化脚本
--- 与当前 JPA 实体兼容；不写入默认账号或明文/过期密码。
--- 业务表由应用启动时的迁移机制创建，生产环境建议使用正式迁移工具执行。
+-- EMIE 数据库基础初始化（与当前 JPA 实体兼容）
+-- 仅创建数据库和用户基础表；其他业务表由 Hibernate ddl-auto=update 创建/补齐。
+-- 不写入默认账号，避免明文或过期密码进入数据库。
 
 CREATE DATABASE IF NOT EXISTS designpm
   DEFAULT CHARACTER SET utf8mb4
@@ -20,10 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(100),
     status VARCHAR(20) NOT NULL DEFAULT 'active',
     department_id BIGINT,
-    feishu_open_id VARCHAR(255),
-    supervisor_id VARCHAR(100),
-    title_level INT DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 其余实体表由应用迁移创建；初始化账号由 UserService 使用 BCrypt 创建。
+-- 让应用启动时负责创建其余实体表并生成 BCrypt 初始化账号。

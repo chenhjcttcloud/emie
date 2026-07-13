@@ -30,10 +30,10 @@ spring:
     activate:
       on-profile: dev
   datasource:
-    url: jdbc:mysql://47.119.179.230:3306/designpmtest?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+    url: jdbc:mysql://${DESIGNPM_TEST_DB_HOST:47.119.179.230}:3306/${DESIGNPM_TEST_DB_NAME:designpmtest}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
     driver-class-name: com.mysql.cj.jdbc.Driver
-    username: emietest
-    password: MYSQL_emie
+    username: ${DESIGNPM_TEST_DB_USER:emietest}
+    password: ${DESIGNPM_TEST_DB_PASSWORD:MYSQL_emie}
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
@@ -60,10 +60,10 @@ spring:
     activate:
       on-profile: local
   datasource:
-    url: jdbc:mysql://47.119.179.230:3306/designpmtest?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+    url: jdbc:mysql://${DESIGNPM_TEST_DB_HOST:47.119.179.230}:3306/${DESIGNPM_TEST_DB_NAME:designpmtest}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
     driver-class-name: com.mysql.cj.jdbc.Driver
-    username: emietest
-    password: MYSQL_emie
+    username: ${DESIGNPM_TEST_DB_USER:emietest}
+    password: ${DESIGNPM_TEST_DB_PASSWORD:MYSQL_emie}
     hikari:
       maximum-pool-size: 10
       minimum-idle: 3
@@ -90,10 +90,10 @@ spring:
     activate:
       on-profile: prod
   datasource:
-    url: jdbc:mysql://47.119.179.230:3306/designpm?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+    url: jdbc:mysql://${DESIGNPM_DB_HOST:47.119.179.230}:3306/${DESIGNPM_DB_NAME:designpm}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
     driver-class-name: com.mysql.cj.jdbc.Driver
-    username: emie
-    password: MYSQL_emie
+    username: ${DESIGNPM_DB_USER:emie}
+    password: ${DESIGNPM_DB_PASSWORD}
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
@@ -125,10 +125,10 @@ spring:
     activate:
       on-profile: default
   datasource:
-    url: jdbc:mysql://47.119.179.230:3306/designpm?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+    url: jdbc:mysql://${DESIGNPM_DB_HOST:47.119.179.230}:3306/${DESIGNPM_DB_NAME:designpm}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
     driver-class-name: com.mysql.cj.jdbc.Driver
-    username: emie
-    password: MYSQL_emie
+    username: ${DESIGNPM_DB_USER:emie}
+    password: ${DESIGNPM_DB_PASSWORD}
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5

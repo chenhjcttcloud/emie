@@ -4,6 +4,7 @@ import com.emie.designpm.entity.Department;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.DepartmentRepository;
 import com.emie.designpm.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -31,7 +32,8 @@ public class DepartmentController {
 
     /** 创建部门 */
     @PostMapping
-    public ResponseEntity<Department> create(@RequestBody Department dept) {
+    public ResponseEntity<Department> create(@RequestBody Department dept, HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
         if (dept.getName() == null || dept.getName().isBlank()) {
             return ResponseEntity.badRequest().build();
         }
@@ -45,7 +47,8 @@ public class DepartmentController {
 
     /** 更新部门 */
     @PutMapping("/{id}")
-    public ResponseEntity<Department> update(@PathVariable Long id, @RequestBody Department dept) {
+    public ResponseEntity<Department> update(@PathVariable Long id, @RequestBody Department dept, HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
         return departmentRepository.findById(id)
                 .map(existing -> {
                     existing.setName(dept.getName());
@@ -92,7 +95,8 @@ public class DepartmentController {
 
     /** 删除部门 */
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> delete(@PathVariable Long id) {
+    public ResponseEntity<?> delete(@PathVariable Long id, HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
         // 清空部门成员的 departmentId
         List<User> members = userService.getUsersByDepartmentId(id);
         for (User u : members) {

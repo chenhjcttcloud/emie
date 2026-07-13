@@ -1,6 +1,18 @@
 // ==================== 产品管理系统 - 应用逻辑 ====================
 
 const API = '/api';
+const API_TIMEOUT_MS = 20000;
+
+function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  return fetch(url, { ...options, signal: controller.signal })
+    .catch(e => {
+      if (e?.name === 'AbortError') throw new Error('请求超时，请检查网络后重试');
+      throw e;
+    })
+    .finally(() => clearTimeout(timer));
+}
 
 // ==================== API 层（带 Token） ====================
 function authHeaders() {
@@ -8,15 +20,27 @@ function authHeaders() {
   return t ? { 'Content-Type': 'application/json', 'X-Auth-Token': t } : { 'Content-Type': 'application/json' };
 }
 
+// 合并同一时刻发出的重复 GET 请求，避免多个组件同时初始化时重复访问接口。
+const pendingApiGets = new Map();
+
 async function apiGet(url) {
-  const r = await fetch(API + url, { headers: authHeaders(), cache: 'no-store' });
-  if (r.status === 401) { handleLogout(); throw new Error('登录已过期'); }
-  if (!r.ok) throw new Error(`GET ${url} failed: ${r.status}`);
-  return r.json();
+  if (pendingApiGets.has(url)) return pendingApiGets.get(url);
+  const request = (async () => {
+    const r = await fetchWithTimeout(API + url, { headers: authHeaders(), cache: 'no-store' });
+    if (r.status === 401) { handleLogout(); throw new Error('登录已过期'); }
+    if (!r.ok) throw new Error(`GET ${url} failed: ${r.status}`);
+    return r.json();
+  })();
+  pendingApiGets.set(url, request);
+  try {
+    return await request;
+  } finally {
+    pendingApiGets.delete(url);
+  }
 }
 
 async function apiPost(url, data) {
-  const r = await fetch(API + url, {
+  const r = await fetchWithTimeout(API + url, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(data),
@@ -29,13 +53,34 @@ async function apiPost(url, data) {
   return r.json();
 }
 
+async function optimizeUploadFile(file) {
+  // 仅压缩大尺寸 JPEG/WebP，保留 PNG 透明通道和办公附件原文件。
+  if (file.size <= 3 * 1024 * 1024 || !/^image\/(jpeg|webp)$/i.test(file.type)) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const maxSide = 2400;
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+    if (scale === 1 && file.size <= 8 * 1024 * 1024) return file;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, file.type, 0.84));
+    bitmap.close();
+    return blob && blob.size < file.size ? new File([blob], file.name, { type: file.type, lastModified: file.lastModified }) : file;
+  } catch (e) {
+    return file;
+  }
+}
+
 // 文件上传（XMLHttpRequest 流式上传，支持进度条）
-function uploadFile(file, onProgress) {
+async function uploadFile(file, onProgress) {
   // 客户端前置检查：限制 200MB
   const MAX_BYTES = 200 * 1024 * 1024;
   if (file.size > MAX_BYTES) {
     return Promise.reject(new Error('文件大小超过限制（最大 200MB），当前文件 ' + (file.size / 1024 / 1024).toFixed(1) + 'MB'));
   }
+  file = await optimizeUploadFile(file);
   return new Promise((resolve, reject) => {
     const fd = new FormData();
     fd.append('file', file);
@@ -63,7 +108,7 @@ function uploadFile(file, onProgress) {
 }
 
 async function apiPut(url, data) {
-  const r = await fetch(API + url, {
+  const r = await fetchWithTimeout(API + url, {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify(data),
@@ -100,9 +145,22 @@ function isModalOpen() {
 }
 
 /** 提交按钮防连点包装器：禁用按钮 → 执行 → 恢复 */
+function showActionError(message) {
+  const old = document.getElementById('actionErrorToast');
+  if (old) old.remove();
+  const toast = document.createElement('div');
+  toast.id = 'actionErrorToast';
+  toast.textContent = message || '操作失败，请稍后重试';
+  toast.style.cssText = 'position:fixed;right:20px;bottom:24px;z-index:10000;max-width:360px;padding:12px 16px;border-radius:8px;background:#b42318;color:#fff;box-shadow:0 4px 16px rgba(0,0,0,.18);font-size:13px;';
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
 async function submitGuard(btn, handler) {
   if (!btn || btn.disabled) return;
   btn.disabled = true;
+  btn.setAttribute('aria-busy', 'true');
+  btn.setAttribute('aria-disabled', 'true');
   const orig = btn.textContent;
   btn.textContent = '⏳...';
   btn.style.opacity = '0.5';
@@ -110,15 +168,18 @@ async function submitGuard(btn, handler) {
     await handler();
   } catch (e) {
     console.error(e);
+    showActionError(e?.message);
   } finally {
     btn.disabled = false;
+    btn.removeAttribute('aria-busy');
+    btn.removeAttribute('aria-disabled');
     btn.textContent = orig;
     btn.style.opacity = '';
   }
 }
 
 async function apiDelete(url) {
-  const r = await fetch(API + url, {
+  const r = await fetchWithTimeout(API + url, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -406,20 +467,19 @@ async function showApp() {
   currentRole = AUTH_USER.role;
   currentUserId = AUTH_USER.userId;
 
-  // 渲染角色切换器（admin 可用）
-  await renderRoleSwitcher();
-
-  // 加载用户列表（用于下拉框）
-  try { USERS = await apiGet('/users'); } catch(e) { USERS = {}; }
-  // 加载产品类目列表
-  try { CATEGORIES = await apiGet('/categories'); } catch(e) { CATEGORIES = []; }
-  // 加载合规处罚列表
-  try { COMPLIANCE_ITEMS = await apiGet('/compliance'); } catch(e) { COMPLIANCE_ITEMS = []; }
-  // 加载参考零售价列表
-  try { PRICE_RANGES = await apiGet('/price-ranges'); } catch(e) { PRICE_RANGES = []; }
-  try { DEPARTMENTS = await apiGet('/departments'); } catch(e) { DEPARTMENTS = []; }
-  // 初始加载时也刷新用户列表（包含部门分配信息）
-  try { USERS = await apiGet('/users'); } catch(e) {}
+  // 基础数据并行加载：单个接口失败只影响对应功能，不阻塞首屏。
+  const [categories, compliance, priceRanges, departments, users] = await Promise.all([
+    apiGet('/categories').catch(() => []),
+    apiGet('/compliance').catch(() => []),
+    apiGet('/price-ranges').catch(() => []),
+    apiGet('/departments').catch(() => []),
+    apiGet('/users').catch(() => ({}))
+  ]);
+  CATEGORIES = categories;
+  COMPLIANCE_ITEMS = compliance;
+  PRICE_RANGES = priceRanges;
+  DEPARTMENTS = departments;
+  USERS = users;
   // 用户列表加载后重新渲染切换器（否则下拉选项为空）
   await renderRoleSwitcher();
   renderSidebar();
@@ -495,7 +555,7 @@ function handleFeishuLogin() {
     const url = 'https://open.feishu.cn/open-apis/authen/v1/index'
       + '?redirect_uri=' + encodeURIComponent(redirectUri)
       + '&app_id=' + cfg.appId
-      + '&state=' + Date.now();
+      + '&state=' + encodeURIComponent(cfg.state || '');
     window.location.href = url;
   }).catch(() => alert('获取飞书配置失败'));
 }
@@ -794,6 +854,11 @@ function closeIdentityPanel() {
 }
 
 function filterUsers(query) {
+  clearTimeout(filterUsers._timer);
+  filterUsers._timer = setTimeout(() => applyFilterUsers(query), 80);
+}
+
+function applyFilterUsers(query) {
   const q = query.toLowerCase().trim();
   const items = document.querySelectorAll('.identity-user');
   const groups = document.querySelectorAll('.identity-group');
@@ -1023,6 +1088,17 @@ function safeRemove(el) {
 function escHtml(s) {
   if (!s) return '';
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// 用于单引号包裹的内联事件参数；HTML 转义不能防止 JS 字符串被单引号截断。
+function escJsString(s) {
+  return String(s ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/</g, '\\x3c')
+    .replace(/>/g, '\\x3e');
 }
 
 // ==================== Modal 工具 ====================
@@ -1416,7 +1492,7 @@ async function renderDashboard(main, role, uid) {
   }
 
   main.innerHTML = `
-    <h2 style="font-size:22px;margin-bottom:20px;">📊 工作台 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">— ${getCurrentUserName()}（${roleLabel(currentRole)}）</span></h2>
+    <h2 style="font-size:22px;margin-bottom:20px;">📊 工作台 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">— ${escHtml(AUTH_USER?.name || getCurrentUserName())}（${roleLabel(currentRole)}）</span></h2>
     <div class="stats-grid">
       <div class="stat-card" style="cursor:pointer" onclick="navigate('orders')"><div class="stat-icon blue">📁</div><div><div class="stat-value">${stats.totalProjects}</div><div class="stat-label">${currentRole === 'admin' ? '全部项目' : '我的项目'}</div></div></div>
       <div class="stat-card" style="cursor:pointer" onclick="navigate('tasks')"><div class="stat-icon blue">📌</div><div><div class="stat-value">${stats.allTasks}</div><div class="stat-label">子任务总数</div></div></div>
@@ -1868,6 +1944,11 @@ function renderProjectTable(orders) {
 }
 
 function filterProjectList() {
+  clearTimeout(filterProjectList._timer);
+  filterProjectList._timer = setTimeout(applyFilterProjectList, 100);
+}
+
+function applyFilterProjectList() {
   let filtered = APP_CACHE.currentFilterData || [...APP_CACHE.orders];
 
   // 状态筛选
@@ -1981,6 +2062,11 @@ function renderTaskProjectTable(orders) {
 }
 
 function filterTaskProjects() {
+  clearTimeout(filterTaskProjects._timer);
+  filterTaskProjects._timer = setTimeout(applyFilterTaskProjects, 100);
+}
+
+function applyFilterTaskProjects() {
   const filter = document.getElementById('taskProjectFilter')?.value || 'all';
   const q = document.getElementById('taskProjectSearch')?.value?.toLowerCase() || '';
   const dateStart = document.getElementById('taskProjectDateStart')?.value;
@@ -2074,6 +2160,11 @@ async function renderScoringView(main, role, uid) {
 }
 
 function filterScoringView() {
+  clearTimeout(filterScoringView._timer);
+  filterScoringView._timer = setTimeout(applyFilterScoringView, 100);
+}
+
+function applyFilterScoringView() {
   const filter = document.getElementById('scoringFilter')?.value || 'all';
   const q = document.getElementById('scoringSearch')?.value?.toLowerCase() || '';
   const dateStart = document.getElementById('scoringDateStart')?.value;
@@ -2202,6 +2293,11 @@ async function renderDesignerTasks(main, uid) {
 }
 
 function filterDesignerTasks() {
+  clearTimeout(filterDesignerTasks._timer);
+  filterDesignerTasks._timer = setTimeout(applyFilterDesignerTasks, 100);
+}
+
+function applyFilterDesignerTasks() {
   const filter = document.getElementById('designerTaskFilter')?.value || 'all';
   const q = document.getElementById('designerTaskSearch')?.value?.toLowerCase() || '';
   const dateStart = document.getElementById('designerTaskDateStart')?.value;
@@ -2474,13 +2570,13 @@ function renderFileList(list, typeLabel) {
   if (isImage) {
     c.innerHTML = `<div class="image-preview">${list.map((img, i) =>
       `<div style="position:relative;display:inline-block;">
-        <img src="${authUrl(img.url)}" alt="${img.name}" class="img-clickable" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
-        <button onclick="event.stopPropagation();showDownloadOptions('${escHtml(img.url)}','${escHtml(img.name)}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:20px;height:20px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
+        <img src="${escHtml(authUrl(img.url))}" alt="${escHtml(img.name)}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+        <button onclick="event.stopPropagation();showDownloadOptions('${escJsString(img.url)}','${escJsString(img.name)}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:20px;height:20px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
         <button style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onclick="removeFileItem('${suffix}',${i},${isImage})">✕</button>
       </div>`).join('')}</div>`;
   } else {
     c.innerHTML = list.map((f, i) =>
-      `<div class="file-item"><span>📎 ${f.name}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(f.size)}</span><button style="margin-left:4px;padding:2px 6px;border-radius:4px;background:var(--primary-light);color:var(--primary);font-size:12px;border:none;cursor:pointer;" onclick="showDownloadOptions('${escHtml(f.url)}','${escHtml(f.name)}',${f.size || 0})" title="下载选项">⬇</button><button class="remove-file" onclick="removeFileItem('${suffix}',${i},${isImage})">✕</button></div>`
+      `<div class="file-item"><span>📎 ${escHtml(f.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(f.size)}</span><button style="margin-left:4px;padding:2px 6px;border-radius:4px;background:var(--primary-light);color:var(--primary);font-size:12px;border:none;cursor:pointer;" onclick="showDownloadOptions('${escJsString(f.url)}','${escJsString(f.name)}',${f.size || 0})" title="下载选项">⬇</button><button class="remove-file" onclick="removeFileItem('${suffix}',${i},${isImage})">✕</button></div>`
     ).join('');
   }
 }
@@ -3184,8 +3280,8 @@ function renderProjectReferenceImages(detail) {
   return `<div style="margin-top:8px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => `<div style="position:relative;display:inline-block;">
-          <img src="${authUrl(img.url)}" alt="${img.name || ''}" title="${img.name || ''}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
-          <button onclick="event.stopPropagation();showDownloadOptions('${img.url}','${escHtml(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
+          <img src="${escHtml(authUrl(img.url))}" alt="${escHtml(img.name || '')}" title="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+          <button onclick="event.stopPropagation();showDownloadOptions('${escJsString(img.url)}','${escJsString(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>`).join('')}
     </div></div>`;
 }
@@ -3201,8 +3297,8 @@ function renderSubTaskImages(jsonStr) {
   return `<div style="margin-top:8px;padding-left:4px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => `<div style="position:relative;display:inline-block;">
-          <img src="${authUrl(img.url)}" alt="${img.name || ''}" class="img-clickable" loading="lazy" decoding="async" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--gray-200);cursor:pointer;">
-          <button onclick="event.stopPropagation();showDownloadOptions('${img.url}','${escHtml(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
+          <img src="${escHtml(authUrl(img.url))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--gray-200);cursor:pointer;">
+          <button onclick="event.stopPropagation();showDownloadOptions('${escJsString(img.url)}','${escJsString(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>`).join('')}
     </div></div>`;
 }
@@ -3215,9 +3311,9 @@ function renderProjectAttachments(detail) {
   if (!atts || !atts.length) return '';
   return `<div style="margin-top:8px;"><div class="detail-label">📎 附件</div>
     ${atts.map(a => `<div class="attachment-item" style="margin-top:4px;display:flex;align-items:center;gap:8px;">
-      <span>📎</span><span class="attachment-name" style="flex:1;">${a.name}</span>
+      <span>📎</span><span class="attachment-name" style="flex:1;">${escHtml(a.name)}</span>
       ${a.size ? `<span class="attachment-size">${fmtSize(a.size)}</span>` : ''}
-      <button onclick="showDownloadOptions('${a.url}','${escHtml(a.name)}',${a.size || 0})" style="padding:2px 8px;border-radius:4px;background:var(--primary-light);color:var(--primary);font-size:12px;white-space:nowrap;border:none;cursor:pointer;">⬇ 下载</button>
+      <button onclick="showDownloadOptions('${escJsString(a.url)}','${escJsString(a.name)}',${a.size || 0})" style="padding:2px 8px;border-radius:4px;background:var(--primary-light);color:var(--primary);font-size:12px;white-space:nowrap;border:none;cursor:pointer;">⬇ 下载</button>
     </div>`).join('')}
     </div>`;
 }
@@ -3241,8 +3337,8 @@ function renderTaskAttachments(jsonStr) {
     html += `<div style="margin-top:8px;"><div class="detail-label">🖼️ 交付图片</div>
       <div class="image-preview" style="margin-top:4px;">
         ${images.map(img => `<div style="position:relative;display:inline-block;">
-            <img src="${authUrl(img.url)}" alt="${img.name || ''}" class="img-clickable" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
-            <button onclick="event.stopPropagation();showDownloadOptions('${img.url}','${escHtml(img.name || 'image.png')}',${img.size || 0})" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
+            <img src="${escHtml(authUrl(img.url))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+            <button onclick="event.stopPropagation();showDownloadOptions('${escJsString(img.url)}','${escJsString(img.name || 'image.png')}',${img.size || 0})" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
         </div>`).join('')}
       </div></div>`;
   }
@@ -3250,9 +3346,9 @@ function renderTaskAttachments(jsonStr) {
   if (files.length) {
     html += `<div style="margin-top:8px;"><div class="detail-label">📎 交付附件</div>
       ${files.map(a => `<div class="attachment-item" style="margin-top:4px;display:flex;align-items:center;gap:8px;">
-        <span>📎</span><span class="attachment-name" style="flex:1;">${a.name}</span>
+        <span>📎</span><span class="attachment-name" style="flex:1;">${escHtml(a.name)}</span>
         ${a.size ? `<span class="attachment-size">${fmtSize(a.size)}</span>` : ''}
-        <button onclick="showDownloadOptions('${a.url}','${escHtml(a.name)}',${a.size || 0})" style="padding:2px 8px;border-radius:4px;background:var(--primary-light);color:var(--primary);font-size:12px;white-space:nowrap;border:none;cursor:pointer;">⬇ 下载</button>
+        <button onclick="showDownloadOptions('${escJsString(a.url)}','${escJsString(a.name)}',${a.size || 0})" style="padding:2px 8px;border-radius:4px;background:var(--primary-light);color:var(--primary);font-size:12px;white-space:nowrap;border:none;cursor:pointer;">⬇ 下载</button>
       </div>`).join('')}
       </div>`;
   }
@@ -4643,6 +4739,11 @@ async function renderAdminUsers(container) {
 }
 
 function filterAdminUsers() {
+  clearTimeout(filterAdminUsers._timer);
+  filterAdminUsers._timer = setTimeout(applyFilterAdminUsers, 100);
+}
+
+function applyFilterAdminUsers() {
   const search = (document.getElementById('userSearchInput').value || '').toLowerCase();
   const roleFilter = document.getElementById('userRoleFilter').value;
   const statusFilter = document.getElementById('userStatusFilter').value;
@@ -6111,12 +6212,12 @@ function showDownloadOptions(fileUrl, fileName, fileSize) {
       </div>
       <div style="padding:0 24px 24px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
-          <button onclick="doDirectDownload('${escHtml(fullUrl)}');closeDownloadOptions();"
+          <button onclick="doDirectDownload('${escJsString(fullUrl)}');closeDownloadOptions();"
             style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:14px;color:#1f2937;transition:background 0.15s;"
             onmouseenter="this.style.background='#f9fafb'" onmouseleave="this.style.background='#fff'">
             <span style="font-size:18px;">⬇️</span> 直接下载
           </button>
-          <button onclick="doCopyDownloadLink('${escHtml(fullUrl)}', this);"
+          <button onclick="doCopyDownloadLink('${escJsString(fullUrl)}', this);"
             style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:14px;color:#1f2937;transition:background 0.15s;"
             onmouseenter="this.style.background='#f9fafb'" onmouseleave="this.style.background='#fff'">
             <span style="font-size:18px;">🔗</span> <span id="copyBtnLabel">复制下载地址</span>
@@ -6125,7 +6226,7 @@ function showDownloadOptions(fileUrl, fileName, fileSize) {
         <div style="padding:10px 14px;background:#f9fafb;border-radius:10px;font-size:12px;color:#9ca3af;display:flex;align-items:center;gap:8px;">
           <span style="flex-shrink:0;">🔗</span>
           <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(fullUrl)}">${escHtml(fullUrl)}</span>
-          <button onclick="copyUrlOnly('${escHtml(fullUrl)}', this)" style="background:none;border:none;cursor:pointer;font-size:12px;color:#3370FF;padding:2px 6px;border-radius:4px;flex-shrink:0;">复制</button>
+          <button onclick="copyUrlOnly('${escJsString(fullUrl)}', this)" style="background:none;border:none;cursor:pointer;font-size:12px;color:#3370FF;padding:2px 6px;border-radius:4px;flex-shrink:0;">复制</button>
         </div>
       </div>
     </div>`;
@@ -6200,7 +6301,7 @@ async function copyUrlOnly(url, btn) {
 /** 生成文件操作按钮 HTML（用于嵌入到列表/卡片中） */
 function renderFileActions(fileUrl, fileName, fileSize) {
   const fullUrl = fileUrl.startsWith('http') ? fileUrl : window.location.origin + fileUrl;
-  return `<button class="btn btn-outline btn-sm" onclick="showDownloadOptions('${escHtml(fullUrl)}','${escHtml(fileName || '')}',${fileSize || 0})" title="下载选项">⬇️</button>`;
+  return `<button class="btn btn-outline btn-sm" onclick="showDownloadOptions('${escJsString(fullUrl)}','${escJsString(fileName || '')}',${fileSize || 0})" title="下载选项">⬇️</button>`;
 }
 
 // ===== Admin: 工作量 =====

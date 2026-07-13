@@ -12,12 +12,17 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+
+    private static final long SESSION_TTL_MS = 8L * 60 * 60 * 1000;
+    private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
 
     private final UserRepository userRepository;
     private final AdminService adminService;
@@ -43,8 +48,8 @@ public class AuthController {
         }
 
         // 防爆破
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty()) ip = request.getRemoteAddr();
+        // 未配置可信反向代理时不能信任客户端自带的 X-Forwarded-For。
+        String ip = request.getRemoteAddr();
         if (isRateLimited(ip)) {
             return ResponseEntity.status(429).body(Map.of("error", "操作太频繁，请稍后再试"));
         }
@@ -61,9 +66,19 @@ public class AuthController {
         }
 
         // 验证密码
-        String hashed = sha256(password);
-        if (!hashed.equals(user.getPassword())) {
+        String storedPassword = user.getPassword();
+        boolean bcrypt = storedPassword != null && storedPassword.startsWith("$2");
+        boolean passwordMatches = bcrypt
+                ? PASSWORD_ENCODER.matches(password, storedPassword)
+                : sha256(password).equals(storedPassword);
+        if (!passwordMatches) {
             return ResponseEntity.status(401).body(Map.of("error", "密码错误"));
+        }
+
+        // 兼容旧 SHA-256 账号，并在成功登录时升级为 BCrypt。
+        if (!bcrypt) {
+            user.setPassword(hashPassword(password));
+            userRepository.save(user);
         }
 
         // 生成 token
@@ -112,8 +127,7 @@ public class AuthController {
     public ResponseEntity<Map<String, Object>> register(@RequestBody Map<String, String> body,
                                                          HttpServletRequest request) {
         // 获取客户端 IP
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty()) ip = request.getRemoteAddr();
+        String ip = request.getRemoteAddr();
 
         // 防爆破
         if (isRateLimited(ip)) {
@@ -169,7 +183,7 @@ public class AuthController {
             case "supplychain" -> "供应链";
                     default -> "";
                 })
-                .password(sha256(password))
+                .password(hashPassword(password))
                 .phone(phone)
                 .email(email)
                 .build();
@@ -214,7 +228,7 @@ public class AuthController {
 
     @GetMapping("/me")
     public ResponseEntity<?> me(@RequestHeader("X-Auth-Token") String token) {
-        AuthSession session = TOKENS.get(token);
+        AuthSession session = validateToken(token);
         if (session == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未登录或会话已过期"));
         }
@@ -233,7 +247,7 @@ public class AuthController {
     public ResponseEntity<Map<String, Object>> impersonate(
             @RequestHeader("X-Auth-Token") String token,
             @RequestBody Map<String, String> body) {
-        AuthSession session = TOKENS.get(token);
+        AuthSession session = validateToken(token);
         if (session == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未登录或会话已过期"));
         }
@@ -258,7 +272,7 @@ public class AuthController {
         // 替换当前会话为目标用户信息，保留原始登录用户信息
         TOKENS.put(token, new AuthSession(
             target.getUserId(), target.getRole(), target.getName(),
-            session.originalUserId(), session.originalRole()));
+            session.originalUserId(), session.originalRole(), session.expiresAt()));
 
         // 记录操作日志
         try {
@@ -280,7 +294,7 @@ public class AuthController {
     /** 获取当前用户权限列表 */
     @GetMapping("/permissions")
     public ResponseEntity<Map<String, Object>> getPermissions(@RequestHeader("X-Auth-Token") String token) {
-        AuthSession session = TOKENS.get(token);
+        AuthSession session = validateToken(token);
         if (session == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未登录或会话已过期"));
         }
@@ -293,7 +307,21 @@ public class AuthController {
 
     // 校验 token 并返回 session（供过滤器使用）
     public static AuthSession validateToken(String token) {
-        return token != null ? TOKENS.get(token) : null;
+        if (token == null) return null;
+        AuthSession session = TOKENS.get(token);
+        if (session == null) return null;
+        if (System.currentTimeMillis() >= session.expiresAt()) {
+            TOKENS.remove(token, session);
+            return null;
+        }
+        return session;
+    }
+
+    /** Controller 层统一使用的管理员判断，避免仅依赖前端隐藏按钮。 */
+    public static boolean isAdmin(HttpServletRequest request) {
+        AuthSession session = request != null
+                ? (AuthSession) request.getAttribute("authSession") : null;
+        return session != null && "admin".equals(session.role());
     }
 
     // 清除用户的所有 token（切换账号时）
@@ -303,9 +331,16 @@ public class AuthController {
 
     // ==================== 内部类 ====================
 
-    public record AuthSession(String userId, String role, String name, String originalUserId, String originalRole) {
+    public record AuthSession(String userId, String role, String name, String originalUserId,
+                              String originalRole, long expiresAt) {
         public AuthSession(String userId, String role, String name) {
-            this(userId, role, name, userId, role);
+            this(userId, role, name, userId, role, System.currentTimeMillis() + SESSION_TTL_MS);
+        }
+
+        public AuthSession(String userId, String role, String name,
+                           String originalUserId, String originalRole) {
+            this(userId, role, name, originalUserId, originalRole,
+                    System.currentTimeMillis() + SESSION_TTL_MS);
         }
     }
 
@@ -329,12 +364,16 @@ public class AuthController {
     public static String sha256(String input) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] hash = md.digest(input.getBytes());
+            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) sb.append(String.format("%02x", b));
             return sb.toString();
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public static String hashPassword(String input) {
+        return PASSWORD_ENCODER.encode(input);
     }
 }

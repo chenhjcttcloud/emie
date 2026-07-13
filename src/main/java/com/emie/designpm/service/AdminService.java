@@ -29,6 +29,7 @@ public class AdminService {
     private final SystemConfigRepository configRepository;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final UserService userService;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -38,10 +39,12 @@ public class AdminService {
 
     private Path uploadPath;
 
-    public AdminService(SystemConfigRepository configRepository, UserRepository userRepository, RoleRepository roleRepository) {
+    public AdminService(SystemConfigRepository configRepository, UserRepository userRepository,
+                        RoleRepository roleRepository, UserService userService) {
         this.configRepository = configRepository;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
+        this.userService = userService;
     }
 
     @PostConstruct
@@ -160,6 +163,11 @@ public class AdminService {
         List<SystemConfig> all = configRepository.findAll();
         return all.stream()
                 .filter(config -> !"smtp".equals(config.getConfigGroup()))
+                .peek(config -> {
+                    if ("password".equalsIgnoreCase(config.getValueType())) {
+                        config.setConfigValue("******");
+                    }
+                })
                 .collect(Collectors.groupingBy(
             SystemConfig::getConfigGroup,
             LinkedHashMap::new,
@@ -185,6 +193,10 @@ public class AdminService {
     public void updateConfigs(Map<String, String> configs, String updatedBy) {
         for (Map.Entry<String, String> entry : configs.entrySet()) {
             configRepository.findByConfigKey(entry.getKey()).ifPresent(config -> {
+                if ("password".equalsIgnoreCase(config.getValueType())
+                        && "******".equals(entry.getValue())) {
+                    return;
+                }
                 config.setConfigValue(entry.getValue());
                 config.setUpdatedBy(updatedBy);
                 config.setUpdatedAt(LocalDateTime.now());
@@ -289,7 +301,9 @@ public class AdminService {
         user.setRole(newRole);
         user.setRoleLevel(level);
         user.setTitle(title);
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        userService.refreshCache();
+        return saved;
     }
 
     /** 重置用户密码 */
@@ -300,7 +314,7 @@ public class AdminService {
         if (newPassword == null || newPassword.length() < 6) {
             throw new IllegalArgumentException("密码长度至少6位");
         }
-        user.setPassword(AuthController.sha256(newPassword));
+        user.setPassword(AuthController.hashPassword(newPassword));
         userRepository.save(user);
     }
 
@@ -310,6 +324,7 @@ public class AdminService {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
         userRepository.delete(user);
+        userService.refreshCache();
     }
 
     /** 编辑用户资料（userId、name、phone、email、password） */
@@ -372,7 +387,7 @@ public class AdminService {
             String pwd = fields.get("password");
             if (pwd != null && !pwd.isBlank()) {
                 if (pwd.length() < 6) throw new IllegalArgumentException("密码长度至少6位");
-                user.setPassword(AuthController.sha256(pwd));
+                user.setPassword(AuthController.hashPassword(pwd));
             }
         }
 
@@ -401,6 +416,7 @@ public class AdminService {
         }
 
         userRepository.save(user);
+        userService.refreshCache();
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", user.getId());
@@ -425,7 +441,9 @@ public class AdminService {
         } else {
             user.setStatus("disabled");
         }
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        userService.refreshCache();
+        return saved;
     }
 
     // ==================== 角色管理 ====================

@@ -72,7 +72,7 @@ public class FeishuSyncController {
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             Map<String, Object> err = new LinkedHashMap<>();
-            err.put("error", e.getMessage());
+            err.put("error", "飞书 Base 初始化失败，请检查配置后重试");
             return ResponseEntity.status(500).body(err);
         }
     }
