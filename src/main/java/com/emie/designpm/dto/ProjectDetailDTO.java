@@ -16,6 +16,7 @@ public class ProjectDetailDTO {
     private String salesId;
     private String plannerName;
     private String plannerId;
+    private String productName;
     private String deadline;
     private String productRequirements;
     private String description;

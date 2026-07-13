@@ -371,6 +371,7 @@ public class ProjectController {
         dto.setStatusCls(statusInfo.get("cls"));
         dto.setSalesName(p.getSalesName());
         dto.setPlannerName(p.getPlannerName());
+        dto.setProductName(p.getProductName());
         dto.setDeadline(p.getDeadline());
         dto.setProductRequirements(p.getProductRequirements());
         dto.setProductCategory(p.getProductCategory() != null ? p.getProductCategory().getName() : null);
@@ -404,6 +405,7 @@ public class ProjectController {
         dto.setSalesId(p.getSalesId());
         dto.setPlannerName(p.getPlannerName());
         dto.setPlannerId(p.getPlannerId());
+        dto.setProductName(p.getProductName());
         dto.setDeadline(p.getDeadline());
         dto.setProductRequirements(p.getProductRequirements());
         dto.setDescription(p.getDescription());
@@ -422,6 +424,11 @@ public class ProjectController {
             m.put("action", l.getAction());
             m.put("user", l.getUsername());
             m.put("role", l.getRole());
+            m.put("entityType", l.getEntityType());
+            m.put("entityId", l.getEntityId());
+            m.put("beforeData", l.getBeforeData());
+            m.put("afterData", l.getAfterData());
+            m.put("changedFields", l.getChangedFields());
             return m;
         }).collect(Collectors.toList()));
 

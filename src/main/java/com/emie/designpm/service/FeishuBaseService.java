@@ -283,16 +283,9 @@ public class FeishuBaseService {
         if (selfScore != null) fields.put("自评分", selfScore.intValue());
         if (createdAt != null) fields.put("创建时间", createdAt.toLocalDate().atStartOfDay(java.time.ZoneId.of("Asia/Shanghai")).toEpochSecond());
 
-        // 关联项目
-        if (projectId != null) {
-            String projRecordId = findRecordId(token, appToken,
-                    getCfg("feishu.base.tableProjects"), "项目ID", String.valueOf(projectId));
-            if (projRecordId != null && !projRecordId.isBlank()) {
-                ArrayNode linkArr = json.createArrayNode();
-                linkArr.add(projRecordId);
-                fields.set("所属项目", linkArr);
-            }
-        }
+        // 生产环境“所属项目”字段为文本类型，写入项目编号即可。
+        // 不能发送关联字段所需的 record_id 数组，否则飞书会返回 TextFieldConvFail。
+        if (projectId != null) fields.put("所属项目", String.valueOf(projectId));
 
         if (existed != null) {
             updateRecord(token, appToken, tableId, existed, fields.toString());

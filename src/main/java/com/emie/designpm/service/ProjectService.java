@@ -23,6 +23,7 @@ public class ProjectService {
     private final SystemConfigRepository systemConfigRepository;
     private final SyncQueueService syncQueueService;
     private final FileArchiveService fileArchiveService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ProjectService(ProjectRepository projectRepository,
                           SubTaskRepository subTaskRepository,
@@ -137,6 +138,7 @@ public class ProjectService {
         String currentUserId = (String) body.getOrDefault("currentUserId", "");
         String plannerId = SecurityUtil.sanitizeText((String) body.get("plannerId"), 100);
         String salesId = SecurityUtil.sanitizeText((String) body.get("salesId"), 100);
+        String productName = SecurityUtil.sanitizeText((String) body.get("productName"), 200);
         String deadline = (String) body.get("deadline");
         String productRequirements = SecurityUtil.sanitizeText((String) body.get("productRequirements"), 2000);
         String description = SecurityUtil.sanitizeText((String) body.getOrDefault("description", ""), 2000);
@@ -146,6 +148,9 @@ public class ProjectService {
         }
         if ("regular".equals(type) && !List.of("planner", "admin").contains(currentRole)) {
             throw new RuntimeException("仅企划或管理员可创建常规品项目");
+        }
+        if (productName == null || productName.isBlank()) {
+            throw new RuntimeException("产品名称不能为空");
         }
 
         // 普通用户只能把项目归属到自己；管理员才可以代其他成员创建。
@@ -174,6 +179,7 @@ public class ProjectService {
         }
 
         p.setDeadline(deadline);
+        p.setProductName(productName.trim());
         p.setProductRequirements(productRequirements);
         p.setDescription(description);
 
@@ -312,6 +318,8 @@ public class ProjectService {
                 .filter(t -> t.getId().equals(taskId))
                 .findFirst().orElseThrow(() -> new RuntimeException("子任务不存在"));
 
+        Map<String, Object> before = snapshotSubTask(task);
+
         if (body.containsKey("name")) task.setName(SecurityUtil.sanitizeText((String) body.get("name"), 200));
         if (body.containsKey("plannedDate")) task.setPlannedDate((String) body.get("plannedDate"));
         if (body.containsKey("designerId")) {
@@ -327,12 +335,34 @@ public class ProjectService {
         if (body.containsKey("attachmentsJson")) task.setAttachmentsJson(validateAndCleanFiles((String) body.get("attachmentsJson"), false));
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
-        p.getLogs().add(new ActivityLog("编辑子任务：" + task.getName(), currentUser, currentRole, p));
+        Map<String, Object> after = snapshotSubTask(task);
+        p.getLogs().add(new ActivityLog("编辑子任务：" + task.getName(), currentUser, currentRole, p,
+                "sub_task", task.getId(), toJson(before), toJson(after), changedFields(before, after)));
 
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
         return saved;
+    }
+
+    private Map<String, Object> snapshotSubTask(SubTask task) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("name", task.getName());
+        data.put("status", task.getStatus());
+        data.put("plannedDate", task.getPlannedDate());
+        data.put("designerId", task.getDesignerId());
+        data.put("designerName", task.getDesignerName());
+        data.put("assigneeRole", task.getAssigneeRole());
+        data.put("details", task.getDetails());
+        return data;
+    }
+
+    private String toJson(Object value) {
+        try { return objectMapper.writeValueAsString(value); } catch (Exception e) { return "{}"; }
+    }
+
+    private String changedFields(Map<String, Object> before, Map<String, Object> after) {
+        return toJson(before.keySet().stream().filter(k -> !Objects.equals(before.get(k), after.get(k))).toList());
     }
 
     @Transactional

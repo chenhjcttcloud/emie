@@ -12,6 +12,7 @@ public class ProjectSummaryDTO {
     private String statusCls;
     private String salesName;
     private String plannerName;
+    private String productName;
     private String deadline;
     private String productRequirements;
     private String productCategory;

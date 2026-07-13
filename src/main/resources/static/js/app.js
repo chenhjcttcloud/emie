@@ -803,15 +803,19 @@ async function switchToUser(targetUserId) {
   if (!targetUserId || targetUserId === currentUserId) return;
   closeIdentityPanel();
   try {
+    const viewBeforeSwitch = currentView || 'dashboard';
     const result = await apiPost('/auth/impersonate', { userId: targetUserId });
     AUTH_USER = { userId: result.userId, name: result.name, role: result.role, title: result.title };
     currentRole = result.role;
     currentUserId = result.userId;
     document.getElementById('userDisplay').textContent = `${AUTH_USER.name}（${roleLabel(AUTH_USER.role)}）`;
     await renderRoleSwitcher();
+    // 角色切换后保留当前业务页面，避免先渲染旧角色再被重置到工作台。
+    currentView = viewBeforeSwitch;
+    localStorage.setItem('design_pm_lastView', currentView);
     renderSidebar();
-    render();
-    currentView = 'dashboard';
+    APP_CACHE.orders = [];
+    await render();
   } catch (e) {
     alert(e.message || '切换失败');
   }
@@ -962,9 +966,13 @@ function navigate(view) {
 function toggleMobileSidebar() {
   const sidebar = document.getElementById('sidebarContainer');
   const overlay = document.getElementById('sidebarOverlay');
+  const button = document.getElementById('hamburgerBtn');
   if (!sidebar || !overlay) return;
-  sidebar.classList.toggle('open');
-  overlay.classList.toggle('open');
+  const open = !sidebar.classList.contains('open');
+  sidebar.classList.toggle('open', open);
+  overlay.classList.toggle('open', open);
+  button?.setAttribute('aria-expanded', String(open));
+  document.body.classList.toggle('mobile-sidebar-open', open);
 }
 
 function closeMobileSidebar() {
@@ -973,7 +981,13 @@ function closeMobileSidebar() {
   if (!sidebar || !overlay) return;
   sidebar.classList.remove('open');
   overlay.classList.remove('open');
+  document.getElementById('hamburgerBtn')?.setAttribute('aria-expanded', 'false');
+  document.body.classList.remove('mobile-sidebar-open');
 }
+
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Escape') closeMobileSidebar();
+});
 
 // ==================== 状态标签 ====================
 function getProjectStatusInfo(status) {
@@ -1090,6 +1104,12 @@ function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// 统一处理接口中的 null / "null"，避免用户看到“xxx（null）”。
+function displayText(value, fallback = '未设置') {
+  if (value === null || value === undefined || String(value).trim().toLowerCase() === 'null' || String(value).trim() === '') return fallback;
+  return String(value);
+}
+
 // 用于单引号包裹的内联事件参数；HTML 转义不能防止 JS 字符串被单引号截断。
 function escJsString(s) {
   return String(s ?? '')
@@ -1129,9 +1149,12 @@ function openModal(id) {
 
 // 弹窗关闭确认
 function showSaveConfirmModal() {
-  if (isModalOpen()) return;
   const overlay = document.getElementById('createProjectModal');
   if (!overlay) return;
+  // 创建项目弹窗本身必须保持打开，才能作为保存确认弹窗的背景。
+  // 这里只需要防止重复创建确认层，不能使用 isModalOpen() 判断，
+  // 因为它会把当前的 createProjectModal 也算作已打开弹窗。
+  if (document.getElementById('saveConfirmOverlay')) return;
   const confirm = document.createElement('div');
   confirm.className = 'modal-overlay';
   confirm.id = 'saveConfirmOverlay';
@@ -1270,6 +1293,7 @@ function renderProjectRow(o) {
   return `<tr style="cursor:pointer;">
     <td><strong>#${o.id}</strong></td>
     <td style="font-size:12px;">${o.type === 'channel_custom' ? '📦 渠道' : '🏭 常规'}</td>
+    <td>${escHtml(displayText(o.productName, '未设置'))}</td>
     <td>${o.salesName || '-'}</td>
     <td>${o.plannerName || '<span style="color:var(--gray-400);">未指定</span>'}</td>
     <td>${o.productCategory || '-'}</td>
@@ -1774,7 +1798,7 @@ function renderUserCard(u) {
     <div class="designer-avatar">${u.name.charAt(0)}</div>
     <div class="designer-info">
       <div class="designer-name">${u.name}</div>
-      <div class="designer-title">${u.title}</div>
+      <div class="designer-title">${escHtml(displayText(u.title, '未设置职级'))}</div>
       <div class="designer-tasks">
         ${u.busy
           ? (u.activeTasks
@@ -1868,11 +1892,12 @@ function renderProjectSummary(projects, title) {
         </div>
         <div style="padding:0 20px 20px 20px;">
           <div class="table-wrap"><table>
-        <thead><tr><th>项目编号</th><th>需求方</th><th>产品企划</th><th>产品类目</th><th>目标市场</th><th>子任务数</th><th>进度</th><th>评分</th><th>要求时间</th><th>状态</th><th>操作</th></tr></thead>
+        <thead><tr><th>项目编号</th><th>产品名称</th><th>需求方</th><th>产品企划</th><th>产品类目</th><th>目标市场</th><th>子任务数</th><th>进度</th><th>评分</th><th>要求时间</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>${display.map(o => {
           const st = getProjectStatusInfo(o.status);
           return `<tr style="cursor:pointer;">
             <td><strong>#${o.id}</strong></td>
+            <td>${escHtml(displayText(o.productName, '未设置'))}</td>
             <td>${o.salesName || '-'}</td>
             <td>${o.plannerName || '<span style="color:var(--gray-400);">未指定</span>'}</td>
             <td>${o.productCategory || '-'}</td>
@@ -1938,7 +1963,7 @@ async function renderOrderList(main, type, role, uid) {
 function renderProjectTable(orders) {
   if (!orders.length) return `<div class="empty" style="padding:40px;"><div class="empty-icon">📭</div><p>暂无项目</p></div>`;
   return `<div class="table-wrap"><table>
-    <thead><tr><th>编号</th><th>类型</th><th>需求方</th><th>产品企划</th><th>产品类目</th><th>目标市场</th><th>价格</th><th>子任务</th><th>评分</th><th>要求时间</th><th>状态</th><th>操作</th></tr></thead>
+    <thead><tr><th>编号</th><th>类型</th><th>产品名称</th><th>需求方</th><th>产品企划</th><th>产品类目</th><th>目标市场</th><th>价格</th><th>子任务</th><th>评分</th><th>要求时间</th><th>状态</th><th>操作</th></tr></thead>
     <tbody>${orders.map(o => renderProjectRow(o)).join('')}</tbody>
   </table></div>`;
 }
@@ -2517,15 +2542,16 @@ function removeProgress(progId) {
 }
 
 async function handleFileUpload(input, list, maxCount, typeLabel, isImage) {
-  if (list.length + input.files.length > maxCount) {
+  const files = input?.files || input || [];
+  if (list.length + files.length > maxCount) {
     alert(typeLabel + '最多上传' + maxCount + '个');
-    input.value = '';
+    if (input?.value !== undefined) input.value = '';
     return;
   }
   const maxBytes = isImage ? 200 * 1024 * 1024 : 2 * 1024 * 1024 * 1024;
   const blocked = ['.sql', '.sh', '.bat', '.cmd', '.exe', '.dll', '.so', '.jar', '.war', '.php', '.asp', '.jsp', '.py', '.vbs', '.ps1', '.msi', '.reg', '.scr'];
 
-  for (const f of input.files) {
+  for (const f of files) {
     const ext = '.' + f.name.split('.').pop()?.toLowerCase();
     if (blocked.includes(ext)) { alert('不允许上传 ' + ext + ' 文件'); continue; }
     if (f.size > maxBytes) { alert('文件 ' + f.name + ' 超过大小限制'); continue; }
@@ -2551,7 +2577,7 @@ async function handleFileUpload(input, list, maxCount, typeLabel, isImage) {
     }
     _uploadingCount--;
   }
-  input.value = '';
+  if (input?.value !== undefined) input.value = '';
 }
 
 function renderFileList(list, typeLabel) {
@@ -2597,6 +2623,42 @@ function handleCreateRefImages(input) { handleFileUpload(input, _createRefImages
 function handleCreateAttachments(input) { handleFileUpload(input, _createAttachments, 5, '附件', false); }
 function handleDeliverImages(input) { handleFileUpload(input, _deliverImages, 9, '交付参考图片', true); }
 function handleDeliverAttachments(input) { handleFileUpload(input, _deliverAttachments, 5, '交付附件', false); }
+
+// 全局拖拽上传：所有 .upload-area 根据其隐藏 input 自动复用现有上传逻辑。
+function handleUploadDrop(input, files) {
+  const id = input?.id || '';
+  const config = {
+    createRefImageInput: [_createRefImages, 9, '参考图片', true],
+    createAttachmentInput: [_createAttachments, 5, '附件', false],
+    subTaskRefImageInput: [_subTaskRefImages, 9, '参考图片', true],
+    subTaskAttachmentInput: [_subTaskAttachments, 9, '附件', false],
+    editRefImageInput: [_editTaskRefImages, 9, '编辑参考图片', true],
+    editAttachmentInput: [_editTaskAttachments, 9, '编辑附件', false],
+    deliverImageInput: [_deliverImages, 9, '交付参考图片', true],
+    deliverAttachmentInput: [_deliverAttachments, 5, '交付附件', false],
+  }[id];
+  if (config) handleFileUpload(files, ...config);
+}
+
+document.addEventListener('dragover', event => {
+  const zone = event.target.closest?.('.upload-area');
+  if (!zone) return;
+  event.preventDefault();
+  zone.classList.add('drag-over');
+  event.dataTransfer.dropEffect = 'copy';
+});
+document.addEventListener('dragleave', event => {
+  const zone = event.target.closest?.('.upload-area');
+  if (zone && !zone.contains(event.relatedTarget)) zone.classList.remove('drag-over');
+});
+document.addEventListener('drop', event => {
+  const zone = event.target.closest?.('.upload-area');
+  if (!zone) return;
+  event.preventDefault();
+  zone.classList.remove('drag-over');
+  const input = zone.querySelector('input[type="file"]');
+  if (input && event.dataTransfer?.files?.length) handleUploadDrop(input, event.dataTransfer.files);
+});
 
 // ==================== 产品类目 / 目标市场选择 ====================
 function onCategoryChange(sel) {
@@ -2651,16 +2713,16 @@ window.switchAssigneeType = function(prefix, role, el) {
   if (!sel) return;
   if (role === 'designer') {
     sel.innerHTML = '<option value="">请选择设计师</option>' +
-      (USERS.designer || []).map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('');
+      (USERS.designer || []).map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('');
   } else if (role === 'planner') {
     sel.innerHTML = (USERS.planner && USERS.planner.length
       ? '<option value="">请选择企划</option>' +
-        USERS.planner.map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('')
+        USERS.planner.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
       : '<option value="">暂无企划人员</option>');
   } else {
     sel.innerHTML = (USERS.supplychain && USERS.supplychain.length
       ? '<option value="">请选择供应链</option>' +
-        USERS.supplychain.map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('')
+        USERS.supplychain.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
       : '<option value="">暂无供应链人员</option>');
   }
 };
@@ -2674,16 +2736,16 @@ window.switchEditAssigneeType = function(role, el) {
   if (!sel) return;
   if (role === 'designer') {
     sel.innerHTML = '<option value="">请选择设计师</option>' +
-      (USERS.designer || []).map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('');
+      (USERS.designer || []).map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('');
   } else if (role === 'planner') {
     sel.innerHTML = (USERS.planner && USERS.planner.length
       ? '<option value="">请选择企划</option>' +
-        USERS.planner.map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('')
+        USERS.planner.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
       : '<option value="">暂无企划人员</option>');
   } else {
     sel.innerHTML = (USERS.supplychain && USERS.supplychain.length
       ? '<option value="">请选择供应链</option>' +
-        USERS.supplychain.map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('')
+        USERS.supplychain.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
       : '<option value="">暂无供应链人员</option>');
   }
 };
@@ -2709,10 +2771,10 @@ function openCreateProject(type) {
   const defaultSales = draft?.salesId || (currentRole === 'sales' ? currentUserId : '');
 
   const plannerOpts = `<option value="">请选择产品企划</option>` + USERS.planner.map(u =>
-    `<option value="${u.userId}" ${defaultPlanner === u.userId ? 'selected' : ''}>${u.name} (${u.title})</option>`
+      `<option value="${u.userId}" ${defaultPlanner === u.userId ? 'selected' : ''}>${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`
   ).join('');
   const salesOpts = `<option value="">请选择需求方</option>` + USERS.sales.map(u =>
-    `<option value="${u.userId}" ${defaultSales === u.userId ? 'selected' : ''}>${u.name} (${u.title})</option>`
+    `<option value="${u.userId}" ${defaultSales === u.userId ? 'selected' : ''}>${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`
   ).join('');
   const title = type === 'channel_custom' ? '新建渠道定制项目' : '新建常规品设计项目';
 
@@ -2742,6 +2804,9 @@ function openCreateProject(type) {
             <div id="categoryNoteWrapper" style="display:none;margin-top:8px;">
               <textarea class="form-textarea" name="productCategoryNote" placeholder="请说明其他类目的具体内容..." oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()"></textarea>
             </div>
+          </div>
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 产品名称</label>
+            <input class="form-input" name="productName" value="${escHtml(draft?.productName || '')}" placeholder="请输入产品名称" maxlength="200" oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">
           </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 参考零售价</label>
             <div class="chip-group" id="priceRangeChips">
@@ -2874,6 +2939,9 @@ async function submitCreateProject(type) {
 
   // 产品企划（必选）
   if (!data.plannerId) addFieldError('plannerId', '请选择产品企划');
+
+  // 产品名称（两类项目均必填）
+  if (!data.productName || !data.productName.trim()) addFieldError('productName', '请填写产品名称');
 
   // 产品类目
   const category = data.productCategory || '';
@@ -3037,6 +3105,7 @@ function renderProjectDetailContent(detail) {
       <div class="detail-section-title">📋 项目信息</div>
       <div class="detail-grid">
         <div class="detail-item"><div class="detail-label">项目类型</div><div class="detail-value">${isChannel ? '渠道定制单' : '公司常规品'}</div></div>
+        <div class="detail-item"><div class="detail-label">产品名称</div><div class="detail-value">${escHtml(displayText(detail.productName, '未设置'))}</div></div>
         ${isChannel ? `<div class="detail-item"><div class="detail-label">需求方（销售）</div><div class="detail-value">${detail.salesName || '-'}</div></div>` : ''}
         <div class="detail-item"><div class="detail-label">产品企划</div><div class="detail-value">${detail.plannerName}</div></div>
         ${detail.productCategory ? `<div class="detail-item"><div class="detail-label">产品类目</div><div class="detail-value">${detail.productCategory}${detail.productCategory === '其他' && detail.productCategoryNote ? `（${detail.productCategoryNote}）` : ''}</div></div>` : ''}
@@ -3588,14 +3657,14 @@ function addSubTask(pid) {
   _subTaskAttachments = [];
 
   const designerOpts = `<option value="">请选择设计师</option>` +
-    USERS.designer.map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('');
+    USERS.designer.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('');
   const supplychainOpts = USERS.supplychain && USERS.supplychain.length
     ? `<option value="">请选择供应链</option>` +
-      USERS.supplychain.map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('')
+    USERS.supplychain.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
     : `<option value="">暂无供应链人员</option>`;
   const plannerOpts = USERS.planner && USERS.planner.length
     ? `<option value="">请选择企划</option>` +
-      USERS.planner.map(u => `<option value="${u.userId}">${u.name} (${u.title})</option>`).join('')
+    USERS.planner.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
     : `<option value="">暂无企划人员</option>`;
 
   const modal = document.createElement('div');
@@ -3650,9 +3719,25 @@ function addSubTask(pid) {
           💡 提示：可多次添加子任务。所有子任务完成后，项目才算完成。
         </div>
       </div>
-      <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('addSubTaskModal')">取消</button><button class="btn btn-primary" onclick="submitGuard(this,()=>submitAddSubTask('${pid}'))">确认添加</button></div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeM('addSubTaskModal')">取消</button><button class="btn btn-outline" onclick="saveSubTaskDraft('${pid}')">保存草稿</button><button class="btn btn-primary" onclick="submitGuard(this,()=>submitAddSubTask('${pid}'))">确认添加</button></div>
     </div>`;
   document.body.appendChild(modal);
+  try {
+    const draft = JSON.parse(sessionStorage.getItem(`design_pm_subtask_draft_${pid}`) || 'null');
+    if (draft) Object.entries(draft).forEach(([name, value]) => {
+      const field = document.querySelector(`#addSubTaskForm [name="${name}"]`);
+      if (field && typeof value === 'string') field.value = value;
+    });
+  } catch (e) { console.warn('恢复子任务草稿失败', e); }
+}
+
+function saveSubTaskDraft(pid) {
+  const form = document.getElementById('addSubTaskForm');
+  if (!form || !pid) return;
+  const draft = Object.fromEntries(new FormData(form).entries());
+  sessionStorage.setItem(`design_pm_subtask_draft_${pid}`, JSON.stringify(draft));
+  closeM('addSubTaskModal', true);
+  showActionError('子任务草稿已保存');
 }
 
 async function submitAddSubTask(pid) {
@@ -3718,6 +3803,7 @@ async function submitAddSubTask(pid) {
 
   try {
     await apiPost(`/projects/${pid}/tasks`, data);
+    sessionStorage.removeItem(`design_pm_subtask_draft_${pid}`);
     closeM('addSubTaskModal');
     await refreshAfterMutation(pid);
   } catch (e) {
@@ -3743,15 +3829,15 @@ function editTask(pid, tid) {
     const designerOpts = task.assigneeRole === 'planner'
       ? (USERS.planner && USERS.planner.length
           ? '<option value="">请选择企划</option>' +
-            USERS.planner.map(u => `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${u.name} (${u.title})</option>`).join('')
+            USERS.planner.map(u => `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
           : '<option value="">暂无企划人员</option>')
       : task.assigneeRole === 'supplychain'
         ? (USERS.supplychain && USERS.supplychain.length
             ? '<option value="">请选择供应链</option>' +
-              USERS.supplychain.map(u => `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${u.name} (${u.title})</option>`).join('')
+              USERS.supplychain.map(u => `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
             : '<option value="">暂无供应链人员</option>')
         : '<option value="">请选择设计师</option>' +
-          (USERS.designer || []).map(u => `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${u.name} (${u.title})</option>`).join('');
+          (USERS.designer || []).map(u => `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('');
 
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
@@ -5570,7 +5656,7 @@ async function renderAdminOrg(container) {
       ${depts.map(d => {
         const headUser = allUsers.find(u => u.userId === d.headUserId);
         const members = allUsers.filter(u => u.departmentId === String(d.id));
-        const roleLabel_ = {sales:'销售',planner:'产品企划',designer:'设计师',supplychain:'供应链'}[d.role] || d.role;
+        const roleLabel_ = {sales:'销售',planner:'产品企划',designer:'设计师',supplychain:'供应链',admin:'管理员'}[d.role] || d.role;
         return `<div class="card" style="padding:16px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
             <div>
@@ -5602,7 +5688,7 @@ async function renderAdminOrg(container) {
     </div>`}
     <div class="card" style="padding:16px;margin-top:16px;">
       <h4 style="margin:0 0 8px 0;font-size:14px;">未分配部门的用户</h4>
-      ${allUsers.filter(u => !u.departmentId && u.role !== 'admin').map(u =>
+      ${allUsers.filter(u => !u.departmentId).map(u =>
         `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;font-size:12px;margin:3px;">
           ${escHtml(u.name)}（${u.role}）
           <span style="cursor:pointer;color:var(--primary);font-size:11px;" onclick="openAssignUserDept('${u.userId}')" title="分配到部门">📂</span>
@@ -5619,7 +5705,7 @@ function escHtml(s) {
 
 async function openCreateDeptModal() {
   if (isModalOpen()) return;
-  const roles = ['sales','planner','designer','supplychain'];
+  const roles = ['sales','planner','designer','supplychain','admin'];
   const allUsers = Object.values(await apiGet('/users')).flat();
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
@@ -5635,7 +5721,7 @@ async function openCreateDeptModal() {
           </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 关联角色</label>
             <select class="form-select" name="role" id="deptRoleSelect">
-              ${roles.map(r => `<option value="${r}">${({sales:'销售',planner:'产品企划',designer:'设计师',supplychain:'供应链'})[r]}</option>`).join('')}
+              ${roles.map(r => `<option value="${r}">${({sales:'销售',planner:'产品企划',designer:'设计师',supplychain:'供应链',admin:'管理员'})[r]}</option>`).join('')}
             </select>
           </div>
           <div class="form-group"><label class="form-label">部门负责人</label>
@@ -5674,7 +5760,7 @@ async function submitCreateDept() {
 
 async function editDept(d) {
   if (isModalOpen()) return;
-  const roles = ['sales','planner','designer','supplychain'];
+  const roles = ['sales','planner','designer','supplychain','admin'];
   const allUsers = Object.values(await apiGet('/users')).flat();
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
@@ -5690,7 +5776,7 @@ async function editDept(d) {
           </div>
           <div class="form-group"><label class="form-label">关联角色</label>
             <select class="form-select" name="role" id="editDeptRoleSelect">
-              ${roles.map(r => `<option value="${r}" ${r === d.role ? 'selected' : ''}>${({sales:'销售',planner:'产品企划',designer:'设计师',supplychain:'供应链'})[r]}</option>`).join('')}
+              ${roles.map(r => `<option value="${r}" ${r === d.role ? 'selected' : ''}>${({sales:'销售',planner:'产品企划',designer:'设计师',supplychain:'供应链',admin:'管理员'})[r]}</option>`).join('')}
             </select>
           </div>
           <div class="form-group"><label class="form-label">部门负责人</label>

@@ -39,6 +39,17 @@ public class ActivityLog {
     /** 关联的项目ID（冗余字段，项目删除后仍可查看日志） */
     private Long projectRefId;
 
+    /** 审计元数据：实体类型/ID及变更前后快照（JSON，兼容历史日志为空） */
+    @Column(length = 50)
+    private String entityType;
+    private Long entityId;
+    @Column(columnDefinition = "LONGTEXT")
+    private String beforeData;
+    @Column(columnDefinition = "LONGTEXT")
+    private String afterData;
+    @Column(columnDefinition = "TEXT")
+    private String changedFields;
+
     public ActivityLog(String action, String username, String role, Project project) {
         this.action = action;
         this.username = username;
@@ -46,6 +57,8 @@ public class ActivityLog {
         this.time = LocalDateTime.now();
         this.project = project;
         this.projectRefId = project != null ? project.getId() : null;
+        this.entityType = "project";
+        this.entityId = project != null ? project.getId() : null;
     }
 
     /** 无项目关联的日志（如登录、查询等系统操作） */
@@ -54,5 +67,16 @@ public class ActivityLog {
         this.username = username;
         this.role = role;
         this.time = LocalDateTime.now();
+    }
+
+    public ActivityLog(String action, String username, String role, Project project,
+                       String entityType, Long entityId, String beforeData,
+                       String afterData, String changedFields) {
+        this(action, username, role, project);
+        this.entityType = entityType;
+        this.entityId = entityId;
+        this.beforeData = beforeData;
+        this.afterData = afterData;
+        this.changedFields = changedFields;
     }
 }

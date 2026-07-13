@@ -149,6 +149,7 @@ public class DashboardController {
         dto.setStatusCls(statusInfo.get("cls"));
         dto.setSalesName(p.getSalesName());
         dto.setPlannerName(p.getPlannerName());
+        dto.setProductName(p.getProductName());
         dto.setDeadline(p.getDeadline());
         dto.setProductRequirements(p.getProductRequirements());
         dto.setProductCategory(p.getProductCategory() != null ? p.getProductCategory().getName() : null);

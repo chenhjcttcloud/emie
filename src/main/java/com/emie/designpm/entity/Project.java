@@ -16,7 +16,9 @@ import java.util.List;
     @Index(name = "idx_project_status", columnList = "status"),
     @Index(name = "idx_created_at", columnList = "createdAt"),
     @Index(name = "idx_project_status_planner", columnList = "status,plannerId"),
-    @Index(name = "idx_project_status_sales", columnList = "status,salesId")
+    @Index(name = "idx_project_status_sales", columnList = "status,salesId"),
+    @Index(name = "idx_project_type_status", columnList = "type,status"),
+    @Index(name = "idx_project_product_name", columnList = "productName")
 })
 @EntityListeners(com.emie.designpm.service.ProjectSyncListener.class)
 public class Project {
@@ -42,6 +44,10 @@ public class Project {
     private String plannerId;
     @Column(nullable = false)
     private String plannerName;
+
+    /** 产品名称（新建项目必填；历史项目允许为空以兼容存量数据） */
+    @Column(length = 200)
+    private String productName;
 
     @Column(nullable = false)
     private String deadline;
