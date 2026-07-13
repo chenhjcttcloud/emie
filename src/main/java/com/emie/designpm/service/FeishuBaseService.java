@@ -165,8 +165,7 @@ public class FeishuBaseService {
         ObjectNode body = json.createObjectNode();
         ObjectNode table = json.createObjectNode();
         table.put("name", name);
-        ArrayNode fieldsArr = json.createArrayNode();
-        fieldsArr.add(fields);
+        ArrayNode fieldsArr = fields.isArray() ? (ArrayNode) fields : json.createArrayNode().add(fields);
         table.set("fields", fieldsArr);
         body.set("table", table);
 
@@ -181,26 +180,55 @@ public class FeishuBaseService {
 
     /** 项目表字段定义 */
     private JsonNode createProjectFields() {
-        ObjectNode f = json.createObjectNode();
-        f.put("field_name", "项目ID");
-        f.put("type", 1); // 文本
-        return f;
+        ArrayNode fields = json.createArrayNode();
+        addTextFields(fields, "项目ID", "类型", "状态", "销售", "产品企划", "产品类目", "参考价格");
+        addDateFields(fields, "截止日期", "创建时间");
+        addNumberFields(fields, "子任务数", "完成进度");
+        return fields;
     }
 
     /** 子任务表字段定义 */
     private JsonNode createTaskFields() {
-        ObjectNode f = json.createObjectNode();
-        f.put("field_name", "子任务ID");
-        f.put("type", 1); // 文本
-        return f;
+        ArrayNode fields = json.createArrayNode();
+        addTextFields(fields, "子任务ID", "任务名称", "状态", "负责人", "所属项目");
+        addDateFields(fields, "计划日期", "实际完成", "创建时间");
+        addNumberFields(fields, "自评分");
+        return fields;
     }
 
     /** 评分表字段定义 */
     private JsonNode createScoringFields() {
-        ObjectNode f = json.createObjectNode();
-        f.put("field_name", "评分ID");
-        f.put("type", 1); // 文本
-        return f;
+        ArrayNode fields = json.createArrayNode();
+        addTextFields(fields, "评分ID", "评分角色", "所属子任务");
+        addNumberFields(fields, "评分", "权重");
+        return fields;
+    }
+
+    private void addTextFields(ArrayNode fields, String... names) {
+        for (String name : names) {
+            ObjectNode field = json.createObjectNode();
+            field.put("field_name", name);
+            field.put("type", 1);
+            fields.add(field);
+        }
+    }
+
+    private void addNumberFields(ArrayNode fields, String... names) {
+        for (String name : names) {
+            ObjectNode field = json.createObjectNode();
+            field.put("field_name", name);
+            field.put("type", 2);
+            fields.add(field);
+        }
+    }
+
+    private void addDateFields(ArrayNode fields, String... names) {
+        for (String name : names) {
+            ObjectNode field = json.createObjectNode();
+            field.put("field_name", name);
+            field.put("type", 5);
+            fields.add(field);
+        }
     }
 
     /** 添加字段到已有表 */
@@ -222,10 +250,8 @@ public class FeishuBaseService {
 
         String appToken = getCfg("feishu.base.appToken");
         String tableId = getCfg("feishu.base.tableProjects");
-        if (appToken.isBlank() || tableId.isBlank()) {
-            log.warn("飞书 Base 未初始化，跳过项目同步");
-            return;
-        }
+        if (appToken.isBlank() || tableId.isBlank())
+            throw new Exception("飞书项目表未配置，无法同步");
 
         String token = getToken();
         String existed = findRecordId(token, appToken, tableId, "项目ID", String.valueOf(projectId));
@@ -264,7 +290,8 @@ public class FeishuBaseService {
 
         String appToken = getCfg("feishu.base.appToken");
         String tableId = getCfg("feishu.base.tableTasks");
-        if (appToken.isBlank() || tableId.isBlank()) return;
+        if (appToken.isBlank() || tableId.isBlank())
+            throw new Exception("飞书子任务表未配置，无法同步");
 
         String token = getToken();
         String existed = findRecordId(token, appToken, tableId, "子任务ID", String.valueOf(taskId));
@@ -302,7 +329,8 @@ public class FeishuBaseService {
 
         String appToken = getCfg("feishu.base.appToken");
         String tableId = getCfg("feishu.base.tableScoring");
-        if (appToken.isBlank() || tableId.isBlank()) return;
+        if (appToken.isBlank() || tableId.isBlank())
+            throw new Exception("飞书评分表未配置，无法同步");
 
         String token = getToken();
         String existed = findRecordId(token, appToken, tableId, "评分ID", String.valueOf(recordId));
@@ -314,13 +342,8 @@ public class FeishuBaseService {
         fields.put("权重", weight != null ? (int)(weight * 100) : 0);
 
         if (subTaskId != null) {
-            String taskRecId = findRecordId(token, appToken,
-                    getCfg("feishu.base.tableTasks"), "子任务ID", String.valueOf(subTaskId));
-            if (taskRecId != null && !taskRecId.isBlank()) {
-                ArrayNode linkArr = json.createArrayNode();
-                linkArr.add(taskRecId);
-                fields.set("所属子任务", linkArr);
-            }
+            // 生产 Base 中“所属子任务”为文本字段，直接写业务 ID，避免依赖同步顺序。
+            fields.put("所属子任务", subTaskId.toString());
         }
 
         if (existed != null) {

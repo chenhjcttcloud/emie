@@ -512,8 +512,51 @@ select.form-select:disabled::-ms-expand { display: none; }
 .attachment-item { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--gray-50); border-radius:6px; margin-bottom:6px; }
 .attachment-name { font-size:13px; flex:1; }
 .attachment-size { font-size:11px; color:var(--gray-400); }
+.attachment-actions { display:inline-flex; align-items:center; gap:6px; flex-shrink:0; }
+.attachment-action-btn { padding:3px 8px; border-radius:5px; font-size:12px; white-space:nowrap; border:none; cursor:pointer; transition:background .15s, color .15s; }
+.attachment-action-btn.preview { background:#EEF2FF; color:#4338CA; }
+.attachment-action-btn.preview:hover { background:#E0E7FF; }
+.attachment-action-btn.download { background:var(--primary-light); color:var(--primary); }
+.attachment-action-btn.download:hover { filter:brightness(.97); }
+.file-item-name { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .image-preview { display:flex; gap:8px; flex-wrap:wrap; max-height:200px; overflow-y:auto; contain:content; }
 .image-preview img { width:80px; height:80px; object-fit:cover; border-radius:6px; border:1px solid var(--gray-200); content-visibility:auto; contain-intrinsic-size:80px; }
+
+/* File preview */
+.file-preview-overlay { z-index:12000; padding:16px; background:rgba(15,23,42,.72); }
+.file-preview-dialog { width:min(1180px,96vw); height:min(900px,94vh); display:flex; flex-direction:column; overflow:hidden; border-radius:14px; background:#fff; box-shadow:0 24px 80px rgba(0,0,0,.35); }
+.file-preview-header { min-height:64px; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; gap:16px; border-bottom:1px solid var(--gray-200); }
+.file-preview-title-wrap { display:flex; align-items:center; gap:11px; min-width:0; }
+.file-preview-icon { width:38px; height:38px; border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:#EEF2FF; font-size:20px; }
+.file-preview-title { max-width:70vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--gray-800); font-size:14px; font-weight:600; }
+.file-preview-meta { margin-top:2px; color:var(--gray-400); font-size:11px; }
+.file-preview-close { width:34px; height:34px; flex-shrink:0; border:none; border-radius:8px; background:var(--gray-100); color:var(--gray-600); font-size:17px; cursor:pointer; }
+.file-preview-close:hover { background:var(--gray-200); }
+.file-preview-body { flex:1; min-height:0; background:#525659; display:flex; align-items:stretch; justify-content:stretch; }
+.file-preview-frame { width:100%; height:100%; border:0; background:#fff; }
+.file-preview-state { width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:32px; color:#fff; text-align:center; }
+.file-preview-state p { margin:0; font-size:14px; }
+.file-preview-state small { color:rgba(255,255,255,.68); }
+.file-preview-state.error { background:#F8FAFC; color:var(--gray-700); }
+.file-preview-error-icon { font-size:36px; }
+.file-preview-spinner { width:34px; height:34px; border:3px solid rgba(255,255,255,.28); border-top-color:#fff; border-radius:50%; animation:file-preview-spin .8s linear infinite; }
+@keyframes file-preview-spin { to { transform:rotate(360deg); } }
+.file-preview-footer { min-height:58px; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; gap:16px; border-top:1px solid var(--gray-200); background:#fff; }
+.file-preview-tip { color:var(--gray-400); font-size:11px; }
+.file-preview-footer-actions { display:flex; align-items:center; gap:8px; }
+
+@media (max-width: 640px) {
+  .attachment-item { align-items:flex-start; flex-wrap:wrap; }
+  .attachment-name { min-width:calc(100% - 32px); }
+  .attachment-actions { width:100%; justify-content:flex-end; }
+  .file-preview-overlay { padding:0; }
+  .file-preview-dialog { width:100vw; height:100vh; max-height:none; border-radius:0; }
+  .file-preview-header { min-height:58px; padding:8px 10px; }
+  .file-preview-title { max-width:68vw; }
+  .file-preview-footer { align-items:flex-end; padding:8px 10px; }
+  .file-preview-tip { display:none; }
+  .file-preview-footer-actions { width:100%; justify-content:flex-end; }
+}
 
 /* Weight config */
 .weight-config { display:flex; gap:24px; align-items:center; flex-wrap:wrap; }

@@ -2582,9 +2582,8 @@ async function handleFileUpload(input, list, maxCount, typeLabel, isImage) {
 
 function renderFileList(list, typeLabel) {
   const isImage = typeLabel.includes('参考图片');
-  const suffix = typeLabel.includes('交付') ? 'Deliver' : 'Create';
-  const containerId = isImage ? (suffix === 'Create' ? 'createRefImageList' : 'deliverImageList')
-                              : (suffix === 'Create' ? 'createAttachmentList' : 'deliverAttachmentList');
+  const context = resolveFileListContext(list, isImage);
+  const containerId = context.containerId;
   const c = document.getElementById(containerId);
   if (!c) return;
   if (!list.length) { c.innerHTML = ''; return; }
@@ -2598,25 +2597,48 @@ function renderFileList(list, typeLabel) {
       `<div style="position:relative;display:inline-block;">
         <img src="${escHtml(authUrl(img.url))}" alt="${escHtml(img.name)}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
         <button onclick="event.stopPropagation();showDownloadOptions('${escJsString(img.url)}','${escJsString(img.name)}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:20px;height:20px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
-        <button style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onclick="removeFileItem('${suffix}',${i},${isImage})">✕</button>
+        <button style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onclick="removeFileItem('${context.listKey}',${i})">✕</button>
       </div>`).join('')}</div>`;
   } else {
     c.innerHTML = list.map((f, i) =>
-      `<div class="file-item"><span>📎 ${escHtml(f.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(f.size)}</span><button style="margin-left:4px;padding:2px 6px;border-radius:4px;background:var(--primary-light);color:var(--primary);font-size:12px;border:none;cursor:pointer;" onclick="showDownloadOptions('${escJsString(f.url)}','${escJsString(f.name)}',${f.size || 0})" title="下载选项">⬇</button><button class="remove-file" onclick="removeFileItem('${suffix}',${i},${isImage})">✕</button></div>`
+      `<div class="file-item"><span class="file-item-name">📎 ${escHtml(f.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(f.size)}</span>${renderAttachmentActions(f, true)}<button class="remove-file" onclick="removeFileItem('${context.listKey}',${i})">✕</button></div>`
     ).join('');
   }
 }
 
-function removeFileItem(suffix, idx, isImage) {
-  if (suffix === 'Create') {
-    if (isImage) _createRefImages.splice(idx, 1);
-    else _createAttachments.splice(idx, 1);
-  } else {
-    if (isImage) _deliverImages.splice(idx, 1);
-    else _deliverAttachments.splice(idx, 1);
+function resolveFileListContext(list, isImage) {
+  if (list === _createRefImages) return { listKey: 'createRef', containerId: 'createRefImageList' };
+  if (list === _createAttachments) return { listKey: 'createAttachment', containerId: 'createAttachmentList' };
+  if (list === _deliverImages) return { listKey: 'deliverImage', containerId: 'deliverImageList' };
+  if (list === _deliverAttachments) return { listKey: 'deliverAttachment', containerId: 'deliverAttachmentList' };
+  if (list === _subTaskRefImages) return { listKey: 'subTaskRef', containerId: 'createRefImageList' };
+  if (list === _subTaskAttachments) return { listKey: 'subTaskAttachment', containerId: 'createAttachmentList' };
+  if (list === _editTaskRefImages) return { listKey: 'editTaskRef', containerId: 'createRefImageList' };
+  if (list === _editTaskAttachments) return { listKey: 'editTaskAttachment', containerId: 'createAttachmentList' };
+  return {
+    listKey: isImage ? 'createRef' : 'createAttachment',
+    containerId: isImage ? 'createRefImageList' : 'createAttachmentList'
+  };
+}
+
+function removeFileItem(listKey, idx) {
+  const contexts = {
+    createRef: [_createRefImages, '参考图片'],
+    createAttachment: [_createAttachments, '附件'],
+    deliverImage: [_deliverImages, '交付参考图片'],
+    deliverAttachment: [_deliverAttachments, '交付附件'],
+    subTaskRef: [_subTaskRefImages, '参考图片'],
+    subTaskAttachment: [_subTaskAttachments, '附件'],
+    editTaskRef: [_editTaskRefImages, '编辑参考图片'],
+    editTaskAttachment: [_editTaskAttachments, '编辑附件']
+  };
+  const context = contexts[listKey];
+  if (!context) return;
+  const [list, typeLabel] = context;
+  if (idx >= 0 && idx < list.length) {
+    list.splice(idx, 1);
   }
-  renderFileList(isImage ? (suffix === 'Create' ? _createRefImages : _deliverImages) : (suffix === 'Create' ? _createAttachments : _deliverAttachments),
-    isImage ? (suffix === 'Create' ? '参考图片' : '交付参考图片') : '附件');
+  renderFileList(list, typeLabel);
 }
 
 function handleCreateRefImages(input) { handleFileUpload(input, _createRefImages, 9, '参考图片', true); }
@@ -3339,18 +3361,51 @@ async function resumeProject(pid) {
 }
 
 // 渲染项目参考图片
+// 兼容历史数据中的旧域名、/uploads 路径和缺少当前下载路径的记录。
+function normalizeFileUrl(fileOrUrl) {
+  const raw = typeof fileOrUrl === 'string' ? fileOrUrl : (fileOrUrl?.url || '');
+  const storedName = typeof fileOrUrl === 'object' && fileOrUrl?.storedName
+    ? fileOrUrl.storedName
+    : raw.split('?')[0].split('/').pop();
+  if (!storedName) return raw;
+  return '/api/files/download/' + encodeURIComponent(storedName);
+}
+
+function storedNameFromFile(fileOrUrl) {
+  if (typeof fileOrUrl === 'object' && fileOrUrl?.storedName) return fileOrUrl.storedName;
+  const normalized = normalizeFileUrl(fileOrUrl).split('?')[0];
+  const rawName = normalized.split('/').pop() || '';
+  try { return decodeURIComponent(rawName); } catch (e) { return rawName; }
+}
+
+function isPreviewableFile(fileName) {
+  return /\.(pdf|ppt|pptx)$/i.test(fileName || '');
+}
+
+function renderAttachmentActions(fileOrUrl, compact = false) {
+  const fileName = typeof fileOrUrl === 'object'
+    ? (fileOrUrl?.name || storedNameFromFile(fileOrUrl))
+    : storedNameFromFile(fileOrUrl);
+  const fileSize = typeof fileOrUrl === 'object' ? (fileOrUrl?.size || 0) : 0;
+  const fileUrl = normalizeFileUrl(fileOrUrl);
+  const previewButton = isPreviewableFile(fileName)
+    ? `<button class="attachment-action-btn preview" onclick="event.stopPropagation();openFilePreview('${escJsString(fileUrl)}','${escJsString(fileName)}',${fileSize})" title="在线预览">${compact ? '👁' : '👁 预览'}</button>`
+    : '';
+  return `<span class="attachment-actions">${previewButton}<button class="attachment-action-btn download" onclick="event.stopPropagation();showDownloadOptions('${escJsString(fileUrl)}','${escJsString(fileName)}',${fileSize})" title="下载选项">${compact ? '⬇' : '⬇ 下载'}</button></span>`;
+}
+
 function renderProjectReferenceImages(detail) {
   if (!detail.referenceImagesJson) return '';
   let imgs;
   try { imgs = JSON.parse(detail.referenceImagesJson); } catch(e) { return ''; }
   if (!imgs || !imgs.length) return '';
   const token = localStorage.getItem('design_pm_token');
-  const authUrl = u => u + (u.includes('?') ? '&' : '?') + 'token=' + token;
+  const authUrl = u => normalizeFileUrl(u) + '?token=' + encodeURIComponent(token || '');
   return `<div style="margin-top:8px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => `<div style="position:relative;display:inline-block;">
-          <img src="${escHtml(authUrl(img.url))}" alt="${escHtml(img.name || '')}" title="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
-          <button onclick="event.stopPropagation();showDownloadOptions('${escJsString(img.url)}','${escJsString(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
+          <img src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" title="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+          <button onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>`).join('')}
     </div></div>`;
 }
@@ -3362,12 +3417,12 @@ function renderSubTaskImages(jsonStr) {
   try { imgs = JSON.parse(jsonStr); } catch(e) { return ''; }
   if (!imgs || !imgs.length) return '';
   const token = localStorage.getItem('design_pm_token');
-  const authUrl = u => u + (u.includes('?') ? '&' : '?') + 'token=' + token;
+  const authUrl = u => normalizeFileUrl(u) + '?token=' + encodeURIComponent(token || '');
   return `<div style="margin-top:8px;padding-left:4px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => `<div style="position:relative;display:inline-block;">
-          <img src="${escHtml(authUrl(img.url))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--gray-200);cursor:pointer;">
-          <button onclick="event.stopPropagation();showDownloadOptions('${escJsString(img.url)}','${escJsString(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
+          <img src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--gray-200);cursor:pointer;">
+          <button onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>`).join('')}
     </div></div>`;
 }
@@ -3382,7 +3437,7 @@ function renderProjectAttachments(detail) {
     ${atts.map(a => `<div class="attachment-item" style="margin-top:4px;display:flex;align-items:center;gap:8px;">
       <span>📎</span><span class="attachment-name" style="flex:1;">${escHtml(a.name)}</span>
       ${a.size ? `<span class="attachment-size">${fmtSize(a.size)}</span>` : ''}
-      <button onclick="showDownloadOptions('${escJsString(a.url)}','${escJsString(a.name)}',${a.size || 0})" style="padding:2px 8px;border-radius:4px;background:var(--primary-light);color:var(--primary);font-size:12px;white-space:nowrap;border:none;cursor:pointer;">⬇ 下载</button>
+      ${renderAttachmentActions(a)}
     </div>`).join('')}
     </div>`;
 }
@@ -3400,14 +3455,14 @@ function renderTaskAttachments(jsonStr) {
 
   let html = '';
   const token = localStorage.getItem('design_pm_token');
-  const authUrl = u => u + (u.includes('?') ? '&' : '?') + 'token=' + token;
+  const authUrl = u => normalizeFileUrl(u) + '?token=' + encodeURIComponent(token || '');
   // 图片预览
   if (images.length) {
     html += `<div style="margin-top:8px;"><div class="detail-label">🖼️ 交付图片</div>
       <div class="image-preview" style="margin-top:4px;">
         ${images.map(img => `<div style="position:relative;display:inline-block;">
-            <img src="${escHtml(authUrl(img.url))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
-            <button onclick="event.stopPropagation();showDownloadOptions('${escJsString(img.url)}','${escJsString(img.name || 'image.png')}',${img.size || 0})" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
+            <img src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+            <button onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
         </div>`).join('')}
       </div></div>`;
   }
@@ -3417,7 +3472,7 @@ function renderTaskAttachments(jsonStr) {
       ${files.map(a => `<div class="attachment-item" style="margin-top:4px;display:flex;align-items:center;gap:8px;">
         <span>📎</span><span class="attachment-name" style="flex:1;">${escHtml(a.name)}</span>
         ${a.size ? `<span class="attachment-size">${fmtSize(a.size)}</span>` : ''}
-        <button onclick="showDownloadOptions('${escJsString(a.url)}','${escJsString(a.name)}',${a.size || 0})" style="padding:2px 8px;border-radius:4px;background:var(--primary-light);color:var(--primary);font-size:12px;white-space:nowrap;border:none;cursor:pointer;">⬇ 下载</button>
+        ${renderAttachmentActions(a)}
       </div>`).join('')}
       </div>`;
   }
@@ -6261,6 +6316,124 @@ async function restoreArchivedFile(fileId) {
   }
 }
 
+// ==================== PDF / PPT / PPTX 在线预览 ====================
+
+let _filePreviewSequence = 0;
+let _currentFilePreview = null;
+
+function closeFilePreview() {
+  _filePreviewSequence++;
+  _currentFilePreview = null;
+  document.getElementById('filePreviewOverlay')?.remove();
+}
+
+function retryFilePreview() {
+  const current = _currentFilePreview;
+  if (!current) return;
+  openFilePreview(current.fileUrl, current.fileName, current.fileSize, true);
+}
+
+function authenticatedFileUrl(url) {
+  const token = localStorage.getItem('design_pm_token') || '';
+  return url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+}
+
+async function openFilePreview(fileUrl, fileName, fileSize, retry = false) {
+  if (!isPreviewableFile(fileName)) {
+    showDownloadOptions(fileUrl, fileName, fileSize);
+    return;
+  }
+
+  closeFilePreview();
+  const requestSequence = ++_filePreviewSequence;
+  const normalizedUrl = normalizeFileUrl(fileUrl);
+  const storedName = storedNameFromFile(normalizedUrl);
+  _currentFilePreview = { fileUrl: normalizedUrl, fileName, fileSize, storedName };
+
+  const overlay = document.createElement('div');
+  overlay.id = 'filePreviewOverlay';
+  overlay.className = 'modal-overlay file-preview-overlay';
+  overlay.onclick = event => { if (event.target === overlay) closeFilePreview(); };
+  overlay.innerHTML = `
+    <div class="file-preview-dialog" role="dialog" aria-modal="true" aria-label="文件预览">
+      <div class="file-preview-header">
+        <div class="file-preview-title-wrap">
+          <span class="file-preview-icon">📄</span>
+          <div><div class="file-preview-title">${escHtml(fileName || storedName)}</div><div class="file-preview-meta">${fileSize ? fmtSize(fileSize) + ' · ' : ''}${escHtml((fileName || storedName).split('.').pop()?.toUpperCase() || '')}</div></div>
+        </div>
+        <button class="file-preview-close" onclick="closeFilePreview()" aria-label="关闭预览">✕</button>
+      </div>
+      <div class="file-preview-body" id="filePreviewBody">
+        <div class="file-preview-state"><div class="file-preview-spinner"></div><p>正在准备文件预览…</p></div>
+      </div>
+      <div class="file-preview-footer">
+        <span class="file-preview-tip">PPT/PPTX 以静态幻灯片形式预览</span>
+        <div class="file-preview-footer-actions">
+          <button class="btn btn-outline btn-sm" id="openPreviewWindowBtn" onclick="openPreviewInNewWindow()" disabled>↗ 新窗口打开</button>
+          <button class="btn btn-primary btn-sm" onclick="doDirectDownload('${escJsString(authenticatedFileUrl(normalizedUrl))}')">⬇ 下载原文件</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  if (!storedName) {
+    showFilePreviewError('无法识别文件地址，请下载后查看', false);
+    return;
+  }
+
+  try {
+    for (let attempt = 0; attempt < 120; attempt++) {
+      if (requestSequence !== _filePreviewSequence || !document.getElementById('filePreviewOverlay')) return;
+      const retryQuery = retry && attempt === 0 ? '?retry=true' : '';
+      const status = await apiGet('/files/preview/status/' + encodeURIComponent(storedName) + retryQuery);
+      if (status.status === 'ready' && status.previewUrl) {
+        showFilePreviewFrame(status.previewUrl, fileName || storedName);
+        return;
+      }
+      if (status.status === 'failed' || status.status === 'unsupported') {
+        showFilePreviewError(status.message || '文件预览生成失败', status.status === 'failed');
+        return;
+      }
+      const body = document.getElementById('filePreviewBody');
+      if (body) {
+        body.innerHTML = `<div class="file-preview-state"><div class="file-preview-spinner"></div><p>${escHtml(status.message || '正在生成演示文稿预览…')}</p><small>首次预览需要转换，完成后会自动打开</small></div>`;
+      }
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+    showFilePreviewError('预览任务仍在排队，请稍后重试或直接下载', true);
+  } catch (error) {
+    if (requestSequence === _filePreviewSequence) {
+      showFilePreviewError(error.message || '文件预览加载失败', true);
+    }
+  }
+}
+
+function showFilePreviewFrame(previewUrl, fileName) {
+  const body = document.getElementById('filePreviewBody');
+  if (!body) return;
+  const iframe = document.createElement('iframe');
+  iframe.className = 'file-preview-frame';
+  iframe.title = fileName || '文件预览';
+  iframe.src = authenticatedFileUrl(previewUrl);
+  iframe.setAttribute('allowfullscreen', '');
+  body.replaceChildren(iframe);
+  if (_currentFilePreview) _currentFilePreview.previewUrl = previewUrl;
+  const openButton = document.getElementById('openPreviewWindowBtn');
+  if (openButton) openButton.disabled = false;
+}
+
+function showFilePreviewError(message, canRetry) {
+  const body = document.getElementById('filePreviewBody');
+  if (!body) return;
+  body.innerHTML = `<div class="file-preview-state error"><div class="file-preview-error-icon">⚠️</div><p>${escHtml(message)}</p>${canRetry ? '<button class="btn btn-outline btn-sm" onclick="retryFilePreview()">重新生成预览</button>' : ''}</div>`;
+}
+
+function openPreviewInNewWindow() {
+  const previewUrl = _currentFilePreview?.previewUrl;
+  if (!previewUrl) return;
+  window.open(authenticatedFileUrl(previewUrl), '_blank', 'noopener');
+}
+
 // ==================== 文件下载选项 ====================
 
 /** 显示文件下载选项面板（直接下载 / 复制链接） */
@@ -6276,6 +6449,7 @@ function showDownloadOptions(fileUrl, fileName, fileSize) {
   }
 
   const ext = fileName ? fileName.split('.').pop().toUpperCase() : '';
+  const canPreview = isPreviewableFile(fileName);
   const token = localStorage.getItem('design_pm_token') || '';
   const fullUrl = (fileUrl.startsWith('http') ? fileUrl : window.location.origin + fileUrl)
     + (fileUrl.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
@@ -6297,14 +6471,18 @@ function showDownloadOptions(fileUrl, fileName, fileSize) {
         </div>
       </div>
       <div style="padding:0 24px 24px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+        <div style="display:grid;grid-template-columns:repeat(${canPreview ? 3 : 2},1fr);gap:10px;margin-bottom:16px;">
+          ${canPreview ? `<button onclick="closeDownloadOptions();openFilePreview('${escJsString(fileUrl)}','${escJsString(fileName)}',${fileSize || 0});"
+            style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 6px;border-radius:10px;border:1px solid #c7d2fe;background:#eef2ff;cursor:pointer;font-size:13px;color:#3730a3;transition:background 0.15s;">
+            <span style="font-size:18px;">👁</span> 在线预览
+          </button>` : ''}
           <button onclick="doDirectDownload('${escJsString(fullUrl)}');closeDownloadOptions();"
-            style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:14px;color:#1f2937;transition:background 0.15s;"
+            style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 6px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:13px;color:#1f2937;transition:background 0.15s;"
             onmouseenter="this.style.background='#f9fafb'" onmouseleave="this.style.background='#fff'">
             <span style="font-size:18px;">⬇️</span> 直接下载
           </button>
           <button onclick="doCopyDownloadLink('${escJsString(fullUrl)}', this);"
-            style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:14px;color:#1f2937;transition:background 0.15s;"
+            style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 6px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:13px;color:#1f2937;transition:background 0.15s;"
             onmouseenter="this.style.background='#f9fafb'" onmouseleave="this.style.background='#fff'">
             <span style="font-size:18px;">🔗</span> <span id="copyBtnLabel">复制下载地址</span>
           </button>

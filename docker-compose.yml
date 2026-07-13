@@ -8,6 +8,10 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://${DESIGNPM_DB_HOST:?Set DESIGNPM_DB_HOST}:3306/${DESIGNPM_DB_NAME:?Set DESIGNPM_DB_NAME}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: ${DESIGNPM_DB_USER:?Set DESIGNPM_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${DESIGNPM_DB_PASSWORD:?Set DESIGNPM_DB_PASSWORD}
+      APP_PREVIEW_CONVERTER_URL: http://127.0.0.1:3000
+      APP_PREVIEW_MAX_SOURCE_BYTES: ${APP_PREVIEW_MAX_SOURCE_BYTES:-52428800}
+      APP_PREVIEW_MAX_CACHE_BYTES: ${APP_PREVIEW_MAX_CACHE_BYTES:-2147483648}
+      APP_PREVIEW_TIMEOUT_SECONDS: ${APP_PREVIEW_TIMEOUT_SECONDS:-120}
       JAVA_TOOL_OPTIONS: -Xmx384m -Xms256m -XX:+UseSerialGC -Xss512k -XX:MaxMetaspaceSize=96m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/app/logs/heapdump.hprof
     mem_limit: 640m
     mem_reservation: 512m
@@ -15,3 +19,15 @@ services:
       - ./uploads:/app/uploads
       - ./logs:/app/logs
       - /root/.lark-cli:/root/.lark-cli
+
+  preview-converter:
+    image: gotenberg/gotenberg:8
+    container_name: emie-preview-converter
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    mem_limit: 1g
+    mem_reservation: 512m
+    cpus: 1.0
+    security_opt:
+      - no-new-privileges:true

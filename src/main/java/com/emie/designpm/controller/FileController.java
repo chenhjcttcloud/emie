@@ -4,7 +4,9 @@ import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.repository.FileRecordRepository;
 import com.emie.designpm.repository.ProjectRepository;
+import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.FileArchiveService;
+import com.emie.designpm.service.FilePreviewService;
 import com.emie.designpm.util.SecurityUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,10 +15,12 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.util.UriUtils;
 
 import java.io.IOException;
 import java.io.FileNotFoundException;
@@ -38,13 +42,19 @@ public class FileController {
     private final FileArchiveService fileArchiveService;
     private final FileRecordRepository fileRecordRepository;
     private final ProjectRepository projectRepository;
+    private final SubTaskRepository subTaskRepository;
+    private final FilePreviewService filePreviewService;
 
     public FileController(FileArchiveService fileArchiveService,
                           FileRecordRepository fileRecordRepository,
-                          ProjectRepository projectRepository) {
+                          ProjectRepository projectRepository,
+                          SubTaskRepository subTaskRepository,
+                          FilePreviewService filePreviewService) {
         this.fileArchiveService = fileArchiveService;
         this.fileRecordRepository = fileRecordRepository;
         this.projectRepository = projectRepository;
+        this.subTaskRepository = subTaskRepository;
+        this.filePreviewService = filePreviewService;
     }
 
     @PostConstruct
@@ -162,6 +172,69 @@ public class FileController {
                 .body(resource);
     }
 
+    /** 查询或启动文件预览生成。PDF 直接就绪，PPT/PPTX 在后台转换。 */
+    @GetMapping("/preview/status/{fileName}")
+    public ResponseEntity<Map<String, Object>> previewStatus(
+            @PathVariable String fileName,
+            @RequestParam(value = "retry", required = false, defaultValue = "false") boolean retry,
+            HttpServletRequest request) {
+        if (!SecurityUtil.isValidFileName(fileName) || !filePreviewService.isPreviewable(fileName)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", "unsupported",
+                    "message", "该文件类型暂不支持在线预览"));
+        }
+        ResponseEntity<Object> authResult = checkDownloadAccess(null, fileName, request);
+        if (authResult != null) {
+            return ResponseEntity.status(authResult.getStatusCode()).body(Map.of(
+                    "status", "failed",
+                    "message", "无权访问该文件"));
+        }
+
+        FilePreviewService.PreviewStatus status = filePreviewService.preparePreview(fileName, retry);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", status.status());
+        result.put("message", status.message());
+        if ("ready".equals(status.status())) {
+            result.put("previewUrl", "/api/files/preview/"
+                    + UriUtils.encodePathSegment(fileName, java.nio.charset.StandardCharsets.UTF_8));
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    /** 返回统一的 PDF 预览内容。 */
+    @GetMapping("/preview/{fileName}")
+    public ResponseEntity<Object> previewFile(@PathVariable String fileName,
+                                              HttpServletRequest request) {
+        if (!SecurityUtil.isValidFileName(fileName) || !filePreviewService.isPreviewable(fileName)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "该文件类型暂不支持在线预览"));
+        }
+        ResponseEntity<Object> authResult = checkDownloadAccess(null, fileName, request);
+        if (authResult != null) {
+            return authResult;
+        }
+        try {
+            Path previewPath = filePreviewService.resolvePreviewFile(fileName);
+            if (previewPath == null) {
+                FilePreviewService.PreviewStatus status = filePreviewService.preparePreview(fileName, false);
+                int httpStatus = "failed".equals(status.status()) ? 503 : 202;
+                return ResponseEntity.status(httpStatus).body(Map.of(
+                        "status", status.status(),
+                        "message", status.message()));
+            }
+            Resource resource = new UrlResource(previewPath.toUri());
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_PDF)
+                    .contentLength(Files.size(previewPath))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"preview.pdf\"")
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .body(resource);
+        } catch (FileNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", "文件预览加载失败"));
+        }
+    }
+
     /** 获取文件基本信息（不含文件内容） */
     @GetMapping("/info/{fileName}")
     public ResponseEntity<Map<String, Object>> fileInfo(@PathVariable String fileName,
@@ -207,9 +280,11 @@ public class FileController {
     private boolean canAccessFile(AuthController.AuthSession session, String storedName, String relativePath) {
         return fileRecordRepository.findByStoredName(storedName)
                 .map(record -> {
-                    // 尚未绑定到业务对象的文件只允许上传者预览
+                    // 历史文件可能没有 owner/target 绑定，但仍被项目或子任务 JSON 引用。
+                    // 先按当前用户可见项目判断，避免这类历史文件被误判为无权访问。
                     if (record.getTargetType() == null && record.getTargetId() == null) {
-                        return session.userId().equals(record.getOwnerUserId());
+                        return (record.getOwnerUserId() != null && session.userId().equals(record.getOwnerUserId()))
+                                || isFileVisibleInAccessibleProjects(session, storedName, relativePath);
                     }
                     return canAccessBoundTarget(session, record.getTargetType(), record.getTargetId())
                             || isFileVisibleInAccessibleProjects(session, storedName, relativePath);
@@ -233,19 +308,20 @@ public class FileController {
     }
 
     private boolean isFileVisibleInAccessibleProjects(AuthController.AuthSession session, String storedName, String relativePath) {
-        for (Project project : getAccessibleProjectsWithTasks(session)) {
+        List<Project> accessibleProjects = getAccessibleProjectsWithTasks(session);
+        for (Project project : accessibleProjects) {
             if (jsonContainsFile(project.getReferenceImagesJson(), storedName, relativePath)
                     || jsonContainsFile(project.getAttachmentsJson(), storedName, relativePath)) {
                 return true;
             }
-            for (SubTask task : project.getTasks()) {
-                if (jsonContainsFile(task.getReferenceImagesJson(), storedName, relativePath)
-                        || jsonContainsFile(task.getAttachmentsJson(), storedName, relativePath)) {
-                    return true;
-                }
-            }
         }
-        return false;
+        List<Long> projectIds = accessibleProjects.stream()
+                .map(Project::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        return !projectIds.isEmpty()
+                && subTaskRepository.countFileReferencesByProjectIds(projectIds, storedName) > 0;
     }
 
     private List<Project> getAccessibleProjectsWithTasks(AuthController.AuthSession session) {

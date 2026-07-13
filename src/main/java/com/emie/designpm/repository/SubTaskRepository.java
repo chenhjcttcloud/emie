@@ -46,4 +46,10 @@ public interface SubTaskRepository extends JpaRepository<SubTask, Long> {
     /** 批量查询多个设计师/供应链的子任务（减少 N+1） */
     @Query("SELECT t FROM SubTask t WHERE t.designerId IN (?1)")
     List<SubTask> findByDesignerIds(List<String> designerIds);
+
+    /** 直接从数据库检查可见项目的全部子任务文件引用，避免受 fetch join 过滤集合和一级缓存影响。 */
+    @Query("SELECT COUNT(t) FROM SubTask t WHERE t.project.id IN (?1) " +
+           "AND (t.referenceImagesJson LIKE CONCAT('%', ?2, '%') " +
+           "OR t.attachmentsJson LIKE CONCAT('%', ?2, '%'))")
+    long countFileReferencesByProjectIds(List<Long> projectIds, String storedName);
 }

@@ -235,13 +235,24 @@ public class ProjectController {
 
     /** 通用角色状态看板（sales/planner/supplychain/designer） */
     @GetMapping("/role-status")
-    public ResponseEntity<Map<String, Object>> roleStatus(@RequestParam String role) {
+    public ResponseEntity<Map<String, Object>> roleStatus(@RequestParam String role,
+                                                          HttpServletRequest request) {
+        AuthController.AuthSession session = getSession(request);
+        if (session == null) return ResponseEntity.status(401).build();
+        if (!"admin".equals(session.role()) && !Objects.equals(session.role(), role)) {
+            return ResponseEntity.status(403).body(Map.of("error", "无权查看其他角色的状态看板"));
+        }
         return ResponseEntity.ok(projectService.getRoleStatus(role));
     }
 
     /** 设计师状态看板（兼容旧版） */
     @GetMapping("/designer-status")
-    public ResponseEntity<Map<String, Object>> designerStatus() {
+    public ResponseEntity<Map<String, Object>> designerStatus(HttpServletRequest request) {
+        AuthController.AuthSession session = getSession(request);
+        if (session == null) return ResponseEntity.status(401).build();
+        if (!List.of("admin", "designer").contains(session.role())) {
+            return ResponseEntity.status(403).body(Map.of("error", "无权查看设计师状态看板"));
+        }
         return ResponseEntity.ok(projectService.getDesignerStatus());
     }
 

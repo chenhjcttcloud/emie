@@ -20,6 +20,12 @@ spring:
 app:
   upload:
     dir: ./uploads
+  preview:
+    cache-dir: ${APP_PREVIEW_CACHE_DIR:./uploads/preview-cache}
+    converter-url: ${APP_PREVIEW_CONVERTER_URL:http://127.0.0.1:3000}
+    max-source-bytes: ${APP_PREVIEW_MAX_SOURCE_BYTES:52428800}
+    max-cache-bytes: ${APP_PREVIEW_MAX_CACHE_BYTES:2147483648}
+    conversion-timeout-seconds: ${APP_PREVIEW_TIMEOUT_SECONDS:120}
   log-archive:
     dir: ./logs/archive
 
@@ -102,7 +108,7 @@ spring:
       max-lifetime: 1200000
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect

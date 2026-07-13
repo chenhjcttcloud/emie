@@ -59,6 +59,19 @@ public class SyncQueueService {
             }
         }
 
+        // 失败任务应在业务记录再次变更或全量重刷时复用并重置，避免不断产生重复失败记录。
+        Optional<SyncQueue> failed = syncQueueRepository
+                .findFirstByEntityTypeAndEntityIdAndStatusOrderByCreatedAtDesc(entityType, entityId, "fail");
+        if (failed.isPresent()) {
+            SyncQueue item = failed.get();
+            item.setAction(action);
+            item.setStatus("pending");
+            item.setRetryCount(0);
+            item.setErrorMsg(null);
+            syncQueueRepository.save(item);
+            return "updated";
+        }
+
         SyncQueue item = SyncQueue.builder()
                 .entityType(entityType)
                 .entityId(entityId)

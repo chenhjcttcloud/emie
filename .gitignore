@@ -33,5 +33,8 @@ uploads/
 # === 运行时日志归档 ===
 logs/
 
+# === 本地部署备份 ===
+backups/
+
 # === Node (if any) ===
 node_modules/

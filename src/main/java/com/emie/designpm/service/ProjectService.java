@@ -228,6 +228,10 @@ public class ProjectService {
         Project p = projectRepository.findByIdForUpdate(projectId)
                 .orElseThrow(() -> new RuntimeException("项目不存在"));
 
+        if (!List.of("draft", "pending_planner").contains(p.getStatus())) {
+            throw new RuntimeException("当前项目状态不允许接单");
+        }
+
         // 如果之前未指定企划，自动绑定接单的企划
         if ((p.getPlannerId() == null || p.getPlannerId().isBlank()) && userId != null && !userId.isBlank()) {
             p.setPlannerId(userId);
@@ -404,6 +408,10 @@ public class ProjectService {
         // 锁定子任务行
         SubTask task = subTaskRepository.findByIdForUpdate(taskId)
                 .orElseThrow(() -> new RuntimeException("子任务不存在"));
+
+        if (task.getProject() == null || !Objects.equals(task.getProject().getId(), projectId)) {
+            throw new RuntimeException("子任务不属于当前项目");
+        }
 
         String currentRole = (String) body.getOrDefault("currentRole", "");
         String currentUser = (String) body.getOrDefault("currentUser", "");
