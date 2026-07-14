@@ -64,7 +64,7 @@ Java 或综合改动：
 前端 JavaScript 改动：
 
 ```bash
-node --check src/main/resources/static/js/app.js
+for file in src/main/resources/static/js/*.js; do node --input-type=module --check < "$file"; done
 ```
 
 文档改动还需检查相对链接、文件路径和发布状态是否准确。无法执行的检查必须如实记录，不能标记为通过。

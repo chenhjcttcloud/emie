@@ -10,6 +10,7 @@
 4. 只处理本次明确纳入范围的文件，不覆盖、不删除用户或其他任务的改动。
 5. 功能完成不代表任务完成；还必须通过检查、留下记录并明确是否已推送和部署。
 6. 遇到密码泄露、破坏性数据库变更、无法备份、生产状态异常或回滚条件不足时，立即停止并说明风险。
+7. 每次开发进度、诊断结论、验证结果或本地运行状态变化后，必须在结束当前任务前更新 [`docs/development-handoff.md`](docs/development-handoff.md)，确保其他开发者或 AI 可直接接手。
 
 ## 2. 项目基线
 
@@ -52,7 +53,7 @@ git rev-list --left-right --count HEAD...emie/project_manager_system
    - `target/`、`uploads/`、`logs/`、`backups/`；
    - `.sheet-work/`、`outputs/`；
    - IDE、系统缓存和临时文件。
-5. 修改前端 `app.js` 后，应同步更新 `index.html` 中的静态资源版本参数，避免浏览器继续使用旧缓存。
+5. 修改 `src/main/resources/static/js/` 下任一前端模块后，应同步更新 `index.html` 中对应静态资源版本参数，避免浏览器继续使用旧缓存。
 6. 修改实体字段、表结构或索引时，必须同时提供 `db/migrations/` 下的数据库迁移。
 7. 修改 Docker、环境变量、端口、挂载目录或部署流程时，必须同步更新 `docs/deployment.md`。
 
@@ -86,7 +87,7 @@ git diff --check
 前端 JavaScript 改动额外执行：
 
 ```bash
-node --check src/main/resources/static/js/app.js
+for file in src/main/resources/static/js/*.js; do node --input-type=module --check < "$file"; done
 ```
 
 提交前还需检查：
@@ -103,6 +104,7 @@ git diff
 - 无意外文件、调试代码或敏感信息；
 - 用户可见变更已更新 `CHANGELOG.md`；
 - 发布范围和验证结果已更新 `docs/release-records.md`。
+- 当前进度、本地运行状态、工作区风险和下一步已更新 `docs/development-handoff.md`。
 
 若某项检查无法执行或被跳过，必须写明原因和风险，不得将“未执行”描述为“通过”。
 

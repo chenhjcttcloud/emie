@@ -7,6 +7,7 @@ import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.RoleRepository;
 import com.emie.designpm.repository.SystemConfigRepository;
 import com.emie.designpm.repository.UserRepository;
+import com.emie.designpm.util.SecurityUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class AdminService {
+
+    private static final Set<String> BUSINESS_ROLES = Set.of("sales", "planner", "designer", "supplychain", "admin");
 
     private final SystemConfigRepository configRepository;
     private final UserRepository userRepository;
@@ -144,8 +147,14 @@ public class AdminService {
                 .description("子任务表 Table ID").valueType("text").sortOrder(4).build(),
             SystemConfig.builder().configKey("feishu.base.tableScoring").configValue("").configGroup("feishu_base")
                 .description("评分记录表 Table ID").valueType("text").sortOrder(5).build(),
+            SystemConfig.builder().configKey("feishu.base.tableProjectsBackup").configValue("").configGroup("feishu_base")
+                .description("项目备份表 Table ID").valueType("text").sortOrder(6).build(),
+            SystemConfig.builder().configKey("feishu.base.tableTasksBackup").configValue("").configGroup("feishu_base")
+                .description("子任务备份表 Table ID").valueType("text").sortOrder(7).build(),
+            SystemConfig.builder().configKey("feishu.base.tableScoringBackup").configValue("").configGroup("feishu_base")
+                .description("评分备份表 Table ID").valueType("text").sortOrder(8).build(),
             SystemConfig.builder().configKey("feishu.base.tableLogs").configValue("").configGroup("feishu_base")
-                .description("操作日志表 Table ID").valueType("text").sortOrder(6).build()
+                .description("操作日志表 Table ID").valueType("text").sortOrder(9).build()
         );
 
         // 只插入缺失的配置项（不覆盖已有值）
@@ -216,13 +225,14 @@ public class AdminService {
             throw new IllegalArgumentException("文件名为空");
         }
 
-        // 只允许图片类型
-        String lower = originalName.toLowerCase();
-        if (!lower.endsWith(".png") && !lower.endsWith(".jpg") && !lower.endsWith(".jpeg")
-            && !lower.endsWith(".gif") && !lower.endsWith(".svg") && !lower.endsWith(".webp")) {
-            throw new IllegalArgumentException("仅支持 PNG/JPG/GIF/SVG/WebP 格式图片");
+        if (!SecurityUtil.isValidImageFile(originalName)) {
+            throw new IllegalArgumentException("仅支持 PNG/JPG/GIF/BMP/WebP 格式图片");
+        }
+        if (file.getSize() > 10L * 1024 * 1024) {
+            throw new IllegalArgumentException("图片大小不能超过10MB");
         }
 
+        String lower = originalName.toLowerCase();
         String ext = lower.substring(lower.lastIndexOf('.'));
         String storedName = "admin_" + type + "_" + UUID.randomUUID().toString().substring(0, 8) + ext;
 
@@ -268,6 +278,7 @@ public class AdminService {
             m.put("phone", u.getPhone());
             m.put("email", u.getEmail());
             m.put("status", u.getStatus() != null ? u.getStatus() : "active");
+            m.put("feishuBound", u.getFeishuOpenId() != null && !u.getFeishuOpenId().isBlank());
             m.put("createdAt", u.getCreatedAt() != null ? u.getCreatedAt().toString() : "");
             return m;
         }).collect(Collectors.toList());
@@ -278,6 +289,10 @@ public class AdminService {
     public User updateUserRole(Long userId, String newRole, String updatedBy) {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+        if (!BUSINESS_ROLES.contains(newRole)) {
+            throw new IllegalArgumentException("无效的角色");
+        }
+        boolean wasPending = "pending".equals(user.getRole()) || "pending".equalsIgnoreCase(user.getStatus());
 
         // 计算 roleLevel
         Integer level = switch (newRole) {
@@ -301,7 +316,9 @@ public class AdminService {
         user.setRole(newRole);
         user.setRoleLevel(level);
         user.setTitle(title);
+        if (wasPending) user.setStatus("active");
         User saved = userRepository.save(user);
+        AuthController.clearUserTokens(user.getUserId());
         userService.refreshCache();
         return saved;
     }
@@ -311,8 +328,8 @@ public class AdminService {
     public void resetPassword(Long userId, String newPassword) {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
-        if (newPassword == null || newPassword.length() < 6) {
-            throw new IllegalArgumentException("密码长度至少6位");
+        if (!SecurityUtil.isValidPassword(newPassword)) {
+            throw new IllegalArgumentException("密码长度须为6-72位");
         }
         user.setPassword(AuthController.hashPassword(newPassword));
         userRepository.save(user);
@@ -332,11 +349,13 @@ public class AdminService {
     public Map<String, Object> updateUser(Long userId, Map<String, String> fields) {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+        boolean roleChanged = false;
+        boolean wasPending = "pending".equals(user.getRole()) || "pending".equalsIgnoreCase(user.getStatus());
 
         if (fields.containsKey("userId")) {
             String newUserId = fields.get("userId");
-            if (newUserId == null || newUserId.isBlank()) {
-                throw new IllegalArgumentException("用户ID不能为空");
+            if (!SecurityUtil.isValidUserId(newUserId)) {
+                throw new IllegalArgumentException("用户ID限3-30位英文数字下划线");
             }
             // 检查唯一性
             if (!newUserId.equals(user.getUserId())) {
@@ -349,13 +368,14 @@ public class AdminService {
 
         if (fields.containsKey("name")) {
             String name = fields.get("name");
-            if (name == null || name.isBlank()) throw new IllegalArgumentException("姓名不能为空");
-            user.setName(name);
+            if (!SecurityUtil.isValidDisplayName(name)) throw new IllegalArgumentException("姓名限1-20字不含特殊字符");
+            user.setName(name.trim());
         }
 
         if (fields.containsKey("phone")) {
             String phone = fields.get("phone");
             if (phone != null && !phone.isBlank()) {
+                if (!SecurityUtil.isValidPhone(phone)) throw new IllegalArgumentException("请输入正确的11位手机号");
                 // 检查唯一性
                 if (!phone.equals(user.getPhone())) {
                     userRepository.findByPhone(phone).ifPresent(u -> {
@@ -369,8 +389,10 @@ public class AdminService {
         }
 
         if (fields.containsKey("email")) {
-            String email = fields.get("email");
-            if (email != null && !email.isBlank()) {
+            String rawEmail = fields.get("email");
+            if (rawEmail != null && !rawEmail.isBlank()) {
+                String email = rawEmail.trim();
+                if (!SecurityUtil.isValidEmail(email)) throw new IllegalArgumentException("邮箱格式不正确");
                 // 检查唯一性
                 if (!email.equals(user.getEmail())) {
                     userRepository.findByEmail(email).ifPresent(u -> {
@@ -386,7 +408,7 @@ public class AdminService {
         if (fields.containsKey("password")) {
             String pwd = fields.get("password");
             if (pwd != null && !pwd.isBlank()) {
-                if (pwd.length() < 6) throw new IllegalArgumentException("密码长度至少6位");
+                if (!SecurityUtil.isValidPassword(pwd)) throw new IllegalArgumentException("密码长度须为6-72位");
                 user.setPassword(AuthController.hashPassword(pwd));
             }
         }
@@ -394,6 +416,9 @@ public class AdminService {
         // 如果更新了 role，同步更新 title 和 roleLevel
         if (fields.containsKey("role")) {
             String newRole = fields.get("role");
+            if (!List.of("admin", "sales", "planner", "designer", "supplychain").contains(newRole)) {
+                throw new IllegalArgumentException("无效的角色");
+            }
             Integer level = switch (newRole) {
                 case "admin" -> 0;
                 case "sales" -> 1;
@@ -413,9 +438,12 @@ public class AdminService {
             user.setRole(newRole);
             user.setRoleLevel(level);
             user.setTitle(title);
+            if (wasPending) user.setStatus("active");
+            roleChanged = true;
         }
 
         userRepository.save(user);
+        if (roleChanged) AuthController.clearUserTokens(user.getUserId());
         userService.refreshCache();
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -442,6 +470,7 @@ public class AdminService {
             user.setStatus("disabled");
         }
         User saved = userRepository.save(user);
+        AuthController.clearUserTokens(user.getUserId());
         userService.refreshCache();
         return saved;
     }
@@ -740,8 +769,8 @@ public class AdminService {
 
         // 按角色分组
         Map<String, List<User>> byRole = allUsers.stream()
-                .filter(u -> !"admin".equals(u.getRole()))
-                .filter(u -> !"disabled".equals(u.getStatus()))
+                .filter(u -> Set.of("sales", "planner", "designer", "supplychain").contains(u.getRole()))
+                .filter(u -> u.getStatus() == null || "active".equalsIgnoreCase(u.getStatus()))
                 .collect(Collectors.groupingBy(User::getRole));
 
         // 定义角色显示信息
@@ -869,8 +898,8 @@ public class AdminService {
         List<User> allUsers = userRepository.findAll();
 
         Map<String, List<User>> byRole = allUsers.stream()
-                .filter(u -> !"admin".equals(u.getRole()))
-                .filter(u -> !"disabled".equals(u.getStatus()))
+                .filter(u -> Set.of("sales", "planner", "designer", "supplychain").contains(u.getRole()))
+                .filter(u -> u.getStatus() == null || "active".equalsIgnoreCase(u.getStatus()))
                 .collect(Collectors.groupingBy(User::getRole));
 
         Map<String, String> roleLabels = Map.of(

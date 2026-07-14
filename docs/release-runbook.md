@@ -147,6 +147,17 @@ free -h
 
 生产部署必须基于已经推送并记录的精确提交：
 
+当前生产 `/root/emie` 是产物目录而不是 Git 工作区，因此使用以下流程：
+
+1. 从已经推送的精确提交创建干净本地工作树并执行 `./mvnw clean package`；
+2. 记录本地 JAR 的 SHA-256，上传为服务器临时文件并再次核对；
+3. 备份服务器现有 `app.jar`，再原子替换为新 JAR；
+4. 将目标提交写入服务器 `release-sha.txt`；
+5. 在 `/root/emie` 执行 `docker compose build app` 和 `docker compose up -d app`；
+6. 不覆盖服务器现有 Compose、环境配置、上传、日志和预览服务。
+
+若生产环境未来改造成 Git 工作区，才使用以下仓库拉取流程：
+
 ```bash
 git fetch emie
 git switch project_manager_system

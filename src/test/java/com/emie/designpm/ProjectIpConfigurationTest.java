@@ -57,7 +57,8 @@ class ProjectIpConfigurationTest {
                 ipOptions,
                 mock(SystemConfigRepository.class),
                 mock(SyncQueueService.class),
-                mock(FileArchiveService.class)
+                mock(FileArchiveService.class),
+                mock(ProjectAccessService.class)
         );
     }
 

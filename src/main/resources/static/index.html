@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>产品管理系统 - EMIE</title>
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
-<link rel="stylesheet" href="/css/app.css?v=16">
+<link rel="stylesheet" href="/css/app.css?v=17">
 </head>
 <body>
 
@@ -16,7 +16,7 @@
       <div class="login-logo">🎨</div>
       <h1 class="login-title">产品管理系统</h1>
       <p class="login-subtitle">EMIE Design Project Management</p>
-      <button id="feishuLoginBtn" class="btn btn-outline btn-lg" style="width:100%;justify-content:center;color:#3370FF;border-color:#3370FF;" onclick="handleFeishuLogin()">
+      <button id="feishuLoginBtn" class="btn btn-outline btn-lg" style="width:100%;justify-content:center;color:#3370FF;border-color:#3370FF;" data-emie-onclick="handleFeishuLogin()">
         <svg viewBox="0 0 24 24" style="width:18px;height:18px;margin-right:4px;" fill="#3370FF"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1.41 15.41L6.41 13l1.41-1.41 3.18 3.18 5.59-5.59L18 10.59l-7.41 7.42z"/></svg>
         飞书登录
       </button>
@@ -25,86 +25,26 @@
   </div>
 </div>
 
-<!-- 注册页（已隐藏，通过飞书 SSO 自动注册） -->
-<div id="registerPage" style="display:none;">
-  <div class="login-container">
-    <div class="login-card" style="max-width:420px;">
-      <div class="login-logo">🎨</div>
-      <h1 class="login-title">注册账号</h1>
-      <p class="login-subtitle">加入产品管理系统</p>
-      <form id="registerForm" onsubmit="handleRegister(event)">
-        <div class="form-group">
-          <label class="form-label">用户ID</label>
-          <input type="text" class="form-input" id="regId" placeholder="设置您的用户ID" required style="text-align:center;">
-        </div>
-        <div class="form-group">
-          <label class="form-label">姓名</label>
-          <input type="text" class="form-input" id="regName" placeholder="您的真实姓名" required style="text-align:center;">
-        </div>
-        <div class="form-group">
-          <label class="form-label">角色</label>
-          <select class="form-select" id="regRole" style="text-align:center;">
-            <option value="sales">销售</option>
-            <option value="planner">产品企划</option>
-            <option value="designer">设计师</option>
-            <option value="supplychain">供应链</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">手机号</label>
-          <input type="tel" class="form-input" id="regPhone" placeholder="请输入手机号" required style="text-align:center;">
-        </div>
-        <div class="form-group">
-          <label class="form-label">邮箱</label>
-          <input type="email" class="form-input" id="regEmail" placeholder="请输入邮箱地址" required style="text-align:center;">
-        </div>
-        <div class="form-group" style="margin-bottom:0;">
-          <label class="form-label">图形验证码</label>
-          <div style="display:flex;gap:8px;align-items:stretch;">
-            <input type="text" class="form-input" id="regCaptcha" placeholder="输入验证码" required maxlength="4" style="text-align:center;flex:1;">
-            <img id="captchaImg" src="" onclick="refreshCaptcha()" style="border-radius:6px;cursor:pointer;height:38px;border:1px solid var(--gray-300);" title="点击刷新">
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">密码</label>
-          <div class="password-wrap">
-            <input type="password" class="form-input" id="regPassword" placeholder="至少6位密码" required minlength="6" style="text-align:center;padding-right:36px;">
-            <span class="password-toggle" onclick="togglePassword('regPassword', this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;display:flex;align-items:center;padding:4px;border-radius:4px;transition:background 0.15s;user-select:none;">
-              <svg class="eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              <svg class="eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-            </span>
-          </div>
-        </div>
-        <div id="registerError" style="color:var(--danger);font-size:13px;text-align:center;margin-bottom:12px;display:none;"></div>
-        <button type="submit" class="btn btn-primary btn-lg" style="width:100%;justify-content:center;">注 册</button>
-      </form>
-      <div style="text-align:center;margin-top:14px;">
-        <a onclick="showLoginPage()" style="color:var(--gray-400);font-size:13px;text-decoration:none;cursor:pointer;">已有账号？返回登录</a>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- 主应用 -->
 <div id="appContainer" style="display:none;">
   <div class="header">
     <div class="header-left">
-      <button class="hamburger" id="hamburgerBtn" onclick="toggleMobileSidebar()" aria-label="菜单" aria-expanded="false" aria-controls="sidebarContainer">☰</button>
+      <button class="hamburger" id="hamburgerBtn" data-emie-onclick="toggleMobileSidebar()" aria-label="菜单" aria-expanded="false" aria-controls="sidebarContainer">☰</button>
       <div class="logo">🎨 <span class="logo-text">产品管理系统</span><span class="logo-sub">Product Management</span></div>
     </div>
     <div class="header-right">
       <span class="user-display" id="userDisplay"></span>
-      <button class="btn btn-outline btn-sm logout-btn" onclick="handleLogout()">退出</button>
+      <button class="btn btn-outline btn-sm logout-btn" data-emie-onclick="handleLogout()">退出</button>
     </div>
   </div>
   <div class="app-layout">
     <aside class="sidebar" id="sidebarContainer"></aside>
     <!-- 移动端侧栏遮罩 -->
-    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
+    <div class="sidebar-overlay" id="sidebarOverlay" data-emie-onclick="closeMobileSidebar()"></div>
     <main class="main-content" id="mainContent"></main>
   </div>
 </div>
 
-<script src="/js/app.js?v=118"></script>
+<script type="module" src="/js/bootstrap.js?v=126"></script>
 </body>
 </html>

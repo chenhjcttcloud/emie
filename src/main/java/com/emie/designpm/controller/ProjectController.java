@@ -8,6 +8,8 @@ import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.repository.ScoringRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.ProjectService;
+import com.emie.designpm.service.ProjectAccessService;
+import com.emie.designpm.util.ProjectAccessPolicy;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,17 +26,20 @@ public class ProjectController {
     private final ScoringRepository scoringRepository;
     private final ActivityLogRepository activityLogRepository;
     private final SubTaskRepository subTaskRepository;
+    private final ProjectAccessService projectAccessService;
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     public ProjectController(ProjectService projectService,
                              ScoringRepository scoringRepository,
                              ActivityLogRepository activityLogRepository,
-                             SubTaskRepository subTaskRepository) {
+                             SubTaskRepository subTaskRepository,
+                             ProjectAccessService projectAccessService) {
         this.projectService = projectService;
         this.scoringRepository = scoringRepository;
         this.activityLogRepository = activityLogRepository;
         this.subTaskRepository = subTaskRepository;
+        this.projectAccessService = projectAccessService;
     }
 
     /** 获取所有项目列表（轻量版：计数查询代替 JOIN FETCH） */
@@ -53,7 +58,7 @@ public class ProjectController {
         List<Project> projects;
         // 设计师/供应链查看渠道/常规品页面时，只显示已参与的项目
         if (participating && ("designer".equals(role) || "supplychain".equals(role))) {
-            projects = projectService.getDesignerParticipatingProjects(userId);
+            projects = projectService.getAssigneeParticipatingProjects(userId, role);
         } else {
             projects = projectService.getProjectsByRoleAndUser(role, userId);
         }
@@ -84,7 +89,7 @@ public class ProjectController {
         if (projectOpt.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
-        if (!canAccessProject(projectOpt.get(), session)) {
+        if (!projectAccessService.canView(projectOpt.get(), session)) {
             return ResponseEntity.status(403).build();
         }
         // 仅记录成功访问，避免把未授权探测误记为正常查询。
@@ -242,7 +247,7 @@ public class ProjectController {
         if (!"admin".equals(session.role()) && !Objects.equals(session.role(), role)) {
             return ResponseEntity.status(403).body(Map.of("error", "无权查看其他角色的状态看板"));
         }
-        return ResponseEntity.ok(projectService.getRoleStatus(role));
+        return ResponseEntity.ok(projectService.getRoleStatus(role, session.role(), session.userId()));
     }
 
     /** 设计师状态看板（兼容旧版） */
@@ -253,7 +258,7 @@ public class ProjectController {
         if (!List.of("admin", "designer").contains(session.role())) {
             return ResponseEntity.status(403).body(Map.of("error", "无权查看设计师状态看板"));
         }
-        return ResponseEntity.ok(projectService.getDesignerStatus());
+        return ResponseEntity.ok(projectService.getDesignerStatus(session.role(), session.userId()));
     }
 
     /** 徽章统计（避免前端循环 N 次 API 调用） */
@@ -287,7 +292,7 @@ public class ProjectController {
         try {
             AuthController.AuthSession session = getSession(request);
             Project project = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
-            if (!canManageProject(project, session)) return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
+            if (!ProjectAccessPolicy.canManage(project, session)) return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
             Project p = projectService.terminateProject(id, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
@@ -301,7 +306,7 @@ public class ProjectController {
         try {
             AuthController.AuthSession session = getSession(request);
             Project project = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
-            if (!canManageProject(project, session)) return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
+            if (!ProjectAccessPolicy.canManage(project, session)) return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
             Project p = projectService.pauseProject(id, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
@@ -315,7 +320,7 @@ public class ProjectController {
         try {
             AuthController.AuthSession session = getSession(request);
             Project project = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
-            if (!canManageProject(project, session)) return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
+            if (!ProjectAccessPolicy.canManage(project, session)) return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
             Project p = projectService.cancelTerminate(id, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
@@ -329,7 +334,7 @@ public class ProjectController {
         try {
             AuthController.AuthSession session = getSession(request);
             Project project = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
-            if (!canManageProject(project, session)) return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
+            if (!ProjectAccessPolicy.canManage(project, session)) return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
             Project p = projectService.resumeProject(id, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
@@ -530,38 +535,4 @@ public class ProjectController {
         return safeBody;
     }
 
-    private boolean canAccessProject(Project project, AuthController.AuthSession session) {
-        if (project == null || session == null) {
-            return false;
-        }
-        if ("admin".equals(session.role())) {
-            return true;
-        }
-        if ("sales".equals(session.role())) {
-            return Objects.equals(session.userId(), project.getSalesId());
-        }
-        if ("planner".equals(session.role())) {
-            return Objects.equals(session.userId(), project.getPlannerId())
-                    || ("channel_custom".equals(project.getType()) && "pending_planner".equals(project.getStatus()))
-                    || project.getTasks().stream().anyMatch(t -> Objects.equals(session.userId(), t.getDesignerId()));
-        }
-        return project.getTasks().stream().anyMatch(t -> Objects.equals(session.userId(), t.getDesignerId())
-                || (t.getDesignerId() == null && "pending".equals(t.getStatus())
-                    && (t.getAssigneeRole() == null || t.getAssigneeRole().isBlank()
-                        || t.getAssigneeRole().equals(session.role()))));
-    }
-
-    /** 项目级写操作权限，和现有工作台按钮角色保持一致。 */
-    private boolean canManageProject(Project project, AuthController.AuthSession session) {
-        if (project == null || session == null) return false;
-        if ("admin".equals(session.role())) return true;
-        if ("sales".equals(session.role())) {
-            return Objects.equals(session.userId(), project.getSalesId());
-        }
-        if ("planner".equals(session.role())) {
-            return Objects.equals(session.userId(), project.getPlannerId())
-                    || ("channel_custom".equals(project.getType()) && "pending_planner".equals(project.getStatus()));
-        }
-        return false;
-    }
 }

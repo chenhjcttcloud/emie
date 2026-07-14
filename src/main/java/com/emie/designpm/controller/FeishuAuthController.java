@@ -50,9 +50,9 @@ public class FeishuAuthController {
                                       @RequestParam("state") String state,
                                       HttpServletRequest request) {
         try {
-            Object savedState = request.getSession(false) != null
-                    ? request.getSession(false).getAttribute("feishu_oauth_state") : null;
-            request.getSession(false).removeAttribute("feishu_oauth_state");
+            var session = request.getSession(false);
+            Object savedState = session != null ? session.getAttribute("feishu_oauth_state") : null;
+            if (session != null) session.removeAttribute("feishu_oauth_state");
             if (savedState == null || !savedState.toString().equals(state)) {
                 return ResponseEntity.status(HttpStatus.FOUND)
                         .location(URI.create("/?sso_error=飞书登录请求已失效，请重新发起登录"))
@@ -105,7 +105,8 @@ public class FeishuAuthController {
             Map<String, Object> userData = Map.of(
                     "userId", user.getUserId(),
                     "userName", user.getName(),
-                    "role", user.getRole()
+                    "role", user.getRole(),
+                    "status", user.getStatus() != null ? user.getStatus() : "active"
             );
 
             return ResponseEntity.ok(Map.of("token", token, "user", userData));
@@ -148,24 +149,58 @@ public class FeishuAuthController {
                 RequestOptions.newBuilder().userAccessToken(userAccessToken).build());
         if (!userInfoResp.success()) return null;
 
-        GetUserInfoRespBody userInfo = userInfoResp.getData();
-        String openId = userInfo.getOpenId();
-        String email = userInfo.getEmail();
+        return resolveFeishuUser(userInfoResp.getData());
+    }
 
-        // 查找或创建用户
+    /**
+     * 将已经通过飞书认证的身份绑定到系统账号。新成员只创建待授权账号，
+     * 不自动授予任何业务角色；管理员分配角色后才会获得业务访问权限。
+     */
+    User resolveFeishuUser(GetUserInfoRespBody userInfo) {
+        if (userInfo == null || userInfo.getOpenId() == null || userInfo.getOpenId().isBlank()) {
+            return null;
+        }
+
+        String openId = userInfo.getOpenId().trim();
+        String email = firstNonBlank(userInfo.getEnterpriseEmail(), userInfo.getEmail());
         User user = userRepository.findByFeishuOpenId(openId).orElse(null);
-        if (user == null && email != null && !email.isBlank()) {
-            user = userRepository.findByEmail(email).orElse(null);
+        if (user == null && email != null) {
+            user = userRepository.findByEmailIgnoreCase(email).orElse(null);
         }
 
         if (user == null) {
-            // 飞书身份必须先由管理员创建/绑定，禁止通过 SSO 自动获得业务账号和角色。
-            return null;
-        } else if (user.getFeishuOpenId() == null) {
+            user = User.builder()
+                    .userId(buildPendingUserId(openId))
+                    .name(firstNonBlank(userInfo.getName(), "飞书用户"))
+                    .role("pending")
+                    .title("待分配角色")
+                    .email(email)
+                    .status("pending")
+                    .feishuOpenId(openId)
+                    .build();
+            user = userRepository.save(user);
+            log.info("已创建飞书待授权账号: userId={}", user.getUserId());
+        } else if (user.getFeishuOpenId() == null || user.getFeishuOpenId().isBlank()) {
             user.setFeishuOpenId(openId);
-            userRepository.save(user);
+            user = userRepository.save(user);
         }
 
+        if ("disabled".equalsIgnoreCase(user.getStatus())) {
+            return null;
+        }
         return user;
+    }
+
+    private String buildPendingUserId(String openId) {
+        String base = "feishu_" + AuthController.sha256(openId).substring(0, 16);
+        if (userRepository.findByUserId(base).isEmpty()) return base;
+        return "feishu_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value.trim();
+        }
+        return null;
     }
 }

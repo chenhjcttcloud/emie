@@ -39,7 +39,7 @@ EMIE 是面向设计团队的项目管理系统，覆盖渠道定制单、公司
 cp .env.example .env
 ```
 
-`.env` 已被 Git 忽略。开发脚本不会自动读取该文件，启动前需要把变量加载到当前 shell：
+`.env` 已被 Git 忽略。`./dev.sh` 会在启动时自动读取该文件；直接运行其他命令时，可以手动加载到当前 shell：
 
 ```bash
 set -a
@@ -106,6 +106,7 @@ set +a
 
 - [项目文档索引](docs/README.md)
 - [开发指南](docs/development.md)
+- [开发交接状态](docs/development-handoff.md)
 - [仓库目录规范](docs/repository-structure.md)
 - [业务流程](docs/业务流程.md)
 - [部署信息](docs/deployment.md)

@@ -102,6 +102,37 @@ public class SyncQueueService {
         return Map.of("total", ids.size(), "added", added, "updated", updated, "skipped", skipped);
     }
 
+    /** 周期性对账：重新激活当前业务记录对应的已完成任务，补回飞书端被删除的记录。 */
+    @Transactional
+    public Map<String, Integer> enqueueAllForReconciliation(String entityType, List<Long> ids) {
+        int requeued = 0;
+        int added = 0;
+        int skipped = 0;
+        for (Long id : ids) {
+            List<SyncQueue> active = syncQueueRepository.findByEntityTypeAndEntityIdAndStatusIn(
+                    entityType, id, ACTIVE_STATUSES);
+            if (!active.isEmpty()) {
+                skipped++;
+                continue;
+            }
+
+            List<SyncQueue> completed = syncQueueRepository.findByEntityTypeAndEntityIdAndStatusIn(
+                    entityType, id, List.of("done"));
+            if (!completed.isEmpty()) {
+                SyncQueue item = completed.get(completed.size() - 1);
+                item.setStatus("pending");
+                item.setRetryCount(0);
+                item.setErrorMsg(null);
+                syncQueueRepository.save(item);
+                requeued++;
+            } else {
+                enqueueDeduplicated(entityType, id, "update");
+                added++;
+            }
+        }
+        return Map.of("total", ids.size(), "requeued", requeued, "added", added, "skipped", skipped);
+    }
+
     /** 获取待处理队列 */
     public List<SyncQueue> getPending() {
         return syncQueueRepository.findTop20ByStatusOrderByCreatedAtAsc("pending");

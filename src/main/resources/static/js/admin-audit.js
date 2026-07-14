@@ -1,0 +1,203 @@
+const EMIE = window.EMIE;
+const showAdminToast = (...args) => EMIE.actions.showAdminToast(...args);
+const apiGet = (...args) => EMIE.actions.apiGet(...args);
+const apiPost = (...args) => EMIE.actions.apiPost(...args);
+const apiPut = (...args) => EMIE.actions.apiPut(...args);
+const closeM = (...args) => EMIE.actions.closeM(...args);
+const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
+
+async function renderAdminLogs(container) {
+  container.innerHTML = `
+    <div class="filter-bar" style="margin-bottom:16px;">
+      <input type="date" class="form-input" id="logStartDate" style="min-width:140px;" title="开始日期">
+      <span style="color:var(--gray-400);font-size:13px;">~</span>
+      <input type="date" class="form-input" id="logEndDate" style="min-width:140px;" title="结束日期">
+      <button class="btn btn-primary btn-sm" data-emie-onclick="loadAdminLogs()">🔍 查询</button>
+      <button class="btn btn-outline btn-sm" data-emie-onclick="document.getElementById('logStartDate').value='';document.getElementById('logEndDate').value='';loadAdminLogs()">重置</button>
+    </div>
+    <div id="logContainer"><div class="loading">加载中</div></div>
+  `;
+  await loadAdminLogs();
+}
+
+async function loadAdminLogs() {
+  const container = document.getElementById('logContainer');
+  if (!container) return;
+  container.innerHTML = '<div class="loading">加载中</div>';
+  try {
+    const startDate = document.getElementById('logStartDate')?.value || '';
+    const endDate = document.getElementById('logEndDate')?.value || '';
+    let url = '/system/logs';
+    const params = [];
+    if (startDate) params.push('startDate=' + startDate);
+    if (endDate) params.push('endDate=' + endDate);
+    if (params.length) url += '?' + params.join('&');
+    const logs = await apiGet(url);
+    if (!logs.length) {
+      container.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><p>暂无日志记录</p></div>';
+      return;
+    }
+    container.innerHTML = '<div style="font-size:13px;color:var(--gray-400);margin-bottom:8px;">共 ' + logs.length + ' 条记录</div>' +
+      '<div class="card" style="padding:0;overflow-x:auto;"><table><thead><tr>' +
+      '<th style="width:60px;">#</th><th style="width:150px;">时间</th><th style="width:60px;">角色</th>' +
+      '<th style="width:80px;">操作人</th><th>操作内容</th><th style="width:80px;">关联项目</th></tr></thead><tbody>' +
+      logs.map(l => {
+        const rl = {sales:'销售',planner:'企划',designer:'设计师',supplychain:'供应链',admin:'管理员'};
+        const rn = rl[l.role] || l.role;
+        const pl = l.projectId ? '<a href="javascript:void(0)" data-emie-onclick="openProjectDetail(' + l.projectId + ')" style="color:var(--primary);text-decoration:none;">#' + l.projectId + '</a>' : '-';
+        return '<tr><td style="color:var(--gray-400);">' + l.id + '</td><td style="white-space:nowrap;font-size:12px;">' +
+          l.time + '</td><td><span class="badge badge-progress" style="font-size:11px;">' + rn + '</span></td><td><strong>' +
+          l.username + '</strong></td><td style="font-size:13px;">' + l.action + '</td><td>' + pl + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  } catch (e) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ' + e.message + '</p></div>';
+  }
+}
+
+// ===== Admin: 分享管理 =====
+async function renderAdminShares(container) {
+  container.innerHTML = `<div class="loading">加载中</div>`;
+  try {
+    const shares = await apiGet('/share/admin/all');
+    if (!shares || shares.length === 0) {
+      container.innerHTML = `<div class="empty"><div class="empty-icon">🔗</div><p>暂无分享链接</p></div>`;
+      return;
+    }
+    const statusLabel = s => ({ active: '有效', expired: '已过期', revoked: '已收回' }[s] || s);
+    const statusCls = s => ({ active: 'badge-completed', expired: 'badge-pending', revoked: 'badge-rejected' }[s] || '');
+    const typeLabel = t => ({ project: '项目', sub_task: '子任务' }[t] || t);
+
+    container.innerHTML = `
+      <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--gray-200);">
+          <h3 style="font-size:15px;font-weight:600;">🔗 全部分享链接</h3>
+          <span style="font-size:12px;color:var(--gray-500);">共 ${shares.length} 条</span>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">ID</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">类型</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">目标</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">创建人</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">创建时间</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">过期</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">状态</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">访问</th>
+              <th style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);color:var(--gray-500);font-weight:500;">操作</th>
+            </tr></thead>
+            <tbody>
+              ${shares.map(s => {
+                const isActive = s.status === 'active';
+                return '<tr>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);">' + s.id + '</td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);">' + typeLabel(s.targetType) + '</td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);"><a href="javascript:void(0)" data-emie-onclick="openProjectDetail(' + s.targetId + ')" style="color:var(--primary);text-decoration:none;">#' + s.targetId + '</a></td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);">' + (s.createdByName || s.createdBy || '-') + '</td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);font-size:12px;">' + (s.createdAt ? s.createdAt.substring(0,16) : '-') + '</td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);font-size:12px;">' + (s.expiresAt ? s.expiresAt.substring(0,10) : '永不过期') + '</td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);"><span class="badge ' + statusCls(s.status) + '">' + statusLabel(s.status) + '</span></td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);font-size:12px;">' + (s.viewCount || 0) + ' 次</td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);white-space:nowrap;">' +
+                    (isActive
+                      ? '<button class="btn btn-outline btn-sm" data-emie-onclick="adminEditShare(' + s.id + ')" style="margin-right:4px;">编辑</button>' +
+                        '<button class="btn btn-danger btn-sm" data-emie-onclick="adminRevokeShare(' + s.id + ')">收回</button>'
+                      : '<span style="font-size:12px;color:var(--gray-400);">-</span>') +
+                  '</td></tr>';
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  } catch (e) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${e.message}</p></div>`;
+  }
+}
+
+async function adminEditShare(id) {
+  document.getElementById('shareEditModal')?.remove();
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'shareEditModal';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:420px;">
+      <div class="modal-header">
+        <div class="modal-title">✏️ 编辑分享链接 #${id}</div>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">过期时间</label>
+          <select class="form-select" id="editShareExpires">
+            <option value="3600">1 小时后</option>
+            <option value="86400">24 小时后</option>
+            <option value="604800" selected>7 天后</option>
+            <option value="2592000">30 天后</option>
+            <option value="-1">永不过期</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">访问密码</label>
+          <input type="text" class="form-input" id="editSharePassword" placeholder="留空不修改，输入新密码覆盖" style="text-align:center;">
+          <div style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:4px;">留空 = 不修改密码 / 清空输入框内容并保存 = 清除密码</div>
+        </div>
+        <div id="editShareError" style="color:var(--danger);font-size:13px;text-align:center;margin-top:12px;display:none;"></div>
+      </div>
+      <div class="modal-footer" style="justify-content:center;">
+        <button class="btn btn-primary" data-emie-onclick="doAdminUpdateShare(${id})">💾 保存</button>
+        <button class="btn btn-outline" data-emie-onclick="closeM('shareEditModal')">取消</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function doAdminUpdateShare(id) {
+  const expiresEl = document.getElementById('editShareExpires');
+  const passwordEl = document.getElementById('editSharePassword');
+  const errEl = document.getElementById('editShareError');
+  errEl.style.display = 'none';
+
+  const expiresVal = expiresEl.value;
+  const expiresIn = expiresVal === '-1' ? -1 : parseInt(expiresVal);
+  // password：空字符串表示留空不传（不修改），有值表示修改
+  const password = passwordEl.value;
+
+  try {
+    await apiPut('/share/admin/' + id, { expiresIn, password: password || null });
+    showAdminToast('✅ 更新成功', 'success');
+    closeM('shareEditModal');
+    await renderAdminShares(document.getElementById('adminContent'));
+  } catch(e) {
+    errEl.textContent = e.message || '更新失败';
+    errEl.style.display = '';
+  }
+}
+
+async function adminRevokeShare(id) {
+  if (!confirm('确定要收回此分享链接吗？收回后原链接将无法访问。')) return;
+  try {
+    const r = await apiPost('/share/admin/' + id + '/revoke', {});
+    showAdminToast('✅ ' + (r.message || '已收回'), 'success');
+    await renderAdminShares(document.getElementById('adminContent'));
+  } catch(e) {
+    alert('操作失败: ' + e.message);
+  }
+}
+
+
+EMIE.registerActions({
+  renderAdminLogs,
+  loadAdminLogs,
+  renderAdminShares,
+  adminEditShare,
+  doAdminUpdateShare,
+  adminRevokeShare,
+});
+
+EMIE.registerModule('adminAudit', {
+  renderAdminLogs,
+  loadAdminLogs,
+  renderAdminShares,
+  adminEditShare,
+  doAdminUpdateShare,
+  adminRevokeShare,
+});

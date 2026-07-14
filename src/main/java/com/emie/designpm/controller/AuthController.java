@@ -64,6 +64,9 @@ public class AuthController {
         if ("disabled".equalsIgnoreCase(user.getStatus())) {
             return ResponseEntity.status(403).body(Map.of("error", "账号已停用，请联系管理员"));
         }
+        if ("pending".equalsIgnoreCase(user.getStatus()) || "pending".equals(user.getRole())) {
+            return ResponseEntity.status(403).body(Map.of("error", "账号等待管理员分配角色，请使用飞书登录查看状态"));
+        }
 
         // 验证密码
         String storedPassword = user.getPassword();
@@ -101,6 +104,7 @@ public class AuthController {
         result.put("userId", user.getUserId());
         result.put("name", user.getName());
         result.put("role", user.getRole());
+        result.put("status", user.getStatus() != null ? user.getStatus() : "active");
         result.put("title", user.getTitle());
         result.put("roleLevel", user.getRoleLevel());
         return ResponseEntity.ok(result);
@@ -116,91 +120,11 @@ public class AuthController {
         synchronized (times) {
             // 清理5分钟前的记录
             while (!times.isEmpty() && times.peek() < now - 300_000) times.poll();
-            // 注册/登录：每分钟最多30次（测试阶段放宽）
+            // 登录：每分钟最多30次（测试阶段放宽）
             if (times.size() >= 30) return true;
             times.add(now);
             return false;
         }
-    }
-
-    @PostMapping("/register")
-    public ResponseEntity<Map<String, Object>> register(@RequestBody Map<String, String> body,
-                                                         HttpServletRequest request) {
-        // 获取客户端 IP
-        String ip = request.getRemoteAddr();
-
-        // 防爆破
-        if (isRateLimited(ip)) {
-            return ResponseEntity.status(429).body(Map.of("error", "操作太频繁，请稍后再试"));
-        }
-
-        String id = body.get("id");
-        String name = body.get("name");
-        String password = body.get("password");
-        String phone = body.get("phone");
-        String email = body.get("email");
-        String captchaKey = body.get("captchaKey");
-        String captchaCode = body.get("captchaCode");
-        String role = body.get("role");
-
-        // 字段校验
-        if (id == null || !id.matches("^[a-zA-Z0-9_]{3,30}$"))
-            return ResponseEntity.badRequest().body(Map.of("error", "用户ID限3-30位英文数字下划线"));
-        if (name == null || name.isBlank() || name.length() > 20 || name.matches(".*[<>\"'\\\\].*"))
-            return ResponseEntity.badRequest().body(Map.of("error", "姓名限1-20字不含特殊字符"));
-        if (phone == null || !phone.matches("^1\\d{10}$"))
-            return ResponseEntity.badRequest().body(Map.of("error", "请输入正确的11位手机号"));
-        if (email == null || !email.matches("^[\\w.-]+@[\\w.-]+\\.\\w{2,}$"))
-            return ResponseEntity.badRequest().body(Map.of("error", "邮箱格式不正确"));
-        if (password == null || password.length() < 6 || password.length() > 30)
-            return ResponseEntity.badRequest().body(Map.of("error", "密码长度6-30位"));
-        if (role == null) role = "sales";
-        if (!List.of("sales", "planner", "designer", "supplychain").contains(role)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "无效的注册角色"));
-        }
-
-        if (!CaptchaController.verifyCaptcha(captchaKey, captchaCode)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "图形验证码错误或已过期"));
-        }
-
-        // 检查唯一性
-        if (userRepository.findByUserId(id).isPresent())
-            return ResponseEntity.badRequest().body(Map.of("error", "该用户ID已被注册"));
-        if (userRepository.findByPhone(phone).isPresent())
-            return ResponseEntity.badRequest().body(Map.of("error", "该手机号已被注册"));
-        if (userRepository.findByEmail(email).isPresent())
-            return ResponseEntity.badRequest().body(Map.of("error", "该邮箱已被注册"));
-
-        // 创建用户
-        User user = User.builder()
-                .userId(id)
-                .name(name)
-                .role(role)
-                .title(switch (role) {
-                    case "sales" -> "销售";
-                    case "planner" -> "产品企划";
-                    case "designer" -> "设计师";
-            case "supplychain" -> "供应链";
-                    default -> "";
-                })
-                .password(hashPassword(password))
-                .phone(phone)
-                .email(email)
-                .build();
-        userRepository.save(user);
-
-        // 自动登录
-        String token = generateToken();
-        TOKENS.put(token, new AuthSession(user.getUserId(), user.getRole(), user.getName()));
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("token", token);
-        result.put("userId", user.getUserId());
-        result.put("name", user.getName());
-        result.put("role", user.getRole());
-        result.put("title", user.getTitle());
-        result.put("roleLevel", user.getRoleLevel());
-        return ResponseEntity.ok(result);
     }
 
     @PostMapping("/logout")
@@ -237,6 +161,7 @@ public class AuthController {
         result.put("userId", session.userId);
         result.put("name", session.name);
         result.put("role", session.role);
+        result.put("status", "pending".equals(session.role) ? "pending" : "active");
         result.put("originalUserId", session.originalUserId);
         result.put("originalRole", session.originalRole);
         return ResponseEntity.ok(result);

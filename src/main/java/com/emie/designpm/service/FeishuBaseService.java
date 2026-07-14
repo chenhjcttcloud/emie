@@ -64,6 +64,8 @@ public class FeishuBaseService {
         Map<String, String> m = new LinkedHashMap<>();
         for (String k : List.of("feishu.base.appToken", "feishu.base.tableProjects",
                 "feishu.base.tableTasks", "feishu.base.tableScoring", "feishu.base.tableLogs",
+                "feishu.base.tableProjectsBackup", "feishu.base.tableTasksBackup",
+                "feishu.base.tableScoringBackup",
                 "feishu.base.syncEnabled")) {
             m.put(k, getCfg(k));
         }
@@ -248,8 +250,23 @@ public class FeishuBaseService {
                             LocalDateTime createdAt) throws Exception {
         if (!isSyncEnabled()) return;
 
+        syncProjectToTable(projectId, type, status, salesName, plannerName, deadline,
+                productCategory, priceRange, taskCount, progress, createdAt,
+                getCfg("feishu.base.tableProjects"));
+        String backup = getCfg("feishu.base.tableProjectsBackup");
+        if (!backup.isBlank()) {
+            syncProjectToTable(projectId, type, status, salesName, plannerName, deadline,
+                    productCategory, priceRange, taskCount, progress, createdAt, backup);
+        }
+    }
+
+    private void syncProjectToTable(Long projectId, String type, String status,
+                                    String salesName, String plannerName,
+                                    String deadline, String productCategory,
+                                    String priceRange, int taskCount, int progress,
+                                    LocalDateTime createdAt, String tableId) throws Exception {
+
         String appToken = getCfg("feishu.base.appToken");
-        String tableId = getCfg("feishu.base.tableProjects");
         if (appToken.isBlank() || tableId.isBlank())
             throw new Exception("飞书项目表未配置，无法同步");
 
@@ -288,8 +305,22 @@ public class FeishuBaseService {
                             Long projectId, LocalDateTime createdAt) throws Exception {
         if (!isSyncEnabled()) return;
 
+        syncSubTaskToTable(taskId, name, status, designerName, plannedDate, actualDate,
+                selfScore, projectId, createdAt, getCfg("feishu.base.tableTasks"));
+        String backup = getCfg("feishu.base.tableTasksBackup");
+        if (!backup.isBlank()) {
+            syncSubTaskToTable(taskId, name, status, designerName, plannedDate, actualDate,
+                    selfScore, projectId, createdAt, backup);
+        }
+    }
+
+    private void syncSubTaskToTable(Long taskId, String name, String status,
+                                    String designerName, String plannedDate,
+                                    String actualDate, Double selfScore,
+                                    Long projectId, LocalDateTime createdAt,
+                                    String tableId) throws Exception {
+
         String appToken = getCfg("feishu.base.appToken");
-        String tableId = getCfg("feishu.base.tableTasks");
         if (appToken.isBlank() || tableId.isBlank())
             throw new Exception("飞书子任务表未配置，无法同步");
 
@@ -327,8 +358,19 @@ public class FeishuBaseService {
                             Double weight, Long subTaskId) throws Exception {
         if (!isSyncEnabled()) return;
 
+        syncScoringToTable(recordId, role, score, weight, subTaskId,
+                getCfg("feishu.base.tableScoring"));
+        String backup = getCfg("feishu.base.tableScoringBackup");
+        if (!backup.isBlank()) {
+            syncScoringToTable(recordId, role, score, weight, subTaskId, backup);
+        }
+    }
+
+    private void syncScoringToTable(Long recordId, String role, Integer score,
+                                    Double weight, Long subTaskId,
+                                    String tableId) throws Exception {
+
         String appToken = getCfg("feishu.base.appToken");
-        String tableId = getCfg("feishu.base.tableScoring");
         if (appToken.isBlank() || tableId.isBlank())
             throw new Exception("飞书评分表未配置，无法同步");
 

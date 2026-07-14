@@ -8,6 +8,10 @@ import java.util.List;
  */
 public class SecurityUtil {
 
+    private static final String USER_ID_PATTERN = "^[a-zA-Z0-9_]{3,30}$";
+    private static final String PHONE_PATTERN = "^1\\d{10}$";
+    private static final String EMAIL_PATTERN = "^[\\w.-]+@[\\w.-]+\\.[A-Za-z]{2,}$";
+
     // 允许上传的图片扩展名
     private static final List<String> ALLOWED_IMAGE_EXTS = Arrays.asList("jpg", "jpeg", "png", "gif", "bmp", "webp");
 
@@ -39,6 +43,28 @@ public class SecurityUtil {
         s = s.replaceAll("javascript:", "x-javascript:")
              .replaceAll("on\\w+\\s*=", "x-event=");
         return s;
+    }
+
+    public static boolean isValidUserId(String userId) {
+        return userId != null && userId.matches(USER_ID_PATTERN);
+    }
+
+    public static boolean isValidDisplayName(String name) {
+        if (name == null) return false;
+        String value = name.trim();
+        return !value.isEmpty() && value.length() <= 20 && !value.matches(".*[<>\"'\\\\].*");
+    }
+
+    public static boolean isValidPhone(String phone) {
+        return phone != null && phone.matches(PHONE_PATTERN);
+    }
+
+    public static boolean isValidEmail(String email) {
+        return email != null && email.length() <= 254 && email.matches(EMAIL_PATTERN);
+    }
+
+    public static boolean isValidPassword(String password) {
+        return password != null && password.length() >= 6 && password.length() <= 72;
     }
 
     /**

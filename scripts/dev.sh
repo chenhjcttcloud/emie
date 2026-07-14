@@ -16,9 +16,24 @@ PROFILE="dev"
 # 切换到项目根目录（兼容 scripts/ 内或根目录调用）
 cd "$(dirname "$0")/.."
 
+# 本地敏感配置只保存在已被 Git 忽略的 .env 中，启动时自动加载但不输出内容。
+if [ -f ".env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source ".env"
+  set +a
+fi
+
 JAR_PATH="target/$APP_NAME-1.0.0.jar"
 
 start() {
+  for var_name in DESIGNPM_TEST_DB_HOST DESIGNPM_TEST_DB_NAME DESIGNPM_TEST_DB_USER DESIGNPM_TEST_DB_PASSWORD; do
+    if [ -z "${!var_name}" ]; then
+      echo "缺少测试库配置：$var_name，请先配置本机 .env"
+      exit 1
+    fi
+  done
+
   if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
     echo "服务已在运行 PID=$(cat $PID_FILE)"
     exit 1

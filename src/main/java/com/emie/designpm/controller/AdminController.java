@@ -91,6 +91,7 @@ public class AdminController {
         result.put("name", user.getName());
         result.put("role", user.getRole());
         result.put("title", user.getTitle());
+        result.put("status", user.getStatus() != null ? user.getStatus() : "active");
         return ResponseEntity.ok(result);
     }
 

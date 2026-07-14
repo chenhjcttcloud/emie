@@ -6,7 +6,7 @@
 |---|---|---|
 | JDK | 17 | 编译和运行 Spring Boot |
 | Maven | 使用 `./mvnw` | 构建与测试 |
-| MySQL | 可访问测试库 | `dev`、`local` profile 数据源 |
+| MySQL | 可访问测试库 | `dev`、`local` profile 使用专用测试库 |
 | Node.js | 可选 | JavaScript 语法检查和模板工具 |
 | Docker | 可选 | 容器镜像和生产等价环境 |
 
@@ -18,7 +18,9 @@
 cp .env.example .env
 ```
 
-开发/测试数据库变量：
+日常开发使用 `dev` profile 连接专用测试 MySQL，以保留飞书配置、测试账号和业务测试数据。连接信息只保存在已被 Git 忽略的 `.env`，不得写入源码。
+
+`dev` 和 `local` profile 均使用以下变量：
 
 | 变量 | 说明 |
 |---|---|
@@ -26,10 +28,11 @@ cp .env.example .env
 | `DESIGNPM_TEST_DB_NAME` | 测试数据库名称 |
 | `DESIGNPM_TEST_DB_USER` | 测试数据库用户 |
 | `DESIGNPM_TEST_DB_PASSWORD` | 测试数据库密码 |
+| `DESIGNPM_TEST_DB_USE_SSL` | 是否启用数据库 TLS，默认建议为 `true` |
 
 生产变量 `DESIGNPM_DB_*` 只用于生产或明确的生产等价验证，不应在日常开发中加载。
 
-将 `.env` 加载到当前 shell：
+`./dev.sh` 会自动加载 `.env`。直接运行 Maven 或 Java 命令时，可手动加载：
 
 ```bash
 set -a
@@ -50,7 +53,16 @@ set +a
 
 根目录 `dev.sh` 是快捷入口，实际逻辑位于 `scripts/dev.sh`。开发脚本使用 `dev` profile，默认端口为 `8080`，日志写入 `/tmp/emie-dev.log`。
 
-`dev` 和 `local` profile 使用测试 MySQL，并允许 Hibernate 更新测试库结构；`prod` profile 使用 `ddl-auto=validate`，不能依赖应用自动修改生产数据库。
+`dev` 和 `local` profile 连接显式配置的专用测试 MySQL，并允许 Hibernate更新测试库结构；未指定 profile 时才使用本机 H2 作为安全兜底。`prod` profile 使用 `ddl-auto=validate`，不能依赖应用自动修改生产数据库。
+
+连接共享测试库时可显式启动：
+
+```bash
+set -a
+source .env
+set +a
+java -jar target/design-pm-1.0.0.jar --spring.profiles.active=local
+```
 
 ## 4. 代码结构
 
@@ -74,14 +86,27 @@ set +a
 
 - 页面入口：`static/index.html`
 - 样式：`static/css/app.css`
-- 主要逻辑：`static/js/app.js`
+- 核心域：`core-runtime.js`、`core-auth.js`、`core-identity.js`、`core-shell.js`、`core-ui.js` 和门面 `core.js`
+- 工作台域：`dashboard-projects.js`、`dashboard-home.js`、`dashboard-lists.js`、`dashboard-scoring.js`、`dashboard-designer.js` 和门面 `dashboard.js`
+- 项目域门面：`static/js/projects.js`
+- 项目上传：`static/js/project-uploads.js`
+- 项目创建表单：`static/js/project-form.js`
+- 项目详情与项目级操作：`static/js/project-detail.js`
+- 子任务、交付、验收与评分：`static/js/project-tasks.js`
+- 项目分享：`static/js/project-sharing.js`
+- 系统管理域：`admin-shell.js`、`admin-users.js`、`admin-roles.js`、`admin-catalog.js`、`admin-org.js`、`admin-scoring.js`、`admin-audit.js`、`admin-storage.js`、`admin-workload.js` 和门面 `admin.js`
+- 声明式事件：`static/js/event-runtime.js`
+- 文件预览与下载：`static/js/files.js`
+- 启动入口：`static/js/bootstrap.js`
 
-修改 `app.js` 后同步递增 `index.html` 中的 `app.js?v=` 参数，避免浏览器缓存旧脚本。
+页面只加载 `bootstrap.js` 这一个 `type="module"` 入口，由它按依赖顺序导入所有业务模块。修改任一前端模块后，同步递增 `bootstrap.js` 内部 import 和 `index.html` 启动入口的 `?v=` 参数。
+
+跨模块共享的可变状态统一保存在 `window.EMIE` 下：通用状态使用 `EMIE.state`，各业务模块分别使用 `dashboardState`、`projectState`、`adminState` 和 `fileState`。模块通过 `EMIE.registerModule()` 声明公共接口，跨模块调用通过 `EMIE.actions` 解析，不向 `window` 暴露业务函数。页面交互使用 `data-emie-on*` 声明式事件，不再使用 HTML 内联 `on*` 属性。
 
 语法检查：
 
 ```bash
-node --check src/main/resources/static/js/app.js
+for file in src/main/resources/static/js/*.js; do node --input-type=module --check < "$file"; done
 ```
 
 ## 6. 构建与测试
@@ -128,7 +153,7 @@ git diff --check
 
 ### 开发脚本无法连接数据库
 
-确认测试数据库变量已经加载到当前 shell，并检查网络、数据库用户权限和数据库名称。
+确认 `.env` 中的测试数据库变量完整，并检查网络、数据库用户权限、TLS 配置和数据库名称。
 
 ### 端口被占用
 

@@ -38,4 +38,18 @@ class SecurityRegressionTest {
         assertTrue(SecurityUtil.isValidAttachmentFile("brief.docx"));
         assertTrue(SecurityUtil.isValidAttachmentFile("reference.pdf"));
     }
+
+    @Test
+    void accountFieldsUseTheSameStrictValidationForRegistrationAndAdminEditing() {
+        assertTrue(SecurityUtil.isValidUserId("designer_01"));
+        assertFalse(SecurityUtil.isValidUserId("../admin"));
+        assertTrue(SecurityUtil.isValidDisplayName("设计成员"));
+        assertFalse(SecurityUtil.isValidDisplayName("<img>"));
+        assertTrue(SecurityUtil.isValidPhone("13800138000"));
+        assertFalse(SecurityUtil.isValidPhone("123"));
+        assertTrue(SecurityUtil.isValidEmail("user@example.com"));
+        assertFalse(SecurityUtil.isValidEmail("bad@email"));
+        assertTrue(SecurityUtil.isValidPassword("secure-password"));
+        assertFalse(SecurityUtil.isValidPassword("12345"));
+    }
 }

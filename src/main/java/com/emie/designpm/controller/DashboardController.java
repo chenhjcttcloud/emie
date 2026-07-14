@@ -73,7 +73,7 @@ public class DashboardController {
         // 3. 四个角色状态看板
         Map<String, Object> roleStatus = new LinkedHashMap<>();
         for (String r : ALL_ROLES) {
-            roleStatus.put(r, projectService.getRoleStatus(r));
+            roleStatus.put(r, projectService.getRoleStatus(r, role, userId));
         }
         result.put("roleStatus", roleStatus);
 

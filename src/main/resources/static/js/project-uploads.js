@@ -1,0 +1,301 @@
+const EMIE = window.EMIE;
+const uploadFile = (...args) => EMIE.actions.uploadFile(...args);
+const fmtSize = (...args) => EMIE.actions.fmtSize(...args);
+const formModified = (...args) => EMIE.actions.formModified(...args);
+const escHtml = (...args) => EMIE.actions.escHtml(...args);
+const escJsString = (...args) => EMIE.actions.escJsString(...args);
+const showDownloadOptions = (...args) => EMIE.actions.showDownloadOptions(...args);
+const renderAttachmentActions = (...args) => EMIE.actions.renderAttachmentActions(...args);
+
+// EMIE 项目域：上传、项目详情、子任务工作流、评分与分享
+// ==================== 图片预览（Lightbox + 滚轮缩放 + 拖拽平移）====================
+function previewImage(src, name) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.style.cssText = 'z-index:300;background:rgba(0,0,0,.85);overflow:hidden;';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  let scale = 1;
+  const minScale = 0.25;
+  const maxScale = 10;
+  let isDragging = false;
+  let startX = 0, startY = 0;
+  let panX = 0, panY = 0;
+
+  const imgWrap = document.createElement('div');
+  imgWrap.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;justify-content:center;cursor:grab;user-select:none;overflow:hidden;';
+  imgWrap.onmousedown = function(e) {
+    if (scale <= 1) return;
+    isDragging = true;
+    startX = e.clientX - panX;
+    startY = e.clientY - panY;
+    imgWrap.style.cursor = 'grabbing';
+    e.preventDefault();
+  };
+
+  const img = document.createElement('img');
+  img.src = src;
+  img.alt = name || '预览';
+  img.draggable = false;
+  img.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,.5);transition:transform .15s ease;transform:scale(1);pointer-events:none;';
+
+  imgWrap.appendChild(img);
+
+  const zoomLabel = document.createElement('div');
+  zoomLabel.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:#fff;padding:6px 16px;border-radius:20px;font-size:13px;z-index:310;pointer-events:none;user-select:none;';
+  zoomLabel.textContent = '100%';
+
+  overlay.onwheel = function(e) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    scale = Math.min(maxScale, Math.max(minScale, scale + delta));
+    img.style.transform = 'scale(' + scale + ')';
+    imgWrap.style.cursor = scale > 1 ? 'grab' : 'default';
+    zoomLabel.textContent = Math.round(scale * 100) + '%';
+    // 还原到 1x 时复位位置
+    if (scale <= 1) { panX = 0; panY = 0; img.style.marginLeft = '0'; img.style.marginTop = '0'; }
+  };
+
+  // 全局鼠标移动和释放（防止拖出图片区域时丢失事件）
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+
+  function onMove(e) {
+    if (!isDragging) return;
+    panX = e.clientX - startX;
+    panY = e.clientY - startY;
+    img.style.marginLeft = panX + 'px';
+    img.style.marginTop = panY + 'px';
+  }
+
+  function onUp() {
+    isDragging = false;
+    imgWrap.style.cursor = scale > 1 ? 'grab' : 'default';
+  }
+
+  const closeBtn = document.createElement('button');
+  closeBtn.innerHTML = '✕';
+  closeBtn.onclick = function() { cleanup(); overlay.remove(); };
+  closeBtn.style.cssText = 'position:fixed;top:20px;left:20px;width:40px;height:40px;border-radius:12px;border:none;background:rgba(255,255,255,.9);color:#333;font-size:20px;cursor:pointer;z-index:310;box-shadow:0 2px 12px rgba(0,0,0,.3);';
+
+  function cleanup() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+
+  overlay.appendChild(closeBtn);
+  overlay.appendChild(imgWrap);
+  overlay.appendChild(zoomLabel);
+  document.body.appendChild(overlay);
+}
+
+// 全局点击图片预览委托
+document.addEventListener('click', function(e) {
+  const img = e.target.closest('.img-clickable');
+  if (img) {
+    previewImage(img.src, img.alt || img.title || '');
+  }
+});
+
+// ==================== 文件上传工具（multipart 流式 + 进度条）====================
+
+function showProgressBar(containerId, fileName) {
+  const c = document.getElementById(containerId);
+  if (!c) return;
+  const el = document.createElement('div');
+  el.className = 'upload-progress';
+  el.id = 'prog_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+  el.style.cssText = 'margin-top:6px;background:var(--gray-100);border-radius:6px;overflow:hidden;font-size:11px;';
+  el.innerHTML = `<div style="display:flex;justify-content:space-between;padding:2px 8px;color:var(--gray-500);">
+    <span>⏳ ${fileName}</span><span class="prog-pct">0%</span>
+  </div><div style="height:4px;background:var(--gray-200);border-radius:2px;margin:0 8px 6px;">
+    <div class="prog-bar" style="width:0%;height:100%;background:var(--primary);border-radius:2px;transition:width .3s;"></div>
+  </div>`;
+  c.parentNode.insertBefore(el, c.nextSibling);
+  return el.id;
+}
+
+function updateProgress(progId, pct) {
+  const el = document.getElementById(progId);
+  if (!el) return;
+  el.querySelector('.prog-pct').textContent = pct + '%';
+  el.querySelector('.prog-bar').style.width = pct + '%';
+  if (pct >= 100) {
+    el.querySelector('span:first-child').textContent = '✅ ' + el.querySelector('span:first-child').textContent.slice(2);
+  }
+}
+
+function removeProgress(progId) {
+  const el = document.getElementById(progId);
+  if (el) el.remove();
+}
+
+async function handleFileUpload(input, list, maxCount, typeLabel, isImage) {
+  const files = input?.files || input || [];
+  if (list.length + files.length > maxCount) {
+    alert(typeLabel + '最多上传' + maxCount + '个');
+    if (input?.value !== undefined) input.value = '';
+    return;
+  }
+  const maxBytes = isImage ? 200 * 1024 * 1024 : 2 * 1024 * 1024 * 1024;
+  const blocked = ['.sql', '.sh', '.bat', '.cmd', '.exe', '.dll', '.so', '.jar', '.war', '.php', '.asp', '.jsp', '.py', '.vbs', '.ps1', '.msi', '.reg', '.scr'];
+
+  for (const f of files) {
+    const ext = '.' + f.name.split('.').pop()?.toLowerCase();
+    if (blocked.includes(ext)) { alert('不允许上传 ' + ext + ' 文件'); continue; }
+    if (f.size > maxBytes) { alert('文件 ' + f.name + ' 超过大小限制'); continue; }
+
+    const suffix = typeLabel.includes('交付') ? 'Deliver' : 'Create';
+    const containerId = isImage ? (suffix + (isImage ? 'RefImageList' : 'AttachmentList')) : (suffix + (isImage ? 'RefImageList' : 'AttachmentList'));
+    const barId = showProgressBar(
+      isImage ? (suffix === 'Create' ? 'createRefImageList' : 'deliverImageList')
+              : (suffix === 'Create' ? 'createAttachmentList' : 'deliverAttachmentList'),
+      f.name
+    );
+    EMIE.projectState.uploadingCount++;
+
+    try {
+      const result = await uploadFile(f, (pct) => updateProgress(barId, pct));
+      list.push({ name: result.name, url: result.url, size: result.size, storedName: result.storedName });
+      renderFileList(list, typeLabel);
+      formModified();
+      setTimeout(() => removeProgress(barId), 1500);
+    } catch (e) {
+      removeProgress(barId);
+      alert('上传失败: ' + f.name + ' - ' + e.message);
+    }
+    EMIE.projectState.uploadingCount--;
+  }
+  if (input?.value !== undefined) input.value = '';
+}
+
+function renderFileList(list, typeLabel) {
+  const isImage = typeLabel.includes('参考图片');
+  const context = resolveFileListContext(list, isImage);
+  const containerId = context.containerId;
+  const c = document.getElementById(containerId);
+  if (!c) return;
+  if (!list.length) { c.innerHTML = ''; return; }
+
+  // 为图片 URL 追加 token（<img> 标签无法发送 X-Auth-Token 头）
+  const token = localStorage.getItem('design_pm_token');
+  const authUrl = u => u + (u.includes('?') ? '&' : '?') + 'token=' + token;
+
+  if (isImage) {
+    c.innerHTML = `<div class="image-preview">${list.map((img, i) =>
+      `<div style="position:relative;display:inline-block;">
+        <img src="${escHtml(authUrl(img.url))}" alt="${escHtml(img.name)}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+        <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(img.url)}','${escJsString(img.name)}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:20px;height:20px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
+        <button style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button>
+      </div>`).join('')}</div>`;
+  } else {
+    c.innerHTML = list.map((f, i) =>
+      `<div class="file-item"><span class="file-item-name">📎 ${escHtml(f.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(f.size)}</span>${renderAttachmentActions(f, true)}<button class="remove-file" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button></div>`
+    ).join('');
+  }
+}
+
+function resolveFileListContext(list, isImage) {
+  if (list === EMIE.projectState.createRefImages) return { listKey: 'createRef', containerId: 'createRefImageList' };
+  if (list === EMIE.projectState.createAttachments) return { listKey: 'createAttachment', containerId: 'createAttachmentList' };
+  if (list === EMIE.projectState.deliverImages) return { listKey: 'deliverImage', containerId: 'deliverImageList' };
+  if (list === EMIE.projectState.deliverAttachments) return { listKey: 'deliverAttachment', containerId: 'deliverAttachmentList' };
+  if (list === EMIE.projectState.subTaskRefImages) return { listKey: 'subTaskRef', containerId: 'createRefImageList' };
+  if (list === EMIE.projectState.subTaskAttachments) return { listKey: 'subTaskAttachment', containerId: 'createAttachmentList' };
+  if (list === EMIE.projectState.editTaskRefImages) return { listKey: 'editTaskRef', containerId: 'createRefImageList' };
+  if (list === EMIE.projectState.editTaskAttachments) return { listKey: 'editTaskAttachment', containerId: 'createAttachmentList' };
+  return {
+    listKey: isImage ? 'createRef' : 'createAttachment',
+    containerId: isImage ? 'createRefImageList' : 'createAttachmentList'
+  };
+}
+
+function removeFileItem(listKey, idx) {
+  const contexts = {
+    createRef: [EMIE.projectState.createRefImages, '参考图片'],
+    createAttachment: [EMIE.projectState.createAttachments, '附件'],
+    deliverImage: [EMIE.projectState.deliverImages, '交付参考图片'],
+    deliverAttachment: [EMIE.projectState.deliverAttachments, '交付附件'],
+    subTaskRef: [EMIE.projectState.subTaskRefImages, '参考图片'],
+    subTaskAttachment: [EMIE.projectState.subTaskAttachments, '附件'],
+    editTaskRef: [EMIE.projectState.editTaskRefImages, '编辑参考图片'],
+    editTaskAttachment: [EMIE.projectState.editTaskAttachments, '编辑附件']
+  };
+  const context = contexts[listKey];
+  if (!context) return;
+  const [list, typeLabel] = context;
+  if (idx >= 0 && idx < list.length) {
+    list.splice(idx, 1);
+  }
+  renderFileList(list, typeLabel);
+}
+
+function handleCreateRefImages(input) { handleFileUpload(input, EMIE.projectState.createRefImages, 9, '参考图片', true); }
+function handleCreateAttachments(input) { handleFileUpload(input, EMIE.projectState.createAttachments, 5, '附件', false); }
+function handleDeliverImages(input) { handleFileUpload(input, EMIE.projectState.deliverImages, 9, '交付参考图片', true); }
+function handleDeliverAttachments(input) { handleFileUpload(input, EMIE.projectState.deliverAttachments, 5, '交付附件', false); }
+
+// 全局拖拽上传：所有 .upload-area 根据其隐藏 input 自动复用现有上传逻辑。
+function handleUploadDrop(input, files) {
+  const id = input?.id || '';
+  const config = {
+    createRefImageInput: [EMIE.projectState.createRefImages, 9, '参考图片', true],
+    createAttachmentInput: [EMIE.projectState.createAttachments, 5, '附件', false],
+    subTaskRefImageInput: [EMIE.projectState.subTaskRefImages, 9, '参考图片', true],
+    subTaskAttachmentInput: [EMIE.projectState.subTaskAttachments, 9, '附件', false],
+    editRefImageInput: [EMIE.projectState.editTaskRefImages, 9, '编辑参考图片', true],
+    editAttachmentInput: [EMIE.projectState.editTaskAttachments, 9, '编辑附件', false],
+    deliverImageInput: [EMIE.projectState.deliverImages, 9, '交付参考图片', true],
+    deliverAttachmentInput: [EMIE.projectState.deliverAttachments, 5, '交付附件', false],
+  }[id];
+  if (config) handleFileUpload(files, ...config);
+}
+
+document.addEventListener('dragover', event => {
+  const zone = event.target.closest?.('.upload-area');
+  if (!zone) return;
+  event.preventDefault();
+  zone.classList.add('drag-over');
+  event.dataTransfer.dropEffect = 'copy';
+});
+document.addEventListener('dragleave', event => {
+  const zone = event.target.closest?.('.upload-area');
+  if (zone && !zone.contains(event.relatedTarget)) zone.classList.remove('drag-over');
+});
+document.addEventListener('drop', event => {
+  const zone = event.target.closest?.('.upload-area');
+  if (!zone) return;
+  event.preventDefault();
+  zone.classList.remove('drag-over');
+  const input = zone.querySelector('input[type="file"]');
+  if (input && event.dataTransfer?.files?.length) handleUploadDrop(input, event.dataTransfer.files);
+});
+
+
+EMIE.registerActions({
+  previewImage,
+  showProgressBar,
+  updateProgress,
+  removeProgress,
+  handleFileUpload,
+  renderFileList,
+  resolveFileListContext,
+  removeFileItem,
+  handleCreateRefImages,
+  handleCreateAttachments,
+  handleDeliverImages,
+  handleDeliverAttachments,
+  handleUploadDrop,
+});
+
+EMIE.registerModule('projectUploads', {
+  previewImage,
+  handleFileUpload,
+  renderFileList,
+  removeFileItem,
+  handleCreateRefImages,
+  handleCreateAttachments,
+  handleDeliverImages,
+  handleDeliverAttachments,
+  handleUploadDrop,
+});

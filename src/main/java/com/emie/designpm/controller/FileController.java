@@ -3,10 +3,10 @@ package com.emie.designpm.controller;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.repository.FileRecordRepository;
-import com.emie.designpm.repository.ProjectRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.FileArchiveService;
 import com.emie.designpm.service.FilePreviewService;
+import com.emie.designpm.service.ProjectAccessService;
 import com.emie.designpm.util.SecurityUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -41,18 +41,18 @@ public class FileController {
     private Path uploadPath;
     private final FileArchiveService fileArchiveService;
     private final FileRecordRepository fileRecordRepository;
-    private final ProjectRepository projectRepository;
+    private final ProjectAccessService projectAccessService;
     private final SubTaskRepository subTaskRepository;
     private final FilePreviewService filePreviewService;
 
     public FileController(FileArchiveService fileArchiveService,
                           FileRecordRepository fileRecordRepository,
-                          ProjectRepository projectRepository,
+                          ProjectAccessService projectAccessService,
                           SubTaskRepository subTaskRepository,
                           FilePreviewService filePreviewService) {
         this.fileArchiveService = fileArchiveService;
         this.fileRecordRepository = fileRecordRepository;
-        this.projectRepository = projectRepository;
+        this.projectAccessService = projectAccessService;
         this.subTaskRepository = subTaskRepository;
         this.filePreviewService = filePreviewService;
     }
@@ -325,18 +325,7 @@ public class FileController {
     }
 
     private List<Project> getAccessibleProjectsWithTasks(AuthController.AuthSession session) {
-        String role = session.role();
-        String userId = session.userId();
-        if ("sales".equals(role)) {
-            return projectRepository.findBySalesId(userId);
-        }
-        if ("planner".equals(role)) {
-            return projectRepository.findByPlannerView(userId);
-        }
-        if ("designer".equals(role) || "supplychain".equals(role)) {
-            return projectRepository.findByDesignerId(userId);
-        }
-        return projectRepository.findAllWithTasks();
+        return projectAccessService.findVisibleProjectsWithTasks(session);
     }
 
     private boolean jsonContainsFile(String json, String storedName, String relativePath) {

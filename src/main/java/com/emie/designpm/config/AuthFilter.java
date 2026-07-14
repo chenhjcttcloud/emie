@@ -36,14 +36,10 @@ public class AuthFilter implements Filter {
 
         // 允许无需认证的路径
         if (path.equals("/api/auth/login") ||
-            path.equals("/api/auth/register") ||
             path.equals("/api/auth/logout") ||
             path.equals("/api/auth/feishu/callback") ||
             path.equals("/api/auth/feishu/config") ||
             path.equals("/api/auth/feishu/auto-login") ||
-            path.equals("/api/captcha/image") ||
-            path.equals("/api/sms/send") ||
-            path.equals("/api/email-code/send") ||
             path.equals("/api/admin/public-config") ||
             path.equals("/favicon.ico") ||
             path.startsWith("/css/") ||
@@ -70,6 +66,12 @@ public class AuthFilter implements Filter {
                 return;
             }
             req.setAttribute("authSession", session);
+            if ("pending".equals(session.role()) && !path.equals("/api/auth/me")) {
+                res.setStatus(403);
+                res.setContentType("application/json;charset=UTF-8");
+                res.getWriter().write("{\"error\":\"账号等待管理员分配角色\"}");
+                return;
+            }
             if (path.startsWith("/api/admin/") && !path.equals("/api/admin/public-config")
                     && !"admin".equals(session.role())) {
                 res.setStatus(403);

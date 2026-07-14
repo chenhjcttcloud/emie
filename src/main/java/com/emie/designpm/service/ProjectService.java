@@ -24,6 +24,7 @@ public class ProjectService {
     private final SystemConfigRepository systemConfigRepository;
     private final SyncQueueService syncQueueService;
     private final FileArchiveService fileArchiveService;
+    private final ProjectAccessService projectAccessService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ProjectService(ProjectRepository projectRepository,
@@ -34,7 +35,8 @@ public class ProjectService {
                           IpOptionRepository ipOptionRepository,
                           SystemConfigRepository systemConfigRepository,
                           SyncQueueService syncQueueService,
-                          FileArchiveService fileArchiveService) {
+                          FileArchiveService fileArchiveService,
+                          ProjectAccessService projectAccessService) {
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
         this.scoringRepository = scoringRepository;
@@ -44,6 +46,7 @@ public class ProjectService {
         this.systemConfigRepository = systemConfigRepository;
         this.syncQueueService = syncQueueService;
         this.fileArchiveService = fileArchiveService;
+        this.projectAccessService = projectAccessService;
     }
 
     // ==================== Query ====================
@@ -58,24 +61,12 @@ public class ProjectService {
 
     /** 获取项目列表（轻量版，不使用 JOIN FETCH tasks） */
     public List<Project> getProjectsByRoleAndUser(String role, String userId) {
-        if ("admin".equals(role)) {
-            return projectRepository.findAllLight();
-        }
-        if ("designer".equals(role) || "supplychain".equals(role)) {
-            return projectRepository.findByDesignerIdLight(userId);
-        }
-        if ("sales".equals(role)) {
-            return projectRepository.findBySalesIdLight(userId);
-        }
-        if ("planner".equals(role)) {
-            return projectRepository.findByPlannerViewLight(userId);
-        }
-        return projectRepository.findBySalesIdLight(userId);
+        return projectAccessService.findVisibleProjectsLight(role, userId);
     }
 
     /** 设计师已参与的项目（轻量版） */
-    public List<Project> getDesignerParticipatingProjects(String userId) {
-        return projectRepository.findParticipatingByDesignerIdLight(userId);
+    public List<Project> getAssigneeParticipatingProjects(String userId, String role) {
+        return projectAccessService.findParticipatingProjectsLight(role, userId);
     }
 
     /** 批量获取子任务统计（projectId → {taskCount, approvedCount}） */
@@ -857,8 +848,8 @@ public class ProjectService {
     // ==================== Role Status Board ====================
 
     /** 获取指定角色的状态看板（销售/企划/供应链/设计师） */
-    public Map<String, Object> getRoleStatus(String role) {
-        List<User> users = userService.getUsersByRole(role);
+    public Map<String, Object> getRoleStatus(String role, String viewerRole, String viewerUserId) {
+        List<User> users = projectAccessService.visibleUsers(viewerRole, viewerUserId, role);
         Map<String, Object> result = new LinkedHashMap<>();
 
         if ("designer".equals(role) || "supplychain".equals(role)) {
@@ -927,8 +918,8 @@ public class ProjectService {
     }
 
     // 保留旧方法兼容
-    public Map<String, Object> getDesignerStatus() {
-        return getRoleStatus("designer");
+    public Map<String, Object> getDesignerStatus(String viewerRole, String viewerUserId) {
+        return getRoleStatus("designer", viewerRole, viewerUserId);
     }
 
     // ==================== Project Compute Status ====================

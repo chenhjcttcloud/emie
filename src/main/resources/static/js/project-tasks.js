@@ -1,0 +1,755 @@
+const EMIE = window.EMIE;
+const roleLabel = (...args) => EMIE.actions.roleLabel(...args);
+const getCurrentUserName = (...args) => EMIE.actions.getCurrentUserName(...args);
+const getCurrentUserId = (...args) => EMIE.actions.getCurrentUserId(...args);
+const apiGet = (...args) => EMIE.actions.apiGet(...args);
+const apiPost = (...args) => EMIE.actions.apiPost(...args);
+const apiPut = (...args) => EMIE.actions.apiPut(...args);
+const tryOpenModal = (...args) => EMIE.actions.tryOpenModal(...args);
+const doneOpenModal = (...args) => EMIE.actions.doneOpenModal(...args);
+const showActionError = (...args) => EMIE.actions.showActionError(...args);
+const submitGuard = (...args) => EMIE.actions.submitGuard(...args);
+const apiDelete = (...args) => EMIE.actions.apiDelete(...args);
+const renderDatePicker = (...args) => EMIE.actions.renderDatePicker(...args);
+const escHtml = (...args) => EMIE.actions.escHtml(...args);
+const displayText = (...args) => EMIE.actions.displayText(...args);
+const closeM = (...args) => EMIE.actions.closeM(...args);
+const refreshAfterMutation = (...args) => EMIE.actions.refreshAfterMutation(...args);
+const switchAssigneeType = (...args) => EMIE.actions.switchAssigneeType(...args);
+const switchEditAssigneeType = (...args) => EMIE.actions.switchEditAssigneeType(...args);
+const handleFileUpload = (...args) => EMIE.actions.handleFileUpload(...args);
+const renderFileList = (...args) => EMIE.actions.renderFileList(...args);
+const handleDeliverImages = (...args) => EMIE.actions.handleDeliverImages(...args);
+const handleDeliverAttachments = (...args) => EMIE.actions.handleDeliverAttachments(...args);
+
+// ==================== 添加 / 编辑子任务 ====================
+
+function handleSubTaskRefImages(input) {
+  handleFileUpload(input, EMIE.projectState.subTaskRefImages, 9, '参考图片', true);
+}
+function handleSubTaskAttachments(input) {
+  handleFileUpload(input, EMIE.projectState.subTaskAttachments, 9, '附件', false);
+}
+
+function addSubTask(pid) {
+  if (document.getElementById('addSubTaskModal')) return;
+  // 清理可能残留的其他弹窗，避免遮挡
+  document.querySelectorAll('.modal-overlay').forEach(el => {
+    if (el.id !== 'projectDetailModal' && el.id !== 'addSubTaskModal') el.remove();
+  });
+  EMIE.projectState.subTaskRefImages = [];
+  EMIE.projectState.subTaskAttachments = [];
+
+  const designerOpts = `<option value="">请选择设计师</option>` +
+    EMIE.state.users.designer.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('');
+  const supplychainOpts = EMIE.state.users.supplychain && EMIE.state.users.supplychain.length
+    ? `<option value="">请选择供应链</option>` +
+    EMIE.state.users.supplychain.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
+    : `<option value="">暂无供应链人员</option>`;
+  const plannerOpts = EMIE.state.users.planner && EMIE.state.users.planner.length
+    ? `<option value="">请选择企划</option>` +
+    EMIE.state.users.planner.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
+    : `<option value="">暂无企划人员</option>`;
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'addSubTaskModal';
+  modal.innerHTML = `
+    <button class="modal-close-float" data-emie-onclick="closeM('addSubTaskModal')">✕</button>
+    <div class="modal modal-lg">
+      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">➕ 添加子任务</div></div></div>
+      <div class="modal-body">
+        <form id="addSubTaskForm">
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 子任务名称</label><input type="text" class="form-input" name="name" required placeholder="如：首页Banner设计、详情页布局..." data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor=''"></div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 计划要求完成时间</label>${renderDatePicker('plannedDate', {required:true})}</div>
+          </div>
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 负责人类型</label>
+            <div style="display:flex;gap:16px;">
+              <label class="checkbox-item checked" style="cursor:pointer;" data-emie-onclick="switchAssigneeType('add', 'designer', this)">
+                <input type="radio" name="assigneeRole" value="designer" checked data-emie-onchange="switchAssigneeType('add', 'designer')" style="display:none;"> 👨‍🎨 设计师
+              </label>
+              <label class="checkbox-item" style="cursor:pointer;" data-emie-onclick="switchAssigneeType('add', 'supplychain', this)">
+                <input type="radio" name="assigneeRole" value="supplychain" data-emie-onchange="switchAssigneeType('add', 'supplychain')" style="display:none;"> 🛒 供应链
+              </label>
+              <label class="checkbox-item" style="cursor:pointer;" data-emie-onclick="switchAssigneeType('add', 'planner', this)">
+                <input type="radio" name="assigneeRole" value="planner" data-emie-onchange="switchAssigneeType('add', 'planner')" style="display:none;"> 📋 企划
+              </label>
+            </div>
+          </div>
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 指派子任务负责人</label>
+            <select class="form-select" name="designerId" id="addSubTaskDesignerId" required data-emie-onchange="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor=''">${designerOpts}</select>
+            <input type="hidden" name="assigneeRole" id="addSubTaskAssigneeRole" value="designer">
+          </div>
+          <div class="form-group"><label class="form-label">细节要求说明</label><textarea class="form-textarea" name="details" placeholder="子任务的具体要求说明..." data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor=''"></textarea></div>
+        </form>
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
+          <div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片（可选）</div>
+          <div class="upload-area" data-emie-onclick="document.getElementById('subTaskRefImageInput').click()">
+            <div>📁 点击上传参考图片</div>
+            <input type="file" id="subTaskRefImageInput" multiple accept="image/*" style="display:none" data-emie-onchange="handleSubTaskRefImages(this)">
+          </div>
+          <div class="file-list" id="createRefImageList"></div>
+        </div>
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
+          <div class="form-label" style="margin-bottom:8px;">📎 附件（可选）</div>
+          <div class="upload-area" data-emie-onclick="document.getElementById('subTaskAttachmentInput').click()">
+            <div>📁 点击上传附件</div>
+            <input type="file" id="subTaskAttachmentInput" multiple style="display:none" data-emie-onchange="handleSubTaskAttachments(this)">
+          </div>
+          <div class="file-list" id="createAttachmentList"></div>
+        </div>
+        <div style="margin-top:8px;padding:10px;background:var(--warning-light);border-radius:8px;font-size:12px;color:#92400E;">
+          💡 提示：可多次添加子任务。所有子任务完成后，项目才算完成。
+        </div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('addSubTaskModal')">取消</button><button class="btn btn-outline" data-emie-onclick="saveSubTaskDraft('${pid}')">保存草稿</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitAddSubTask('${pid}'))">确认添加</button></div>
+    </div>`;
+  document.body.appendChild(modal);
+  try {
+    const draft = JSON.parse(sessionStorage.getItem(`design_pm_subtask_draft_${pid}`) || 'null');
+    if (draft) Object.entries(draft).forEach(([name, value]) => {
+      const field = document.querySelector(`#addSubTaskForm [name="${name}"]`);
+      if (field && typeof value === 'string') field.value = value;
+    });
+  } catch (e) { console.warn('恢复子任务草稿失败', e); }
+}
+
+function saveSubTaskDraft(pid) {
+  const form = document.getElementById('addSubTaskForm');
+  if (!form || !pid) return;
+  const draft = Object.fromEntries(new FormData(form).entries());
+  sessionStorage.setItem(`design_pm_subtask_draft_${pid}`, JSON.stringify(draft));
+  closeM('addSubTaskModal', true);
+  showActionError('子任务草稿已保存');
+}
+
+async function submitAddSubTask(pid) {
+  if (!pid) { alert('项目ID无效'); return; }
+  if (EMIE.projectState.uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
+  // 清除之前错误
+  document.querySelectorAll('#addSubTaskForm .field-error').forEach(el => el.remove());
+  document.querySelectorAll('#addSubTaskForm .form-input, #addSubTaskForm .form-select, #addSubTaskForm .form-textarea').forEach(el => el.style.borderColor = '');
+
+  function showError(name, msg) {
+    const input = document.querySelector(`#addSubTaskForm [name="${name}"]`);
+    if (!input) return;
+    const group = input.closest('.form-group');
+    if (!group) return;
+    const err = document.createElement('div');
+    err.className = 'field-error';
+    err.style.cssText = 'color:var(--danger);font-size:12px;margin-top:4px;';
+    err.textContent = '❌ ' + msg;
+    group.appendChild(err);
+    input.style.borderColor = 'var(--danger)';
+  }
+
+  const fd = new FormData(document.getElementById('addSubTaskForm'));
+  const data = Object.fromEntries(fd.entries());
+  let hasErr = false;
+
+  if (!data.name) { showError('name', '请填写子任务名称'); hasErr = true; }
+  if (!data.plannedDate) { showError('plannedDate', '请选择计划完成时间'); hasErr = true; }
+  else if (!/^\d{4}-\d{2}-\d{2}$/.test(data.plannedDate) || isNaN(new Date(data.plannedDate).getTime())) {
+    showError('plannedDate', '日期格式不正确（yyyy-mm-dd）');
+    hasErr = true;
+  } else {
+    const parts = data.plannedDate.split('-');
+    const m = parseInt(parts[1]), day = parseInt(parts[2]);
+    if (m < 1 || m > 12 || day < 1 || day > 31) {
+      showError('plannedDate', '日期超出有效范围');
+      hasErr = true;
+    } else {
+      // 禁止选择早于今天的日期
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const selected = new Date(data.plannedDate);
+      if (selected < today) {
+        showError('plannedDate', '计划完成时间不能早于今天');
+        hasErr = true;
+      }
+    }
+  }
+
+  // 子任务负责人：未指定可以提交，但"请选择子任务负责人"不允许
+  const designerSel = document.querySelector('#addSubTaskForm [name="designerId"]');
+  if (designerSel && designerSel.selectedIndex === 0) {
+    showError('designerId', '请选择子任务负责人或未指定');
+    hasErr = true;
+  }
+  if (hasErr) return;
+
+  data.currentUser = getCurrentUserName();
+  data.currentRole = EMIE.state.currentRole;
+  // 始终提交图片和附件列表
+  data.referenceImagesJson = JSON.stringify(EMIE.projectState.subTaskRefImages.map(img => ({name: img.name, url: img.url, size: img.size, storedName: img.storedName})));
+  data.attachmentsJson = JSON.stringify(EMIE.projectState.subTaskAttachments.map(a => ({name: a.name, url: a.url, size: a.size, storedName: a.storedName})));
+
+  try {
+    await apiPost(`/projects/${pid}/tasks`, data);
+    sessionStorage.removeItem(`design_pm_subtask_draft_${pid}`);
+    closeM('addSubTaskModal');
+    await refreshAfterMutation(pid);
+  } catch (e) {
+    alert('添加失败: ' + (e.message || '未知错误'));
+  }
+}
+
+function editTask(pid, tid) {
+  if (!tryOpenModal('editTaskModal')) return;
+  apiGet(`/projects/${pid}`).then(detail => {
+    const task = detail.tasks.find(t => t.id === tid);
+    if (!task) { doneOpenModal('editTaskModal'); return; }
+    // 加载现有图片和附件
+    EMIE.projectState.editTaskRefImages = [];
+    EMIE.projectState.editTaskAttachments = [];
+    if (task.referenceImagesJson) {
+      try { EMIE.projectState.editTaskRefImages = JSON.parse(task.referenceImagesJson); } catch(e) {}
+    }
+    if (task.attachmentsJson) {
+      try { EMIE.projectState.editTaskAttachments = JSON.parse(task.attachmentsJson); } catch(e) {}
+    }
+
+    const designerOpts = task.assigneeRole === 'planner'
+      ? (EMIE.state.users.planner && EMIE.state.users.planner.length
+          ? '<option value="">请选择企划</option>' +
+            EMIE.state.users.planner.map(u => `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
+          : '<option value="">暂无企划人员</option>')
+      : task.assigneeRole === 'supplychain'
+        ? (EMIE.state.users.supplychain && EMIE.state.users.supplychain.length
+            ? '<option value="">请选择供应链</option>' +
+              EMIE.state.users.supplychain.map(u => `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
+            : '<option value="">暂无供应链人员</option>')
+        : '<option value="">请选择设计师</option>' +
+          (EMIE.state.users.designer || []).map(u => `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('');
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'editTaskModal';
+    modal.innerHTML = `
+    <button class="modal-close-float" data-emie-onclick="closeM('editTaskModal')">✕</button>
+      <div class="modal modal-lg">
+        <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✏️ 编辑子任务</div></div></div>
+        <div class="modal-body">
+          <form id="editTaskForm">
+            <div class="form-group"><label class="form-label">子任务名称</label><input type="text" class="form-input" name="name" value="${escHtml(task.name)}"></div>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">计划完成时间</label>${renderDatePicker('plannedDate', {value: task.plannedDate || ''})}</div>
+            </div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 负责人类型</label>
+              <div style="display:flex;gap:16px;">
+                <label class="checkbox-item ${task.assigneeRole === 'designer' || !task.assigneeRole ? 'checked' : ''}" style="cursor:pointer;" data-emie-onclick="switchEditAssigneeType('designer', this)">
+                  <input type="radio" name="assigneeRole" value="designer" ${task.assigneeRole === 'designer' || !task.assigneeRole ? 'checked' : ''} style="display:none;"> 👨‍🎨 设计师
+                </label>
+                <label class="checkbox-item ${task.assigneeRole === 'supplychain' ? 'checked' : ''}" style="cursor:pointer;" data-emie-onclick="switchEditAssigneeType('supplychain', this)">
+                  <input type="radio" name="assigneeRole" value="supplychain" ${task.assigneeRole === 'supplychain' ? 'checked' : ''} style="display:none;"> 🛒 供应链
+                </label>
+                <label class="checkbox-item ${task.assigneeRole === 'planner' ? 'checked' : ''}" style="cursor:pointer;" data-emie-onclick="switchEditAssigneeType('planner', this)">
+                  <input type="radio" name="assigneeRole" value="planner" ${task.assigneeRole === 'planner' ? 'checked' : ''} style="display:none;"> 📋 企划
+                </label>
+              </div>
+            </div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 指派子任务负责人</label>
+              <select class="form-select" name="designerId" id="editSubTaskDesignerId">${designerOpts}</select>
+              <input type="hidden" name="assigneeRole" id="editSubTaskAssigneeRole" value="${task.assigneeRole || 'designer'}">
+            </div>
+            <div class="form-group"><label class="form-label">细节要求说明</label><textarea class="form-textarea" name="details">${escHtml(task.details)}</textarea></div>
+          </form>
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
+            <div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片（可选）</div>
+            <div class="upload-area" data-emie-onclick="document.getElementById('editRefImageInput').click()">
+              <div>📁 点击上传参考图片</div>
+              <input type="file" id="editRefImageInput" multiple accept="image/*" style="display:none" data-emie-onchange="handleEditRefImages(this)">
+            </div>
+            <div class="file-list" id="createRefImageList"></div>
+          </div>
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
+            <div class="form-label" style="margin-bottom:8px;">📎 附件（可选）</div>
+            <div class="upload-area" data-emie-onclick="document.getElementById('editAttachmentInput').click()">
+              <div>📁 点击上传附件</div>
+              <input type="file" id="editAttachmentInput" multiple style="display:none" data-emie-onchange="handleEditAttachments(this)">
+            </div>
+            <div class="file-list" id="createAttachmentList"></div>
+          </div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('editTaskModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitEditTask('${pid}','${tid}'))">保存修改</button></div>
+      </div>`;
+    document.body.appendChild(modal);
+    doneOpenModal('editTaskModal');
+    // 渲染现有文件
+    if (EMIE.projectState.editTaskRefImages.length) renderFileList(EMIE.projectState.editTaskRefImages, '编辑参考图片');
+    if (EMIE.projectState.editTaskAttachments.length) renderFileList(EMIE.projectState.editTaskAttachments, '编辑附件');
+  }).catch(() => doneOpenModal('editTaskModal'));
+}
+
+function handleEditRefImages(input) { handleFileUpload(input, EMIE.projectState.editTaskRefImages, 9, '编辑参考图片', true); }
+function handleEditAttachments(input) { handleFileUpload(input, EMIE.projectState.editTaskAttachments, 9, '编辑附件', false); }
+
+async function submitEditTask(pid, tid) {
+  if (EMIE.projectState.uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
+  const fd = new FormData(document.getElementById('editTaskForm'));
+  const data = Object.fromEntries(fd.entries());
+
+  // 验证计划时间不能早于今天
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (data.plannedDate && /^\d{4}-\d{2}-\d{2}$/.test(data.plannedDate)) {
+    const selected = new Date(data.plannedDate);
+    if (selected < today) {
+      alert('计划完成时间不能早于今天');
+      return;
+    }
+  }
+
+  data.currentUser = getCurrentUserName();
+  data.currentRole = EMIE.state.currentRole;
+  // 始终提交当前图片和附件列表（包含已有的和新上传的）
+  data.referenceImagesJson = JSON.stringify(EMIE.projectState.editTaskRefImages.map(img => ({name: img.name, url: img.url, size: img.size, storedName: img.storedName})));
+  data.attachmentsJson = JSON.stringify(EMIE.projectState.editTaskAttachments.map(a => ({name: a.name, url: a.url, size: a.size, storedName: a.storedName})));
+
+  try {
+    await apiPut(`/projects/${pid}/tasks/${tid}`, data);
+    closeM('editTaskModal');
+    await refreshAfterMutation(pid);
+  } catch (e) {
+    alert('编辑失败: ' + e.message);
+  }
+}
+
+async function deleteTask(pid, tid) {
+  if (!confirm('确定要删除这个子任务吗？此操作不可恢复。')) return;
+  try {
+    await apiDelete(`/projects/${pid}/tasks/${tid}`);
+    closeM('editTaskModal');
+    await refreshAfterMutation(pid);
+  } catch (e) {
+    alert('删除失败: ' + e.message);
+  }
+}
+
+// ==================== 任务工作流 ====================
+async function taskAccept(pid, tid) {
+  if (document.getElementById('taskAcceptModal')) return;
+  try {
+    const detail = await apiGet(`/projects/${pid}`);
+    const task = detail.tasks.find(t => t.id === tid);
+    if (!task) return;
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'taskAcceptModal';
+    modal.innerHTML = `
+      <button class="modal-close-float" data-emie-onclick="closeM('taskAcceptModal')">✕</button>
+      <div class="modal">
+        <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✅ 接单：${task.name}</div></div></div>
+        <div class="modal-body">
+          <p style="margin-bottom:12px;color:var(--gray-500);">负责人：<strong>${task.designerName || '未指定'}</strong></p>
+          <form id="taskAcceptForm">
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 计划完成时间</label>${renderDatePicker('plannedDate', {required:true, value: task.plannedDate || ''})}</div>
+          </form>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskAcceptModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitTaskAccept(${pid},${tid}))">确认接单</button></div>
+      </div>`;
+    document.body.appendChild(modal);
+    doneOpenModal('taskDeliverModal');
+  } catch (e) {
+    doneOpenModal('taskDeliverModal');
+    alert('加载失败: ' + e.message);
+  }
+}
+
+async function submitTaskAccept(pid, tid) {
+  const fd = new FormData(document.getElementById('taskAcceptForm'));
+  const plannedDate = fd.get('plannedDate');
+  if (!plannedDate) { alert('请选择计划完成时间'); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(plannedDate) || isNaN(new Date(plannedDate).getTime())) {
+    alert('日期格式不正确（yyyy-mm-dd）');
+    return;
+  }
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  if (new Date(plannedDate) < today) {
+    alert('计划完成时间不能早于今天');
+    return;
+  }
+
+  try {
+    await apiPost(`/projects/${pid}/tasks/${tid}/accept`, {
+      plannedDate,
+      currentUser: getCurrentUserName(),
+      currentRole: EMIE.state.currentRole,
+      designerUserId: getCurrentUserId(),
+    });
+    closeM('taskAcceptModal');
+    await refreshAfterMutation(pid);
+  } catch (e) {
+    alert('操作失败: ' + e.message);
+  }
+}
+
+async function taskDeliver(pid, tid) {
+  if (!tryOpenModal('taskDeliverModal')) return;
+  try {
+    const detail = await apiGet(`/projects/${pid}`);
+    const task = detail.tasks.find(t => t.id === tid);
+    if (!task) return;
+    EMIE.projectState.deliverImages = [];
+    EMIE.projectState.deliverAttachments = [];
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'taskDeliverModal';
+    modal.innerHTML = `
+    <button class="modal-close-float" data-emie-onclick="closeM('taskDeliverModal')">✕</button>
+      <div class="modal modal-lg">
+        <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📤 交付：${task.name}</div></div></div>
+        <div class="modal-body">
+          <form id="taskDeliverForm">
+            <input type="hidden" name="actualDate">
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required placeholder="描述交付的设计成果..." style="min-height:100px;"></textarea></div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 自评分数</label>
+              <div style="max-width:200px;">
+                <input type="number" class="form-input" name="selfScore" required placeholder="1-100" min="1" max="100" step="1" style="text-align:center;font-size:18px;" data-emie-oninput="validateScoreInput(this)">
+                <div style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:4px;">总分100分，填写1-100的整数</div>
+              </div>
+            </div>
+          </form>
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
+            <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
+            <div class="upload-area" data-emie-onclick="document.getElementById('deliverImageInput').click()">
+              <div>📁 点击上传图片</div>
+              <input type="file" id="deliverImageInput" multiple accept="image/*" style="display:none" data-emie-onchange="handleDeliverImages(this)">
+            </div>
+            <div class="file-list" id="deliverImageList"></div>
+          </div>
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
+            <div class="form-label" style="margin-bottom:8px;">📎 交付附件</div>
+            <div class="upload-area" data-emie-onclick="document.getElementById('deliverAttachmentInput').click()">
+              <div>📁 点击上传附件</div>
+              <input type="file" id="deliverAttachmentInput" multiple style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
+            </div>
+            <div class="file-list" id="deliverAttachmentList"></div>
+          </div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskDeliverModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitTaskDeliver(${pid},${tid}))">确认交付</button></div>
+      </div>`;
+    document.body.appendChild(modal);
+  } catch (e) {
+    alert('加载失败: ' + e.message);
+  }
+}
+
+// ===== 自评分数输入校验：1-100，整数 =====
+const validateScoreInput = function(input) {
+  let val = input.value.trim();
+  if (val === '') { input.setCustomValidity(''); return; }
+  const num = parseInt(val);
+  if (isNaN(num) || num < 1 || num > 100) {
+    input.setCustomValidity('请输入 1 ~ 100 之间的整数分数');
+  } else {
+    // 检查是否为整数（不允许小数）
+    if (val.includes('.') || val.includes(',')) {
+      input.setCustomValidity('不允许小数点，请输入整数');
+    } else {
+      input.setCustomValidity('');
+    }
+  }
+  input.reportValidity();
+};
+
+async function submitTaskDeliver(pid, tid) {
+  if (EMIE.projectState.uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
+  const fd = new FormData(document.getElementById('taskDeliverForm'));
+  const data = Object.fromEntries(fd.entries());
+  data.actualDate = new Date().toISOString().split('T')[0];
+  if (!data.deliverables) { alert('请填写交付成果描述'); return; }
+  const selfScore = parseInt(data.selfScore);
+  if (isNaN(selfScore) || selfScore < 1 || selfScore > 100) { alert('请输入有效的自评分（1-100分）'); return; }
+  data.selfScore = selfScore;
+  data.currentUser = getCurrentUserName();
+  data.currentRole = EMIE.state.currentRole;
+  data.currentUserId = EMIE.state.currentUserId;
+  data.referenceImagesJson = JSON.stringify(EMIE.projectState.deliverImages.map(i => ({ name: i.name, url: i.url, size: i.size, storedName: i.storedName })));
+  data.attachmentsJson = JSON.stringify(EMIE.projectState.deliverAttachments);
+
+  try {
+    await apiPost(`/projects/${pid}/tasks/${tid}/deliver`, data);
+    closeM('taskDeliverModal');
+    await refreshAfterMutation(pid);
+  } catch (e) {
+    alert('交付失败: ' + e.message);
+  }
+}
+
+async function taskRedeliver(pid, tid) {
+  if (!tryOpenModal('taskRedeliverModal')) return;
+  try {
+    const detail = await apiGet(`/projects/${pid}`);
+    const task = detail.tasks.find(t => t.id === tid);
+    if (!task) return;
+    EMIE.projectState.deliverImages = [];
+    EMIE.projectState.deliverAttachments = [];
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'taskRedeliverModal';
+    modal.innerHTML = `
+    <button class="modal-close-float" data-emie-onclick="closeM('taskRedeliverModal')">✕</button>
+      <div class="modal modal-lg">
+        <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📤 重新交付：${task.name}</div></div></div>
+        <div class="modal-body">
+          ${task.reviewComments ? `<div class="review-box rejected" style="margin-bottom:16px;"><strong>驳回意见：</strong>${task.reviewComments}</div>` : ''}
+          <form id="taskRedeliverForm">
+            <input type="hidden" name="actualDate">
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required style="min-height:100px;"></textarea></div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 自评分数</label>
+              <div style="max-width:200px;">
+                <input type="number" class="form-input" name="selfScore" required placeholder="1-100" min="1" max="100" step="1" style="text-align:center;font-size:18px;" data-emie-oninput="validateScoreInput(this)">
+                <div style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:4px;">总分100分，填写1-100的整数</div>
+              </div>
+            </div>
+          </form>
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
+            <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
+            <div class="upload-area" data-emie-onclick="document.getElementById('deliverImageInput').click()">
+              <div>📁 点击上传图片</div>
+              <input type="file" id="deliverImageInput" multiple accept="image/*" style="display:none" data-emie-onchange="handleDeliverImages(this)">
+            </div>
+            <div class="file-list" id="deliverImageList"></div>
+          </div>
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
+            <div class="form-label" style="margin-bottom:8px;">📎 交付附件</div>
+            <div class="upload-area" data-emie-onclick="document.getElementById('deliverAttachmentInput').click()">
+              <div>📁 点击上传附件</div>
+              <input type="file" id="deliverAttachmentInput" multiple style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
+            </div>
+            <div class="file-list" id="deliverAttachmentList"></div>
+          </div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskRedeliverModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitTaskRedeliver(${pid},${tid}))">确认交付</button></div>
+      </div>`;
+    document.body.appendChild(modal);
+    doneOpenModal('taskRedeliverModal');
+  } catch (e) {
+    doneOpenModal('taskRedeliverModal');
+    alert('加载失败: ' + e.message);
+  }
+}
+
+async function submitTaskRedeliver(pid, tid) {
+  if (EMIE.projectState.uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
+  const fd = new FormData(document.getElementById('taskRedeliverForm'));
+  const data = Object.fromEntries(fd.entries());
+  data.actualDate = new Date().toISOString().split('T')[0];
+  if (!data.deliverables) { alert('请填写交付成果描述'); return; }
+  const selfScore = parseInt(data.selfScore);
+  if (isNaN(selfScore) || selfScore < 1 || selfScore > 100) { alert('请输入有效的自评分（1-100分）'); return; }
+  data.selfScore = selfScore;
+  data.currentUser = getCurrentUserName();
+  data.currentRole = EMIE.state.currentRole;
+  data.currentUserId = EMIE.state.currentUserId;
+  data.referenceImagesJson = JSON.stringify(EMIE.projectState.deliverImages.map(i => ({ name: i.name, url: i.url, size: i.size, storedName: i.storedName })));
+  data.attachmentsJson = JSON.stringify(EMIE.projectState.deliverAttachments);
+
+  try {
+    await apiPost(`/projects/${pid}/tasks/${tid}/redeliver`, data);
+    closeM('taskRedeliverModal');
+    await refreshAfterMutation(pid);
+  } catch (e) {
+    alert('交付失败: ' + e.message);
+  }
+}
+
+// ==================== 验收 ====================
+function taskApprove(pid, tid, projectType) {
+  if (!tryOpenModal('taskApproveModal')) return;
+  apiGet(`/projects/${pid}`).then(detail => {
+    const task = detail.tasks.find(t => t.id === tid);
+    if (!task) return;
+
+    const isChannel = projectType === 'channel_custom';
+    const isSalesConfirm = EMIE.state.currentRole === 'sales';
+    const isAdminConfirm = EMIE.state.currentRole === 'admin' && !isChannel;
+    const needsScore = EMIE.state.currentRole === 'planner' || isSalesConfirm || isAdminConfirm;
+    const title = isSalesConfirm
+      ? '✅ 销售确认评分通过'
+      : (isAdminConfirm ? '✅ 管理确认评分通过' : (isChannel ? '👍 企划确认评分通过' : '✅ 验收评分通过'));
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'taskApproveModal';
+    modal.innerHTML = `
+      <div class="modal">
+        <div class="modal-header"><div class="modal-header-left"><div class="modal-title">${title}：${task.name}</div></div></div>
+        <div class="modal-body">
+          <p style="margin-bottom:12px;">${isSalesConfirm ? '销售确认该子任务通过并评分？' : (isAdminConfirm ? '管理确认该子任务通过并评分？' : (isChannel ? '企划确认该子任务通过并评分？之后需销售再次确认评分。' : '企划确认该子任务验收通过并评分？之后需管理再次确认。'))}</p>
+          ${needsScore ? `
+          <div class="form-group">
+              <label class="form-label"><span class="required">*</span> 综合评分</label>
+              <input type="number" class="form-input" id="approveScore" min="1" max="100" step="1" placeholder="1-100" required style="max-width:200px;text-align:center;">
+              <div style="font-size:11px;color:var(--gray-400);margin-top:4px;">总分100分，填写1-100的整数</div>
+            </div>` : ''}
+          <div class="form-group"><label class="form-label">验收意见（可选）</label><textarea class="form-textarea" id="approveComments" placeholder="输入验收意见..."></textarea></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskApproveModal')">取消</button><button class="btn btn-success" data-emie-onclick="submitGuard(this,()=>submitTaskApprove(${pid},${tid},'${projectType}'))">${needsScore ? '确认通过并评分' : '确认通过'}</button></div>
+      </div>`;
+    document.body.appendChild(modal);
+  });
+}
+
+async function submitTaskApprove(pid, tid) {
+  const scoreVal = parseInt(document.getElementById('approveScore')?.value);
+  const hasScoreFields = document.getElementById('approveScore') !== null;
+  if (hasScoreFields) {
+    if (isNaN(scoreVal) || scoreVal < 1 || scoreVal > 100) { alert('请输入有效的评分（1-100）'); return; }
+  }
+  const comments = document.getElementById('approveComments')?.value || '';
+
+  const data = {
+    comments: comments,
+    score: hasScoreFields ? scoreVal : null,
+    currentUser: getCurrentUserName(),
+    currentRole: EMIE.state.currentRole,
+  };
+
+  try {
+    await apiPost(`/projects/${pid}/tasks/${tid}/approve`, data);
+    closeM('taskApproveModal');
+    await refreshAfterMutation(pid);
+  } catch (e) {
+    alert('操作失败: ' + (e.message || '未知错误'));
+  }
+}
+
+
+function taskReject(pid, tid) {
+  if (document.getElementById('taskRejectModal')) return;
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'taskRejectModal';
+  modal.innerHTML = `
+    <div class="modal">
+      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">↩️ 驳回修改</div></div></div>
+      <div class="modal-body">
+        <div class="form-group"><label class="form-label"><span class="required">*</span> 修改意见</label><textarea class="form-textarea" id="rejectComments" required placeholder="请详细说明修改意见..." style="min-height:100px;"></textarea></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskRejectModal')">取消</button><button class="btn btn-danger" data-emie-onclick="submitGuard(this,()=>submitTaskReject(${pid},${tid}))">确认驳回</button></div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function submitTaskReject(pid, tid) {
+  const comments = document.getElementById('rejectComments')?.value || '';
+  if (!comments) { alert('请填写修改意见'); return; }
+  try {
+    await apiPost(`/projects/${pid}/tasks/${tid}/reject`, {
+      comments,
+      currentUser: getCurrentUserName(),
+      currentRole: EMIE.state.currentRole,
+    });
+    closeM('taskRejectModal');
+    await refreshAfterMutation(pid);
+  } catch (e) {
+    alert('操作失败: ' + e.message);
+  }
+}
+
+// ==================== 评分 ====================
+function openScoring(pid, tid) {
+  if (!tryOpenModal('scoringModal')) return;
+  apiGet(`/projects/${pid}`).then(detail => {
+    const task = detail.tasks.find(t => t.id === tid);
+    if (!task || !task.scoringRecords) return;
+    const myRecord = task.scoringRecords.find(sr => sr.role === EMIE.state.currentRole);
+    if (!myRecord) { alert('您无需对此任务评分'); return; }
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'scoringModal';
+    modal.innerHTML = `
+      <div class="modal">
+        <div class="modal-header"><button class="modal-close" data-emie-onclick="closeM('scoringModal')">✕</button><div class="modal-header-left"><div class="modal-title">⭐ 评分：${task.name}</div></div></div>
+        <div class="modal-body">
+          <p style="margin-bottom:8px;color:var(--gray-500);">评分人：<strong>${roleLabel(EMIE.state.currentRole)}</strong>（${getCurrentUserName()}）</p>
+          <p style="margin-bottom:16px;color:var(--gray-500);">请对 <strong>${task.name}</strong> 进行评分（1-100分）</p>
+          <div>
+            <div class="form-group"><label class="form-label">⭐ 综合评分</label><input type="number" class="form-input" id="scoreValue" min="1" max="100" step="1" placeholder="1-100" value="${myRecord.score ?? ''}" style="font-size:24px;text-align:center;max-width:200px;margin:0 auto;"></div>
+          </div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('scoringModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitScoring(${pid},${tid}))">提交评分</button></div>
+      </div>`;
+    document.body.appendChild(modal);
+  });
+}
+
+async function submitScoring(pid, tid) {
+  const score = parseInt(document.getElementById('scoreValue').value);
+  if (isNaN(score) || score < 1 || score > 100) { alert('请输入有效的评分（1-100分）'); return; }
+
+  const data = {
+    role: EMIE.state.currentRole,
+    score,
+    currentUser: getCurrentUserName(),
+    currentRole: EMIE.state.currentRole,
+  };
+
+  try {
+    await apiPost(`/projects/${pid}/tasks/${tid}/score`, data);
+    closeM('scoringModal');
+    await refreshAfterMutation(pid);
+  } catch (e) {
+    alert('评分提交失败: ' + e.message);
+  }
+}
+
+
+EMIE.registerActions({
+  handleSubTaskRefImages,
+  handleSubTaskAttachments,
+  addSubTask,
+  saveSubTaskDraft,
+  submitAddSubTask,
+  editTask,
+  handleEditRefImages,
+  handleEditAttachments,
+  submitEditTask,
+  deleteTask,
+  taskAccept,
+  submitTaskAccept,
+  taskDeliver,
+  submitTaskDeliver,
+  taskRedeliver,
+  submitTaskRedeliver,
+  taskApprove,
+  submitTaskApprove,
+  taskReject,
+  submitTaskReject,
+  openScoring,
+  submitScoring,
+  validateScoreInput,
+});
+
+EMIE.registerModule('projectTasks', {
+  addSubTask,
+  saveSubTaskDraft,
+  submitAddSubTask,
+  editTask,
+  submitEditTask,
+  deleteTask,
+  handleSubTaskRefImages,
+  handleSubTaskAttachments,
+  handleEditRefImages,
+  handleEditAttachments,
+  taskAccept,
+  submitTaskAccept,
+  taskDeliver,
+  submitTaskDeliver,
+  taskRedeliver,
+  submitTaskRedeliver,
+  taskApprove,
+  submitTaskApprove,
+  taskReject,
+  submitTaskReject,
+  openScoring,
+  submitScoring,
+  validateScoreInput,
+});

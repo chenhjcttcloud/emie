@@ -25,17 +25,20 @@ public class SyncWorker {
     private final SubTaskRepository subTaskRepository;
     private final ScoringRepository scoringRepository;
     private final FeishuBaseService feishuBaseService;
+    private final SyncQueueService syncQueueService;
 
     public SyncWorker(SyncQueueRepository syncQueueRepository,
                       ProjectRepository projectRepository,
                       SubTaskRepository subTaskRepository,
                       ScoringRepository scoringRepository,
-                      FeishuBaseService feishuBaseService) {
+                      FeishuBaseService feishuBaseService,
+                      SyncQueueService syncQueueService) {
         this.syncQueueRepository = syncQueueRepository;
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
         this.scoringRepository = scoringRepository;
         this.feishuBaseService = feishuBaseService;
+        this.syncQueueService = syncQueueService;
     }
 
     /** 每 30 秒消费队列 */
@@ -95,6 +98,29 @@ public class SyncWorker {
                 syncQueueRepository.save(item);
             }
         }
+    }
+
+    /**
+     * 周期性全量对账，用数据库当前记录补回飞书端被直接删除的数据。
+     * 与 30 秒队列消费解耦，并仅在队列空闲时执行，避免持续全量写入和新任务饥饿。
+     */
+    @Scheduled(
+            fixedDelayString = "${app.feishu.reconcile-delay-ms:3600000}",
+            initialDelayString = "${app.feishu.reconcile-initial-delay-ms:300000}"
+    )
+    @Transactional
+    public void reconcileCurrentData() {
+        if (syncQueueRepository.countByStatus("pending") > 0
+                || syncQueueRepository.countByStatus("processing") > 0) {
+            log.debug("飞书全量对账跳过：同步队列仍有待处理任务");
+            return;
+        }
+        syncQueueService.enqueueAllForReconciliation("project",
+                projectRepository.findAll().stream().map(Project::getId).toList());
+        syncQueueService.enqueueAllForReconciliation("sub_task",
+                subTaskRepository.findAll().stream().map(SubTask::getId).toList());
+        syncQueueService.enqueueAllForReconciliation("scoring_record",
+                scoringRepository.findAll().stream().map(ScoringRecord::getId).toList());
     }
 
     private void syncProject(Long projectId) throws Exception {
