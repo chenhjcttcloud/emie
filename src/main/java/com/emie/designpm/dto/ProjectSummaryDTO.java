@@ -19,6 +19,7 @@ public class ProjectSummaryDTO {
     private String targetMarket;
     private String complianceItems;
     private String priceRange;
+    private String ipName;
     private int taskCount;
     private int approvedTaskCount;
     private int progressPercent;

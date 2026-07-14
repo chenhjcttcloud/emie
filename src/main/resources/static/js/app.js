@@ -202,6 +202,7 @@ let USERS = {};
 let CATEGORIES = [];
 let COMPLIANCE_ITEMS = [];
 let PRICE_RANGES = [];
+let IP_OPTIONS = [];
 let DEPARTMENTS = [];
 let APP_CACHE = { orders: [] };
 
@@ -441,49 +442,58 @@ async function handleRegister(event) {
 }
 
 async function showApp() {
-  document.getElementById('loginPage').style.display = 'none';
-  document.getElementById('appContainer').style.display = '';
-
-  // 加载公开配置更新头部
+  // 登录回调、自动登录和用户连续点击可能同时触发渲染；同一时刻只允许一个首屏初始化流程。
+  if (window._showAppInProgress) return;
+  window._showAppInProgress = true;
   try {
-    const r = await fetch('/api/admin/public-config');
-    if (r.ok) {
-      const cfg = await r.json();
-      if (cfg['app.title']) document.title = cfg['app.title'] + ' - EMIE';
-      const logoEl = document.querySelector('.logo');
-      if (logoEl) {
-        if (cfg['app.logo']) {
-          logoEl.innerHTML = `<img src="${cfg['app.logo']}" style="height:32px;width:auto;vertical-align:middle;margin-right:8px;" alt="logo"><span>${cfg['app.title'] || '产品管理系统'}</span>`;
-        } else if (cfg['app.logoEmoji']) {
-          logoEl.innerHTML = `${cfg['app.logoEmoji']} ${cfg['app.title'] || '产品管理系统'}<span>${cfg['app.subtitle'] || 'Product Management'}</span>`;
-        } else {
-          logoEl.innerHTML = `🎨 ${cfg['app.title'] || '产品管理系统'}<span>${cfg['app.subtitle'] || 'Product Management'}</span>`;
+    document.getElementById('loginPage').style.display = 'none';
+    document.getElementById('appContainer').style.display = '';
+
+    // 加载公开配置更新头部
+    try {
+      const r = await fetch('/api/admin/public-config');
+      if (r.ok) {
+        const cfg = await r.json();
+        if (cfg['app.title']) document.title = cfg['app.title'] + ' - EMIE';
+        const logoEl = document.querySelector('.logo');
+        if (logoEl) {
+          if (cfg['app.logo']) {
+            logoEl.innerHTML = `<img src="${cfg['app.logo']}" style="height:32px;width:auto;vertical-align:middle;margin-right:8px;" alt="logo"><span>${cfg['app.title'] || '产品管理系统'}</span>`;
+          } else if (cfg['app.logoEmoji']) {
+            logoEl.innerHTML = `${cfg['app.logoEmoji']} ${cfg['app.title'] || '产品管理系统'}<span>${cfg['app.subtitle'] || 'Product Management'}</span>`;
+          } else {
+            logoEl.innerHTML = `🎨 ${cfg['app.title'] || '产品管理系统'}<span>${cfg['app.subtitle'] || 'Product Management'}</span>`;
+          }
         }
       }
-    }
-  } catch(e) { /* ignore */ }
+    } catch(e) { /* ignore */ }
 
-  document.getElementById('userDisplay').textContent = `${AUTH_USER.name}（${roleLabel(AUTH_USER.role)}）`;
-  currentRole = AUTH_USER.role;
-  currentUserId = AUTH_USER.userId;
+    document.getElementById('userDisplay').textContent = `${AUTH_USER.name}（${roleLabel(AUTH_USER.role)}）`;
+    currentRole = AUTH_USER.role;
+    currentUserId = AUTH_USER.userId;
 
-  // 基础数据并行加载：单个接口失败只影响对应功能，不阻塞首屏。
-  const [categories, compliance, priceRanges, departments, users] = await Promise.all([
-    apiGet('/categories').catch(() => []),
-    apiGet('/compliance').catch(() => []),
-    apiGet('/price-ranges').catch(() => []),
-    apiGet('/departments').catch(() => []),
-    apiGet('/users').catch(() => ({}))
-  ]);
-  CATEGORIES = categories;
-  COMPLIANCE_ITEMS = compliance;
-  PRICE_RANGES = priceRanges;
-  DEPARTMENTS = departments;
-  USERS = users;
-  // 用户列表加载后重新渲染切换器（否则下拉选项为空）
-  await renderRoleSwitcher();
-  renderSidebar();
-  render();
+    // 基础数据并行加载：单个接口失败只影响对应功能，不阻塞首屏。
+    const [categories, compliance, priceRanges, ipOptions, departments, users] = await Promise.all([
+      apiGet('/categories').catch(() => []),
+      apiGet('/compliance').catch(() => []),
+      apiGet('/price-ranges').catch(() => []),
+      apiGet('/ip-options').catch(() => []),
+      apiGet('/departments').catch(() => []),
+      apiGet('/users').catch(() => ({}))
+    ]);
+    CATEGORIES = categories;
+    COMPLIANCE_ITEMS = compliance;
+    PRICE_RANGES = priceRanges;
+    IP_OPTIONS = ipOptions;
+    DEPARTMENTS = departments;
+    USERS = users;
+    // 用户列表加载后重新渲染切换器（否则下拉选项为空）
+    await renderRoleSwitcher();
+    renderSidebar();
+    render();
+  } finally {
+    window._showAppInProgress = false;
+  }
 }
 
 // ===== 密码可见性切换 =====
@@ -568,17 +578,17 @@ function checkFeishuCallback() {
   if (error) {
     alert('飞书登录失败: ' + error);
     window.history.replaceState({}, document.title, window.location.pathname);
-    return;
+    return false;
   }
-  if (token) {
-    const userId = params.get('userId') || '';
-    const userName = params.get('userName') || '';
-    const role = params.get('role') || '';
-    localStorage.setItem('design_pm_token', token);
-    localStorage.setItem('design_pm_user', JSON.stringify({ userId, userName, role }));
-    window.history.replaceState({}, document.title, window.location.pathname);
-    showApp();
-  }
+  if (!token) return false;
+  const userId = params.get('userId') || '';
+  const userName = params.get('userName') || '';
+  const role = params.get('role') || '';
+  localStorage.setItem('design_pm_token', token);
+  localStorage.setItem('design_pm_user', JSON.stringify({ userId, userName, role }));
+  window.history.replaceState({}, document.title, window.location.pathname);
+  // 只保存回调 token，由 initApp 统一调用 /me 并启动一次 showApp，避免并发首屏渲染。
+  return true;
 }
 
 function handleLogout() {
@@ -694,16 +704,26 @@ function roleLabel(r) {
 // ==================== 用户视角切换（天花板版） ====================
 const ROLE_LABELS = { admin: '管理员', sales: '销售', planner: '企划', designer: '设计师', supplychain: '供应链' };
 const ROLE_COLORS = { admin: 'admin', sales: 'sales', planner: 'planner', designer: 'designer', supplychain: 'supplychain' };
+let _roleSwitcherRenderToken = 0;
 
 async function renderRoleSwitcher() {
   const headerRight = document.querySelector('.header-right');
-  const old = document.getElementById('identitySwitcher');
-  if (old) old.remove();
+  const renderToken = ++_roleSwitcherRenderToken;
   // 仅 admin 显示切换
-  if (!ORIGINAL_USER || (ORIGINAL_USER.role !== 'admin')) return;
+  if (!ORIGINAL_USER || (ORIGINAL_USER.role !== 'admin')) {
+    document.getElementById('identitySwitcher')?.remove();
+    return;
+  }
   // 刷新用户列表，确保新增/角色变更及时同步
   try { USERS = await apiGet('/users'); } catch(e) {}
-  if (!USERS || Object.keys(USERS).length === 0) return;
+  // 丢弃旧的异步渲染，避免多个请求各自插入一个切换器。
+  if (renderToken !== _roleSwitcherRenderToken) return;
+  if (!USERS || Object.keys(USERS).length === 0) {
+    document.getElementById('identitySwitcher')?.remove();
+    return;
+  }
+
+  document.getElementById('identitySwitcher')?.remove();
 
   // 构建所有用户列表
   const allUsers = [];
@@ -2830,6 +2850,12 @@ function openCreateProject(type) {
           <div class="form-group"><label class="form-label"><span class="required">*</span> 产品名称</label>
             <input class="form-input" name="productName" value="${escHtml(draft?.productName || '')}" placeholder="请输入产品名称" maxlength="200" oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">
           </div>
+          <div class="form-group"><label class="form-label">IP<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可选）</span></label>
+            <select class="form-select" name="ipName" onchange="formModified()">
+              <option value="">无IP</option>
+              ${IP_OPTIONS.map(ip => `<option value="${escHtml(ip.name)}" ${draft?.ipName === ip.name ? 'selected' : ''}>${escHtml(ip.name)}</option>`).join('')}
+            </select>
+          </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 参考零售价</label>
             <div class="chip-group" id="priceRangeChips">
               ${PRICE_RANGES.map(p => `<span class="chip" data-value="${p.name}" onclick="togglePriceRange(this)">${p.name}</span>`).join('')}
@@ -3128,6 +3154,7 @@ function renderProjectDetailContent(detail) {
       <div class="detail-grid">
         <div class="detail-item"><div class="detail-label">项目类型</div><div class="detail-value">${isChannel ? '渠道定制单' : '公司常规品'}</div></div>
         <div class="detail-item"><div class="detail-label">产品名称</div><div class="detail-value">${escHtml(displayText(detail.productName, '未设置'))}</div></div>
+        <div class="detail-item"><div class="detail-label">IP</div><div class="detail-value">${escHtml(displayText(detail.ipName, '无IP'))}</div></div>
         ${isChannel ? `<div class="detail-item"><div class="detail-label">需求方（销售）</div><div class="detail-value">${detail.salesName || '-'}</div></div>` : ''}
         <div class="detail-item"><div class="detail-label">产品企划</div><div class="detail-value">${detail.plannerName}</div></div>
         ${detail.productCategory ? `<div class="detail-item"><div class="detail-label">产品类目</div><div class="detail-value">${detail.productCategory}${detail.productCategory === '其他' && detail.productCategoryNote ? `（${detail.productCategoryNote}）` : ''}</div></div>` : ''}
@@ -4489,6 +4516,7 @@ async function renderAdmin(main, role, uid) {
         <button class="admin-tab ${currentAdminTab === 'users' ? 'active' : ''}" onclick="switchAdminTab('users')">👥 用户管理</button>
         <button class="admin-tab ${currentAdminTab === 'roles' ? 'active' : ''}" onclick="switchAdminTab('roles')">🔐 角色管理</button>
         <button class="admin-tab ${currentAdminTab === 'categories' ? 'active' : ''}" onclick="switchAdminTab('categories')">📂 产品类目</button>
+        <button class="admin-tab ${currentAdminTab === 'ipOptions' ? 'active' : ''}" onclick="switchAdminTab('ipOptions')">🏷️ IP配置</button>
         <button class="admin-tab ${currentAdminTab === 'compliance' ? 'active' : ''}" onclick="switchAdminTab('compliance')">⚖️ 合规处罚</button>
         <button class="admin-tab ${currentAdminTab === 'priceRanges' ? 'active' : ''}" onclick="switchAdminTab('priceRanges')">💰 参考零售价</button>
         <button class="admin-tab ${currentAdminTab === 'org' ? 'active' : ''}" onclick="switchAdminTab('org')">🏢 组织架构</button>
@@ -4529,6 +4557,8 @@ async function renderAdminContent() {
       await renderAdminRoles(container);
     } else if (currentAdminTab === 'categories') {
       await renderAdminCategories(container);
+    } else if (currentAdminTab === 'ipOptions') {
+      await renderAdminIpOptions(container);
     } else if (currentAdminTab === 'compliance') {
       await renderAdminCompliance(container);
     } else if (currentAdminTab === 'priceRanges') {
@@ -5459,6 +5489,100 @@ window.deleteCategory = async function(id) {
   await apiDelete(`/categories/${id}`);
   try { CATEGORIES = await apiGet('/categories'); } catch(e) {}
   switchAdminTab('categories');
+};
+
+// ==================== 管理员：IP配置管理 ====================
+async function renderAdminIpOptions(container) {
+  const items = await apiGet('/ip-options/all');
+  container.innerHTML = `
+    <div class="config-card">
+      <div class="config-card-header">
+        <h3>🏷️ IP配置管理</h3>
+        <button class="btn btn-primary btn-sm" onclick="addIpOption()">➕ 新增IP</button>
+      </div>
+      <div class="config-card-body">
+        <p style="font-size:13px;color:var(--gray-500);margin-bottom:14px;">启用的IP会出现在渠道定制单和公司常规品项目的新建页面中。</p>
+        ${items.length === 0 ? `<div class="empty" style="padding:30px;"><div class="empty-icon">🏷️</div><p>暂未配置IP</p></div>` : `
+        <div class="table-wrap"><table>
+          <thead><tr><th>ID</th><th>IP名称</th><th>排序</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody>${items.map(item => `
+            <tr>
+              <td>${item.id}</td>
+              <td><strong>${escHtml(item.name)}</strong></td>
+              <td>${item.sortOrder}</td>
+              <td><span class="badge ${item.active ? 'badge-completed' : 'badge-rejected'}">${item.active ? '启用' : '禁用'}</span></td>
+              <td style="white-space:nowrap;">
+                <button class="btn btn-outline btn-sm" onclick="editIpOption(${item.id}, '${escHtml(escJsString(item.name))}', ${item.sortOrder}, ${item.active})">✏️ 编辑</button>
+                <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" onclick="deleteIpOption(${item.id})">🗑️ 删除</button>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>`}
+      </div>
+    </div>`;
+}
+
+window.addIpOption = function() {
+  openIpOptionModal(null, '', 0, true);
+};
+
+window.editIpOption = function(id, name, sortOrder, active) {
+  openIpOptionModal(id, name, sortOrder, active);
+};
+
+function openIpOptionModal(id, name, sortOrder, active) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'ipOptionEditModal';
+  overlay.innerHTML = `
+    <button class="modal-close-float" onclick="closeM('ipOptionEditModal')">✕</button>
+    <div class="modal">
+      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">${id ? '✏️ 编辑IP' : '🏷️ 新增IP'}</div></div></div>
+      <div class="modal-body">
+        <div class="form-group"><label class="form-label"><span class="required">*</span> IP名称</label><input class="form-input" id="ipOptionName" value="${escHtml(name)}" maxlength="100" placeholder="请输入IP名称"></div>
+        <div class="form-group"><label class="form-label">排序号</label><input class="form-input" id="ipOptionOrder" type="number" value="${sortOrder || 0}" placeholder="数字越小越靠前"></div>
+        ${id ? `<div class="form-group"><label class="form-label">状态</label>
+          <select class="form-select" id="ipOptionActive">
+            <option value="true" ${active ? 'selected' : ''}>启用</option>
+            <option value="false" ${!active ? 'selected' : ''}>禁用</option>
+          </select>
+        </div>` : ''}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeM('ipOptionEditModal')">取消</button>
+        <button class="btn btn-primary" onclick="submitGuard(this,()=>saveIpOption(${id || 'null'}))">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('ipOptionName')?.focus();
+}
+
+window.saveIpOption = async function(id) {
+  const name = document.getElementById('ipOptionName')?.value?.trim();
+  if (!name) { alert('请输入IP名称'); return; }
+  const sortOrder = parseInt(document.getElementById('ipOptionOrder')?.value, 10) || 0;
+  const body = { name, sortOrder: String(sortOrder) };
+  if (id) body.active = document.getElementById('ipOptionActive')?.value || 'true';
+  try {
+    if (id) await apiPut(`/ip-options/${id}`, body);
+    else await apiPost('/ip-options', body);
+    closeM('ipOptionEditModal');
+    IP_OPTIONS = await apiGet('/ip-options');
+    await switchAdminTab('ipOptions');
+  } catch (e) {
+    alert('保存失败：' + e.message);
+  }
+};
+
+window.deleteIpOption = async function(id) {
+  if (!confirm('确定删除该IP配置？历史项目中已保存的IP仍会保留。')) return;
+  try {
+    await apiDelete(`/ip-options/${id}`);
+    IP_OPTIONS = await apiGet('/ip-options');
+    await switchAdminTab('ipOptions');
+  } catch (e) {
+    alert('删除失败：' + e.message);
+  }
 };
 
 // ==================== 管理员：合规处罚管理 ====================

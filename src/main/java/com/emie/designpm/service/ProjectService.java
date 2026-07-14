@@ -20,6 +20,7 @@ public class ProjectService {
     private final ScoringRepository scoringRepository;
     private final UserService userService;
     private final ProductCategoryRepository productCategoryRepository;
+    private final IpOptionRepository ipOptionRepository;
     private final SystemConfigRepository systemConfigRepository;
     private final SyncQueueService syncQueueService;
     private final FileArchiveService fileArchiveService;
@@ -30,6 +31,7 @@ public class ProjectService {
                           ScoringRepository scoringRepository,
                           UserService userService,
                           ProductCategoryRepository productCategoryRepository,
+                          IpOptionRepository ipOptionRepository,
                           SystemConfigRepository systemConfigRepository,
                           SyncQueueService syncQueueService,
                           FileArchiveService fileArchiveService) {
@@ -38,6 +40,7 @@ public class ProjectService {
         this.scoringRepository = scoringRepository;
         this.userService = userService;
         this.productCategoryRepository = productCategoryRepository;
+        this.ipOptionRepository = ipOptionRepository;
         this.systemConfigRepository = systemConfigRepository;
         this.syncQueueService = syncQueueService;
         this.fileArchiveService = fileArchiveService;
@@ -200,6 +203,13 @@ public class ProjectService {
         String priceRangeStr = (String) body.get("priceRange");
         if (priceRangeStr != null && !priceRangeStr.isBlank()) {
             p.setPriceRange(priceRangeStr);
+        }
+        String ipName = SecurityUtil.sanitizeText((String) body.get("ipName"), 100);
+        if (ipName != null && !ipName.isBlank()) {
+            IpOption ipOption = ipOptionRepository.findByName(ipName.trim())
+                    .filter(option -> Boolean.TRUE.equals(option.getActive()))
+                    .orElseThrow(() -> new RuntimeException("请选择有效的IP"));
+            p.setIpName(ipOption.getName());
         }
 
         p.setReferenceImagesJson(refImagesJson);

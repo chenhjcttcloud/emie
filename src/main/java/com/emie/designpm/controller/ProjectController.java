@@ -389,6 +389,7 @@ public class ProjectController {
         dto.setTargetMarket(p.getTargetMarket());
         dto.setComplianceItems(p.getComplianceItems());
         dto.setPriceRange(p.getPriceRange());
+        dto.setIpName(p.getIpName());
 
         // 使用预计算的计数，避免加载子任务
         int[] counts = taskCountMap != null ? taskCountMap.get(p.getId()) : null;
@@ -425,6 +426,7 @@ public class ProjectController {
         dto.setTargetMarket(p.getTargetMarket());
         dto.setComplianceItems(p.getComplianceItems());
         dto.setPriceRange(p.getPriceRange());
+        dto.setIpName(p.getIpName());
         dto.setReferenceImagesJson(p.getReferenceImagesJson());
         dto.setAttachmentsJson(p.getAttachmentsJson());
 

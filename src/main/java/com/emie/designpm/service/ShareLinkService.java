@@ -305,6 +305,7 @@ public class ShareLinkService {
         }
         data.put("productCategoryNote", safe(project.getProductCategoryNote()));
         data.put("priceRange", safe(project.getPriceRange()));
+        data.put("ipName", safe(project.getIpName()));
 
         // 子任务（脱敏：只显示名称、状态、交付物图片，隐藏内部备注/评分）
         List<Map<String, Object>> taskList = new ArrayList<>();

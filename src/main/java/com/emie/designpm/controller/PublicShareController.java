@@ -129,6 +129,7 @@ public class PublicShareController {
         String description = safe(data, "description");
         String productCategory = safe(data, "productCategory");
         String priceRange = safe(data, "priceRange");
+        String ipName = safe(data, "ipName");
         String createdAt = safe(data, "createdAt");
 
         Object metaRaw = data.get("_shareMeta");
@@ -219,6 +220,7 @@ public class PublicShareController {
                         <div class="info-item"><label>销售</label><div class="value">%s</div></div>
                         <div class="info-item"><label>产品企划</label><div class="value">%s</div></div>
                         <div class="info-item"><label>产品类目</label><div class="value">%s</div></div>
+                        <div class="info-item"><label>IP</label><div class="value">%s</div></div>
                         <div class="info-item"><label>参考价格</label><div class="value">%s</div></div>
                     </div>
                 </div>
@@ -244,7 +246,7 @@ public class PublicShareController {
                     esc(projectTitle != null && !projectTitle.isBlank() ? projectTitle : "项目详情"),
                     safe(data, "status"), statusLabel, createdAt.substring(0, Math.min(10, createdAt.length())),
                     typeLabel, deadline, salesName, plannerName,
-                    productCategory, priceRange,
+                    productCategory, ipName == null || ipName.isBlank() ? "无IP" : ipName, priceRange,
                     esc(productRequirements), esc(description),
                     taskRows
             );

@@ -85,6 +85,10 @@ public class Project {
     /** 参考零售价 */
     private String priceRange;
 
+    /** IP名称；保存文本以确保管理员调整配置后历史项目仍可正常展示 */
+    @Column(length = 100)
+    private String ipName;
+
     /** 终止请求发起方（用于双方确认终止流程） */
     private String terminateRequester;
 
