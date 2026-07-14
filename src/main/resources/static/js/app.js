@@ -5494,11 +5494,12 @@ window.deleteCategory = async function(id) {
 // ==================== 管理员：IP配置管理 ====================
 async function renderAdminIpOptions(container) {
   const items = await apiGet('/ip-options/all');
+  const nextSortOrder = items.reduce((maxOrder, item) => Math.max(maxOrder, Number(item.sortOrder) || 0), 0) + 1;
   container.innerHTML = `
     <div class="config-card">
       <div class="config-card-header">
         <h3>🏷️ IP配置管理</h3>
-        <button class="btn btn-primary btn-sm" onclick="addIpOption()">➕ 新增IP</button>
+        <button class="btn btn-primary btn-sm" onclick="addIpOption(${nextSortOrder})">➕ 新增IP</button>
       </div>
       <div class="config-card-body">
         <p style="font-size:13px;color:var(--gray-500);margin-bottom:14px;">启用的IP会出现在渠道定制单和公司常规品项目的新建页面中。</p>
@@ -5522,8 +5523,8 @@ async function renderAdminIpOptions(container) {
     </div>`;
 }
 
-window.addIpOption = function() {
-  openIpOptionModal(null, '', 0, true);
+window.addIpOption = function(nextSortOrder = 1) {
+  openIpOptionModal(null, '', nextSortOrder, true);
 };
 
 window.editIpOption = function(id, name, sortOrder, active) {

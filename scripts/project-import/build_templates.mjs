@@ -1,7 +1,10 @@
 import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Workbook, SpreadsheetFile } from '@oai/artifact-tool';
 
-const outDir = '/Users/jinli/Documents/emie/outputs/project-import-templates';
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const outDir = path.join(projectRoot, 'outputs/project-import-templates');
 await fs.mkdir(outDir, { recursive: true });
 
 const colors = {

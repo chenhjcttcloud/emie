@@ -26,6 +26,8 @@ application-dev.yml
 # === 工作空间/工具 ===
 .workbuddy/
 .codebuddy/
+.sheet-work/
+outputs/
 
 # === 运行时上传文件 ===
 uploads/

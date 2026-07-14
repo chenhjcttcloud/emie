@@ -1,5 +1,7 @@
 # EMIE 部署信息
 
+生产发布的完整检查、推送、迁移、验证和回滚流程见 [`release-runbook.md`](release-runbook.md)，每次实际操作必须追加到 [`release-records.md`](release-records.md)。本文件只维护相对稳定的环境与服务信息，不记录任何真实密码。
+
 ## 阿里云生产服务器
 
 | 配置项 | 值 |
