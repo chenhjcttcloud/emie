@@ -13,6 +13,34 @@
 
 ---
 
+## 2026-07-15 五个业务列表页搜索与条件筛选
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 发布成功 |
+| 目标分支 | `project_manager_system` |
+| 旧生产提交 | `5a2a49b9d2177b1a46a84cf832668d73279cb820` |
+| 应用发布提交 | `b090c68774adce61e1665f3430ad2f39895cfac3` |
+| 远端核对 | `b090c68774adce61e1665f3430ad2f39895cfac3` |
+| 生产运行提交 | `b090c68774adce61e1665f3430ad2f39895cfac3` |
+| 操作时间 | `2026-07-15 22:24:13 +0800` 至 `2026-07-15 22:28:12 +0800` |
+| 本地改动 | `dashboard-lists.js`、`dashboard-designer.js`、`dashboard-scoring.js` 及前端缓存版本 `v131` |
+| 功能范围 | 五个页面统一支持关键词搜索与条件筛选，项目页同时修复类型切换覆盖全量缓存的问题 |
+| 数据库结构变更 | 无 |
+| 本地验证 | 精确提交干净工作树执行 JavaScript 语法检查；`./mvnw clean package` 成功，55 项测试全部通过 |
+| 新生产 JAR | SHA-256 为 `62bafd1ed8562ef7b91cb0f737eeac3560ccb3ae46e940a6dcefffbe170e46cd` |
+| 数据库备份 | `/root/emie/db-backup-before-b090c68-20260715_222429.sql.gz`，19466 字节，`gzip -t` 通过 |
+| 应用回滚包 | `/root/emie/app.jar.bak.pre-b090c68-20260715_222645`，旧 JAR SHA-256 为 `8c6d30fc3d3fa4f73e991da6eb3c35305e54963006853755b442c6a072a412f9` |
+| 生产验证 | `emie-app` 与 `emie-preview-converter` 正常，重启次数均为 0；首页、公开配置、预览健康接口 HTTP 200；未登录项目接口 401；`bootstrap.js?v=131` 和三个筛选模块静态资源均验证通过 |
+
+- 全部项目、渠道定制单、公司常规品支持状态、类目、市场、关键词和日期范围筛选。
+- 我的子任务支持任务归属、任务状态、项目类型、关键词和计划完成日期筛选。
+- 待评分支持评分状态、项目类型、审核阶段、关键词和计划完成日期筛选。
+- 本地 JavaScript 语法检查、`git diff --check` 通过；`./mvnw clean package` 成功，55 项测试全部通过；本地首页 HTTP 200 且引用 `bootstrap.js?v=131`。
+- 首次数据库备份因缺少 `PROCESS` 权限产生的 `tablespaces` 文件已改名为 `.invalid`，未作为回滚依据；随后使用 `--no-tablespaces` 生成有效备份。
+
+---
+
 ## 2026-07-15 飞书主表严格镜像与备份永久保留
 
 | 项目 | 记录 |
