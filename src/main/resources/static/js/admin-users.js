@@ -11,6 +11,10 @@ const closeM = (...args) => EMIE.actions.closeM(...args);
 
 const adminUserRoleLabels = { pending: '待分配', sales: '销售', planner: '产品企划', designer: '设计师', supplychain: '供应链', admin: '管理员' };
 
+function adminUserRoleClass(role) {
+  return String(role || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+}
+
 function adminUserStatusLabel(status) {
   if (status === 'pending') return '⏳ 待分配';
   if (status === 'disabled') return '❌ 停用';
@@ -74,7 +78,7 @@ async function renderAdminUsers(container) {
                   <td style="color:var(--gray-400);">${i + 1}</td>
                   <td><strong>${escHtml(u.userId)}</strong></td>
                   <td>${escHtml(u.name)}</td>
-                  <td><span class="admin-user-role-badge role-${u.role}">${adminUserRoleLabels[u.role] || u.role}</span></td>
+                  <td><span class="admin-user-role-badge role-${adminUserRoleClass(u.role)}">${adminUserRoleLabels[u.role] || u.role}</span></td>
                   <td><span class="admin-user-status-badge status-${u.status || 'active'}">${adminUserStatusLabel(u.status)}</span></td>
                   <td>${escHtml(u.phone || '-')}</td>
                   <td>${escHtml(u.email || '-')}</td>
@@ -170,7 +174,7 @@ function openEditUserModal(userData) {
         </div>
         <div style="background:var(--gray-50);padding:12px 16px;border-radius:8px;margin-top:8px;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <span style="font-size:13px;color:var(--gray-500);">当前角色：<span class="admin-user-role-badge role-${userData.role}">${adminUserRoleLabels[userData.role] || userData.role}</span></span>
+            <span style="font-size:13px;color:var(--gray-500);">当前角色：<span class="admin-user-role-badge role-${adminUserRoleClass(userData.role)}">${adminUserRoleLabels[userData.role] || userData.role}</span></span>
             <span style="font-size:13px;color:var(--gray-500);">当前状态：<span class="admin-user-status-badge status-${userData.status || 'active'}">${adminUserStatusLabel(userData.status)}</span></span>
           </div>
         </div>
@@ -255,7 +259,7 @@ async function openChangeRoleModal(userId, existingRole, userName) {
       <div class="modal-body">
         <div class="form-group">
           <label class="form-label">当前角色</label>
-          <div><span class="admin-user-role-badge role-${existingRole}">${adminUserRoleLabels[existingRole] || existingRole}</span></div>
+          <div><span class="admin-user-role-badge role-${adminUserRoleClass(existingRole)}">${adminUserRoleLabels[existingRole] || existingRole}</span></div>
         </div>
         <div class="form-group">
           <label class="form-label">新角色</label>
