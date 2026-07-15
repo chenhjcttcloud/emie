@@ -65,7 +65,7 @@ public class FeishuBaseService {
         for (String k : List.of("feishu.base.appToken", "feishu.base.tableProjects",
                 "feishu.base.tableTasks", "feishu.base.tableScoring", "feishu.base.tableLogs",
                 "feishu.base.tableProjectsBackup", "feishu.base.tableTasksBackup",
-                "feishu.base.tableScoringBackup",
+                "feishu.base.tableScoringBackup", "feishu.base.tableLogsBackup",
                 "feishu.base.syncEnabled")) {
             m.put(k, getCfg(k));
         }
@@ -87,6 +87,7 @@ public class FeishuBaseService {
         configured.put("projectsBackup", getCfg("feishu.base.tableProjectsBackup"));
         configured.put("tasksBackup", getCfg("feishu.base.tableTasksBackup"));
         configured.put("scoringBackup", getCfg("feishu.base.tableScoringBackup"));
+        configured.put("logsBackup", getCfg("feishu.base.tableLogsBackup"));
 
         if (configured.values().stream().allMatch(String::isBlank)) {
             return Map.of("valid", true, "message", "未配置备份表，主表同步不受影响", "tables", List.of());
@@ -462,6 +463,25 @@ public class FeishuBaseService {
         } else {
             createRecord(token, appToken, tableId, fields.toString());
         }
+    }
+
+    public void syncActivityLog(Long logId, String action, String username, String role,
+                                Long projectId, LocalDateTime time) throws Exception {
+        if (!isSyncEnabled()) return;
+        String backup = getCfg("feishu.base.tableLogsBackup");
+        if (backup.isBlank()) return;
+        String appToken = getCfg("feishu.base.appToken");
+        String token = getToken();
+        String existed = findRecordId(token, appToken, backup, "日志ID", String.valueOf(logId));
+        ObjectNode fields = json.createObjectNode();
+        fields.put("日志ID", String.valueOf(logId));
+        fields.put("操作内容", action != null ? action : "");
+        fields.put("操作人", username != null ? username : "");
+        fields.put("角色", roleLabel(role));
+        if (projectId != null) fields.put("所属项目", String.valueOf(projectId));
+        if (time != null) fields.put("时间", time.atZone(java.time.ZoneId.of("Asia/Shanghai")).toEpochSecond());
+        if (existed != null) updateRecord(token, appToken, backup, existed, fields.toString());
+        else createRecord(token, appToken, backup, fields.toString());
     }
 
     // ==================== 删除同步 ====================

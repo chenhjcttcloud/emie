@@ -26,6 +26,7 @@ public class SyncWorker {
     private final ProjectRepository projectRepository;
     private final SubTaskRepository subTaskRepository;
     private final ScoringRepository scoringRepository;
+    private final ActivityLogRepository activityLogRepository;
     private final FeishuBaseService feishuBaseService;
     private final SyncQueueService syncQueueService;
 
@@ -33,12 +34,14 @@ public class SyncWorker {
                       ProjectRepository projectRepository,
                       SubTaskRepository subTaskRepository,
                       ScoringRepository scoringRepository,
+                      ActivityLogRepository activityLogRepository,
                       FeishuBaseService feishuBaseService,
                       SyncQueueService syncQueueService) {
         this.syncQueueRepository = syncQueueRepository;
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
         this.scoringRepository = scoringRepository;
+        this.activityLogRepository = activityLogRepository;
         this.feishuBaseService = feishuBaseService;
         this.syncQueueService = syncQueueService;
     }
@@ -79,6 +82,7 @@ public class SyncWorker {
                             syncScoring(item.getEntityId());
                         }
                     }
+                    case "activity_log" -> syncActivityLog(item.getEntityId());
                     default -> log.warn("未知同步类型: {}", item.getEntityType());
                 }
 
@@ -123,6 +127,8 @@ public class SyncWorker {
                 subTaskRepository.findAll().stream().map(SubTask::getId).toList());
         syncQueueService.enqueueAllForReconciliation("scoring_record",
                 scoringRepository.findAll().stream().map(ScoringRecord::getId).toList());
+        syncQueueService.enqueueAllForReconciliation("activity_log",
+                activityLogRepository.findAll().stream().map(ActivityLog::getId).toList());
     }
 
     private void syncProject(Long projectId) throws Exception {
@@ -169,6 +175,13 @@ public class SyncWorker {
                 r.getWeight(),
                 r.getSubTask() != null ? r.getSubTask().getId() : null
         );
+    }
+
+    private void syncActivityLog(Long logId) throws Exception {
+        ActivityLog log = activityLogRepository.findById(logId)
+                .orElseThrow(() -> new Exception("操作日志不存在: " + logId));
+        feishuBaseService.syncActivityLog(log.getId(), log.getAction(), log.getUsername(), log.getRole(),
+                log.getProjectRefId(), log.getTime());
     }
 
     private void deleteProject(Long projectId) throws Exception {

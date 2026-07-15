@@ -1,6 +1,7 @@
 package com.emie.designpm.service;
 
 import com.emie.designpm.repository.ProjectRepository;
+import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.repository.ScoringRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.repository.SyncQueueRepository;
@@ -40,6 +41,7 @@ class SyncWorkerSchedulingTest {
                 mock(ProjectRepository.class),
                 mock(SubTaskRepository.class),
                 mock(ScoringRepository.class),
+                mock(ActivityLogRepository.class),
                 mock(FeishuBaseService.class),
                 queueService
         );

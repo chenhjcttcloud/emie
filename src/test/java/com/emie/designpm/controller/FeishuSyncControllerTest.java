@@ -1,6 +1,7 @@
 package com.emie.designpm.controller;
 
 import com.emie.designpm.repository.ProjectRepository;
+import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.repository.ScoringRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.FeishuBaseService;
@@ -38,12 +39,14 @@ class FeishuSyncControllerTest {
         ProjectRepository projects = mock(ProjectRepository.class);
         SubTaskRepository tasks = mock(SubTaskRepository.class);
         ScoringRepository scoring = mock(ScoringRepository.class);
+        ActivityLogRepository logs = mock(ActivityLogRepository.class);
         when(projects.findAll()).thenReturn(List.of());
         when(tasks.findAll()).thenReturn(List.of());
         when(scoring.findAll()).thenReturn(List.of());
+        when(logs.findAll()).thenReturn(List.of());
         when(queueService.enqueueAll(anyString(), anyList())).thenReturn(Map.of("total", 0, "added", 0, "updated", 0, "skipped", 0));
 
-        FeishuSyncController controller = new FeishuSyncController(queueService, feishu, projects, tasks, scoring);
+        FeishuSyncController controller = new FeishuSyncController(queueService, feishu, projects, tasks, scoring, logs);
 
         var response = controller.fullResync();
 
@@ -51,10 +54,12 @@ class FeishuSyncControllerTest {
         verify(queueService).enqueueAll("project", List.of());
         verify(queueService).enqueueAll("sub_task", List.of());
         verify(queueService).enqueueAll("scoring_record", List.of());
+        verify(queueService).enqueueAll("activity_log", List.of());
     }
 
     private FeishuSyncController controller(SyncQueueService queueService, FeishuBaseService feishu) {
         return new FeishuSyncController(queueService, feishu,
-                mock(ProjectRepository.class), mock(SubTaskRepository.class), mock(ScoringRepository.class));
+                mock(ProjectRepository.class), mock(SubTaskRepository.class), mock(ScoringRepository.class),
+                mock(ActivityLogRepository.class));
     }
 }

@@ -153,8 +153,10 @@ public class AdminService {
                 .description("子任务备份表 Table ID").valueType("text").sortOrder(7).build(),
             SystemConfig.builder().configKey("feishu.base.tableScoringBackup").configValue("").configGroup("feishu_base")
                 .description("评分备份表 Table ID").valueType("text").sortOrder(8).build(),
+            SystemConfig.builder().configKey("feishu.base.tableLogsBackup").configValue("").configGroup("feishu_base")
+                .description("操作日志备份表 Table ID").valueType("text").sortOrder(9).build(),
             SystemConfig.builder().configKey("feishu.base.tableLogs").configValue("").configGroup("feishu_base")
-                .description("操作日志表 Table ID").valueType("text").sortOrder(9).build()
+                .description("操作日志表 Table ID").valueType("text").sortOrder(10).build()
         );
 
         // 只插入缺失的配置项（不覆盖已有值）
@@ -289,7 +291,11 @@ public class AdminService {
     public User updateUserRole(Long userId, String newRole, String updatedBy) {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
-        if (!BUSINESS_ROLES.contains(newRole)) {
+        Role assignedRole = roleRepository.findByName(newRole).orElse(null);
+        if (assignedRole == null && !BUSINESS_ROLES.contains(newRole)) {
+            throw new IllegalArgumentException("角色不存在或不可分配");
+        }
+        if ("pending".equals(newRole)) {
             throw new IllegalArgumentException("无效的角色");
         }
         boolean wasPending = "pending".equals(user.getRole()) || "pending".equalsIgnoreCase(user.getStatus());
@@ -310,7 +316,7 @@ public class AdminService {
             case "designer" -> "设计师";
             case "supplychain" -> "供应链";
             case "admin" -> "系统管理员";
-            default -> user.getTitle();
+            default -> assignedRole != null ? assignedRole.getDisplayName() : user.getTitle();
         };
 
         user.setRole(newRole);

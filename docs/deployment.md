@@ -39,6 +39,7 @@ SERVER_PASSWORD=<本机忽略文件中的实际密码>
 - `tableProjectsBackup`：项目备份表的 `tbl...` Table ID；
 - `tableTasksBackup`：子任务备份表的 `tbl...` Table ID；
 - `tableScoringBackup`：评分备份表的 `tbl...` Table ID。
+- `tableLogsBackup`：操作日志备份表的 `tbl...` Table ID。
 
 填写的是飞书 URL 中 `table=` 后面的 Table ID，不是表名或完整 URL。三个备份表必须与主表位于 `feishu.base.appToken` 指向的同一个 Base 中；当前实现不支持用一套 App Token 同步到另一个 Base。保存后应先用少量数据验证，确认日志没有 `TableIdNotFound` 或字段结构错误，再执行全量同步。
 

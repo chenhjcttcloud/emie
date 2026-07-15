@@ -238,9 +238,10 @@ async function refreshUserList() {
   await renderAdminContent();
 }
 
-function openChangeRoleModal(userId, existingRole, userName) {
+async function openChangeRoleModal(userId, existingRole, userName) {
   if (isModalOpen()) return;
-  const roleOptions = { sales: '销售', planner: '产品企划', designer: '设计师', supplychain: '供应链', admin: '管理员' };
+  const roles = await apiGet('/admin/roles').catch(() => []);
+  const roleOptions = Object.fromEntries(roles.map(r => [r.name, r.displayName]));
   const needsAssignment = existingRole === 'pending';
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';

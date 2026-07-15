@@ -80,11 +80,12 @@ public class AdminController {
             @RequestBody Map<String, String> body,
             @RequestHeader("X-Auth-Token") String token) {
         String newRole = body.get("role");
-        if (newRole == null || !List.of("sales", "planner", "designer", "supplychain", "admin").contains(newRole)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "无效的角色"));
+        User user;
+        try {
+            user = adminService.updateUserRole(id, newRole, getUserFromToken(token));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
-        String updatedBy = getUserFromToken(token);
-        User user = adminService.updateUserRole(id, newRole, updatedBy);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", user.getId());
         result.put("userId", user.getUserId());

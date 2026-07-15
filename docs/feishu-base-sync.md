@@ -48,6 +48,7 @@ FeishuBaseService → 飞书 OpenAPI → Base (bitable)
 | feishu.base.tableTasks | 子任务表 Table ID |
 | feishu.base.tableScoring | 评分记录表 Table ID |
 | feishu.base.tableLogs | 操作日志表 Table ID |
+| feishu.base.tableLogsBackup | 操作日志备份表 Table ID |
 
 ## 前提条件
 1. 在飞书开放平台为应用添加 bitable 权限

@@ -1,6 +1,7 @@
 package com.emie.designpm.controller;
 
 import com.emie.designpm.repository.ProjectRepository;
+import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.repository.ScoringRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.FeishuBaseService;
@@ -24,17 +25,20 @@ public class FeishuSyncController {
     private final ProjectRepository projectRepository;
     private final SubTaskRepository subTaskRepository;
     private final ScoringRepository scoringRepository;
+    private final ActivityLogRepository activityLogRepository;
 
     public FeishuSyncController(SyncQueueService syncQueueService,
                                 FeishuBaseService feishuBaseService,
                                 ProjectRepository projectRepository,
                                 SubTaskRepository subTaskRepository,
-                                ScoringRepository scoringRepository) {
+                                ScoringRepository scoringRepository,
+                                ActivityLogRepository activityLogRepository) {
         this.syncQueueService = syncQueueService;
         this.feishuBaseService = feishuBaseService;
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
         this.scoringRepository = scoringRepository;
+        this.activityLogRepository = activityLogRepository;
     }
 
     /** 同步状态统计 */
@@ -85,11 +89,13 @@ public class FeishuSyncController {
         List<Long> projectIds = projectRepository.findAll().stream().map(p -> p.getId()).toList();
         List<Long> taskIds = subTaskRepository.findAll().stream().map(t -> t.getId()).toList();
         List<Long> scoringIds = scoringRepository.findAll().stream().map(s -> s.getId()).toList();
+        List<Long> logIds = activityLogRepository.findAll().stream().map(l -> l.getId()).toList();
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("project", syncQueueService.enqueueAll("project", projectIds));
         result.put("sub_task", syncQueueService.enqueueAll("sub_task", taskIds));
         result.put("scoring_record", syncQueueService.enqueueAll("scoring_record", scoringIds));
+        result.put("activity_log", syncQueueService.enqueueAll("activity_log", logIds));
         result.put("message", "全量重刷已入队");
         return ResponseEntity.ok(result);
     }
