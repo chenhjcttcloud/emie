@@ -64,4 +64,16 @@ class FeishuBaseServiceFieldCompatibilityTest {
         assertEquals(timestamp, fields.path("截止日期").asLong());
         assertEquals(timestamp, FeishuBaseService.toTimestamp(LocalDateTime.of(2026, 7, 15, 0, 0)));
     }
+
+    @Test
+    void reviewLabelsExposeTwoStageWorkflow() {
+        assertEquals("渠道定制", FeishuBaseService.projectTypeLabel("channel_custom"));
+        assertEquals("公司常规品", FeishuBaseService.projectTypeLabel("regular"));
+        assertEquals("一审", FeishuBaseService.reviewStageLabel("first"));
+        assertEquals("二审", FeishuBaseService.reviewStageLabel("second"));
+        assertEquals("等待一审", FeishuBaseService.reviewStatusLabel("waiting"));
+        assertEquals("待审核", FeishuBaseService.reviewStatusLabel("pending"));
+        assertEquals("已通过", FeishuBaseService.reviewStatusLabel("approved"));
+        assertEquals("已驳回", FeishuBaseService.reviewStatusLabel("rejected"));
+    }
 }

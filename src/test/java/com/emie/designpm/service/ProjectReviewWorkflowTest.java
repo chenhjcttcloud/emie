@@ -1,0 +1,213 @@
+package com.emie.designpm.service;
+
+import com.emie.designpm.entity.Project;
+import com.emie.designpm.entity.ScoringRecord;
+import com.emie.designpm.entity.SubTask;
+import com.emie.designpm.repository.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
+
+class ProjectReviewWorkflowTest {
+
+    private ProjectRepository projects;
+    private ScoringRepository scoring;
+    private SystemConfigRepository configs;
+    private ProjectService service;
+
+    @BeforeEach
+    void setUp() {
+        projects = mock(ProjectRepository.class);
+        scoring = mock(ScoringRepository.class);
+        configs = mock(SystemConfigRepository.class);
+        when(configs.findByConfigKey(anyString())).thenReturn(Optional.empty());
+        service = new ProjectService(
+                projects,
+                mock(SubTaskRepository.class),
+                scoring,
+                mock(UserService.class),
+                mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class),
+                configs,
+                mock(SyncQueueService.class),
+                mock(FileArchiveService.class),
+                mock(ProjectAccessService.class)
+        );
+    }
+
+    @Test
+    void channelDeliveryCreatesPlannerAndSalesReviewRows() {
+        Project project = projectWithTask("channel_custom", "accepted");
+        when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scoring.findBySubTaskIdAndRole(any(), anyString())).thenReturn(Optional.empty());
+
+        service.taskDeliver(1L, 11L, deliveryBody());
+
+        List<ScoringRecord> records = savedScoringRecords();
+        assertReview(records.get(0), "planner", "first", "pending", null);
+        assertReview(records.get(1), "sales", "second", "waiting", null);
+        assertEquals("delivered", project.getTasks().get(0).getStatus());
+    }
+
+    @Test
+    void regularDeliveryCreatesPlannerAndAdminReviewRows() {
+        Project project = projectWithTask("regular", "accepted");
+        when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scoring.findBySubTaskIdAndRole(any(), anyString())).thenReturn(Optional.empty());
+
+        service.taskDeliver(1L, 11L, deliveryBody());
+
+        List<ScoringRecord> records = savedScoringRecords();
+        assertReview(records.get(0), "planner", "first", "pending", null);
+        assertReview(records.get(1), "admin", "second", "waiting", null);
+    }
+
+    @Test
+    void plannerApprovalCompletesFirstReviewWithAuditContext() {
+        Project project = projectWithTask("channel_custom", "delivered");
+        ScoringRecord firstReview = review(project.getTasks().get(0), "planner", "first");
+        when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scoring.findBySubTaskIdAndRole(11L, "planner")).thenReturn(Optional.of(firstReview));
+
+        service.taskApprove(1L, 11L, Map.of(
+                "currentRole", "planner",
+                "currentUserId", "planner-1",
+                "currentUser", "企划甲",
+                "comments", "一审通过",
+                "score", 82
+        ));
+
+        assertReview(firstReview, "planner", "first", "approved", 82);
+        assertEquals("planner-1", firstReview.getReviewerId());
+        assertEquals("企划甲", firstReview.getReviewerName());
+        assertEquals("一审通过", firstReview.getComment());
+        assertNotNull(firstReview.getReviewedAt());
+        assertEquals("planner_approved", project.getTasks().get(0).getStatus());
+        ArgumentCaptor<ScoringRecord> captor = ArgumentCaptor.forClass(ScoringRecord.class);
+        verify(scoring, times(2)).save(captor.capture());
+        ScoringRecord secondReview = captor.getAllValues().stream()
+                .filter(record -> "sales".equals(record.getRole()))
+                .findFirst().orElseThrow();
+        assertReview(secondReview, "sales", "second", "pending", null);
+    }
+
+    @Test
+    void salesRejectionMarksSecondReviewRejected() {
+        Project project = projectWithTask("channel_custom", "planner_approved");
+        ScoringRecord secondReview = review(project.getTasks().get(0), "sales", "second");
+        when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scoring.findBySubTaskIdAndRole(11L, "sales")).thenReturn(Optional.of(secondReview));
+
+        service.taskReject(1L, 11L, Map.of(
+                "currentRole", "sales",
+                "currentUserId", "sales-1",
+                "currentUser", "销售甲",
+                "comments", "二审需修改"
+        ));
+
+        assertReview(secondReview, "sales", "second", "rejected", null);
+        assertEquals("sales-1", secondReview.getReviewerId());
+        assertEquals("销售甲", secondReview.getReviewerName());
+        assertEquals("二审需修改", secondReview.getComment());
+        assertNotNull(secondReview.getReviewedAt());
+        assertEquals("rejected", project.getTasks().get(0).getStatus());
+    }
+
+    @Test
+    void regularAdminApprovalCompletesSecondReviewAndTask() {
+        Project project = projectWithTask("regular", "planner_approved");
+        ScoringRecord secondReview = review(project.getTasks().get(0), "admin", "second");
+        when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scoring.findBySubTaskIdAndRole(11L, "admin")).thenReturn(Optional.of(secondReview));
+
+        service.taskApprove(1L, 11L, Map.of(
+                "currentRole", "admin",
+                "currentUserId", "admin-1",
+                "currentUser", "管理员甲",
+                "comments", "二审通过",
+                "score", 91
+        ));
+
+        assertReview(secondReview, "admin", "second", "approved", 91);
+        assertEquals("管理员甲", secondReview.getReviewerName());
+        assertEquals("completed", project.getTasks().get(0).getStatus());
+        assertEquals("completed", project.getStatus());
+    }
+
+    private Project projectWithTask(String type, String taskStatus) {
+        Project project = new Project();
+        project.setId(1L);
+        project.setType(type);
+        project.setStatus("in_progress");
+        project.setPlannerId("planner-1");
+        project.setPlannerName("企划甲");
+        project.setSalesId("sales-1");
+        project.setSalesName("销售甲");
+
+        SubTask task = new SubTask();
+        task.setId(11L);
+        task.setName("包装设计");
+        task.setStatus(taskStatus);
+        task.setDesignerId("designer-1");
+        task.setDesignerName("设计师甲");
+        task.setPlannedDate("2026-07-20");
+        task.setProject(project);
+        project.getTasks().add(task);
+        return project;
+    }
+
+    private Map<String, Object> deliveryBody() {
+        return Map.of(
+                "currentRole", "designer",
+                "currentUserId", "designer-1",
+                "currentUser", "设计师甲",
+                "actualDate", "2026-07-15",
+                "deliverables", "已交付",
+                "referenceImagesJson", "[]",
+                "attachmentsJson", "[]",
+                "selfScore", 88
+        );
+    }
+
+    private ScoringRecord review(SubTask task, String role, String stage) {
+        ScoringRecord record = new ScoringRecord();
+        record.setId("first".equals(stage) ? 101L : 102L);
+        record.setRole(role);
+        record.setScoreType(role);
+        record.setReviewStage(stage);
+        record.setReviewStatus("pending");
+        record.setWeight(0.25);
+        record.setSubTask(task);
+        return record;
+    }
+
+    private List<ScoringRecord> savedScoringRecords() {
+        ArgumentCaptor<ScoringRecord> captor = ArgumentCaptor.forClass(ScoringRecord.class);
+        verify(scoring, times(2)).save(captor.capture());
+        return captor.getAllValues();
+    }
+
+    private void assertReview(ScoringRecord record, String role, String stage,
+                              String status, Integer score) {
+        assertEquals(role, record.getRole());
+        assertEquals(stage, record.getReviewStage());
+        assertEquals(status, record.getReviewStatus());
+        assertEquals(score, record.getScore());
+        assertNotNull(record.getWeight());
+        assertNotNull(record.getSubTask());
+    }
+}

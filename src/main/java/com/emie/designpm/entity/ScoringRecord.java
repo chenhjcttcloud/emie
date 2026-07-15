@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 @Data
 @NoArgsConstructor
 @Entity
@@ -28,7 +30,25 @@ public class ScoringRecord {
     @Column(length = 20)
     private String scoreType;
 
-    /** 单一评分 1-10（新系统使用，替代 aesthetics + innovation） */
+    /** 审核阶段：first=一审，second=二审 */
+    @Column(length = 20)
+    private String reviewStage;
+
+    /** 审核状态：waiting=等待前序审核，pending=待审核，approved=已通过，rejected=已驳回 */
+    @Column(length = 20)
+    private String reviewStatus = "pending";
+
+    /** 实际执行本次审核的用户 */
+    @Column(length = 100)
+    private String reviewerId;
+
+    @Column(length = 100)
+    private String reviewerName;
+
+    /** 审核通过或驳回的时间；待审核时为空 */
+    private LocalDateTime reviewedAt;
+
+    /** 单一评分 1-100（新系统使用，替代 aesthetics + innovation） */
     private Integer score;
 
     /** 评分备注 */

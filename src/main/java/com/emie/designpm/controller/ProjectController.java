@@ -461,6 +461,11 @@ public class ProjectController {
                 m.put("id", sr.getId());
                 m.put("role", sr.getRole());
                 m.put("scoreType", sr.getScoreType());
+                m.put("reviewStage", sr.getReviewStage());
+                m.put("reviewStatus", sr.getReviewStatus());
+                m.put("reviewerId", sr.getReviewerId());
+                m.put("reviewerName", sr.getReviewerName());
+                m.put("reviewedAt", sr.getReviewedAt() != null ? sr.getReviewedAt().format(DTF) : null);
                 m.put("score", sr.getScore());
                 m.put("comment", sr.getComment());
                 m.put("aesthetics", sr.getAesthetics());

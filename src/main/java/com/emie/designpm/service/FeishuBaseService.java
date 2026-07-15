@@ -219,8 +219,65 @@ public class FeishuBaseService {
         }
         result.put("tableScoring", tableScoring);
 
+        result.put("reviewFields", ensureReviewWorkflowFields());
+
         result.put("message", "飞书 Base 初始化完成");
         return result;
+    }
+
+    /** 为现有主表和备份表补齐两级审核同步字段。 */
+    public synchronized Map<String, Object> ensureReviewWorkflowFields() throws Exception {
+        String appToken = getCfg("feishu.base.appToken");
+        if (appToken.isBlank()) throw new Exception("飞书 Base App Token 未配置");
+        String token = getToken();
+
+        Map<String, Integer> projectFields = new LinkedHashMap<>();
+        projectFields.put("审核流程", 1);
+        projectFields.put("当前审核阶段", 1);
+        projectFields.put("审核进度", 2);
+
+        Map<String, Integer> taskFields = new LinkedHashMap<>();
+        for (String name : List.of("一审角色", "一审状态", "一审审核人", "二审角色", "二审状态", "二审审核人")) {
+            taskFields.put(name, 1);
+        }
+        for (String name : List.of("一审得分", "二审得分", "审核得分")) {
+            taskFields.put(name, 2);
+        }
+
+        Map<String, Integer> scoringFields = new LinkedHashMap<>();
+        for (String name : List.of("项目ID", "项目类型", "审核阶段", "审核状态", "审核人", "审核意见")) {
+            scoringFields.put(name, 1);
+        }
+        scoringFields.put("审核时间", 5);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("项目总表", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableProjects"), projectFields));
+        result.put("项目总表_backup", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableProjectsBackup"), projectFields));
+        result.put("子任务表", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableTasks"), taskFields));
+        result.put("子任务表_backup", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableTasksBackup"), taskFields));
+        result.put("评分记录表", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableScoring"), scoringFields));
+        result.put("评分记录表_backup", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableScoringBackup"), scoringFields));
+        return result;
+    }
+
+    private Map<String, Object> ensureFieldsForTable(String token, String appToken, String tableId,
+                                                     Map<String, Integer> requiredFields) throws Exception {
+        if (tableId == null || tableId.isBlank()) {
+            return Map.of("configured", false, "added", 0);
+        }
+        Map<String, Integer> existing = new LinkedHashMap<>(getFieldTypes(token, appToken, tableId));
+        int added = 0;
+        for (Map.Entry<String, Integer> required : requiredFields.entrySet()) {
+            Integer currentType = existing.get(required.getKey());
+            if (currentType == null) {
+                addField(token, appToken, tableId, required.getKey(), required.getValue());
+                existing.put(required.getKey(), required.getValue());
+                added++;
+            } else if (!currentType.equals(required.getValue())) {
+                throw new Exception("飞书字段类型不匹配: " + required.getKey());
+            }
+        }
+        return Map.of("configured", true, "added", added, "total", requiredFields.size());
     }
 
     private String createBase() throws Exception {
@@ -257,25 +314,29 @@ public class FeishuBaseService {
     /** 项目表字段定义 */
     private JsonNode createProjectFields() {
         ArrayNode fields = json.createArrayNode();
-        addTextFields(fields, "项目ID", "类型", "状态", "销售", "产品企划", "产品类目", "参考价格");
+        addTextFields(fields, "项目ID", "类型", "状态", "销售", "产品企划", "产品类目", "参考价格",
+                "审核流程", "当前审核阶段");
         addDateFields(fields, "截止日期", "创建时间");
-        addNumberFields(fields, "子任务数", "完成进度");
+        addNumberFields(fields, "子任务数", "完成进度", "审核进度");
         return fields;
     }
 
     /** 子任务表字段定义 */
     private JsonNode createTaskFields() {
         ArrayNode fields = json.createArrayNode();
-        addTextFields(fields, "子任务ID", "任务名称", "状态", "负责人", "所属项目");
+        addTextFields(fields, "子任务ID", "任务名称", "状态", "负责人", "所属项目",
+                "一审角色", "一审状态", "一审审核人", "二审角色", "二审状态", "二审审核人");
         addDateFields(fields, "计划日期", "实际完成", "创建时间");
-        addNumberFields(fields, "自评分");
+        addNumberFields(fields, "自评分", "一审得分", "二审得分", "审核得分");
         return fields;
     }
 
     /** 评分表字段定义 */
     private JsonNode createScoringFields() {
         ArrayNode fields = json.createArrayNode();
-        addTextFields(fields, "评分ID", "评分角色", "所属子任务");
+        addTextFields(fields, "评分ID", "评分角色", "所属子任务", "项目ID", "项目类型",
+                "审核阶段", "审核状态", "审核人", "审核意见");
+        addDateFields(fields, "审核时间");
         addNumberFields(fields, "评分", "权重");
         return fields;
     }
@@ -352,16 +413,19 @@ public class FeishuBaseService {
                             String salesName, String plannerName,
                             String deadline, String productCategory,
                             String priceRange, int taskCount, int progress,
+                            String reviewFlow, String currentReviewStage, int reviewProgress,
                             LocalDateTime createdAt) throws Exception {
         if (!isSyncEnabled()) return;
 
         syncProjectToTable(projectId, type, status, salesName, plannerName, deadline,
-                productCategory, priceRange, taskCount, progress, createdAt,
+                productCategory, priceRange, taskCount, progress,
+                reviewFlow, currentReviewStage, reviewProgress, createdAt,
                 getCfg("feishu.base.tableProjects"));
         String backup = getCfg("feishu.base.tableProjectsBackup");
         if (!backup.isBlank()) {
             syncProjectToTable(projectId, type, status, salesName, plannerName, deadline,
-                    productCategory, priceRange, taskCount, progress, createdAt, backup);
+                    productCategory, priceRange, taskCount, progress,
+                    reviewFlow, currentReviewStage, reviewProgress, createdAt, backup);
         }
     }
 
@@ -369,6 +433,7 @@ public class FeishuBaseService {
                                     String salesName, String plannerName,
                                     String deadline, String productCategory,
                                     String priceRange, int taskCount, int progress,
+                                    String reviewFlow, String currentReviewStage, int reviewProgress,
                                     LocalDateTime createdAt, String tableId) throws Exception {
 
         String appToken = getCfg("feishu.base.appToken");
@@ -392,6 +457,9 @@ public class FeishuBaseService {
         if (priceRange != null && !priceRange.isBlank()) fields.put("参考价格", priceRange);
         fields.put("子任务数", taskCount);
         fields.put("完成进度", progress);
+        fields.put("审核流程", reviewFlow != null ? reviewFlow : "");
+        fields.put("当前审核阶段", currentReviewStage != null ? currentReviewStage : "");
+        fields.put("审核进度", reviewProgress);
         if (createdAt != null) {
             putDateValue(fields, "创建时间", toTimestamp(createdAt), fieldTypes.get("创建时间"));
         }
@@ -407,59 +475,80 @@ public class FeishuBaseService {
 
     // ==================== 同步子任务 ====================
 
-    public void syncSubTask(Long taskId, String name, String status,
-                            String designerName, String plannedDate,
-                            String actualDate, Double selfScore,
-                            Long projectId, LocalDateTime createdAt) throws Exception {
+    public record SubTaskSyncData(
+            Long taskId,
+            String name,
+            String status,
+            String designerName,
+            String plannedDate,
+            String actualDate,
+            Double selfScore,
+            Long projectId,
+            String firstReviewRole,
+            String firstReviewStatus,
+            Integer firstReviewScore,
+            String firstReviewerName,
+            String secondReviewRole,
+            String secondReviewStatus,
+            Integer secondReviewScore,
+            String secondReviewerName,
+            Double finalReviewScore,
+            LocalDateTime createdAt
+    ) {}
+
+    public void syncSubTask(SubTaskSyncData data) throws Exception {
         if (!isSyncEnabled()) return;
 
-        syncSubTaskToTable(taskId, name, status, designerName, plannedDate, actualDate,
-                selfScore, projectId, createdAt, getCfg("feishu.base.tableTasks"));
+        syncSubTaskToTable(data, getCfg("feishu.base.tableTasks"));
         String backup = getCfg("feishu.base.tableTasksBackup");
         if (!backup.isBlank()) {
-            syncSubTaskToTable(taskId, name, status, designerName, plannedDate, actualDate,
-                    selfScore, projectId, createdAt, backup);
+            syncSubTaskToTable(data, backup);
         }
     }
 
-    private void syncSubTaskToTable(Long taskId, String name, String status,
-                                    String designerName, String plannedDate,
-                                    String actualDate, Double selfScore,
-                                    Long projectId, LocalDateTime createdAt,
-                                    String tableId) throws Exception {
+    private void syncSubTaskToTable(SubTaskSyncData data, String tableId) throws Exception {
 
         String appToken = getCfg("feishu.base.appToken");
         if (appToken.isBlank() || tableId.isBlank())
             throw new Exception("飞书子任务表未配置，无法同步");
 
         String token = getToken();
-        String existed = findRecordId(token, appToken, tableId, "子任务ID", String.valueOf(taskId));
+        String existed = findRecordId(token, appToken, tableId, "子任务ID", String.valueOf(data.taskId()));
         Map<String, Integer> fieldTypes = getFieldTypes(token, appToken, tableId);
 
         ObjectNode fields = json.createObjectNode();
-        fields.put("子任务ID", String.valueOf(taskId));
-        fields.put("任务名称", name != null ? name : "");
-        fields.put("状态", taskStatusLabel(status));
-        fields.put("负责人", designerName != null ? designerName : "");
-        if (plannedDate != null && !plannedDate.isBlank()) {
-            putDateValue(fields, "计划日期", dateToTimestamp(plannedDate), fieldTypes.get("计划日期"));
+        fields.put("子任务ID", String.valueOf(data.taskId()));
+        fields.put("任务名称", data.name() != null ? data.name() : "");
+        fields.put("状态", taskStatusLabel(data.status()));
+        fields.put("负责人", data.designerName() != null ? data.designerName() : "");
+        if (data.plannedDate() != null && !data.plannedDate().isBlank()) {
+            putDateValue(fields, "计划日期", dateToTimestamp(data.plannedDate()), fieldTypes.get("计划日期"));
         }
-        if (actualDate != null && !actualDate.isBlank()) {
-            putDateValue(fields, "实际完成", dateToTimestamp(actualDate), fieldTypes.get("实际完成"));
+        if (data.actualDate() != null && !data.actualDate().isBlank()) {
+            putDateValue(fields, "实际完成", dateToTimestamp(data.actualDate()), fieldTypes.get("实际完成"));
         }
-        if (selfScore != null) fields.put("自评分", selfScore.intValue());
-        if (createdAt != null) {
-            putDateValue(fields, "创建时间", toTimestamp(createdAt), fieldTypes.get("创建时间"));
+        if (data.selfScore() != null) fields.put("自评分", data.selfScore().intValue());
+        putReviewSummary(fields, "一审", data.firstReviewRole(), data.firstReviewStatus(),
+                data.firstReviewScore(), data.firstReviewerName(), existed != null);
+        putReviewSummary(fields, "二审", data.secondReviewRole(), data.secondReviewStatus(),
+                data.secondReviewScore(), data.secondReviewerName(), existed != null);
+        if (data.finalReviewScore() != null) {
+            fields.put("审核得分", data.finalReviewScore());
+        } else if (existed != null) {
+            fields.putNull("审核得分");
+        }
+        if (data.createdAt() != null) {
+            putDateValue(fields, "创建时间", toTimestamp(data.createdAt()), fieldTypes.get("创建时间"));
         }
 
-        if (projectId != null) {
+        if (data.projectId() != null) {
             Integer fieldType = fieldTypes.get("所属项目");
             String linkedRecordId = null;
             if (isLinkField(fieldType)) {
                 linkedRecordId = findRecordId(token, appToken, getCfg("feishu.base.tableProjects"),
-                        "项目ID", String.valueOf(projectId));
+                        "项目ID", String.valueOf(data.projectId()));
             }
-            putReferenceValue(fields, "所属项目", String.valueOf(projectId), linkedRecordId, fieldType);
+            putReferenceValue(fields, "所属项目", String.valueOf(data.projectId()), linkedRecordId, fieldType);
         }
 
         if (existed != null) {
@@ -469,46 +558,84 @@ public class FeishuBaseService {
         }
     }
 
-    // ==================== 同步评分 ====================
-
-    public void syncScoring(Long recordId, String role, Integer score,
-                            Double weight, Long subTaskId) throws Exception {
-        if (!isSyncEnabled()) return;
-
-        syncScoringToTable(recordId, role, score, weight, subTaskId,
-                getCfg("feishu.base.tableScoring"));
-        String backup = getCfg("feishu.base.tableScoringBackup");
-        if (!backup.isBlank()) {
-            syncScoringToTable(recordId, role, score, weight, subTaskId, backup);
+    private void putReviewSummary(ObjectNode fields, String prefix, String role, String status,
+                                  Integer score, String reviewerName, boolean existed) {
+        fields.put(prefix + "角色", roleLabel(role));
+        fields.put(prefix + "状态", reviewStatusLabel(status));
+        fields.put(prefix + "审核人", reviewerName != null ? reviewerName : "");
+        if (score != null) {
+            fields.put(prefix + "得分", score);
+        } else if (existed) {
+            fields.putNull(prefix + "得分");
         }
     }
 
-    private void syncScoringToTable(Long recordId, String role, Integer score,
-                                    Double weight, Long subTaskId,
-                                    String tableId) throws Exception {
+    // ==================== 同步评分 ====================
+
+    public record ScoringSyncData(
+            Long recordId,
+            String role,
+            Integer score,
+            Double weight,
+            Long subTaskId,
+            Long projectId,
+            String projectType,
+            String reviewStage,
+            String reviewStatus,
+            String reviewerName,
+            String comment,
+            LocalDateTime reviewedAt
+    ) {}
+
+    public void syncScoring(ScoringSyncData data) throws Exception {
+        if (!isSyncEnabled()) return;
+
+        syncScoringToTable(data, getCfg("feishu.base.tableScoring"));
+        String backup = getCfg("feishu.base.tableScoringBackup");
+        if (!backup.isBlank()) {
+            syncScoringToTable(data, backup);
+        }
+    }
+
+    private void syncScoringToTable(ScoringSyncData data, String tableId) throws Exception {
 
         String appToken = getCfg("feishu.base.appToken");
         if (appToken.isBlank() || tableId.isBlank())
             throw new Exception("飞书评分表未配置，无法同步");
 
         String token = getToken();
-        String existed = findRecordId(token, appToken, tableId, "评分ID", String.valueOf(recordId));
+        String existed = findRecordId(token, appToken, tableId, "评分ID", String.valueOf(data.recordId()));
         Map<String, Integer> fieldTypes = getFieldTypes(token, appToken, tableId);
 
         ObjectNode fields = json.createObjectNode();
-        fields.put("评分ID", String.valueOf(recordId));
-        fields.put("评分角色", roleLabel(role));
-        fields.put("评分", score != null ? score : 0);
-        fields.put("权重", weight != null ? (int)(weight * 100) : 0);
+        fields.put("评分ID", String.valueOf(data.recordId()));
+        fields.put("评分角色", roleLabel(data.role()));
+        if (data.score() != null) {
+            fields.put("评分", data.score());
+        } else if (existed != null) {
+            fields.putNull("评分");
+        }
+        fields.put("权重", data.weight() != null ? (int)(data.weight() * 100) : 0);
+        fields.put("项目ID", data.projectId() != null ? String.valueOf(data.projectId()) : "");
+        fields.put("项目类型", projectTypeLabel(data.projectType()));
+        fields.put("审核阶段", reviewStageLabel(data.reviewStage()));
+        fields.put("审核状态", reviewStatusLabel(data.reviewStatus()));
+        fields.put("审核人", data.reviewerName() != null ? data.reviewerName() : "");
+        fields.put("审核意见", data.comment() != null ? data.comment() : "");
+        if (data.reviewedAt() != null) {
+            putDateValue(fields, "审核时间", toTimestamp(data.reviewedAt()), fieldTypes.get("审核时间"));
+        } else if (existed != null) {
+            fields.putNull("审核时间");
+        }
 
-        if (subTaskId != null) {
+        if (data.subTaskId() != null) {
             Integer fieldType = fieldTypes.get("所属子任务");
             String linkedRecordId = null;
             if (isLinkField(fieldType)) {
                 linkedRecordId = findRecordId(token, appToken, getCfg("feishu.base.tableTasks"),
-                        "子任务ID", String.valueOf(subTaskId));
+                        "子任务ID", String.valueOf(data.subTaskId()));
             }
-            putReferenceValue(fields, "所属子任务", subTaskId.toString(), linkedRecordId, fieldType);
+            putReferenceValue(fields, "所属子任务", data.subTaskId().toString(), linkedRecordId, fieldType);
         }
 
         if (existed != null) {
@@ -749,6 +876,23 @@ public class FeishuBaseService {
             case "supplychain" -> "供应链";
             case "admin" -> "管理";
             default -> r;
+        };
+    }
+
+    static String projectTypeLabel(String type) {
+        return "channel_custom".equals(type) ? "渠道定制" : "公司常规品";
+    }
+
+    static String reviewStageLabel(String stage) {
+        return "second".equals(stage) ? "二审" : "一审";
+    }
+
+    static String reviewStatusLabel(String status) {
+        return switch (status != null ? status : "pending") {
+            case "waiting" -> "等待一审";
+            case "approved" -> "已通过";
+            case "rejected" -> "已驳回";
+            default -> "待审核";
         };
     }
 

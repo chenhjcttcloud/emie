@@ -142,6 +142,18 @@ public class SyncWorker {
                         .count() : 0;
         int progress = taskCount > 0 ? (doneCount * 100 / taskCount) : 0;
 
+        List<ScoringRecord> reviewRecords = scoringRepository.findByProjectIds(List.of(projectId));
+        int expectedReviewCount = taskCount * 2;
+        int approvedReviewCount = (int) reviewRecords.stream()
+                .filter(this::isApprovedReview)
+                .count();
+        int reviewProgress = expectedReviewCount > 0
+                ? approvedReviewCount * 100 / expectedReviewCount : 0;
+        String reviewFlow = "channel_custom".equals(p.getType())
+                ? "产品企划一审 → 销售二审"
+                : "产品企划一审 → 管理员二审";
+        String currentReviewStage = currentReviewStage(p, reviewRecords);
+
         String categoryName = p.getProductCategory() != null ? p.getProductCategory().getName() : null;
 
         feishuBaseService.syncProject(
@@ -149,6 +161,7 @@ public class SyncWorker {
                 p.getSalesName(), p.getPlannerName(),
                 p.getDeadline(), categoryName,
                 p.getPriceRange(), taskCount, progress,
+                reviewFlow, currentReviewStage, reviewProgress,
                 p.getCreatedAt()
         );
     }
@@ -157,24 +170,115 @@ public class SyncWorker {
         SubTask t = subTaskRepository.findById(taskId)
                 .orElseThrow(() -> new Exception("子任务不存在: " + taskId));
 
-        feishuBaseService.syncSubTask(
+        List<ScoringRecord> reviews = scoringRepository.findBySubTaskId(taskId);
+        ScoringRecord firstReview = findReview(reviews, "first");
+        ScoringRecord secondReview = findReview(reviews, "second");
+        String projectType = t.getProject() != null ? t.getProject().getType() : "regular";
+
+        feishuBaseService.syncSubTask(new FeishuBaseService.SubTaskSyncData(
                 t.getId(), t.getName(), t.getStatus(),
                 t.getDesignerName(), t.getPlannedDate(),
                 t.getActualDate(), t.getSelfScore(),
                 t.getProject() != null ? t.getProject().getId() : null,
+                reviewRole(firstReview, "planner"), reviewStatus(firstReview), reviewScore(firstReview), reviewName(firstReview),
+                reviewRole(secondReview, "channel_custom".equals(projectType) ? "sales" : "admin"),
+                reviewStatus(secondReview), reviewScore(secondReview), reviewName(secondReview),
+                finalReviewScore(firstReview, secondReview),
                 t.getCreatedAt()
-        );
+        ));
     }
 
     private void syncScoring(Long recordId) throws Exception {
         ScoringRecord r = scoringRepository.findById(recordId)
                 .orElseThrow(() -> new Exception("评分记录不存在: " + recordId));
 
-        feishuBaseService.syncScoring(
-                r.getId(), r.getRole(), r.getScore(),
-                r.getWeight(),
-                r.getSubTask() != null ? r.getSubTask().getId() : null
-        );
+        SubTask task = r.getSubTask();
+        Project project = task != null ? task.getProject() : null;
+        feishuBaseService.syncScoring(new FeishuBaseService.ScoringSyncData(
+                r.getId(), r.getRole(), r.getScore(), r.getWeight(),
+                task != null ? task.getId() : null,
+                project != null ? project.getId() : null,
+                project != null ? project.getType() : null,
+                normalizedReviewStage(r), normalizedReviewStatus(r),
+                r.getReviewerName(), r.getComment(), r.getReviewedAt()
+        ));
+    }
+
+    private String currentReviewStage(Project project, List<ScoringRecord> reviews) {
+        if (project.getTasks() == null || project.getTasks().isEmpty()) return "未进入审核";
+        if (project.getTasks().stream().allMatch(t -> "completed".equals(t.getStatus()))) return "审核完成";
+        if (reviews.stream().anyMatch(r -> "second".equals(normalizedReviewStage(r))
+                && "rejected".equals(normalizedReviewStatus(r)))) return "二审已驳回";
+        if (reviews.stream().anyMatch(r -> "first".equals(normalizedReviewStage(r))
+                && "rejected".equals(normalizedReviewStatus(r)))) return "一审已驳回";
+        if (project.getTasks().stream().anyMatch(t -> "planner_approved".equals(t.getStatus()))) return "二审中";
+        if (project.getTasks().stream().anyMatch(t -> "delivered".equals(t.getStatus()))) return "一审中";
+        return "未进入审核";
+    }
+
+    private ScoringRecord findReview(List<ScoringRecord> reviews, String stage) {
+        return reviews.stream()
+                .filter(r -> stage.equals(r.getReviewStage()))
+                .findFirst()
+                .orElseGet(() -> reviews.stream()
+                        .filter(r -> "first".equals(stage) == "planner".equals(r.getRole()))
+                        .findFirst().orElse(null));
+    }
+
+    private boolean isApprovedReview(ScoringRecord record) {
+        return "approved".equals(normalizedReviewStatus(record));
+    }
+
+    private String normalizedReviewStatus(ScoringRecord record) {
+        if (record == null) return "pending";
+        if (record.getReviewStatus() != null && !record.getReviewStatus().isBlank()) {
+            return record.getReviewStatus();
+        }
+        return record.getScore() != null
+                || (record.getAesthetics() != null && record.getInnovation() != null)
+                ? "approved" : "pending";
+    }
+
+    private String normalizedReviewStage(ScoringRecord record) {
+        if (record != null && record.getReviewStage() != null && !record.getReviewStage().isBlank()) {
+            return record.getReviewStage();
+        }
+        return record != null && "planner".equals(record.getRole()) ? "first" : "second";
+    }
+
+    private String reviewRole(ScoringRecord review, String defaultRole) {
+        return review != null ? review.getRole() : defaultRole;
+    }
+
+    private String reviewStatus(ScoringRecord review) {
+        return normalizedReviewStatus(review);
+    }
+
+    private Integer reviewScore(ScoringRecord review) {
+        if (review == null) return null;
+        if (review.getScore() != null) return review.getScore();
+        if (review.getAesthetics() != null && review.getInnovation() != null) {
+            return (int) Math.round((review.getAesthetics() + review.getInnovation()) * 5.0);
+        }
+        return null;
+    }
+
+    private String reviewName(ScoringRecord review) {
+        return review != null ? review.getReviewerName() : null;
+    }
+
+    private Double finalReviewScore(ScoringRecord firstReview, ScoringRecord secondReview) {
+        Integer firstScore = reviewScore(firstReview);
+        Integer secondScore = reviewScore(secondReview);
+        if (!isApprovedReview(firstReview) || !isApprovedReview(secondReview)
+                || firstScore == null || secondScore == null) {
+            return null;
+        }
+        double firstWeight = firstReview.getWeight() != null ? firstReview.getWeight() : 1.0;
+        double secondWeight = secondReview.getWeight() != null ? secondReview.getWeight() : 1.0;
+        double totalWeight = firstWeight + secondWeight;
+        if (totalWeight <= 0) return null;
+        return Math.round(((firstScore * firstWeight + secondScore * secondWeight) / totalWeight) * 10.0) / 10.0;
     }
 
     private void syncActivityLog(Long logId) throws Exception {

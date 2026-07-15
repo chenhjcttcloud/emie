@@ -23,13 +23,22 @@ public class ScoringSyncListener implements ApplicationContextAware {
     }
 
     @PostPersist public void onCreated(ScoringRecord r) {
-        enqueueAfterCommit("scoring_record", r.getId(), "update", "评分创建已入队");
+        enqueueReviewChange(r, "update", "评分创建已入队");
     }
     @PostUpdate public void onUpdated(ScoringRecord r) {
-        enqueueAfterCommit("scoring_record", r.getId(), "update", "评分更新已入队");
+        enqueueReviewChange(r, "update", "评分更新已入队");
     }
     @PostRemove public void onDeleted(ScoringRecord r) {
-        enqueueAfterCommit("scoring_record", r.getId(), "delete", "评分删除已入队");
+        enqueueReviewChange(r, "delete", "评分删除已入队");
+    }
+
+    private void enqueueReviewChange(ScoringRecord record, String scoringAction, String logMessage) {
+        enqueueAfterCommit("scoring_record", record.getId(), scoringAction, logMessage);
+        if (record.getSubTask() == null) return;
+        enqueueAfterCommit("sub_task", record.getSubTask().getId(), "update", "审核汇总子任务已入队");
+        if (record.getSubTask().getProject() != null) {
+            enqueueAfterCommit("project", record.getSubTask().getProject().getId(), "update", "审核进度项目已入队");
+        }
     }
 
     private void enqueueAfterCommit(String entityType, Long entityId, String action, String logMessage) {

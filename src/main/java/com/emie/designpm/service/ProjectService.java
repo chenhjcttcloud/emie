@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -483,6 +484,7 @@ public class ProjectService {
             selfScore = null;
         }
         task.setSelfScore(selfScore != null ? selfScore.doubleValue() : null);
+        resetReviewWorkflow(task);
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
@@ -525,8 +527,8 @@ public class ProjectService {
         }
         task.setSelfScore(reScore != null ? reScore.doubleValue() : null);
 
-        // Clear all scoring records
-        scoringRepository.deleteAll(scoringRepository.findBySubTaskId(taskId));
+        // 重新交付后，两级审核都回到待审核状态；操作日志继续保留历史过程。
+        resetReviewWorkflow(task);
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
@@ -566,21 +568,21 @@ public class ProjectService {
             validateScoreRequired(score, "企划");
             task.setStatus("planner_approved");
             task.setReviewComments(comments);
-            createScoringRecord(task, "planner", "planner", score);
+            completeReviewRecord(task, "planner", currentUserId, currentUser, comments, score);
             p.getLogs().add(new ActivityLog("企划验收通过并评分：" + task.getName(), currentUser, currentRole, p));
         } else if ("planner_approved".equals(task.getStatus()) && "sales".equals(currentRole) && isChannel) {
             // 渠道：销售验收 → 销售评分
             validateScoreRequired(score, "销售");
             task.setStatus("sales_approved");
             task.setReviewComments(comments);
-            createScoringRecord(task, "sales", "sales", score);
+            completeReviewRecord(task, "sales", currentUserId, currentUser, comments, score);
             p.getLogs().add(new ActivityLog("销售验收通过并评分：" + task.getName(), currentUser, currentRole, p));
         } else if ("planner_approved".equals(task.getStatus()) && "admin".equals(currentRole) && !isChannel) {
             // 常规品：管理验收 → 管理评分
             validateScoreRequired(score, "管理员");
             task.setStatus("admin_approved");
             task.setReviewComments(comments);
-            createScoringRecord(task, "admin", "admin", score);
+            completeReviewRecord(task, "admin", currentUserId, currentUser, comments, score);
             p.getLogs().add(new ActivityLog("管理验收通过并评分：" + task.getName(), currentUser, currentRole, p));
         } else {
             throw new RuntimeException("当前状态无法执行验收操作");
@@ -592,12 +594,43 @@ public class ProjectService {
         return projectRepository.save(p);
     }
 
-    /** 创建评分记录（单维度：总分100分） */
-    private void createScoringRecord(SubTask task, String role, String scoreType, Integer score) {
+    /** 子任务交付或重新交付时，建立两级待审核记录。 */
+    private void resetReviewWorkflow(SubTask task) {
+        List<String> roles = expectedReviewRoles(task);
+        for (int index = 0; index < roles.size(); index++) {
+            String role = roles.get(index);
+            ScoringRecord record = scoringRepository.findBySubTaskIdAndRole(task.getId(), role)
+                    .orElseGet(ScoringRecord::new);
+            record.setRole(role);
+            record.setScoreType(role);
+            record.setReviewStage(index == 0 ? "first" : "second");
+            record.setReviewStatus(index == 0 ? "pending" : "waiting");
+            record.setReviewerId(null);
+            record.setReviewerName(null);
+            record.setReviewedAt(null);
+            record.setComment(null);
+            record.setScore(null);
+            record.setAesthetics(null);
+            record.setInnovation(null);
+            record.setWeight(getScoringPct(projectType(task), role) / 100.0);
+            record.setSubTask(task);
+            scoringRepository.save(record);
+        }
+    }
+
+    /** 审核通过时更新对应阶段记录（单维度：总分100分）。 */
+    private void completeReviewRecord(SubTask task, String role, String reviewerId,
+                                      String reviewerName, String comment, Integer score) {
         ScoringRecord sr = scoringRepository.findBySubTaskIdAndRole(task.getId(), role)
                 .orElseGet(ScoringRecord::new);
         sr.setRole(role);
-        sr.setScoreType(scoreType);
+        sr.setScoreType(role);
+        sr.setReviewStage(reviewStage(task, role));
+        sr.setReviewStatus("approved");
+        sr.setReviewerId(reviewerId);
+        sr.setReviewerName(reviewerName);
+        sr.setReviewedAt(LocalDateTime.now());
+        sr.setComment(comment);
         sr.setScore(score);
         // 兼容保留旧字段
         if (score != null) {
@@ -610,10 +643,40 @@ public class ProjectService {
             sr.setInnovation(null);
         }
         // 读取对应项目类型的角色权重百分比，转为小数
-        String projectType = task.getProject() != null ? task.getProject().getType() : "regular";
-        sr.setWeight(getScoringPct(projectType, role) / 100.0);
+        sr.setWeight(getScoringPct(projectType(task), role) / 100.0);
         sr.setSubTask(task);
         scoringRepository.save(sr);
+        if ("planner".equals(role)) {
+            activateSecondReview(task);
+        }
+    }
+
+    private void activateSecondReview(SubTask task) {
+        String secondRole = expectedReviewRoles(task).get(1);
+        ScoringRecord secondReview = scoringRepository.findBySubTaskIdAndRole(task.getId(), secondRole)
+                .orElseGet(ScoringRecord::new);
+        secondReview.setRole(secondRole);
+        secondReview.setScoreType(secondRole);
+        secondReview.setReviewStage("second");
+        secondReview.setReviewStatus("pending");
+        secondReview.setWeight(getScoringPct(projectType(task), secondRole) / 100.0);
+        secondReview.setSubTask(task);
+        scoringRepository.save(secondReview);
+    }
+
+    private List<String> expectedReviewRoles(SubTask task) {
+        return "channel_custom".equals(projectType(task))
+                ? List.of("planner", "sales")
+                : List.of("planner", "admin");
+    }
+
+    private String reviewStage(SubTask task, String role) {
+        return expectedReviewRoles(task).get(0).equals(role) ? "first" : "second";
+    }
+
+    private String projectType(SubTask task) {
+        return task.getProject() != null && task.getProject().getType() != null
+                ? task.getProject().getType() : "regular";
     }
 
     /** 从 SystemConfig 读取评分权重百分比，按项目类型+角色 */
@@ -680,11 +743,32 @@ public class ProjectService {
         if (!canReject || !canReviewTask(p, task, currentRole, currentUserId)) {
             throw new RuntimeException("当前角色或任务状态无法驳回");
         }
+        rejectReviewRecord(task, currentRole, currentUserId, currentUser, comments);
         task.setStatus("rejected");
         task.setReviewComments(comments);
         p.getLogs().add(new ActivityLog("子任务驳回：" + task.getName() + "（意见：" + comments + "）", currentUser, currentRole, p));
 
         return projectRepository.save(p);
+    }
+
+    private void rejectReviewRecord(SubTask task, String role, String reviewerId,
+                                    String reviewerName, String comment) {
+        ScoringRecord record = scoringRepository.findBySubTaskIdAndRole(task.getId(), role)
+                .orElseGet(ScoringRecord::new);
+        record.setRole(role);
+        record.setScoreType(role);
+        record.setReviewStage(reviewStage(task, role));
+        record.setReviewStatus("rejected");
+        record.setReviewerId(reviewerId);
+        record.setReviewerName(reviewerName);
+        record.setReviewedAt(LocalDateTime.now());
+        record.setComment(comment);
+        record.setScore(null);
+        record.setAesthetics(null);
+        record.setInnovation(null);
+        record.setWeight(getScoringPct(projectType(task), role) / 100.0);
+        record.setSubTask(task);
+        scoringRepository.save(record);
     }
 
     // ==================== Scoring ====================
@@ -713,6 +797,14 @@ public class ProjectService {
         if (!canReviewTask(p, task, currentRole, currentUserId)) {
             throw new RuntimeException("当前用户无权提交该项目评分");
         }
+        boolean validStage = ("planner".equals(role) && "delivered".equals(task.getStatus()))
+                || ("sales".equals(role) && "channel_custom".equals(p.getType())
+                    && "planner_approved".equals(task.getStatus()))
+                || ("admin".equals(role) && !"channel_custom".equals(p.getType())
+                    && "planner_approved".equals(task.getStatus()));
+        if (!validStage) {
+            throw new RuntimeException("当前审核阶段不能提交该评分");
+        }
         Integer score = parseOptionalScore(body.get("score"));
         validateScoreRequired(score, "评分");
 
@@ -729,10 +821,24 @@ public class ProjectService {
         sr.setAesthetics(mapped);
         sr.setInnovation(mapped);
         sr.setScoreType(role);
+        sr.setReviewStage(reviewStage(task, role));
+        sr.setReviewStatus("approved");
+        sr.setReviewerId(currentUserId);
+        sr.setReviewerName((String) body.getOrDefault("currentUser", ""));
+        sr.setReviewedAt(LocalDateTime.now());
         if (body.containsKey("comment")) {
             sr.setComment(SecurityUtil.sanitizeText((String) body.get("comment"), 500));
         }
         scoringRepository.save(sr);
+
+        if ("planner".equals(role)) {
+            task.setStatus("planner_approved");
+            activateSecondReview(task);
+        } else if ("sales".equals(role)) {
+            task.setStatus("sales_approved");
+        } else {
+            task.setStatus("admin_approved");
+        }
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         p.getLogs().add(new ActivityLog("子任务评分（" + role + "：" + score + "分）：" + task.getName(), currentUser, currentRole, p));
@@ -1089,7 +1195,7 @@ public class ProjectService {
                 Optional<ScoringRecord> myRecord = records.stream()
                         .filter(sr -> role.equals(sr.getRole()))
                         .findFirst();
-                if (myRecord.isEmpty()) {
+                if (myRecord.isEmpty() || "waiting".equals(myRecord.get().getReviewStatus())) {
                     continue;
                 }
 
@@ -1106,11 +1212,17 @@ public class ProjectService {
                 item.put("selfScore", t.getSelfScore());
                 item.put("selfAesthetics", t.getSelfAesthetics());
                 item.put("selfInnovation", t.getSelfInnovation());
-                item.put("isPending", !isScoringRecordCompleted(myRecord.get()));
+                item.put("isPending", isScoringRecordPending(myRecord.get()));
                 item.put("scoringRecords", records.stream().map(sr -> {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("role", sr.getRole());
                     m.put("scoreType", sr.getScoreType());
+                    m.put("reviewStage", sr.getReviewStage());
+                    m.put("reviewStatus", sr.getReviewStatus());
+                    m.put("reviewerId", sr.getReviewerId());
+                    m.put("reviewerName", sr.getReviewerName());
+                    m.put("reviewedAt", sr.getReviewedAt());
+                    m.put("comment", sr.getComment());
                     m.put("score", sr.getScore());
                     m.put("aesthetics", sr.getAesthetics());
                     m.put("innovation", sr.getInnovation());
@@ -1173,8 +1285,18 @@ public class ProjectService {
     }
 
     private boolean isScoringRecordCompleted(ScoringRecord record) {
+        if (record.getReviewStatus() != null) {
+            return "approved".equals(record.getReviewStatus());
+        }
         return record.getScore() != null
                 || (record.getAesthetics() != null && record.getInnovation() != null);
+    }
+
+    private boolean isScoringRecordPending(ScoringRecord record) {
+        if (record.getReviewStatus() != null) {
+            return "pending".equals(record.getReviewStatus());
+        }
+        return !isScoringRecordCompleted(record);
     }
 
     private Double toHundredPointScore(ScoringRecord record) {

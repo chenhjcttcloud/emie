@@ -28,14 +28,14 @@ public interface ScoringRepository extends JpaRepository<ScoringRecord, Long> {
     @Query("DELETE FROM ScoringRecord s WHERE s.subTask.id IN (SELECT t.id FROM SubTask t WHERE t.project.id = ?1)")
     void deleteByProjectId(Long projectId);
 
-    @Query("SELECT COUNT(s) FROM ScoringRecord s WHERE s.role = ?1 AND s.score IS NULL AND (s.aesthetics IS NULL OR s.innovation IS NULL)")
+    @Query("SELECT COUNT(s) FROM ScoringRecord s WHERE s.role = ?1 AND s.reviewStatus = 'pending'")
     long countPendingByRole(String role);
 
     @Query("SELECT COUNT(s) FROM ScoringRecord s JOIN s.subTask t JOIN t.project p " +
            "WHERE p.type = 'channel_custom' AND s.role IN ('sales', 'planner') " +
-           "AND s.score IS NULL AND (s.aesthetics IS NULL OR s.innovation IS NULL)")
+           "AND s.reviewStatus = 'pending'")
     long countPendingChannelScore();
 
-    @Query("SELECT COUNT(s) FROM ScoringRecord s WHERE s.score IS NULL AND (s.aesthetics IS NULL OR s.innovation IS NULL)")
+    @Query("SELECT COUNT(s) FROM ScoringRecord s WHERE s.reviewStatus = 'pending'")
     long countAllPendingScores();
 }

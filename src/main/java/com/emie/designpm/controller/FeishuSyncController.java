@@ -112,4 +112,15 @@ public class FeishuSyncController {
             return ResponseEntity.status(500).body(err);
         }
     }
+
+    /** 为当前主表和备份表补齐两级审核同步字段。 */
+    @PostMapping("/ensure-review-fields")
+    public ResponseEntity<Map<String, Object>> ensureReviewFields() {
+        try {
+            return ResponseEntity.ok(feishuBaseService.ensureReviewWorkflowFields());
+        } catch (Exception e) {
+            return ResponseEntity.status(502).body(Map.of(
+                    "error", "补充飞书审核字段失败，请检查表格权限及同名字段类型"));
+        }
+    }
 }
