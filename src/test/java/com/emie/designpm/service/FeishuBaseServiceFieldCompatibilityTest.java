@@ -18,8 +18,8 @@ class FeishuBaseServiceFieldCompatibilityTest {
 
         FeishuBaseService.putReferenceValue(fields, "所属项目", "42", "recProject42", 21);
 
-        assertEquals("recProject42",
-                fields.path("所属项目").path("link_record_ids").path(0).asText());
+        assertTrue(fields.path("所属项目").isArray());
+        assertEquals("recProject42", fields.path("所属项目").path(0).asText());
     }
 
     @Test

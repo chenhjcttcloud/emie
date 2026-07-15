@@ -762,9 +762,7 @@ public class FeishuBaseService {
             if (linkedRecordId == null || linkedRecordId.isBlank()) {
                 throw new IllegalArgumentException("关联记录尚未同步: " + fieldName);
             }
-            ObjectNode value = json.createObjectNode();
-            value.putArray("link_record_ids").add(linkedRecordId);
-            fields.set(fieldName, value);
+            fields.putArray(fieldName).add(linkedRecordId);
             return;
         }
         if (fieldType != null && (fieldType == 1 || fieldType == 3)) {
