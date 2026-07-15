@@ -20,8 +20,15 @@ function adminUserStatusLabel(status) {
 // ===== Admin: 用户管理 =====
 async function renderAdminUsers(container) {
   container.innerHTML = `<div class="loading">加载中</div>`;
-  let users = [];
-  try { users = await apiGet('/admin/users'); } catch(e) { /* ignore */ }
+  let users = [], roles = [];
+  try {
+    [users, roles] = await Promise.all([
+      apiGet('/admin/users'),
+      apiGet('/admin/roles'),
+    ]);
+  } catch(e) { /* ignore */ }
+  roles.forEach(r => { adminUserRoleLabels[r.name] = r.displayName || r.name; });
+  const assignableRoles = roles.filter(r => r.name !== 'pending');
 
   container.innerHTML = `
     <div class="config-card">
@@ -37,11 +44,7 @@ async function renderAdminUsers(container) {
           <select id="userRoleFilter" data-emie-onchange="filterAdminUsers()">
             <option value="">全部角色</option>
             <option value="pending">待分配</option>
-            <option value="sales">销售</option>
-            <option value="planner">产品企划</option>
-            <option value="designer">设计师</option>
-            <option value="supplychain">供应链</option>
-            <option value="admin">管理员</option>
+            ${assignableRoles.map(r => `<option value="${escHtml(r.name)}">${escHtml(r.displayName || r.name)}</option>`).join('')}
           </select>
           <select id="userStatusFilter" data-emie-onchange="filterAdminUsers()">
             <option value="">全部状态</option>
