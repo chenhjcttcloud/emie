@@ -93,8 +93,8 @@ class FrontendModuleLayoutTest {
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=126\"></script>"),
-                "页面应只通过 v126 ES Module 启动入口加载前端");
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=127\"></script>"),
+                "页面应只通过 v127 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
         assertTrue(bootstrap.indexOf("./core.js") > bootstrap.indexOf("./core-ui.js"),
