@@ -17,6 +17,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 飞书多维表格（Base）同步服务
@@ -34,9 +35,12 @@ public class FeishuBaseService {
     private static final ObjectMapper json = new ObjectMapper();
 
     private final SystemConfigRepository configRepository;
+    private final Map<String, CachedFieldTypes> fieldTypesCache = new ConcurrentHashMap<>();
 
     private String cachedToken;
     private long tokenExpiresAt;
+
+    private record CachedFieldTypes(Map<String, Integer> types, long expiresAt) {}
 
     public FeishuBaseService(SystemConfigRepository configRepository) {
         this.configRepository = configRepository;
@@ -308,7 +312,38 @@ public class FeishuBaseService {
         ObjectNode body = json.createObjectNode();
         body.put("field_name", fieldName);
         body.put("type", fieldType);
-        bearerPost(API + "/bitable/v1/apps/" + appToken + "/tables/" + tableId + "/fields", token, body.toString());
+        JsonNode root = json.readTree(bearerPost(
+                API + "/bitable/v1/apps/" + appToken + "/tables/" + tableId + "/fields",
+                token, body.toString()));
+        checkResponse(root, "新增字段");
+        fieldTypesCache.remove(appToken + ":" + tableId);
+    }
+
+    private Map<String, Integer> getFieldTypes(String token, String appToken, String tableId) throws Exception {
+        String cacheKey = appToken + ":" + tableId;
+        CachedFieldTypes cached = fieldTypesCache.get(cacheKey);
+        if (cached != null && System.currentTimeMillis() < cached.expiresAt()) {
+            return cached.types();
+        }
+
+        Map<String, Integer> types = new LinkedHashMap<>();
+        String pageToken = null;
+        do {
+            String url = String.format("%s/bitable/v1/apps/%s/tables/%s/fields?page_size=100%s",
+                    API, appToken, tableId,
+                    pageToken != null && !pageToken.isBlank() ? "&page_token=" + pageToken : "");
+            JsonNode root = json.readTree(bearerGet(url, token));
+            checkResponse(root, "读取字段列表");
+            for (JsonNode field : root.path("data").path("items")) {
+                types.put(field.path("field_name").asText(), field.path("type").asInt());
+            }
+            boolean hasMore = root.path("data").path("has_more").asBoolean(false);
+            pageToken = hasMore ? root.path("data").path("page_token").asText(null) : null;
+        } while (pageToken != null && !pageToken.isBlank());
+
+        Map<String, Integer> immutable = Collections.unmodifiableMap(types);
+        fieldTypesCache.put(cacheKey, new CachedFieldTypes(immutable, System.currentTimeMillis() + 600_000));
+        return immutable;
     }
 
     // ==================== 同步项目 ====================
@@ -342,6 +377,7 @@ public class FeishuBaseService {
 
         String token = getToken();
         String existed = findRecordId(token, appToken, tableId, "项目ID", String.valueOf(projectId));
+        Map<String, Integer> fieldTypes = getFieldTypes(token, appToken, tableId);
 
         ObjectNode fields = json.createObjectNode();
         fields.put("项目ID", String.valueOf(projectId));
@@ -350,13 +386,15 @@ public class FeishuBaseService {
         fields.put("销售", salesName != null ? salesName : "");
         fields.put("产品企划", plannerName != null ? plannerName : "");
         if (deadline != null && !deadline.isBlank()) {
-            fields.put("截止日期", dateToTimestamp(deadline));
+            putDateValue(fields, "截止日期", dateToTimestamp(deadline), fieldTypes.get("截止日期"));
         }
         if (productCategory != null && !productCategory.isBlank()) fields.put("产品类目", productCategory);
         if (priceRange != null && !priceRange.isBlank()) fields.put("参考价格", priceRange);
         fields.put("子任务数", taskCount);
         fields.put("完成进度", progress);
-        if (createdAt != null) fields.put("创建时间", createdAt.toLocalDate().atStartOfDay(java.time.ZoneId.of("Asia/Shanghai")).toEpochSecond());
+        if (createdAt != null) {
+            putDateValue(fields, "创建时间", toTimestamp(createdAt), fieldTypes.get("创建时间"));
+        }
 
         if (existed != null) {
             updateRecord(token, appToken, tableId, existed, fields.toString());
@@ -396,6 +434,7 @@ public class FeishuBaseService {
 
         String token = getToken();
         String existed = findRecordId(token, appToken, tableId, "子任务ID", String.valueOf(taskId));
+        Map<String, Integer> fieldTypes = getFieldTypes(token, appToken, tableId);
 
         ObjectNode fields = json.createObjectNode();
         fields.put("子任务ID", String.valueOf(taskId));
@@ -403,17 +442,25 @@ public class FeishuBaseService {
         fields.put("状态", taskStatusLabel(status));
         fields.put("负责人", designerName != null ? designerName : "");
         if (plannedDate != null && !plannedDate.isBlank()) {
-            fields.put("计划日期", dateToTimestamp(plannedDate));
+            putDateValue(fields, "计划日期", dateToTimestamp(plannedDate), fieldTypes.get("计划日期"));
         }
         if (actualDate != null && !actualDate.isBlank()) {
-            fields.put("实际完成", dateToTimestamp(actualDate));
+            putDateValue(fields, "实际完成", dateToTimestamp(actualDate), fieldTypes.get("实际完成"));
         }
         if (selfScore != null) fields.put("自评分", selfScore.intValue());
-        if (createdAt != null) fields.put("创建时间", createdAt.toLocalDate().atStartOfDay(java.time.ZoneId.of("Asia/Shanghai")).toEpochSecond());
+        if (createdAt != null) {
+            putDateValue(fields, "创建时间", toTimestamp(createdAt), fieldTypes.get("创建时间"));
+        }
 
-        // 生产环境“所属项目”字段为文本类型，写入项目编号即可。
-        // 不能发送关联字段所需的 record_id 数组，否则飞书会返回 TextFieldConvFail。
-        if (projectId != null) fields.put("所属项目", String.valueOf(projectId));
+        if (projectId != null) {
+            Integer fieldType = fieldTypes.get("所属项目");
+            String linkedRecordId = null;
+            if (isLinkField(fieldType)) {
+                linkedRecordId = findRecordId(token, appToken, getCfg("feishu.base.tableProjects"),
+                        "项目ID", String.valueOf(projectId));
+            }
+            putReferenceValue(fields, "所属项目", String.valueOf(projectId), linkedRecordId, fieldType);
+        }
 
         if (existed != null) {
             updateRecord(token, appToken, tableId, existed, fields.toString());
@@ -446,6 +493,7 @@ public class FeishuBaseService {
 
         String token = getToken();
         String existed = findRecordId(token, appToken, tableId, "评分ID", String.valueOf(recordId));
+        Map<String, Integer> fieldTypes = getFieldTypes(token, appToken, tableId);
 
         ObjectNode fields = json.createObjectNode();
         fields.put("评分ID", String.valueOf(recordId));
@@ -454,8 +502,13 @@ public class FeishuBaseService {
         fields.put("权重", weight != null ? (int)(weight * 100) : 0);
 
         if (subTaskId != null) {
-            // 生产 Base 中“所属子任务”为文本字段，直接写业务 ID，避免依赖同步顺序。
-            fields.put("所属子任务", subTaskId.toString());
+            Integer fieldType = fieldTypes.get("所属子任务");
+            String linkedRecordId = null;
+            if (isLinkField(fieldType)) {
+                linkedRecordId = findRecordId(token, appToken, getCfg("feishu.base.tableTasks"),
+                        "子任务ID", String.valueOf(subTaskId));
+            }
+            putReferenceValue(fields, "所属子任务", subTaskId.toString(), linkedRecordId, fieldType);
         }
 
         if (existed != null) {
@@ -468,20 +521,35 @@ public class FeishuBaseService {
     public void syncActivityLog(Long logId, String action, String username, String role,
                                 Long projectId, LocalDateTime time) throws Exception {
         if (!isSyncEnabled()) return;
+        String primary = getCfg("feishu.base.tableLogs");
         String backup = getCfg("feishu.base.tableLogsBackup");
-        if (backup.isBlank()) return;
+        if (primary.isBlank() && backup.isBlank()) return;
+
+        if (!primary.isBlank()) {
+            syncActivityLogToTable(logId, action, username, role, projectId, time, primary);
+        }
+        if (!backup.isBlank() && !backup.equals(primary)) {
+            syncActivityLogToTable(logId, action, username, role, projectId, time, backup);
+        }
+    }
+
+    private void syncActivityLogToTable(Long logId, String action, String username, String role,
+                                        Long projectId, LocalDateTime time, String tableId) throws Exception {
         String appToken = getCfg("feishu.base.appToken");
         String token = getToken();
-        String existed = findRecordId(token, appToken, backup, "日志ID", String.valueOf(logId));
+        String existed = findRecordId(token, appToken, tableId, "日志ID", String.valueOf(logId));
+        Map<String, Integer> fieldTypes = getFieldTypes(token, appToken, tableId);
         ObjectNode fields = json.createObjectNode();
         fields.put("日志ID", String.valueOf(logId));
         fields.put("操作内容", action != null ? action : "");
         fields.put("操作人", username != null ? username : "");
         fields.put("角色", roleLabel(role));
         if (projectId != null) fields.put("所属项目", String.valueOf(projectId));
-        if (time != null) fields.put("时间", time.atZone(java.time.ZoneId.of("Asia/Shanghai")).toEpochSecond());
-        if (existed != null) updateRecord(token, appToken, backup, existed, fields.toString());
-        else createRecord(token, appToken, backup, fields.toString());
+        if (time != null) {
+            putDateValue(fields, "时间", toTimestamp(time), fieldTypes.get("时间"));
+        }
+        if (existed != null) updateRecord(token, appToken, tableId, existed, fields.toString());
+        else createRecord(token, appToken, tableId, fields.toString());
     }
 
     // ==================== 删除同步 ====================
@@ -673,6 +741,7 @@ public class FeishuBaseService {
     }
 
     private static String roleLabel(String r) {
+        if (r == null) return "未知";
         return switch (r) {
             case "sales" -> "销售";
             case "planner" -> "企划";
@@ -683,15 +752,51 @@ public class FeishuBaseService {
         };
     }
 
-    /** 将日期字符串 yyyy-MM-dd 转换为 Unix 时间戳（秒） */
-    private static long dateToTimestamp(String dateStr) {
+    static boolean isLinkField(Integer fieldType) {
+        return fieldType != null && (fieldType == 18 || fieldType == 21);
+    }
+
+    static void putReferenceValue(ObjectNode fields, String fieldName, String businessId,
+                                  String linkedRecordId, Integer fieldType) {
+        if (isLinkField(fieldType)) {
+            if (linkedRecordId == null || linkedRecordId.isBlank()) {
+                throw new IllegalArgumentException("关联记录尚未同步: " + fieldName);
+            }
+            ObjectNode value = json.createObjectNode();
+            value.putArray("link_record_ids").add(linkedRecordId);
+            fields.set(fieldName, value);
+            return;
+        }
+        if (fieldType != null && (fieldType == 1 || fieldType == 3)) {
+            fields.put(fieldName, businessId);
+            return;
+        }
+        throw new IllegalArgumentException("字段类型不兼容: " + fieldName);
+    }
+
+    static void putDateValue(ObjectNode fields, String fieldName, long timestamp, Integer fieldType) {
+        if (fieldType != null && fieldType == 5) {
+            fields.put(fieldName, timestamp);
+            return;
+        }
+        // 飞书“创建时间”等自动字段为只读字段，保留飞书自动生成值。
+        if (fieldType != null && fieldType >= 1000) return;
+        throw new IllegalArgumentException("日期字段类型不兼容: " + fieldName);
+    }
+
+    static long toTimestamp(LocalDateTime time) {
+        return time.atZone(java.time.ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli();
+    }
+
+    /** 将日期字符串 yyyy-MM-dd 转换为飞书日期字段使用的毫秒时间戳。 */
+    static long dateToTimestamp(String dateStr) {
         try {
             String d = dateStr.contains(" ") ? dateStr.split(" ")[0] : dateStr;
             return java.time.LocalDate.parse(d)
                 .atStartOfDay(java.time.ZoneId.of("Asia/Shanghai"))
-                .toEpochSecond();
+                .toInstant().toEpochMilli();
         } catch (Exception e) {
-            return java.time.Instant.now().getEpochSecond();
+            return java.time.Instant.now().toEpochMilli();
         }
     }
 }
