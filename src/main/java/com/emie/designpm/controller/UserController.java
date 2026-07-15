@@ -8,7 +8,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/users")
@@ -28,39 +27,37 @@ public class UserController {
         Map<String, List<Map<String, String>>> result = new LinkedHashMap<>();
 
         for (String role : List.of("sales", "planner", "designer", "supplychain", "admin")) {
-            result.put(role, userService.getUsersByRole(role).stream().map(u -> {
-                Map<String, String> m = new LinkedHashMap<>();
-                m.put("id", String.valueOf(u.getId()));
-                m.put("userId", u.getUserId());
-                m.put("name", u.getName());
-                m.put("role", u.getRole());
-                m.put("title", u.getTitle());
-                m.put("roleLevel", u.getRoleLevel() != null ? String.valueOf(u.getRoleLevel()) : "");
-                m.put("departmentId", u.getDepartmentId() != null ? String.valueOf(u.getDepartmentId()) : "");
-                m.put("supervisorId", u.getSupervisorId() != null ? u.getSupervisorId() : "");
-                m.put("titleLevel", u.getTitleLevel() != null ? String.valueOf(u.getTitleLevel()) : "0");
-                return m;
-            }).collect(Collectors.toList()));
+            result.put(role, new ArrayList<>());
+        }
+
+        for (User user : userService.getAllUsers()) {
+            String role = user.getRole();
+            if (role == null || role.isBlank() || "pending".equals(role)) continue;
+            result.computeIfAbsent(role, ignored -> new ArrayList<>()).add(toUserMap(user));
         }
 
         return ResponseEntity.ok(result);
+    }
+
+    private Map<String, String> toUserMap(User user) {
+        Map<String, String> result = new LinkedHashMap<>();
+        result.put("id", String.valueOf(user.getId()));
+        result.put("userId", user.getUserId());
+        result.put("name", user.getName());
+        result.put("role", user.getRole());
+        result.put("title", user.getTitle());
+        result.put("roleLevel", user.getRoleLevel() != null ? String.valueOf(user.getRoleLevel()) : "");
+        result.put("departmentId", user.getDepartmentId() != null ? String.valueOf(user.getDepartmentId()) : "");
+        result.put("supervisorId", user.getSupervisorId() != null ? user.getSupervisorId() : "");
+        result.put("titleLevel", user.getTitleLevel() != null ? String.valueOf(user.getTitleLevel()) : "0");
+        return result;
     }
 
     @GetMapping("/info/{userId}")
     public ResponseEntity<Map<String, String>> getUserInfo(@PathVariable String userId) {
         User u = userService.getUserByUserId(userId);
         if (u == null) return ResponseEntity.notFound().build();
-        Map<String, String> m = new LinkedHashMap<>();
-        m.put("id", String.valueOf(u.getId()));
-        m.put("userId", u.getUserId());
-        m.put("name", u.getName());
-        m.put("role", u.getRole());
-        m.put("title", u.getTitle());
-        m.put("roleLevel", u.getRoleLevel() != null ? String.valueOf(u.getRoleLevel()) : "");
-        m.put("departmentId", u.getDepartmentId() != null ? String.valueOf(u.getDepartmentId()) : "");
-        m.put("supervisorId", u.getSupervisorId() != null ? u.getSupervisorId() : "");
-        m.put("titleLevel", u.getTitleLevel() != null ? String.valueOf(u.getTitleLevel()) : "0");
-        return ResponseEntity.ok(m);
+        return ResponseEntity.ok(toUserMap(u));
     }
 
     /** 更新用户部门/职级/主管信息 */

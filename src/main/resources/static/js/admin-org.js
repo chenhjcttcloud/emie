@@ -9,6 +9,10 @@ const apiDelete = (...args) => EMIE.actions.apiDelete(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
 
+function adminOrgRoleClass(role) {
+  return String(role || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+}
+
 async function refreshOrgData() {
   try {
     const [users, depts] = await Promise.all([
@@ -22,15 +26,17 @@ async function refreshOrgData() {
 
   // ==================== 管理员：组织架构管理 ====================
 async function renderAdminOrg(container) {
-  const [depts, usersData] = await Promise.all([
+  const [depts, usersData, roles] = await Promise.all([
     apiGet('/departments'),
     apiGet('/users'),
+    apiGet('/admin/roles'),
   ]);
   // 同步全局数据，避免组织架构操作继续使用进入页面前的旧列表。
   EMIE.state.departments = depts;
   EMIE.state.users = usersData;
   // 展平所有用户
   const allUsers = Object.values(usersData).flat();
+  const roleLabels = Object.fromEntries(roles.map(r => [r.name, r.displayName || r.name]));
 
   // 确保部门负责人也计入部门成员（即使 departmentId 未同步）
   for (const d of depts) {
@@ -52,12 +58,12 @@ async function renderAdminOrg(container) {
       ${depts.map(d => {
         const headUser = allUsers.find(u => u.userId === d.headUserId);
         const members = allUsers.filter(u => u.departmentId === String(d.id));
-        const roleLabel_ = {sales:'销售',planner:'产品企划',designer:'设计师',supplychain:'供应链',admin:'管理员'}[d.role] || d.role;
+        const roleLabel_ = roleLabels[d.role] || d.role;
         return `<div class="card" style="padding:16px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
             <div>
               <strong style="font-size:15px;">${escHtml(d.name)}</strong>
-              <span class="admin-user-role-badge role-${d.role}" style="margin-left:8px;font-size:11px;">${roleLabel_}</span>
+              <span class="admin-user-role-badge role-${adminOrgRoleClass(d.role)}" style="margin-left:8px;font-size:11px;">${escHtml(roleLabel_)}</span>
               ${!d.active ? `<span style="color:var(--danger);font-size:12px;margin-left:8px;">⛔ 已停用</span>` : ''}
             </div>
             <div style="display:flex;gap:6px;">
@@ -86,7 +92,7 @@ async function renderAdminOrg(container) {
       <h4 style="margin:0 0 8px 0;font-size:14px;">未分配部门的用户</h4>
       ${allUsers.filter(u => !u.departmentId).map(u =>
         `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;font-size:12px;margin:3px;">
-          ${escHtml(u.name)}（${u.role}）
+          ${escHtml(u.name)}（${escHtml(roleLabels[u.role] || u.role)}）
           <span style="cursor:pointer;color:var(--primary);font-size:11px;" data-emie-onclick="openAssignUserDept('${u.userId}')" title="分配到部门">📂</span>
         </span>`
       ).join('') || '<span style="font-size:12px;color:var(--gray-400);">全部已分配</span>'}
@@ -96,8 +102,12 @@ async function renderAdminOrg(container) {
 
 async function openCreateDeptModal() {
   if (isModalOpen()) return;
-  const roles = ['sales','planner','designer','supplychain','admin'];
-  const allUsers = Object.values(await apiGet('/users')).flat();
+  const [roleData, usersData] = await Promise.all([
+    apiGet('/admin/roles'),
+    apiGet('/users'),
+  ]);
+  const roles = roleData.filter(r => r.name !== 'pending');
+  const allUsers = Object.values(usersData).flat();
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'createDeptModal';
@@ -112,7 +122,7 @@ async function openCreateDeptModal() {
           </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 关联角色</label>
             <select class="form-select" name="role" id="deptRoleSelect">
-              ${roles.map(r => `<option value="${r}">${({sales:'销售',planner:'产品企划',designer:'设计师',supplychain:'供应链',admin:'管理员'})[r]}</option>`).join('')}
+              ${roles.map(r => `<option value="${escHtml(r.name)}">${escHtml(r.displayName || r.name)}</option>`).join('')}
             </select>
           </div>
           <div class="form-group"><label class="form-label">部门负责人</label>
@@ -134,7 +144,7 @@ async function openCreateDeptModal() {
     const sel = document.getElementById('deptHeadSelect');
     const filtered = allUsers.filter(u => u.role === role);
     sel.innerHTML = '<option value="">未设置</option>' +
-      filtered.map(u => `<option value="${u.userId}">${u.name}</option>`).join('');
+      filtered.map(u => `<option value="${escHtml(u.userId)}">${escHtml(u.name)}</option>`).join('');
   };
   document.getElementById('deptRoleSelect').dispatchEvent(new Event('change'));
 }
@@ -151,8 +161,15 @@ async function submitCreateDept() {
 
 async function editDept(d) {
   if (isModalOpen()) return;
-  const roles = ['sales','planner','designer','supplychain','admin'];
-  const allUsers = Object.values(await apiGet('/users')).flat();
+  const [roleData, usersData] = await Promise.all([
+    apiGet('/admin/roles'),
+    apiGet('/users'),
+  ]);
+  const roles = roleData.filter(r => r.name !== 'pending');
+  if (d.role && !roles.some(r => r.name === d.role)) {
+    roles.push({ name: d.role, displayName: d.role });
+  }
+  const allUsers = Object.values(usersData).flat();
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'editDeptModal';
@@ -167,7 +184,7 @@ async function editDept(d) {
           </div>
           <div class="form-group"><label class="form-label">关联角色</label>
             <select class="form-select" name="role" id="editDeptRoleSelect">
-              ${roles.map(r => `<option value="${r}" ${r === d.role ? 'selected' : ''}>${({sales:'销售',planner:'产品企划',designer:'设计师',supplychain:'供应链',admin:'管理员'})[r]}</option>`).join('')}
+              ${roles.map(r => `<option value="${escHtml(r.name)}" ${r.name === d.role ? 'selected' : ''}>${escHtml(r.displayName || r.name)}</option>`).join('')}
             </select>
           </div>
           <div class="form-group"><label class="form-label">部门负责人</label>
@@ -192,7 +209,7 @@ async function editDept(d) {
     const sel = document.getElementById('editDeptHeadSelect');
     sel.innerHTML = '<option value="">未设置</option>' +
       allUsers.filter(u => u.role === role).map(u =>
-        `<option value="${u.userId}" ${u.userId === d.headUserId ? 'selected' : ''}>${u.name}</option>`
+        `<option value="${escHtml(u.userId)}" ${u.userId === d.headUserId ? 'selected' : ''}>${escHtml(u.name)}</option>`
       ).join('');
   };
   document.getElementById('editDeptRoleSelect').onchange = updateHeadSelect;

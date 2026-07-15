@@ -87,14 +87,14 @@ class FrontendModuleLayoutTest {
         for (String module : MODULES) {
             assertNotNull(getClass().getResourceAsStream("/static/js/" + module), module + " 必须存在");
             if (module.equals("bootstrap.js")) continue;
-            int currentIndex = bootstrap.indexOf("./" + module + "?v=129");
+            int currentIndex = bootstrap.indexOf("./" + module + "?v=130");
             assertTrue(currentIndex > previousIndex, module + " 的 ES Module 加载顺序不正确");
             previousIndex = currentIndex;
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=129\"></script>"),
-                "页面应只通过 v129 ES Module 启动入口加载前端");
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=130\"></script>"),
+                "页面应只通过 v130 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
         assertTrue(bootstrap.indexOf("./core.js") > bootstrap.indexOf("./core-ui.js"),
@@ -116,6 +116,18 @@ class FrontendModuleLayoutTest {
                 "角色徽章 CSS 类名应忽略角色键大小写");
         assertFalse(adminUsers.matches("(?s).*role-\\$\\{(u\\.role|userData\\.role|existingRole)\\}.*"),
                 "角色徽章不应直接使用未规范化的角色键");
+    }
+
+    @Test
+    void adminOrganizationUsesDynamicRoles() throws IOException {
+        String adminOrg = readResource("/static/js/admin-org.js");
+
+        assertTrue(adminOrg.contains("apiGet('/admin/roles')"),
+                "组织架构应从角色管理动态读取关联角色");
+        assertTrue(adminOrg.contains("r.displayName || r.name"),
+                "组织架构应显示角色管理中的角色名称");
+        assertFalse(adminOrg.contains("const roles = ['sales','planner','designer','supplychain','admin']"),
+                "部门新建和编辑不应继续使用固定角色列表");
     }
 
     @Test
