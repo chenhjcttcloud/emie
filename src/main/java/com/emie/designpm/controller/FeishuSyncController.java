@@ -91,6 +91,15 @@ public class FeishuSyncController {
         List<Long> scoringIds = scoringRepository.findAll().stream().map(s -> s.getId()).toList();
         List<Long> logIds = activityLogRepository.findAll().stream().map(l -> l.getId()).toList();
 
+        try {
+            feishuBaseService.reconcileMirrors(
+                    new java.util.HashSet<>(projectIds), new java.util.HashSet<>(taskIds),
+                    new java.util.HashSet<>(scoringIds), new java.util.HashSet<>(logIds));
+        } catch (Exception e) {
+            return ResponseEntity.status(502).body(Map.of(
+                    "message", "主表镜像删除对账失败，未执行全量重刷"));
+        }
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("project", syncQueueService.enqueueAll("project", projectIds));
         result.put("sub_task", syncQueueService.enqueueAll("sub_task", taskIds));
@@ -121,6 +130,17 @@ public class FeishuSyncController {
         } catch (Exception e) {
             return ResponseEntity.status(502).body(Map.of(
                     "error", "补充飞书审核字段失败，请检查表格权限及同名字段类型"));
+        }
+    }
+
+    /** 为当前八张表补齐主表镜像与备份保留策略字段。 */
+    @PostMapping("/ensure-mirror-fields")
+    public ResponseEntity<Map<String, Object>> ensureMirrorFields() {
+        try {
+            return ResponseEntity.ok(feishuBaseService.ensureMirrorStrategyFields());
+        } catch (Exception e) {
+            return ResponseEntity.status(502).body(Map.of(
+                    "error", "补充飞书镜像字段失败，请检查表格权限及同名字段类型"));
         }
     }
 }

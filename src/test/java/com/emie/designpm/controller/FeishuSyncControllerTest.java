@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
@@ -51,10 +52,26 @@ class FeishuSyncControllerTest {
         var response = controller.fullResync();
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
+        verify(feishu).reconcileMirrors(Set.of(), Set.of(), Set.of(), Set.of());
         verify(queueService).enqueueAll("project", List.of());
         verify(queueService).enqueueAll("sub_task", List.of());
         verify(queueService).enqueueAll("scoring_record", List.of());
         verify(queueService).enqueueAll("activity_log", List.of());
+    }
+
+    @Test
+    void fullResyncStopsBeforeQueueingWhenMirrorCleanupFails() throws Exception {
+        SyncQueueService queueService = mock(SyncQueueService.class);
+        FeishuBaseService feishu = mock(FeishuBaseService.class);
+        when(feishu.validateBackupTables()).thenReturn(Map.of("valid", true, "tables", List.of()));
+        doThrow(new Exception("飞书不可用"))
+                .when(feishu).reconcileMirrors(Set.of(), Set.of(), Set.of(), Set.of());
+
+        FeishuSyncController controller = controller(queueService, feishu);
+        var response = controller.fullResync();
+
+        assertEquals(HttpStatus.BAD_GATEWAY, response.getStatusCode());
+        verifyNoInteractions(queueService);
     }
 
     private FeishuSyncController controller(SyncQueueService queueService, FeishuBaseService feishu) {

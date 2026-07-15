@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.*;
 
 /**
  * 飞书同步工作线程
@@ -114,21 +114,35 @@ public class SyncWorker {
             fixedDelayString = "${app.feishu.reconcile-delay-ms:3600000}",
             initialDelayString = "${app.feishu.reconcile-initial-delay-ms:300000}"
     )
-    @Transactional
     public void reconcileCurrentData() {
         if (syncQueueRepository.countByStatus("pending") > 0
                 || syncQueueRepository.countByStatus("processing") > 0) {
             log.debug("飞书全量对账跳过：同步队列仍有待处理任务");
             return;
         }
-        syncQueueService.enqueueAllForReconciliation("project",
-                projectRepository.findAll().stream().map(Project::getId).toList());
-        syncQueueService.enqueueAllForReconciliation("sub_task",
-                subTaskRepository.findAll().stream().map(SubTask::getId).toList());
-        syncQueueService.enqueueAllForReconciliation("scoring_record",
-                scoringRepository.findAll().stream().map(ScoringRecord::getId).toList());
-        syncQueueService.enqueueAllForReconciliation("activity_log",
-                activityLogRepository.findAll().stream().map(ActivityLog::getId).toList());
+        List<Long> projectIds = projectRepository.findAll().stream().map(Project::getId).toList();
+        List<Long> taskIds = subTaskRepository.findAll().stream().map(SubTask::getId).toList();
+        List<Long> scoringIds = scoringRepository.findAll().stream().map(ScoringRecord::getId).toList();
+        List<Long> logIds = activityLogRepository.findAll().stream().map(ActivityLog::getId).toList();
+
+        try {
+            Map<String, FeishuBaseService.MirrorReconcileResult> mirrorResult = feishuBaseService.reconcileMirrors(
+                    new HashSet<>(projectIds), new HashSet<>(taskIds),
+                    new HashSet<>(scoringIds), new HashSet<>(logIds));
+            int skipped = mirrorResult.values().stream()
+                    .mapToInt(FeishuBaseService.MirrorReconcileResult::skippedWithoutBackup).sum();
+            if (skipped > 0) {
+                log.warn("飞书主表镜像对账跳过 {} 条缺少系统备份的孤儿记录", skipped);
+            }
+        } catch (Exception e) {
+            log.error("飞书主表镜像删除对账失败，本轮不执行全量重刷: {}", e.getMessage());
+            return;
+        }
+
+        syncQueueService.enqueueAllForReconciliation("project", projectIds);
+        syncQueueService.enqueueAllForReconciliation("sub_task", taskIds);
+        syncQueueService.enqueueAllForReconciliation("scoring_record", scoringIds);
+        syncQueueService.enqueueAllForReconciliation("activity_log", logIds);
     }
 
     private void syncProject(Long projectId) throws Exception {

@@ -220,6 +220,7 @@ public class FeishuBaseService {
         result.put("tableScoring", tableScoring);
 
         result.put("reviewFields", ensureReviewWorkflowFields());
+        result.put("mirrorFields", ensureMirrorStrategyFields());
 
         result.put("message", "飞书 Base 初始化完成");
         return result;
@@ -257,6 +258,30 @@ public class FeishuBaseService {
         result.put("子任务表_backup", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableTasksBackup"), taskFields));
         result.put("评分记录表", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableScoring"), scoringFields));
         result.put("评分记录表_backup", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableScoringBackup"), scoringFields));
+        return result;
+    }
+
+    /** 为主表和备份表补齐镜像来源、备份状态及源数据删除时间字段。 */
+    public synchronized Map<String, Object> ensureMirrorStrategyFields() throws Exception {
+        String appToken = getCfg("feishu.base.appToken");
+        if (appToken.isBlank()) throw new Exception("飞书 Base App Token 未配置");
+        String token = getToken();
+
+        Map<String, Integer> primaryFields = Map.of("同步来源", 1);
+        Map<String, Integer> backupFields = new LinkedHashMap<>();
+        backupFields.put("同步来源", 1);
+        backupFields.put("备份状态", 1);
+        backupFields.put("源数据删除时间", 5);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("项目总表", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableProjects"), primaryFields));
+        result.put("项目总表_backup", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableProjectsBackup"), backupFields));
+        result.put("子任务表", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableTasks"), primaryFields));
+        result.put("子任务表_backup", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableTasksBackup"), backupFields));
+        result.put("评分记录表", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableScoring"), primaryFields));
+        result.put("评分记录表_backup", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableScoringBackup"), backupFields));
+        result.put("操作日志表", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableLogs"), primaryFields));
+        result.put("操作日志表_backup", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableLogsBackup"), backupFields));
         return result;
     }
 
@@ -315,7 +340,7 @@ public class FeishuBaseService {
     private JsonNode createProjectFields() {
         ArrayNode fields = json.createArrayNode();
         addTextFields(fields, "项目ID", "类型", "状态", "销售", "产品企划", "产品类目", "参考价格",
-                "审核流程", "当前审核阶段");
+                "审核流程", "当前审核阶段", "同步来源");
         addDateFields(fields, "截止日期", "创建时间");
         addNumberFields(fields, "子任务数", "完成进度", "审核进度");
         return fields;
@@ -325,7 +350,7 @@ public class FeishuBaseService {
     private JsonNode createTaskFields() {
         ArrayNode fields = json.createArrayNode();
         addTextFields(fields, "子任务ID", "任务名称", "状态", "负责人", "所属项目",
-                "一审角色", "一审状态", "一审审核人", "二审角色", "二审状态", "二审审核人");
+                "一审角色", "一审状态", "一审审核人", "二审角色", "二审状态", "二审审核人", "同步来源");
         addDateFields(fields, "计划日期", "实际完成", "创建时间");
         addNumberFields(fields, "自评分", "一审得分", "二审得分", "审核得分");
         return fields;
@@ -335,7 +360,7 @@ public class FeishuBaseService {
     private JsonNode createScoringFields() {
         ArrayNode fields = json.createArrayNode();
         addTextFields(fields, "评分ID", "评分角色", "所属子任务", "项目ID", "项目类型",
-                "审核阶段", "审核状态", "审核人", "审核意见");
+                "审核阶段", "审核状态", "审核人", "审核意见", "同步来源");
         addDateFields(fields, "审核时间");
         addNumberFields(fields, "评分", "权重");
         return fields;
@@ -420,12 +445,12 @@ public class FeishuBaseService {
         syncProjectToTable(projectId, type, status, salesName, plannerName, deadline,
                 productCategory, priceRange, taskCount, progress,
                 reviewFlow, currentReviewStage, reviewProgress, createdAt,
-                getCfg("feishu.base.tableProjects"));
+                getCfg("feishu.base.tableProjects"), false);
         String backup = getCfg("feishu.base.tableProjectsBackup");
         if (!backup.isBlank()) {
             syncProjectToTable(projectId, type, status, salesName, plannerName, deadline,
                     productCategory, priceRange, taskCount, progress,
-                    reviewFlow, currentReviewStage, reviewProgress, createdAt, backup);
+                    reviewFlow, currentReviewStage, reviewProgress, createdAt, backup, true);
         }
     }
 
@@ -434,7 +459,7 @@ public class FeishuBaseService {
                                     String deadline, String productCategory,
                                     String priceRange, int taskCount, int progress,
                                     String reviewFlow, String currentReviewStage, int reviewProgress,
-                                    LocalDateTime createdAt, String tableId) throws Exception {
+                                    LocalDateTime createdAt, String tableId, boolean backupTable) throws Exception {
 
         String appToken = getCfg("feishu.base.appToken");
         if (appToken.isBlank() || tableId.isBlank())
@@ -460,6 +485,7 @@ public class FeishuBaseService {
         fields.put("审核流程", reviewFlow != null ? reviewFlow : "");
         fields.put("当前审核阶段", currentReviewStage != null ? currentReviewStage : "");
         fields.put("审核进度", reviewProgress);
+        putSyncMetadata(fields, backupTable, false, null, existed != null, fieldTypes);
         if (createdAt != null) {
             putDateValue(fields, "创建时间", toTimestamp(createdAt), fieldTypes.get("创建时间"));
         }
@@ -499,14 +525,14 @@ public class FeishuBaseService {
     public void syncSubTask(SubTaskSyncData data) throws Exception {
         if (!isSyncEnabled()) return;
 
-        syncSubTaskToTable(data, getCfg("feishu.base.tableTasks"));
+        syncSubTaskToTable(data, getCfg("feishu.base.tableTasks"), false);
         String backup = getCfg("feishu.base.tableTasksBackup");
         if (!backup.isBlank()) {
-            syncSubTaskToTable(data, backup);
+            syncSubTaskToTable(data, backup, true);
         }
     }
 
-    private void syncSubTaskToTable(SubTaskSyncData data, String tableId) throws Exception {
+    private void syncSubTaskToTable(SubTaskSyncData data, String tableId, boolean backupTable) throws Exception {
 
         String appToken = getCfg("feishu.base.appToken");
         if (appToken.isBlank() || tableId.isBlank())
@@ -537,6 +563,7 @@ public class FeishuBaseService {
         } else if (existed != null) {
             fields.putNull("审核得分");
         }
+        putSyncMetadata(fields, backupTable, false, null, existed != null, fieldTypes);
         if (data.createdAt() != null) {
             putDateValue(fields, "创建时间", toTimestamp(data.createdAt()), fieldTypes.get("创建时间"));
         }
@@ -590,14 +617,14 @@ public class FeishuBaseService {
     public void syncScoring(ScoringSyncData data) throws Exception {
         if (!isSyncEnabled()) return;
 
-        syncScoringToTable(data, getCfg("feishu.base.tableScoring"));
+        syncScoringToTable(data, getCfg("feishu.base.tableScoring"), false);
         String backup = getCfg("feishu.base.tableScoringBackup");
         if (!backup.isBlank()) {
-            syncScoringToTable(data, backup);
+            syncScoringToTable(data, backup, true);
         }
     }
 
-    private void syncScoringToTable(ScoringSyncData data, String tableId) throws Exception {
+    private void syncScoringToTable(ScoringSyncData data, String tableId, boolean backupTable) throws Exception {
 
         String appToken = getCfg("feishu.base.appToken");
         if (appToken.isBlank() || tableId.isBlank())
@@ -622,6 +649,7 @@ public class FeishuBaseService {
         fields.put("审核状态", reviewStatusLabel(data.reviewStatus()));
         fields.put("审核人", data.reviewerName() != null ? data.reviewerName() : "");
         fields.put("审核意见", data.comment() != null ? data.comment() : "");
+        putSyncMetadata(fields, backupTable, false, null, existed != null, fieldTypes);
         if (data.reviewedAt() != null) {
             putDateValue(fields, "审核时间", toTimestamp(data.reviewedAt()), fieldTypes.get("审核时间"));
         } else if (existed != null) {
@@ -653,15 +681,16 @@ public class FeishuBaseService {
         if (primary.isBlank() && backup.isBlank()) return;
 
         if (!primary.isBlank()) {
-            syncActivityLogToTable(logId, action, username, role, projectId, time, primary);
+            syncActivityLogToTable(logId, action, username, role, projectId, time, primary, false);
         }
         if (!backup.isBlank() && !backup.equals(primary)) {
-            syncActivityLogToTable(logId, action, username, role, projectId, time, backup);
+            syncActivityLogToTable(logId, action, username, role, projectId, time, backup, true);
         }
     }
 
     private void syncActivityLogToTable(Long logId, String action, String username, String role,
-                                        Long projectId, LocalDateTime time, String tableId) throws Exception {
+                                        Long projectId, LocalDateTime time, String tableId,
+                                        boolean backupTable) throws Exception {
         String appToken = getCfg("feishu.base.appToken");
         String token = getToken();
         String existed = findRecordId(token, appToken, tableId, "日志ID", String.valueOf(logId));
@@ -672,6 +701,7 @@ public class FeishuBaseService {
         fields.put("操作人", username != null ? username : "");
         fields.put("角色", roleLabel(role));
         if (projectId != null) fields.put("所属项目", String.valueOf(projectId));
+        putSyncMetadata(fields, backupTable, false, null, existed != null, fieldTypes);
         if (time != null) {
             putDateValue(fields, "时间", toTimestamp(time), fieldTypes.get("时间"));
         }
@@ -679,40 +709,181 @@ public class FeishuBaseService {
         else createRecord(token, appToken, tableId, fields.toString());
     }
 
+    static void putSyncMetadata(ObjectNode fields, boolean backupTable, boolean sourceDeleted,
+                                LocalDateTime deletedAt, boolean existed,
+                                Map<String, Integer> fieldTypes) {
+        fields.put("同步来源", "系统");
+        if (!backupTable) return;
+        fields.put("备份状态", sourceDeleted ? "源数据已删除" : "有效");
+        if (deletedAt != null) {
+            putDateValue(fields, "源数据删除时间", toTimestamp(deletedAt), fieldTypes.get("源数据删除时间"));
+        } else if (existed) {
+            fields.putNull("源数据删除时间");
+        }
+    }
+
     // ==================== 删除同步 ====================
 
     public void deleteProjectRecord(Long projectId) throws Exception {
-        if (!isSyncEnabled()) return;
-        String token = getToken();
-        String existed = findRecordId(token,
-                getCfg("feishu.base.appToken"), getCfg("feishu.base.tableProjects"),
+        deleteMirroredRecord("feishu.base.tableProjects", "feishu.base.tableProjectsBackup",
                 "项目ID", String.valueOf(projectId));
-        if (existed != null) {
-            deleteRecord(token, getCfg("feishu.base.appToken"), getCfg("feishu.base.tableProjects"), existed);
-        }
     }
 
     public void deleteSubTaskRecord(Long taskId) throws Exception {
-        if (!isSyncEnabled()) return;
-        String token = getToken();
-        String existed = findRecordId(token,
-                getCfg("feishu.base.appToken"), getCfg("feishu.base.tableTasks"),
+        deleteMirroredRecord("feishu.base.tableTasks", "feishu.base.tableTasksBackup",
                 "子任务ID", String.valueOf(taskId));
-        if (existed != null) {
-            deleteRecord(token, getCfg("feishu.base.appToken"), getCfg("feishu.base.tableTasks"), existed);
-        }
     }
 
     public void deleteScoringRecord(Long scoringRecordId) throws Exception {
-        if (!isSyncEnabled()) return;
-        String token = getToken();
-        String existed = findRecordId(token,
-                getCfg("feishu.base.appToken"), getCfg("feishu.base.tableScoring"),
+        deleteMirroredRecord("feishu.base.tableScoring", "feishu.base.tableScoringBackup",
                 "评分ID", String.valueOf(scoringRecordId));
-        if (existed != null) {
-            deleteRecord(token, getCfg("feishu.base.appToken"), getCfg("feishu.base.tableScoring"), existed);
+    }
+
+    private void deleteMirroredRecord(String primaryConfigKey, String backupConfigKey,
+                                      String idField, String businessId) throws Exception {
+        if (!isSyncEnabled()) return;
+        String appToken = getCfg("feishu.base.appToken");
+        String primaryTable = getCfg(primaryConfigKey);
+        String backupTable = getCfg(backupConfigKey);
+        if (appToken.isBlank() || primaryTable.isBlank()) return;
+        String token = getToken();
+        String primaryRecordId = findRecordId(token, appToken, primaryTable, idField, businessId);
+        String backupRecordId = backupTable.isBlank() ? null
+                : findRecordId(token, appToken, backupTable, idField, businessId);
+
+        if (backupRecordId != null) {
+            markBackupDeleted(token, appToken, backupTable, backupRecordId, LocalDateTime.now());
+        }
+        if (primaryRecordId != null) {
+            if (backupRecordId == null) {
+                throw new Exception("备份记录不存在，已阻止主表删除: " + idField + "=" + businessId);
+            }
+            deleteRecord(token, appToken, primaryTable, primaryRecordId);
         }
     }
+
+    public record MirrorReconcileResult(int primaryDeleted, int backupMarked, int skippedWithoutBackup) {}
+
+    /**
+     * 主表严格镜像数据库，备份表永不删除；只处理带“同步来源=系统”的记录。
+     * 子记录必须先于父记录传入，避免关联字段阻止父记录删除。
+     */
+    public Map<String, MirrorReconcileResult> reconcileMirrors(
+            Set<Long> projectIds, Set<Long> taskIds, Set<Long> scoringIds, Set<Long> logIds) throws Exception {
+        if (!isSyncEnabled()) return Map.of();
+        String appToken = getCfg("feishu.base.appToken");
+        if (appToken.isBlank()) throw new Exception("飞书 Base App Token 未配置");
+        String token = getToken();
+
+        Map<String, MirrorReconcileResult> result = new LinkedHashMap<>();
+        result.put("scoring_record", reconcileEntityMirror(token, appToken,
+                getCfg("feishu.base.tableScoring"), getCfg("feishu.base.tableScoringBackup"),
+                "评分ID", toStringIds(scoringIds)));
+        result.put("sub_task", reconcileEntityMirror(token, appToken,
+                getCfg("feishu.base.tableTasks"), getCfg("feishu.base.tableTasksBackup"),
+                "子任务ID", toStringIds(taskIds)));
+        result.put("project", reconcileEntityMirror(token, appToken,
+                getCfg("feishu.base.tableProjects"), getCfg("feishu.base.tableProjectsBackup"),
+                "项目ID", toStringIds(projectIds)));
+        result.put("activity_log", reconcileEntityMirror(token, appToken,
+                getCfg("feishu.base.tableLogs"), getCfg("feishu.base.tableLogsBackup"),
+                "日志ID", toStringIds(logIds)));
+        return result;
+    }
+
+    private MirrorReconcileResult reconcileEntityMirror(String token, String appToken,
+                                                         String primaryTable, String backupTable,
+                                                         String idField, Set<String> currentIds) throws Exception {
+        if (primaryTable == null || primaryTable.isBlank()) return new MirrorReconcileResult(0, 0, 0);
+        List<RecordSnapshot> primaryRecords = listRecordSnapshots(token, appToken, primaryTable);
+        List<RecordSnapshot> backupRecords = backupTable == null || backupTable.isBlank()
+                ? List.of() : listRecordSnapshots(token, appToken, backupTable);
+        Map<String, RecordSnapshot> backupByBusinessId = new HashMap<>();
+        for (RecordSnapshot record : backupRecords) {
+            String id = fieldText(record.fields(), idField);
+            if (!id.isBlank()) backupByBusinessId.putIfAbsent(id, record);
+        }
+
+        LocalDateTime deletedAt = LocalDateTime.now();
+        Set<String> markedBackupIds = new HashSet<>();
+        int backupMarked = 0;
+        for (RecordSnapshot backup : backupRecords) {
+            String id = fieldText(backup.fields(), idField);
+            if (isOrphanSystemRecord(backup.fields(), idField, currentIds)
+                    && !"源数据已删除".equals(fieldText(backup.fields(), "备份状态"))) {
+                markBackupDeleted(token, appToken, backupTable, backup.recordId(), deletedAt);
+                markedBackupIds.add(id);
+                backupMarked++;
+            }
+        }
+
+        int primaryDeleted = 0;
+        int skippedWithoutBackup = 0;
+        for (RecordSnapshot primary : primaryRecords) {
+            String id = fieldText(primary.fields(), idField);
+            if (!isOrphanSystemRecord(primary.fields(), idField, currentIds)) continue;
+            RecordSnapshot backup = backupByBusinessId.get(id);
+            if (backup == null || !isSystemRecord(backup.fields())) {
+                skippedWithoutBackup++;
+                continue;
+            }
+            if (markedBackupIds.add(id)
+                    && !"源数据已删除".equals(fieldText(backup.fields(), "备份状态"))) {
+                markBackupDeleted(token, appToken, backupTable, backup.recordId(), deletedAt);
+                backupMarked++;
+            }
+            deleteRecord(token, appToken, primaryTable, primary.recordId());
+            primaryDeleted++;
+        }
+        return new MirrorReconcileResult(primaryDeleted, backupMarked, skippedWithoutBackup);
+    }
+
+    private void markBackupDeleted(String token, String appToken, String backupTable,
+                                   String recordId, LocalDateTime deletedAt) throws Exception {
+        Map<String, Integer> fieldTypes = getFieldTypes(token, appToken, backupTable);
+        ObjectNode fields = json.createObjectNode();
+        putSyncMetadata(fields, true, true, deletedAt, true, fieldTypes);
+        updateRecord(token, appToken, backupTable, recordId, fields.toString());
+    }
+
+    private List<RecordSnapshot> listRecordSnapshots(String token, String appToken, String tableId) throws Exception {
+        List<RecordSnapshot> records = new ArrayList<>();
+        String pageToken = null;
+        do {
+            String url = String.format("%s/bitable/v1/apps/%s/tables/%s/records?page_size=500%s",
+                    API, appToken, tableId,
+                    pageToken != null && !pageToken.isBlank() ? "&page_token=" + pageToken : "");
+            JsonNode root = json.readTree(bearerGet(url, token));
+            checkResponse(root, "读取记录列表");
+            for (JsonNode item : root.path("data").path("items")) {
+                records.add(new RecordSnapshot(item.path("record_id").asText(), item.path("fields")));
+            }
+            boolean hasMore = root.path("data").path("has_more").asBoolean(false);
+            pageToken = hasMore ? root.path("data").path("page_token").asText(null) : null;
+        } while (pageToken != null && !pageToken.isBlank());
+        return records;
+    }
+
+    private static Set<String> toStringIds(Set<Long> ids) {
+        if (ids == null || ids.isEmpty()) return Set.of();
+        return ids.stream().filter(Objects::nonNull).map(String::valueOf).collect(java.util.stream.Collectors.toSet());
+    }
+
+    static boolean isSystemRecord(JsonNode fields) {
+        return "系统".equals(fieldText(fields, "同步来源"));
+    }
+
+    static boolean isOrphanSystemRecord(JsonNode fields, String idField, Set<String> currentIds) {
+        String id = fieldText(fields, idField);
+        return isSystemRecord(fields) && !id.isBlank() && !currentIds.contains(id);
+    }
+
+    static String fieldText(JsonNode fields, String fieldName) {
+        JsonNode value = fields != null ? fields.get(fieldName) : null;
+        return value == null || value.isNull() ? "" : value.asText("");
+    }
+
+    private record RecordSnapshot(String recordId, JsonNode fields) {}
 
     // ==================== 通用 API 调用 ====================
 
@@ -725,9 +896,7 @@ public class FeishuBaseService {
                     pageToken != null && !pageToken.isBlank() ? "&page_token=" + pageToken : "");
             String resp = bearerGet(url, token);
             JsonNode root = json.readTree(resp);
-            if (root.has("code") && root.get("code").asInt() != 0) {
-                return null;
-            }
+            checkResponse(root, "查找记录");
 
             JsonNode items = root.path("data").path("items");
             if (items.isArray()) {

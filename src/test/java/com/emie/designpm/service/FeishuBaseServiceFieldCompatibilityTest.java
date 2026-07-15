@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -75,5 +77,51 @@ class FeishuBaseServiceFieldCompatibilityTest {
         assertEquals("待审核", FeishuBaseService.reviewStatusLabel("pending"));
         assertEquals("已通过", FeishuBaseService.reviewStatusLabel("approved"));
         assertEquals("已驳回", FeishuBaseService.reviewStatusLabel("rejected"));
+    }
+
+    @Test
+    void primaryAndBackupRecordsReceiveDifferentSyncMetadata() {
+        ObjectNode primary = json.createObjectNode();
+        ObjectNode backup = json.createObjectNode();
+        backup.put("源数据删除时间", 1_700_000_000_000L);
+
+        FeishuBaseService.putSyncMetadata(primary, false, false, null, false, Map.of());
+        FeishuBaseService.putSyncMetadata(backup, true, false, null, true,
+                Map.of("源数据删除时间", 5));
+
+        assertEquals("系统", primary.path("同步来源").asText());
+        assertFalse(primary.has("备份状态"));
+        assertEquals("系统", backup.path("同步来源").asText());
+        assertEquals("有效", backup.path("备份状态").asText());
+        assertTrue(backup.path("源数据删除时间").isNull());
+    }
+
+    @Test
+    void deletedBackupIsMarkedWithoutRemovingItsBusinessIdentity() {
+        ObjectNode fields = json.createObjectNode();
+        fields.put("项目ID", "42");
+        LocalDateTime deletedAt = LocalDateTime.of(2026, 7, 15, 18, 0);
+
+        FeishuBaseService.putSyncMetadata(fields, true, true, deletedAt, true,
+                Map.of("源数据删除时间", 5));
+
+        assertEquals("42", fields.path("项目ID").asText());
+        assertEquals("源数据已删除", fields.path("备份状态").asText());
+        assertEquals(FeishuBaseService.toTimestamp(deletedAt), fields.path("源数据删除时间").asLong());
+    }
+
+    @Test
+    void mirrorCleanupOnlyTargetsSystemRecordsMissingFromDatabase() {
+        ObjectNode currentSystemRecord = json.createObjectNode();
+        currentSystemRecord.put("同步来源", "系统");
+        currentSystemRecord.put("项目ID", "1");
+        ObjectNode orphanSystemRecord = currentSystemRecord.deepCopy();
+        orphanSystemRecord.put("项目ID", "2");
+        ObjectNode manualRecord = orphanSystemRecord.deepCopy();
+        manualRecord.put("同步来源", "人工");
+
+        assertFalse(FeishuBaseService.isOrphanSystemRecord(currentSystemRecord, "项目ID", Set.of("1")));
+        assertTrue(FeishuBaseService.isOrphanSystemRecord(orphanSystemRecord, "项目ID", Set.of("1")));
+        assertFalse(FeishuBaseService.isOrphanSystemRecord(manualRecord, "项目ID", Set.of("1")));
     }
 }
