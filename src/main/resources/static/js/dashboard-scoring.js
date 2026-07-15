@@ -5,6 +5,8 @@ const swrFetch = (...args) => EMIE.actions.swrFetch(...args);
 const formatDate = (...args) => EMIE.actions.formatDate(...args);
 const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const openScoring = (...args) => EMIE.actions.openScoring(...args);
+const matchesSearchText = (...args) => EMIE.actions.matchesSearchText(...args);
+const isDateInRange = (...args) => EMIE.actions.isDateInRange(...args);
 
 async function renderScoringView(main, role, uid) {
   // 使用专用聚合端点（1 次 API 替代 N+1 次）
@@ -54,10 +56,20 @@ async function renderScoringView(main, role, uid) {
         <option value="pending">待评分</option>
         <option value="done">已评分</option>
       </select>
+      <select class="form-select" data-emie-onchange="filterScoringView()" style="min-width:120px;" id="scoringTypeFilter">
+        <option value="all">全部项目类型</option>
+        <option value="channel_custom">渠道定制单</option>
+        <option value="regular">公司常规品</option>
+      </select>
+      <select class="form-select" data-emie-onchange="filterScoringView()" style="min-width:120px;" id="scoringStageFilter">
+        <option value="all">全部审核阶段</option>
+        <option value="first">一审</option>
+        <option value="second">二审</option>
+      </select>
       <input class="form-input" placeholder="🔍 搜索任务名/项目号..." data-emie-oninput="filterScoringView()" style="min-width:180px;" id="scoringSearch">
-      <input type="date" class="form-input" id="scoringDateStart" style="min-width:130px;" title="计划完成日期起">
+      <input type="date" class="form-input" id="scoringDateStart" data-emie-onchange="filterScoringView()" style="min-width:130px;" title="计划完成日期起">
       <span style="color:var(--gray-400);font-size:13px;">~</span>
-      <input type="date" class="form-input" id="scoringDateEnd" style="min-width:130px;" title="计划完成日期止">
+      <input type="date" class="form-input" id="scoringDateEnd" data-emie-onchange="filterScoringView()" style="min-width:130px;" title="计划完成日期止">
       <button class="btn btn-primary btn-sm" data-emie-onclick="filterScoringView()">🔍 查询</button>
       <button class="btn btn-outline btn-sm" data-emie-onclick="resetScoringFilters()">↺ 重置</button>
     </div>
@@ -73,24 +85,20 @@ function filterScoringView() {
 
 function applyFilterScoringView() {
   const filter = document.getElementById('scoringFilter')?.value || 'all';
-  const q = document.getElementById('scoringSearch')?.value?.toLowerCase() || '';
+  const projectType = document.getElementById('scoringTypeFilter')?.value || 'all';
+  const stage = document.getElementById('scoringStageFilter')?.value || 'all';
+  const q = document.getElementById('scoringSearch')?.value || '';
   const dateStart = document.getElementById('scoringDateStart')?.value;
   const dateEnd = document.getElementById('scoringDateEnd')?.value;
   let list = EMIE.dashboardState.scoringCache || [];
 
   if (filter === 'pending') list = list.filter(t => t.isPending);
   else if (filter === 'done') list = list.filter(t => !t.isPending);
+  if (projectType !== 'all') list = list.filter(t => t.projectType === projectType);
+  if (stage !== 'all') list = list.filter(t => t.scoringRecords?.some(r => r.reviewStage === stage));
 
-  if (q) list = list.filter(t => String(t.projectId).includes(q) || (t.name || '').toLowerCase().includes(q) || (t.projectName || '').toLowerCase().includes(q));
-
-  if (dateStart || dateEnd) {
-    list = list.filter(t => {
-      if (!t.plannedDate) return !dateStart && !dateEnd;
-      if (dateStart && t.plannedDate < dateStart) return false;
-      if (dateEnd && t.plannedDate > dateEnd) return false;
-      return true;
-    });
-  }
+  if (q) list = list.filter(t => matchesSearchText(q, t.id, t.projectId, t.name, t.projectName, t.designerName));
+  list = list.filter(t => isDateInRange(t.plannedDate, dateStart, dateEnd));
 
   const c = document.getElementById('scoringContainer');
   if (c) c.innerHTML = renderScoringCards(list);
@@ -98,10 +106,14 @@ function applyFilterScoringView() {
 
 function resetScoringFilters() {
   const filterEl = document.getElementById('scoringFilter');
+  const typeEl = document.getElementById('scoringTypeFilter');
+  const stageEl = document.getElementById('scoringStageFilter');
   const searchEl = document.getElementById('scoringSearch');
   const dateStartEl = document.getElementById('scoringDateStart');
   const dateEndEl = document.getElementById('scoringDateEnd');
   if (filterEl) filterEl.value = 'all';
+  if (typeEl) typeEl.value = 'all';
+  if (stageEl) stageEl.value = 'all';
   if (searchEl) searchEl.value = '';
   if (dateStartEl) dateStartEl.value = '';
   if (dateEndEl) dateEndEl.value = '';

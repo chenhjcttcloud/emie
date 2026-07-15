@@ -10,18 +10,18 @@ const openCreateProject = (...args) => EMIE.actions.openCreateProject(...args);
 
 async function renderOrderList(main, type, role, uid) {
   // 使用缓存的项目列表
-  let orders = EMIE.state.cache.orders;
-  if (!orders || !orders.length) {
+  let allOrders = EMIE.state.cache.orders;
+  if (!allOrders || !allOrders.length) {
     const participating = role === 'designer' || role === 'supplychain' ? '&participating=true' : '';
-    orders = await apiGet(`/projects?role=${role}&userId=${uid}${participating}`);
-    EMIE.state.cache.orders = orders;
+    allOrders = await apiGet(`/projects?role=${role}&userId=${uid}${participating}`);
+    EMIE.state.cache.orders = allOrders;
   }
+  let orders = [...allOrders];
   let title = '全部项目';
   if (type === 'channel_custom') { orders = orders.filter(o => o.type === 'channel_custom'); title = '📦 渠道定制单'; }
   else if (type === 'regular') { orders = orders.filter(o => o.type === 'regular'); title = '🏭 公司常规品'; }
   else title = '📋 全部项目';
 
-  EMIE.state.cache.orders = orders;
   // 保存当前列表的完整数据用于筛选
   EMIE.state.cache.currentFilterData = [...orders];
 
@@ -36,15 +36,28 @@ async function renderOrderList(main, type, role, uid) {
     <div class="filter-bar" style="margin-bottom:16px;">
       <select class="form-select" data-emie-onchange="filterProjectList()" style="min-width:120px;" id="projectStatusFilter">
         <option value="all">全部状态</option>
+        <option value="draft">草稿</option>
         <option value="in_progress">进行中</option>
+        <option value="paused">已暂停</option>
         <option value="completed">已完成</option>
         <option value="completed_pending_score">待评分</option>
         <option value="pending_planner">待企划接单</option>
+        <option value="pending_terminate">终止确认中</option>
+        <option value="terminated">已终止</option>
+      </select>
+      <select class="form-select" data-emie-onchange="filterProjectList()" style="min-width:120px;" id="projectCategoryFilter">
+        <option value="all">全部类目</option>
+        ${(EMIE.state.categories || []).map(c => `<option value="${escHtml(c.name)}">${escHtml(c.name)}</option>`).join('')}
+      </select>
+      <select class="form-select" data-emie-onchange="filterProjectList()" style="min-width:120px;" id="projectMarketFilter">
+        <option value="all">全部市场</option>
+        <option value="国内">国内</option>
+        <option value="海外">海外</option>
       </select>
       <input class="form-input" placeholder="🔍 搜索编号/描述..." data-emie-oninput="filterProjectList()" style="min-width:180px;" id="searchInput">
-      <input type="date" class="form-input" id="filterDateStart" style="min-width:130px;" title="开始日期">
+      <input type="date" class="form-input" id="filterDateStart" data-emie-onchange="filterProjectList()" style="min-width:130px;" title="开始日期">
       <span style="color:var(--gray-400);font-size:12px;">~</span>
-      <input type="date" class="form-input" id="filterDateEnd" style="min-width:130px;" title="结束日期">
+      <input type="date" class="form-input" id="filterDateEnd" data-emie-onchange="filterProjectList()" style="min-width:130px;" title="结束日期">
       <button class="btn btn-primary btn-sm" data-emie-onclick="filterProjectList()">🔍 查询</button>
       <button class="btn btn-outline btn-sm" data-emie-onclick="resetProjectFilters()">↺ 重置</button>
     </div>
@@ -71,25 +84,28 @@ function applyFilterProjectList() {
   // 状态筛选
   const currentFilter = document.getElementById('projectStatusFilter')?.value || 'all';
   if (currentFilter === 'in_progress') filtered = filtered.filter(o => o.status === 'in_progress' || o.status === 'planner_accepted');
+  else if (currentFilter === 'draft') filtered = filtered.filter(o => o.status === 'draft');
+  else if (currentFilter === 'paused') filtered = filtered.filter(o => o.status === 'paused');
   else if (currentFilter === 'completed') filtered = filtered.filter(o => o.status === 'completed');
   else if (currentFilter === 'completed_pending_score') filtered = filtered.filter(o => o.status === 'completed_pending_score');
   else if (currentFilter === 'pending_planner') filtered = filtered.filter(o => o.status === 'pending_planner');
+  else if (currentFilter === 'pending_terminate') filtered = filtered.filter(o => o.status === 'pending_terminate');
+  else if (currentFilter === 'terminated') filtered = filtered.filter(o => o.status === 'terminated');
 
-  // 搜索
-  const q = document.getElementById('searchInput')?.value?.toLowerCase();
-  if (q) filtered = filtered.filter(o => String(o.id).includes(q) || (o.productRequirements || '').toLowerCase().includes(q));
+  const category = document.getElementById('projectCategoryFilter')?.value || 'all';
+  if (category !== 'all') filtered = filtered.filter(o => o.productCategory === category);
+
+  const market = document.getElementById('projectMarketFilter')?.value || 'all';
+  if (market !== 'all') filtered = filtered.filter(o => normalizeFilterText(o.targetMarket).includes(normalizeFilterText(market)));
+
+  // 关键字覆盖项目编号、名称、需求、人员、类目、市场和价格等可见字段
+  const q = document.getElementById('searchInput')?.value || '';
+  if (q) filtered = filtered.filter(o => projectMatchesKeyword(o, q));
 
   // 日期范围筛选（按 deadline）
   const dateStart = document.getElementById('filterDateStart')?.value;
   const dateEnd = document.getElementById('filterDateEnd')?.value;
-  if (dateStart || dateEnd) {
-    filtered = filtered.filter(o => {
-      if (!o.deadline) return !dateStart && !dateEnd;
-      if (dateStart && o.deadline < dateStart) return false;
-      if (dateEnd && o.deadline > dateEnd) return false;
-      return true;
-    });
-  }
+  filtered = filtered.filter(o => isDateInRange(o.deadline, dateStart, dateEnd));
 
   const c = document.getElementById('projectListContainer');
   if (c) c.innerHTML = renderProjectTable(filtered);
@@ -101,7 +117,11 @@ function resetProjectFilters() {
   const dateStartEl = document.getElementById('filterDateStart');
   const dateEndEl = document.getElementById('filterDateEnd');
   if (statusEl) statusEl.value = 'all';
+  const categoryEl = document.getElementById('projectCategoryFilter');
+  const marketEl = document.getElementById('projectMarketFilter');
   if (searchEl) searchEl.value = '';
+  if (categoryEl) categoryEl.value = 'all';
+  if (marketEl) marketEl.value = 'all';
   if (dateStartEl) dateStartEl.value = '';
   if (dateEndEl) dateEndEl.value = '';
   filterProjectList();
@@ -131,13 +151,24 @@ async function renderMyTasks(main, role, uid) {
     <div class="filter-bar">
       <select class="form-select" data-emie-onchange="filterTaskProjects()" style="min-width:120px;" id="taskProjectFilter">
         <option value="all">全部项目</option>
+        <option value="draft">草稿</option>
+        <option value="paused">已暂停</option>
         <option value="in_progress">进行中</option>
         <option value="planner_accepted">待添加子任务</option>
+        <option value="completed_pending_score">待评分</option>
+        <option value="completed">已完成</option>
+        <option value="pending_terminate">终止确认中</option>
+        <option value="terminated">已终止</option>
+      </select>
+      <select class="form-select" data-emie-onchange="filterTaskProjects()" style="min-width:120px;" id="taskProjectTypeFilter">
+        <option value="all">全部类型</option>
+        <option value="channel_custom">渠道定制单</option>
+        <option value="regular">公司常规品</option>
       </select>
       <input class="form-input" placeholder="🔍 搜索项目编号/描述..." data-emie-oninput="filterTaskProjects()" style="min-width:180px;" id="taskProjectSearch">
-      <input type="date" class="form-input" id="taskProjectDateStart" style="min-width:130px;" title="要求日期起">
+      <input type="date" class="form-input" id="taskProjectDateStart" data-emie-onchange="filterTaskProjects()" style="min-width:130px;" title="要求日期起">
       <span style="color:var(--gray-400);font-size:13px;">~</span>
-      <input type="date" class="form-input" id="taskProjectDateEnd" style="min-width:130px;" title="要求日期止">
+      <input type="date" class="form-input" id="taskProjectDateEnd" data-emie-onchange="filterTaskProjects()" style="min-width:130px;" title="要求日期止">
       <button class="btn btn-primary btn-sm" data-emie-onclick="filterTaskProjects()">🔍 查询</button>
       <button class="btn btn-outline btn-sm" data-emie-onclick="resetTaskProjectFilters()">↺ 重置</button>
     </div>
@@ -190,25 +221,22 @@ function applyFilterTaskProjects() {
   const dateEnd = document.getElementById('taskProjectDateEnd')?.value;
   let list = EMIE.dashboardState.taskProjectsCache || [];
   if (filter !== 'all') list = list.filter(o => o.status === filter);
-  if (q) list = list.filter(o => String(o.id).includes(q) || (o.productRequirements || '').toLowerCase().includes(q));
-  if (dateStart || dateEnd) {
-    list = list.filter(o => {
-      if (!o.deadline) return !dateStart && !dateEnd;
-      if (dateStart && o.deadline < dateStart) return false;
-      if (dateEnd && o.deadline > dateEnd) return false;
-      return true;
-    });
-  }
+  const type = document.getElementById('taskProjectTypeFilter')?.value || 'all';
+  if (type !== 'all') list = list.filter(o => o.type === type);
+  if (q) list = list.filter(o => projectMatchesKeyword(o, q));
+  list = list.filter(o => isDateInRange(o.deadline, dateStart, dateEnd));
   const c = document.getElementById('taskProjectContainer');
   if (c) c.innerHTML = renderTaskProjectTable(list);
 }
 
 function resetTaskProjectFilters() {
   const filterEl = document.getElementById('taskProjectFilter');
+  const typeEl = document.getElementById('taskProjectTypeFilter');
   const searchEl = document.getElementById('taskProjectSearch');
   const dateStartEl = document.getElementById('taskProjectDateStart');
   const dateEndEl = document.getElementById('taskProjectDateEnd');
   if (filterEl) filterEl.value = 'all';
+  if (typeEl) typeEl.value = 'all';
   if (searchEl) searchEl.value = '';
   if (dateStartEl) dateStartEl.value = '';
   if (dateEndEl) dateEndEl.value = '';
@@ -216,6 +244,40 @@ function resetTaskProjectFilters() {
 }
 
 // ==================== 待评分页面 ====================
+
+function normalizeFilterText(value) {
+  if (Array.isArray(value)) return value.join(' ')
+    .toLocaleLowerCase();
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.join(' ').toLocaleLowerCase();
+    } catch (e) { /* 普通文本 */ }
+  }
+  return String(value ?? '').toLocaleLowerCase();
+}
+
+function matchesSearchText(query, ...values) {
+  const normalizedQuery = normalizeFilterText(query).trim();
+  if (!normalizedQuery) return true;
+  return values.some(value => normalizeFilterText(value).includes(normalizedQuery));
+}
+
+function projectMatchesKeyword(project, query) {
+  return matchesSearchText(query,
+    project.id, project.type, project.status, project.productName,
+    project.productRequirements, project.salesName, project.plannerName,
+    project.productCategory, project.targetMarket, project.complianceItems,
+    project.priceRange, project.ipName
+  );
+}
+
+function isDateInRange(value, start, end) {
+  if (!start && !end) return true;
+  const date = String(value || '').slice(0, 10);
+  if (!date) return false;
+  return (!start || date >= start) && (!end || date <= end);
+}
 
 EMIE.registerActions({
   renderOrderList,
@@ -228,6 +290,10 @@ EMIE.registerActions({
   filterTaskProjects,
   applyFilterTaskProjects,
   resetTaskProjectFilters,
+  normalizeFilterText,
+  matchesSearchText,
+  projectMatchesKeyword,
+  isDateInRange,
 });
 
 EMIE.registerModule('dashboardLists', {

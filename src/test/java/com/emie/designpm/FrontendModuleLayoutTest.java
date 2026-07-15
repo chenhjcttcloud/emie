@@ -87,14 +87,14 @@ class FrontendModuleLayoutTest {
         for (String module : MODULES) {
             assertNotNull(getClass().getResourceAsStream("/static/js/" + module), module + " 必须存在");
             if (module.equals("bootstrap.js")) continue;
-            int currentIndex = bootstrap.indexOf("./" + module + "?v=130");
+            int currentIndex = bootstrap.indexOf("./" + module + "?v=131");
             assertTrue(currentIndex > previousIndex, module + " 的 ES Module 加载顺序不正确");
             previousIndex = currentIndex;
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=130\"></script>"),
-                "页面应只通过 v130 ES Module 启动入口加载前端");
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=131\"></script>"),
+                "页面应只通过 v131 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
         assertTrue(bootstrap.indexOf("./core.js") > bootstrap.indexOf("./core-ui.js"),
@@ -128,6 +128,26 @@ class FrontendModuleLayoutTest {
                 "组织架构应显示角色管理中的角色名称");
         assertFalse(adminOrg.contains("const roles = ['sales','planner','designer','supplychain','admin']"),
                 "部门新建和编辑不应继续使用固定角色列表");
+    }
+
+    @Test
+    void listPagesExposeKeywordAndConditionFilters() throws IOException {
+        String lists = readResource("/static/js/dashboard-lists.js");
+        String designer = readResource("/static/js/dashboard-designer.js");
+        String scoring = readResource("/static/js/dashboard-scoring.js");
+
+        assertTrue(lists.contains("id=\"projectCategoryFilter\""));
+        assertTrue(lists.contains("id=\"projectMarketFilter\""));
+        assertTrue(lists.contains("id=\"taskProjectTypeFilter\""));
+        assertTrue(lists.contains("function projectMatchesKeyword(project, query)"));
+        assertTrue(lists.contains("let allOrders = EMIE.state.cache.orders"),
+                "项目类型切换应基于完整项目缓存，不能覆盖全量缓存");
+        assertTrue(designer.contains("id=\"designerTaskStatusFilter\""));
+        assertTrue(designer.contains("id=\"designerTaskTypeFilter\""));
+        assertTrue(designer.contains("function resetDesignerTaskFilters()"));
+        assertTrue(scoring.contains("id=\"scoringTypeFilter\""));
+        assertTrue(scoring.contains("id=\"scoringStageFilter\""));
+        assertTrue(scoring.contains("reviewStage === stage"));
     }
 
     @Test

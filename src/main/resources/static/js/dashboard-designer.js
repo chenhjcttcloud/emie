@@ -8,6 +8,9 @@ const taskAccept = (...args) => EMIE.actions.taskAccept(...args);
 const taskDeliver = (...args) => EMIE.actions.taskDeliver(...args);
 const taskRedeliver = (...args) => EMIE.actions.taskRedeliver(...args);
 const openScoring = (...args) => EMIE.actions.openScoring(...args);
+const escHtml = (...args) => EMIE.actions.escHtml(...args);
+const matchesSearchText = (...args) => EMIE.actions.matchesSearchText(...args);
+const isDateInRange = (...args) => EMIE.actions.isDateInRange(...args);
 
 async function renderDesignerTasks(main, uid) {
   // 企划可能作为子任务负责人而非项目负责人，需查全部项目
@@ -48,10 +51,28 @@ async function renderDesignerTasks(main, uid) {
         <option value="unassigned">待认领</option>
         <option value="mine">我的任务</option>
       </select>
+      <select class="form-select" data-emie-onchange="filterDesignerTasks()" style="min-width:120px;" id="designerTaskStatusFilter">
+        <option value="all">全部状态</option>
+        <option value="pending">待接单</option>
+        <option value="accepted">进行中</option>
+        <option value="delivered">待验收</option>
+        <option value="planner_approved">一审通过</option>
+        <option value="sales_approved">销售已验收</option>
+        <option value="admin_approved">管理员已验收</option>
+        <option value="rejected">已驳回</option>
+        <option value="completed">已完成</option>
+        <option value="approved">已通过</option>
+      </select>
+      <select class="form-select" data-emie-onchange="filterDesignerTasks()" style="min-width:120px;" id="designerTaskTypeFilter">
+        <option value="all">全部项目类型</option>
+        <option value="channel_custom">渠道定制单</option>
+        <option value="regular">公司常规品</option>
+      </select>
       <input class="form-input" placeholder="🔍 搜索任务名/项目号..." data-emie-oninput="filterDesignerTasks()" style="min-width:180px;" id="designerTaskSearch">
       <input type="date" class="form-input" id="designerTaskDateStart" data-emie-onchange="filterDesignerTasks()" style="min-width:130px;" title="计划完成日期起">
       <span style="color:var(--gray-400);font-size:13px;">~</span>
       <input type="date" class="form-input" id="designerTaskDateEnd" data-emie-onchange="filterDesignerTasks()" style="min-width:130px;" title="计划完成日期止">
+      <button class="btn btn-outline btn-sm" data-emie-onclick="resetDesignerTaskFilters()">↺ 重置</button>
     </div>
     <div id="designerTaskContainer">${renderDesignerTaskCards(myTasks)}</div>
   `;
@@ -65,27 +86,39 @@ function filterDesignerTasks() {
 
 function applyFilterDesignerTasks() {
   const filter = document.getElementById('designerTaskFilter')?.value || 'all';
-  const q = document.getElementById('designerTaskSearch')?.value?.toLowerCase() || '';
+  const status = document.getElementById('designerTaskStatusFilter')?.value || 'all';
+  const projectType = document.getElementById('designerTaskTypeFilter')?.value || 'all';
+  const q = document.getElementById('designerTaskSearch')?.value || '';
   const dateStart = document.getElementById('designerTaskDateStart')?.value;
   const dateEnd = document.getElementById('designerTaskDateEnd')?.value;
   let list = EMIE.dashboardState.designerTaskCache || [];
 
   if (filter === 'unassigned') list = list.filter(t => t._unassigned);
   else if (filter === 'mine') list = list.filter(t => !t._unassigned);
+  if (status !== 'all') list = list.filter(t => t.status === status);
+  if (projectType !== 'all') list = list.filter(t => t.projectType === projectType);
 
-  if (q) list = list.filter(t => String(t.projectId).includes(q) || (t.name || '').toLowerCase().includes(q) || (t.projectName || '').toLowerCase().includes(q));
-
-  if (dateStart || dateEnd) {
-    list = list.filter(t => {
-      if (!t.plannedDate) return !dateStart && !dateEnd;
-      if (dateStart && t.plannedDate < dateStart) return false;
-      if (dateEnd && t.plannedDate > dateEnd) return false;
-      return true;
-    });
-  }
+  if (q) list = list.filter(t => matchesSearchText(q, t.id, t.projectId, t.name, t.projectName, t.details, t.designerName));
+  list = list.filter(t => isDateInRange(t.plannedDate, dateStart, dateEnd));
 
   const c = document.getElementById('designerTaskContainer');
   if (c) c.innerHTML = renderDesignerTaskCards(list);
+}
+
+function resetDesignerTaskFilters() {
+  const filterEl = document.getElementById('designerTaskFilter');
+  const statusEl = document.getElementById('designerTaskStatusFilter');
+  const typeEl = document.getElementById('designerTaskTypeFilter');
+  const searchEl = document.getElementById('designerTaskSearch');
+  const dateStartEl = document.getElementById('designerTaskDateStart');
+  const dateEndEl = document.getElementById('designerTaskDateEnd');
+  if (filterEl) filterEl.value = 'all';
+  if (statusEl) statusEl.value = 'all';
+  if (typeEl) typeEl.value = 'all';
+  if (searchEl) searchEl.value = '';
+  if (dateStartEl) dateStartEl.value = '';
+  if (dateEndEl) dateEndEl.value = '';
+  filterDesignerTasks();
 }
 
 function renderDesignerTaskCards(tasks) {
@@ -96,17 +129,17 @@ function renderDesignerTaskCards(tasks) {
         const needScore = t.scoringRecords && t.scoringRecords.some(sr => sr.score == null && (sr.role === 'designer' || sr.role === 'supplychain'));
         return `<div class="subtask-card" style="${t._unassigned ? 'border-left:3px solid var(--warning);' : ''}">
           <div class="subtask-header">
-            <div class="subtask-name">${t._unassigned ? '📋' : tsi.icon} ${t.name}</div>
+            <div class="subtask-name">${t._unassigned ? '📋' : tsi.icon} ${escHtml(t.name || '-')}</div>
             <span class="badge ${t._unassigned ? 'badge-pending' : tsi.cls}">${t._unassigned ? '待接单' : tsi.label}</span>
           </div>
-          <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">📁 项目 #${t.projectId}：${t.projectName}</div>
+          <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">📁 项目 #${t.projectId}：${escHtml(t.projectName || '-')}</div>
           <div class="subtask-meta">
             <div class="subtask-meta-item">👤 负责人：<strong>${t.designerName || '<span style="color:var(--warning);">待认领</span>'}</strong>${t.assigneeRole ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;${t.assigneeRole === 'supplychain' ? 'background:#F0FDFA;color:#0D9488;' : t.assigneeRole === 'planner' ? 'background:#EFF6FF;color:#1D4ED8;' : 'background:#FEF2F2;color:#DC2626;'}">${t.assigneeRole === 'supplychain' ? '供应链' : t.assigneeRole === 'planner' ? '企划' : '设计师'}</span>` : ''}</div>
             <div class="subtask-meta-item">📅 计划完成：<strong>${formatDate(t.plannedDate)}</strong></div>
             ${t.actualDate ? `<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(t.actualDate)}</strong></div>` : ''}
           </div>
-          ${t.details ? `<div style="font-size:13px;color:var(--gray-600);margin-top:8px;">📝 ${t.details}</div>` : ''}
-          ${t.reviewComments ? `<div class="review-box ${t.status === 'rejected' ? 'rejected' : 'approved'}">${t.status === 'rejected' ? '驳回意见' : '验收意见'}：${t.reviewComments}</div>` : ''}
+          ${t.details ? `<div style="font-size:13px;color:var(--gray-600);margin-top:8px;">📝 ${escHtml(t.details)}</div>` : ''}
+          ${t.reviewComments ? `<div class="review-box ${t.status === 'rejected' ? 'rejected' : 'approved'}">${t.status === 'rejected' ? '驳回意见' : '验收意见'}：${escHtml(t.reviewComments)}</div>` : ''}
           ${t.scoringRecords ? renderScoringMini(t) : ''}
           <div class="subtask-actions">
             ${t.status === 'pending' && !t._unassigned ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskAccept(${t.projectId},${t.id})">✅ 接单</button>` : ''}
@@ -159,6 +192,7 @@ EMIE.registerActions({
   renderDesignerTasks,
   filterDesignerTasks,
   applyFilterDesignerTasks,
+  resetDesignerTaskFilters,
   renderDesignerTaskCards,
   renderScoringMini,
 });
@@ -166,6 +200,7 @@ EMIE.registerActions({
 EMIE.registerModule('dashboardDesigner', {
   renderDesignerTasks,
   filterDesignerTasks,
+  resetDesignerTaskFilters,
   renderDesignerTaskCards,
   renderScoringMini,
 });
