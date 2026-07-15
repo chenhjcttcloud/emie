@@ -40,6 +40,8 @@ source .env
 set +a
 ```
 
+为避免共享测试库中的存量队列在本地启动时写入飞书，`dev` profile 默认关闭同步消费者。需要进行明确的同步联调时，再在本机 `.env` 中设置 `APP_FEISHU_SYNC_WORKER_ENABLED=true`；不得把该值写入仓库或生产配置。
+
 `.env` 和 `.server.local.env` 都是本地敏感文件，不得提交或复制到文档。
 
 ## 3. 启动与停止

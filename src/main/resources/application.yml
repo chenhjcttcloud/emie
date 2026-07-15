@@ -19,6 +19,7 @@ spring:
 
 app:
   feishu:
+    sync-worker-enabled: ${APP_FEISHU_SYNC_WORKER_ENABLED:true}
     reconcile-delay-ms: ${APP_FEISHU_RECONCILE_DELAY_MS:3600000}
     reconcile-initial-delay-ms: ${APP_FEISHU_RECONCILE_INITIAL_DELAY_MS:300000}
   upload:
@@ -38,6 +39,10 @@ spring:
   config:
     activate:
       on-profile: dev
+app:
+  feishu:
+    # 共享测试库可能含有待处理任务；本地开发须显式开启后才允许调用飞书。
+    sync-worker-enabled: ${APP_FEISHU_SYNC_WORKER_ENABLED:false}
   datasource:
     url: jdbc:mysql://${DESIGNPM_TEST_DB_HOST}:3306/${DESIGNPM_TEST_DB_NAME}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=${DESIGNPM_TEST_DB_USE_SSL:true}
     driver-class-name: com.mysql.cj.jdbc.Driver

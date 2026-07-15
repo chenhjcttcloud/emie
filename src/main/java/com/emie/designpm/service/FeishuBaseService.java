@@ -72,6 +72,75 @@ public class FeishuBaseService {
         return m;
     }
 
+    /**
+     * 只读确认已配置的备份表可由当前 appToken 与企业自建应用访问。
+     * 备份表为可选项；未填写时不会阻断主表同步。
+     */
+    public Map<String, Object> validateBackupTables() throws Exception {
+        String appToken = getCfg("feishu.base.appToken");
+        if (appToken.isBlank()) {
+            return Map.of("valid", false, "message", "未配置飞书 Base App Token", "tables", List.of());
+        }
+
+        String token = getToken();
+        Map<String, String> configured = new LinkedHashMap<>();
+        configured.put("projectsBackup", getCfg("feishu.base.tableProjectsBackup"));
+        configured.put("tasksBackup", getCfg("feishu.base.tableTasksBackup"));
+        configured.put("scoringBackup", getCfg("feishu.base.tableScoringBackup"));
+
+        if (configured.values().stream().allMatch(String::isBlank)) {
+            return Map.of("valid", true, "message", "未配置备份表，主表同步不受影响", "tables", List.of());
+        }
+
+        Map<String, String> availableTables = listTables(token, appToken);
+        List<Map<String, Object>> results = new ArrayList<>();
+        boolean valid = true;
+        for (Map.Entry<String, String> entry : configured.entrySet()) {
+            String tableId = entry.getValue();
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("key", entry.getKey());
+            item.put("configured", !tableId.isBlank());
+            if (tableId.isBlank()) {
+                item.put("valid", true);
+                item.put("message", "未配置，备份双写将跳过该表");
+            } else if (availableTables.containsKey(tableId)) {
+                item.put("valid", true);
+                item.put("tableName", availableTables.get(tableId));
+                item.put("message", "备份表可访问");
+            } else {
+                valid = false;
+                item.put("valid", false);
+                item.put("message", "当前 Base 中未找到该 Table ID，或应用没有访问权限");
+            }
+            results.add(item);
+        }
+        return Map.of(
+                "valid", valid,
+                "message", valid ? "备份表预检通过" : "备份表预检失败，请核对 Base、Table ID 与应用权限",
+                "tables", results);
+    }
+
+    private Map<String, String> listTables(String token, String appToken) throws Exception {
+        Map<String, String> tables = new LinkedHashMap<>();
+        String pageToken = null;
+        do {
+            String url = String.format("%s/bitable/v1/apps/%s/tables?page_size=100%s",
+                    API, appToken,
+                    pageToken != null && !pageToken.isBlank() ? "&page_token=" + pageToken : "");
+            JsonNode root = json.readTree(bearerGet(url, token));
+            checkResponse(root, "读取数据表列表");
+            for (JsonNode table : root.path("data").path("items")) {
+                String tableId = table.path("table_id").asText();
+                if (!tableId.isBlank()) {
+                    tables.put(tableId, table.path("name").asText("未命名表"));
+                }
+            }
+            boolean hasMore = root.path("data").path("has_more").asBoolean(false);
+            pageToken = hasMore ? root.path("data").path("page_token").asText(null) : null;
+        } while (pageToken != null && !pageToken.isBlank());
+        return tables;
+    }
+
     // ==================== Token 管理（纯机器人 token）====================
 
     private synchronized String getToken() throws Exception {
@@ -486,7 +555,10 @@ public class FeishuBaseService {
     }
 
     private void checkResponse(String resp, String action) throws Exception {
-        JsonNode root = json.readTree(resp);
+        checkResponse(json.readTree(resp), action);
+    }
+
+    private void checkResponse(JsonNode root, String action) throws Exception {
         int code = root.path("code").asInt();
         if (code != 0) {
             log.warn("飞书 API {} 失败: code={} msg={}", action, code, root.path("msg").asText());

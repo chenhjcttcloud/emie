@@ -4,6 +4,7 @@ import com.emie.designpm.entity.*;
 import com.emie.designpm.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +17,7 @@ import java.util.List;
  * 定时消费 sync_queue 表，将数据写入飞书多维表格
  */
 @Component
+@ConditionalOnProperty(name = "app.feishu.sync-worker-enabled", havingValue = "true", matchIfMissing = true)
 public class SyncWorker {
 
     private static final Logger log = LoggerFactory.getLogger(SyncWorker.class);

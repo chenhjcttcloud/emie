@@ -49,9 +49,39 @@ public class FeishuSyncController {
         return ResponseEntity.ok(feishuBaseService.getConfig());
     }
 
+    /**
+     * 只读检查备份表是否属于当前 Base 且当前应用可访问。
+     * 不创建、更新或重试任何飞书记录。
+     */
+    @PostMapping("/validate-backups")
+    public ResponseEntity<Map<String, Object>> validateBackups() {
+        try {
+            Map<String, Object> result = feishuBaseService.validateBackupTables();
+            return Boolean.TRUE.equals(result.get("valid"))
+                    ? ResponseEntity.ok(result)
+                    : ResponseEntity.unprocessableEntity().body(result);
+        } catch (Exception e) {
+            return ResponseEntity.status(502).body(Map.of(
+                    "valid", false,
+                    "message", "无法读取飞书数据表，请检查应用权限和网络后重试"));
+        }
+    }
+
     /** 全量重刷（重新入队所有数据） */
     @PostMapping("/full-resync")
     public ResponseEntity<Map<String, Object>> fullResync() {
+        try {
+            Map<String, Object> validation = feishuBaseService.validateBackupTables();
+            if (!Boolean.TRUE.equals(validation.get("valid"))) {
+                Map<String, Object> result = new LinkedHashMap<>(validation);
+                result.put("message", "备份表预检失败，未执行全量重刷");
+                return ResponseEntity.unprocessableEntity().body(result);
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(502).body(Map.of(
+                    "valid", false,
+                    "message", "无法完成备份表预检，未执行全量重刷"));
+        }
         List<Long> projectIds = projectRepository.findAll().stream().map(p -> p.getId()).toList();
         List<Long> taskIds = subTaskRepository.findAll().stream().map(t -> t.getId()).toList();
         List<Long> scoringIds = scoringRepository.findAll().stream().map(s -> s.getId()).toList();
