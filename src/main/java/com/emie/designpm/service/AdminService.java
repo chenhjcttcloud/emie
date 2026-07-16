@@ -156,7 +156,25 @@ public class AdminService {
             SystemConfig.builder().configKey("feishu.base.tableLogsBackup").configValue("").configGroup("feishu_base")
                 .description("操作日志备份表 Table ID").valueType("text").sortOrder(9).build(),
             SystemConfig.builder().configKey("feishu.base.tableLogs").configValue("").configGroup("feishu_base")
-                .description("操作日志表 Table ID").valueType("text").sortOrder(10).build()
+                .description("操作日志表 Table ID").valueType("text").sortOrder(10).build(),
+
+            // ===== 通知中心 =====
+            SystemConfig.builder().configKey("notification.enabled").configValue("true").configGroup("notification")
+                .description("启用通知中心（关闭后仅保留已有审计，不创建新通知）").valueType("boolean").sortOrder(1).build(),
+            SystemConfig.builder().configKey("notification.inAppEnabled").configValue("true").configGroup("notification")
+                .description("启用站内通知；关键任务、审核、驳回和催办始终按必达规则处理").valueType("boolean").sortOrder(2).build(),
+            SystemConfig.builder().configKey("notification.feishuEnabled").configValue("false").configGroup("notification")
+                .description("启用飞书机器人外送（需先完成机器人权限、用户 OpenID 和卡片回调配置）").valueType("boolean").sortOrder(3).build(),
+            SystemConfig.builder().configKey("notification.deliveryRetryLimit").configValue("8").configGroup("notification")
+                .description("外部渠道最大重试次数，超出后进入失败队列并告警管理员").valueType("number").sortOrder(4).build(),
+            SystemConfig.builder().configKey("notification.reminderMinIntervalMinutes").configValue("10").configGroup("notification")
+                .description("同一催办人对同一项目或任务的最短催办间隔（分钟）").valueType("number").sortOrder(5).build(),
+            SystemConfig.builder().configKey("notification.reminderCrossUserMergeMinutes").configValue("30").configGroup("notification")
+                .description("不同催办人的展示合并窗口（分钟）；不会删除任何原始审计或必达通知").valueType("number").sortOrder(6).build(),
+            SystemConfig.builder().configKey("notification.overdueEscalationHours").configValue("24").configGroup("notification")
+                .description("逾期后升级提醒负责人或管理员的等待时长（小时）").valueType("number").sortOrder(7).build(),
+            SystemConfig.builder().configKey("notification.dailyDigestEnabled").configValue("true").configGroup("notification")
+                .description("启用普通动态摘要；摘要仅补充展示，不替代必达通知").valueType("boolean").sortOrder(8).build()
         );
 
         // 只插入缺失的配置项（不覆盖已有值）

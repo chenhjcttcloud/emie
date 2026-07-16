@@ -144,7 +144,7 @@ async function renderAdminDashboard(container) {
 }
 
 function groupLabel(group) {
-  return { appearance: '🎨 外观设置', security: '🔒 安全设置', system: '💻 系统信息', feishu: '💬 飞书 SSO 登录', nas: '🗄️ NAS 归档', feishu_base: '📊 飞书多维表格' }[group] || group;
+  return { appearance: '🎨 外观设置', security: '🔒 安全设置', system: '💻 系统信息', feishu: '💬 飞书 SSO 登录', nas: '🗄️ NAS 归档', feishu_base: '📊 飞书多维表格', notification: '🔔 通知中心' }[group] || group;
 }
 
 // ===== Admin: 系统配置 =====

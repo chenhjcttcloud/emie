@@ -13,6 +13,20 @@
 
 ---
 
+## 2026-07-16 通知中心第一阶段基础
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 待发布 |
+| 目标分支 | `project_manager_system` |
+| 当前生产提交 | `d48b7b8` |
+| 变更范围 | 通知 Outbox、站内通知、渠道投递、追加式审计实体与迁移；系统设置通知中心配置；前端资源 `v132` |
+| 数据库结构变更 | 新增 `notification_events`、`notifications`、`notification_deliveries`、`notification_audit_logs` 四张表 |
+| 本地验证 | Java 21 完整构建 57 项测试通过；所有前端模块语法检查通过；本地 `dev` 服务 HTTP 200 |
+| 发布状态 | 等待数据库备份、迁移、部署与生产验证 |
+
+---
+
 ## 2026-07-16 Java 17 升级 Java 21
 
 | 项目 | 记录 |
