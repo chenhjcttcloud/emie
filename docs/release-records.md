@@ -13,6 +13,21 @@
 
 ---
 
+## 2026-07-16 IP 二级选项
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 发布成功 |
+| 目标分支 / 应用提交 | `project_manager_system` / `a87a67df8abe9372a216be236e282fe62d3e242c` |
+| 变更范围 | 一级 IP 支持维护二级项与单选/多选规则；两类新建项目页按一级 IP 动态展示标签式二级选择；项目保存并展示实际二级 IP；前端资源 `v137` |
+| 数据库迁移 | `db/migrations/2026-07-16-add-ip-secondary-options.sql` 已执行，新增 `ip_options.sub_options_json`、`ip_options.sub_option_selection_mode`、`projects.ip_sub_options` 三列并核验 |
+| 本地验证 | Java 21 `./mvnw clean package`：60 项测试通过；全部前端 JS 语法检查通过；本地测试库字段与 `8080` 健康检查通过 |
+| 数据库备份 | `/root/emie/db-backup-before-a87a67d-20260716_160418.sql.gz`，25787 字节，`gzip -t` 通过 |
+| 应用回滚包 | `/root/emie/app.jar.bak.pre-a87a67df8abe9372a216be236e282fe62d3e242c-20260716_160538` |
+| 生产验证 | `emie-app` 与 `emie-preview-converter` 正常；生产运行 SHA 为 `a87a67df8abe9372a216be236e282fe62d3e242c`；公开配置 HTTP 200；首页加载 `bootstrap.js?v=137`；应用启动日志无严重错误 |
+
+---
+
 ## 2026-07-16 工作流通知与飞书跳转修复
 
 | 项目 | 记录 |
