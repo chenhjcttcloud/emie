@@ -3,6 +3,7 @@ package com.emie.designpm.controller;
 import com.emie.designpm.entity.SystemConfig;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.service.AdminService;
+import com.emie.designpm.service.NotificationTestService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -14,9 +15,11 @@ import java.util.*;
 public class AdminController {
 
     private final AdminService adminService;
+    private final NotificationTestService notificationTestService;
 
-    public AdminController(AdminService adminService) {
+    public AdminController(AdminService adminService, NotificationTestService notificationTestService) {
         this.adminService = adminService;
+        this.notificationTestService = notificationTestService;
     }
 
     // ==================== 公开配置 ====================
@@ -45,6 +48,21 @@ public class AdminController {
         String updatedBy = getUserFromToken(token);
         adminService.updateConfigs(configs, updatedBy);
         return ResponseEntity.ok(Map.of("message", "配置已更新"));
+    }
+
+    /** 保存配置后，向当前管理员验证站内及飞书通知渠道。 */
+    @PostMapping("/notifications/test")
+    public ResponseEntity<Map<String, Object>> sendNotificationTest(
+            @RequestHeader("X-Auth-Token") String token) {
+        AuthController.AuthSession session = AuthController.validateToken(token);
+        if (session == null || !"admin".equals(session.role())) {
+            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可发送通知测试"));
+        }
+        try {
+            return ResponseEntity.ok(notificationTestService.sendTest(session.userId()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     /** 上传管理图片（logo / login-bg） */

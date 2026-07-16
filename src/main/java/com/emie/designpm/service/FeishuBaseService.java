@@ -172,6 +172,29 @@ public class FeishuBaseService {
         return cachedToken;
     }
 
+    /**
+     * 向已绑定飞书 Open ID 的用户发送交互式卡片消息。
+     * 该能力与多维表格同步共用 tenant_access_token，避免在通知模块重复管理应用凭据。
+     */
+    public String sendInteractiveMessage(String openId, String cardContent) throws Exception {
+        if (openId == null || openId.isBlank()) {
+            throw new IllegalArgumentException("收件人的飞书 Open ID 未绑定");
+        }
+        ObjectNode body = json.createObjectNode();
+        body.put("receive_id", openId);
+        body.put("msg_type", "interactive");
+        body.put("content", cardContent);
+
+        JsonNode root = json.readTree(bearerPost(
+                API + "/im/v1/messages?receive_id_type=open_id", getToken(), body.toString()));
+        checkResponse(root, "发送飞书通知");
+        String messageId = root.path("data").path("message_id").asText();
+        if (messageId.isBlank()) {
+            throw new Exception("发送飞书通知失败：响应中缺少 message_id");
+        }
+        return messageId;
+    }
+
     // ==================== 初始化（机器人自动创建 Base + 表）====================
 
     /**

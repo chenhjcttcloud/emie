@@ -14,6 +14,7 @@ const showAdminToast = (...args) => EMIE.actions.showAdminToast(...args);
 const renderAdminWorkload = (...args) => EMIE.actions.renderAdminWorkload(...args);
 const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const apiPut = (...args) => EMIE.actions.apiPut(...args);
+const apiPost = (...args) => EMIE.actions.apiPost(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
 
 // EMIE 系统管理：配置、用户、角色、业务选项、组织、日志、归档与工作量
@@ -159,6 +160,7 @@ async function renderAdminConfig(container) {
       <div class="config-card" data-group="${group}">
         <div class="config-card-header">
           <h3>${groupLabel(group)}</h3>
+          ${group === 'notification' ? '<button class="btn btn-sm btn-secondary" data-emie-onclick="sendNotificationTest()">🧪 保存并发送测试</button>' : ''}
           <button class="btn btn-sm btn-primary" data-emie-onclick="saveConfigGroup('${group}')">💾 保存</button>
         </div>
         <div class="config-card-body">
@@ -202,6 +204,20 @@ async function saveConfigGroup(group) {
     showAdminToast('✅ 配置已保存', 'success');
   } catch (e) {
     showAdminToast('❌ 保存失败: ' + e.message, 'error');
+  }
+}
+
+async function sendNotificationTest() {
+  const card = document.querySelector('.config-card[data-group="notification"]');
+  if (!card) return;
+  const configs = {};
+  card.querySelectorAll('.config-input').forEach(inp => { configs[inp.dataset.key] = inp.value; });
+  try {
+    await apiPut('/admin/configs', { configs });
+    const result = await apiPost('/admin/notifications/test', {});
+    showAdminToast('✅ ' + result.message, 'success');
+  } catch (e) {
+    showAdminToast('❌ 测试失败: ' + e.message, 'error');
   }
 }
 
@@ -354,6 +370,7 @@ EMIE.registerActions({
   groupLabel,
   renderAdminConfig,
   saveConfigGroup,
+  sendNotificationTest,
   renderAdminAppearance,
   uploadAdminImage,
   removeAdminImage,
@@ -367,6 +384,7 @@ EMIE.registerModule('adminShell', {
   renderAdminDashboard,
   renderAdminConfig,
   saveConfigGroup,
+  sendNotificationTest,
   renderAdminAppearance,
   uploadAdminImage,
   removeAdminImage,
