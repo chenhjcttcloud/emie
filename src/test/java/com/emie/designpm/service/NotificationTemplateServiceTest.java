@@ -2,15 +2,18 @@ package com.emie.designpm.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.emie.designpm.repository.SystemConfigRepository;
+import com.emie.designpm.entity.SystemConfig;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.*;
 
 class NotificationTemplateServiceTest {
-    private final NotificationTemplateService service = new NotificationTemplateService(mock(SystemConfigRepository.class));
+    private final SystemConfigRepository configs = mock(SystemConfigRepository.class);
+    private final NotificationTemplateService service = new NotificationTemplateService(configs);
 
     @Test
     void redeliveryTemplateKeepsDeliveryCountAndRejectionReason() throws Exception {
@@ -27,5 +30,16 @@ class NotificationTemplateServiceTest {
             assertTrue(result.mandatory(), event + " 必须为必达通知");
             assertFalse(result.feishuCardJson().isBlank());
         }
+    }
+
+    @Test
+    void configuredTemplateOverridesDefaultAndResolvesVariables() {
+        when(configs.findByConfigKey("notification.template.TASK_ASSIGNED.title"))
+                .thenReturn(Optional.of(SystemConfig.builder().configValue("请处理：{{taskName}}").build()));
+        when(configs.findByConfigKey("notification.template.TASK_ASSIGNED.content"))
+                .thenReturn(Optional.of(SystemConfig.builder().configValue("{{actorName}}派发了{{projectName}}，截止{{deadline}}").build()));
+        var result = service.render("TASK_ASSIGNED", Map.of("projectName", "环球杯子", "taskName", "小黄人包装", "actorName", "小李", "deadline", "2026-07-20"));
+        assertEquals("请处理：小黄人包装", result.title());
+        assertEquals("小李派发了环球杯子，截止2026-07-20", result.content());
     }
 }

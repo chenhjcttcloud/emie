@@ -65,7 +65,7 @@ public class AdminService {
     }
 
     private void initDefaultConfigs() {
-        List<SystemConfig> defaults = Arrays.asList(
+        List<SystemConfig> defaults = new ArrayList<>(Arrays.asList(
             // ===== 外观配置 =====
             SystemConfig.builder().configKey("app.title").configValue("产品管理系统").configGroup("appearance")
                 .description("系统标题").valueType("text").sortOrder(1).build(),
@@ -177,13 +177,43 @@ public class AdminService {
                 .description("逾期后升级提醒负责人或管理员的等待时长（小时）").valueType("number").sortOrder(8).build(),
             SystemConfig.builder().configKey("notification.dailyDigestEnabled").configValue("true").configGroup("notification")
                 .description("启用普通动态摘要；摘要仅补充展示，不替代必达通知").valueType("boolean").sortOrder(9).build()
-        );
+        ));
+        addNotificationTemplateDefaults(defaults);
 
         // 只插入缺失的配置项（不覆盖已有值）
         for (SystemConfig cfg : defaults) {
             if (configRepository.findByConfigKey(cfg.getConfigKey()).isEmpty()) {
                 configRepository.save(cfg);
             }
+        }
+    }
+
+    private void addNotificationTemplateDefaults(List<SystemConfig> defaults) {
+        String variables = "可用变量：{{projectName}}、{{taskName}}、{{actorName}}、{{deadline}}、{{reason}}、{{deliveryCount}}、{{reviewRole}}、{{targetName}}、{{message}}";
+        String[][] templates = {
+            {"PROJECT_ASSIGNED", "项目指派", "有新的项目待接单", "“{{projectName}}”已由{{actorName}}指定给你，请及时接单并安排任务。"},
+            {"TASK_ASSIGNED", "子任务派发", "有新的子任务待处理", "子任务“{{taskName}}”已指派给你，所属项目：{{projectName}}；计划完成：{{deadline}}。"},
+            {"TASK_REASSIGNED", "子任务改派", "有新的子任务待处理", "子任务“{{taskName}}”已改派给你，所属项目：{{projectName}}；计划完成：{{deadline}}。"},
+            {"TASK_ACCEPTED", "子任务接单", "子任务已接单", "{{actorName}}已接单子任务“{{taskName}}”。"},
+            {"TASK_DELIVERED", "子任务首次交付", "子任务待审核", "{{actorName}}已交付子任务“{{taskName}}”，请查看成果并完成审核。"},
+            {"TASK_REJECTED", "子任务驳回", "子任务已驳回", "子任务“{{taskName}}”被驳回，原因：{{reason}}。请修改后重新交付。"},
+            {"TASK_REDELIVERED", "子任务再次交付", "子任务再次交付待审核", "{{actorName}}已第{{deliveryCount}}次交付“{{taskName}}”。上次驳回原因：{{reason}}。"},
+            {"REVIEW_PENDING", "审核待办", "有审核待办", "项目“{{projectName}}”的子任务“{{taskName}}”等待{{reviewRole}}审核。"},
+            {"REVIEW_APPROVED", "审核通过", "审核已通过", "“{{taskName}}”已由{{actorName}}审核通过。"},
+            {"REVIEW_REJECTED", "审核驳回", "审核已驳回", "“{{taskName}}”审核未通过，原因：{{reason}}。"},
+            {"PROJECT_REMINDER", "项目催办", "待办催办提醒", "{{actorName}}提醒你处理“{{projectName}}”。当前负责人：{{targetName}}。"},
+            {"TASK_REMINDER", "子任务催办", "待办催办提醒", "{{actorName}}提醒你处理“{{taskName}}”。当前负责人：{{targetName}}。"},
+            {"TASK_DUE_SOON", "任务临期", "子任务即将到期", "子任务“{{taskName}}”将于{{deadline}}到期，请及时处理。"},
+            {"TASK_OVERDUE", "任务逾期", "子任务已逾期", "子任务“{{taskName}}”已超过计划完成时间{{deadline}}，请尽快处理。"},
+            {"SYSTEM_ALERT", "系统告警", "系统通知告警", "{{message}}"}
+        };
+        int order = 1;
+        for (String[] template : templates) {
+            String prefix = "notification.template." + template[0];
+            defaults.add(SystemConfig.builder().configKey(prefix + ".title").configValue(template[2]).configGroup("notification_templates")
+                    .description(template[1] + " — 通知标题").valueType("text").sortOrder(order++).build());
+            defaults.add(SystemConfig.builder().configKey(prefix + ".content").configValue(template[3]).configGroup("notification_templates")
+                    .description(template[1] + " — 通知正文；" + variables).valueType("textarea").sortOrder(order++).build());
         }
     }
 

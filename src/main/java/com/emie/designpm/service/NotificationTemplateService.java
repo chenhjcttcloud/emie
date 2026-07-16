@@ -37,25 +37,27 @@ public class NotificationTemplateService {
         String target = value(context, "targetName", "相关负责人");
 
         return switch (eventType) {
-            case "PROJECT_ASSIGNED" -> create("有新的项目待接单", "“" + project + "”已由" + actor + "指定给你，请及时接单并安排任务。", "high", true, projectLink(context), project, "项目待接单", deadline, actor);
-            case "TASK_ASSIGNED", "TASK_REASSIGNED" -> create("有新的子任务待处理", "子任务“" + task + "”已指派给你，所属项目：" + project + "；计划完成：" + deadline + "。", "high", true, taskLink(context), project, "子任务待处理：" + task, deadline, actor);
-            case "TASK_ACCEPTED" -> create("子任务已接单", actor + "已接单子任务“" + task + "”。", "normal", false, taskLink(context), project, "子任务已接单：" + task, deadline, actor);
-            case "TASK_DELIVERED" -> create("子任务待审核", actor + "已交付子任务“" + task + "”，请查看成果并完成审核。", "high", true, taskLink(context), project, "待审核：" + task, deadline, actor);
-            case "TASK_REJECTED" -> create("子任务已驳回", "子任务“" + task + "”被驳回，原因：" + reason + "。请修改后重新交付。", "high", true, taskLink(context), project, "已驳回：" + task, deadline, actor);
-            case "TASK_REDELIVERED" -> create("子任务再次交付待审核", actor + "已第" + deliveryCount + "次交付“" + task + "”。上次驳回原因：" + reason + "。", "high", true, taskLink(context), project, "再次交付待审核：" + task, deadline, actor);
-            case "REVIEW_PENDING" -> create("有审核待办", "项目“" + project + "”的子任务“" + task + "”等待" + reviewRole + "审核。", "high", true, reviewLink(context), project, "审核待办：" + task, deadline, actor);
-            case "REVIEW_APPROVED" -> create("审核已通过", "“" + task + "”已由" + actor + "审核通过。", "normal", false, reviewLink(context), project, "审核通过：" + task, deadline, actor);
-            case "REVIEW_REJECTED" -> create("审核已驳回", "“" + task + "”审核未通过，原因：" + reason + "。", "high", true, reviewLink(context), project, "审核驳回：" + task, deadline, actor);
-            case "PROJECT_REMINDER", "TASK_REMINDER" -> create("待办催办提醒", actor + "提醒你处理“" + ("PROJECT_REMINDER".equals(eventType) ? project : task) + "”。当前负责人：" + target + "。", "high", true, "PROJECT_REMINDER".equals(eventType) ? projectLink(context) : taskLink(context), project, "催办提醒", deadline, actor);
-            case "TASK_DUE_SOON" -> create("子任务即将到期", "子任务“" + task + "”将于" + deadline + "到期，请及时处理。", "high", true, taskLink(context), project, "即将到期：" + task, deadline, actor);
-            case "TASK_OVERDUE" -> create("子任务已逾期", "子任务“" + task + "”已超过计划完成时间" + deadline + "，请尽快处理。", "urgent", true, taskLink(context), project, "已逾期：" + task, deadline, actor);
-            case "SYSTEM_ALERT" -> create("系统通知告警", value(context, "message", "系统检测到需要处理的异常。"), "urgent", true, "/admin?tab=logs", project, "系统告警", deadline, actor);
+            case "PROJECT_ASSIGNED" -> create(eventType, "有新的项目待接单", "“{{projectName}}”已由{{actorName}}指定给你，请及时接单并安排任务。", "high", true, projectLink(context), project, "项目待接单", deadline, actor, context);
+            case "TASK_ASSIGNED", "TASK_REASSIGNED" -> create(eventType, "有新的子任务待处理", "子任务“{{taskName}}”已指派给你，所属项目：{{projectName}}；计划完成：{{deadline}}。", "high", true, taskLink(context), project, "子任务待处理：" + task, deadline, actor, context);
+            case "TASK_ACCEPTED" -> create(eventType, "子任务已接单", "{{actorName}}已接单子任务“{{taskName}}”。", "normal", false, taskLink(context), project, "子任务已接单：" + task, deadline, actor, context);
+            case "TASK_DELIVERED" -> create(eventType, "子任务待审核", "{{actorName}}已交付子任务“{{taskName}}”，请查看成果并完成审核。", "high", true, taskLink(context), project, "待审核：" + task, deadline, actor, context);
+            case "TASK_REJECTED" -> create(eventType, "子任务已驳回", "子任务“{{taskName}}”被驳回，原因：{{reason}}。请修改后重新交付。", "high", true, taskLink(context), project, "已驳回：" + task, deadline, actor, context);
+            case "TASK_REDELIVERED" -> create(eventType, "子任务再次交付待审核", "{{actorName}}已第{{deliveryCount}}次交付“{{taskName}}”。上次驳回原因：{{reason}}。", "high", true, taskLink(context), project, "再次交付待审核：" + task, deadline, actor, context);
+            case "REVIEW_PENDING" -> create(eventType, "有审核待办", "项目“{{projectName}}”的子任务“{{taskName}}”等待{{reviewRole}}审核。", "high", true, reviewLink(context), project, "审核待办：" + task, deadline, actor, context);
+            case "REVIEW_APPROVED" -> create(eventType, "审核已通过", "“{{taskName}}”已由{{actorName}}审核通过。", "normal", false, reviewLink(context), project, "审核通过：" + task, deadline, actor, context);
+            case "REVIEW_REJECTED" -> create(eventType, "审核已驳回", "“{{taskName}}”审核未通过，原因：{{reason}}。", "high", true, reviewLink(context), project, "审核驳回：" + task, deadline, actor, context);
+            case "PROJECT_REMINDER", "TASK_REMINDER" -> create(eventType, "待办催办提醒", "{{actorName}}提醒你处理“{{targetName}}”。当前负责人：{{targetName}}。", "high", true, "PROJECT_REMINDER".equals(eventType) ? projectLink(context) : taskLink(context), project, "催办提醒", deadline, actor, context);
+            case "TASK_DUE_SOON" -> create(eventType, "子任务即将到期", "子任务“{{taskName}}”将于{{deadline}}到期，请及时处理。", "high", true, taskLink(context), project, "即将到期：" + task, deadline, actor, context);
+            case "TASK_OVERDUE" -> create(eventType, "子任务已逾期", "子任务“{{taskName}}”已超过计划完成时间{{deadline}}，请尽快处理。", "urgent", true, taskLink(context), project, "已逾期：" + task, deadline, actor, context);
+            case "SYSTEM_ALERT" -> create(eventType, "系统通知告警", "{{message}}", "urgent", true, "/admin?tab=logs", project, "系统告警", deadline, actor, context);
             default -> throw new IllegalArgumentException("未定义的通知事件模板: " + eventType);
         };
     }
 
-    private Template create(String title, String content, String priority, boolean mandatory, String deepLink,
-                            String project, String subject, String deadline, String actor) {
+    private Template create(String eventType, String defaultTitle, String defaultContent, String priority, boolean mandatory, String deepLink,
+                            String project, String subject, String deadline, String actor, Map<String, String> context) {
+        String title = renderVariables(configured(eventType, "title", defaultTitle), context);
+        String content = renderVariables(configured(eventType, "content", defaultContent), context);
         return new Template(title, content, priority, mandatory, deepLink,
                 card(title, project, subject, deadline, actor, content, deepLink));
     }
@@ -102,5 +104,26 @@ public class NotificationTemplateService {
                 .orElse("");
         if (!baseUrl.matches("https?://.+")) return "";
         return baseUrl.replaceAll("/+$", "") + (deepLink.startsWith("/") ? deepLink : "/" + deepLink);
+    }
+
+    private String configured(String eventType, String field, String fallback) {
+        return configRepository.findByConfigKey("notification.template." + eventType + "." + field)
+                .map(SystemConfig::getConfigValue).filter(value -> !value.isBlank()).orElse(fallback);
+    }
+
+    private String renderVariables(String template, Map<String, String> context) {
+        Map<String, String> variables = Map.of(
+                "projectName", value(context, "projectName", "未命名项目"),
+                "taskName", value(context, "taskName", "未命名子任务"),
+                "actorName", value(context, "actorName", "系统"),
+                "deadline", value(context, "deadline", "未设置"),
+                "reason", value(context, "reason", "无"),
+                "deliveryCount", value(context, "deliveryCount", ""),
+                "reviewRole", value(context, "reviewRole", "当前审核人"),
+                "targetName", value(context, "targetName", value(context, "taskName", value(context, "projectName", "相关事项"))),
+                "message", value(context, "message", "系统检测到需要处理的异常。"));
+        String result = template;
+        for (Map.Entry<String, String> entry : variables.entrySet()) result = result.replace("{{" + entry.getKey() + "}}", entry.getValue());
+        return result;
     }
 }

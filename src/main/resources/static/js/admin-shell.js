@@ -30,6 +30,7 @@ async function renderAdmin(main, role, uid) {
       <div class="admin-tabs" id="adminTabs">
         <button class="admin-tab ${EMIE.adminState.currentTab === 'dashboard' ? 'active' : ''}" data-emie-onclick="switchAdminTab('dashboard')">📊 概览</button>
         <button class="admin-tab ${EMIE.adminState.currentTab === 'config' ? 'active' : ''}" data-emie-onclick="switchAdminTab('config')">🔧 系统配置</button>
+        <button class="admin-tab ${EMIE.adminState.currentTab === 'notificationTemplates' ? 'active' : ''}" data-emie-onclick="switchAdminTab('notificationTemplates')">💬 通知文案</button>
         <button class="admin-tab ${EMIE.adminState.currentTab === 'appearance' ? 'active' : ''}" data-emie-onclick="switchAdminTab('appearance')">🎨 外观</button>
         <button class="admin-tab ${EMIE.adminState.currentTab === 'users' ? 'active' : ''}" data-emie-onclick="switchAdminTab('users')">👥 用户管理</button>
         <button class="admin-tab ${EMIE.adminState.currentTab === 'roles' ? 'active' : ''}" data-emie-onclick="switchAdminTab('roles')">🔐 角色管理</button>
@@ -67,6 +68,8 @@ async function renderAdminContent() {
       await renderAdminDashboard(container);
     } else if (EMIE.adminState.currentTab === 'config') {
       await renderAdminConfig(container);
+    } else if (EMIE.adminState.currentTab === 'notificationTemplates') {
+      await renderAdminNotificationTemplates(container);
     } else if (EMIE.adminState.currentTab === 'appearance') {
       await renderAdminAppearance(container);
     } else if (EMIE.adminState.currentTab === 'users') {
@@ -145,7 +148,7 @@ async function renderAdminDashboard(container) {
 }
 
 function groupLabel(group) {
-  return { appearance: '🎨 外观设置', security: '🔒 安全设置', system: '💻 系统信息', feishu: '💬 飞书 SSO 登录', nas: '🗄️ NAS 归档', feishu_base: '📊 飞书多维表格', notification: '🔔 通知中心' }[group] || group;
+  return { appearance: '🎨 外观设置', security: '🔒 安全设置', system: '💻 系统信息', feishu: '💬 飞书 SSO 登录', nas: '🗄️ NAS 归档', feishu_base: '📊 飞书多维表格', notification: '🔔 通知中心', notification_templates: '💬 飞书通知模板' }[group] || group;
 }
 
 // ===== Admin: 系统配置 =====
@@ -155,7 +158,7 @@ async function renderAdminConfig(container) {
 
   let html = '';
   for (const [group, items] of Object.entries(configs)) {
-    if (group === 'appearance') continue; // 外观有独立页面
+    if (group === 'appearance' || group === 'notification_templates') continue; // 独立页面管理
     html += `
       <div class="config-card" data-group="${group}">
         <div class="config-card-header">
@@ -171,6 +174,8 @@ async function renderAdminConfig(container) {
                 <span class="config-desc">${escHtml(item.description || '')}</span>
                 ${item.valueType === 'password'
                   ? `<input type="password" class="config-input" data-key="${item.configKey}" value="${escHtml(item.configValue || '')}" placeholder="${item.description}" autocomplete="off">`
+                  : item.valueType === 'textarea'
+                    ? `<textarea class="config-input" data-key="${item.configKey}" rows="3" placeholder="${escHtml(item.description || '')}">${escHtml(item.configValue || '')}</textarea>`
                   : item.valueType === 'number'
                     ? `<input type="number" class="config-input" data-key="${item.configKey}" value="${escHtml(item.configValue || '')}" placeholder="${item.description}">`
                     : item.valueType === 'boolean'
@@ -218,6 +223,76 @@ async function sendNotificationTest() {
     showAdminToast('✅ ' + result.message, 'success');
   } catch (e) {
     showAdminToast('❌ 测试失败: ' + e.message, 'error');
+  }
+}
+
+const NOTIFICATION_TEMPLATE_SCENARIOS = [
+  ['PROJECT_ASSIGNED', '项目指派', '项目被指定给产品企划时'],
+  ['TASK_ASSIGNED', '子任务派发', '子任务首次指派给负责人时'],
+  ['TASK_REASSIGNED', '子任务改派', '子任务改派给新负责人时'],
+  ['TASK_ACCEPTED', '子任务接单', '负责人确认接单时'],
+  ['TASK_DELIVERED', '首次交付', '负责人提交成果、等待审核时'],
+  ['TASK_REJECTED', '驳回修改', '审核人驳回成果时'],
+  ['TASK_REDELIVERED', '再次交付', '驳回后再次提交成果时'],
+  ['REVIEW_PENDING', '审核待办', '有审核任务等待处理时'],
+  ['REVIEW_APPROVED', '审核通过', '审核通过时'],
+  ['REVIEW_REJECTED', '审核驳回', '审核不通过时'],
+  ['PROJECT_REMINDER', '项目催办', '项目负责人被催办时'],
+  ['TASK_REMINDER', '子任务催办', '子任务负责人被催办时'],
+  ['TASK_DUE_SOON', '即将到期', '子任务临近截止日期时'],
+  ['TASK_OVERDUE', '任务逾期', '子任务超过截止日期时'],
+  ['SYSTEM_ALERT', '系统告警', '系统需要人工关注时'],
+];
+
+const NOTIFICATION_VARIABLES = [
+  ['项目名称', '{{projectName}}'], ['任务名称', '{{taskName}}'], ['操作人', '{{actorName}}'],
+  ['截止时间', '{{deadline}}'], ['驳回原因', '{{reason}}'], ['交付次数', '{{deliveryCount}}'],
+  ['审核角色', '{{reviewRole}}'], ['负责人', '{{targetName}}'], ['告警内容', '{{message}}'],
+];
+
+async function renderAdminNotificationTemplates(container) {
+  container.innerHTML = '<div class="loading">加载中</div>';
+  const groups = await apiGet('/admin/configs');
+  const configs = Object.fromEntries((groups.notification_templates || []).map(item => [item.configKey, item.configValue || '']));
+  const variableButtons = (event, field) => NOTIFICATION_VARIABLES.map(([label, token]) =>
+    `<button type="button" class="btn btn-outline btn-sm" style="padding:3px 7px;font-size:11px;" data-emie-onclick="insertNotificationVariable('${event}','${field}','${token}')">＋${label}</button>`).join('');
+  container.innerHTML = `
+    <div class="config-card">
+      <div class="config-card-header"><h3>💬 飞书通知文案</h3><button class="btn btn-primary" data-emie-onclick="saveNotificationTemplates()">💾 保存全部文案</button></div>
+      <div class="config-card-body">
+        <div style="padding:12px 14px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;color:#1E40AF;font-size:13px;line-height:1.7;margin-bottom:18px;">直接修改成你希望员工看到的中文即可。需要自动带入项目或任务信息时，点击下方蓝色按钮插入，不需要记任何技术写法。保存后，下一条飞书通知会立即使用新文案。</div>
+        ${NOTIFICATION_TEMPLATE_SCENARIOS.map(([event, label, when]) => {
+          const prefix = `notification.template.${event}`;
+          return `<div style="border:1px solid var(--gray-200);border-radius:10px;padding:16px;margin-bottom:12px;background:#fff;">
+            <div style="font-size:15px;font-weight:650;color:var(--gray-800);margin-bottom:4px;">${escHtml(label)}</div>
+            <div style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">发送时机：${escHtml(when)}</div>
+            <div class="form-group" style="margin-bottom:12px;"><label class="form-label">通知标题</label><input class="form-input notification-template-input" data-key="${prefix}.title" id="notificationTemplateTitle_${event}" value="${escHtml(configs[`${prefix}.title`] || '')}" maxlength="100"></div>
+            <div class="form-group" style="margin-bottom:8px;"><label class="form-label">通知正文</label><textarea class="form-textarea notification-template-input" data-key="${prefix}.content" id="notificationTemplateContent_${event}" rows="3">${escHtml(configs[`${prefix}.content`] || '')}</textarea></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"><span style="font-size:12px;color:var(--gray-500);margin-right:2px;">点击插入：</span>${variableButtons(event, 'content')}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+function insertNotificationVariable(event, field, token) {
+  const input = document.getElementById(`notificationTemplate${field === 'title' ? 'Title' : 'Content'}_${event}`);
+  if (!input) return;
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? start;
+  input.value = input.value.slice(0, start) + token + input.value.slice(end);
+  input.focus();
+  input.setSelectionRange(start + token.length, start + token.length);
+}
+
+async function saveNotificationTemplates() {
+  const configs = {};
+  document.querySelectorAll('.notification-template-input').forEach(input => { configs[input.dataset.key] = input.value.trim(); });
+  try {
+    await apiPut('/admin/configs', { configs });
+    showAdminToast('✅ 飞书通知文案已保存，下一条通知将使用新文案', 'success');
+  } catch (e) {
+    showAdminToast('❌ 保存失败：' + e.message, 'error');
   }
 }
 
@@ -371,6 +446,9 @@ EMIE.registerActions({
   renderAdminConfig,
   saveConfigGroup,
   sendNotificationTest,
+  renderAdminNotificationTemplates,
+  insertNotificationVariable,
+  saveNotificationTemplates,
   renderAdminAppearance,
   uploadAdminImage,
   removeAdminImage,
@@ -385,6 +463,9 @@ EMIE.registerModule('adminShell', {
   renderAdminConfig,
   saveConfigGroup,
   sendNotificationTest,
+  renderAdminNotificationTemplates,
+  insertNotificationVariable,
+  saveNotificationTemplates,
   renderAdminAppearance,
   uploadAdminImage,
   removeAdminImage,
