@@ -36,8 +36,9 @@
 
 ### 2026-07-16 JVM 内存收紧
 
-- 生产 JVM 参数调整为 `-Xmx192m -Xms64m -XX:MaxMetaspaceSize=96m -XX:+UseSerialGC`；发布前已在本地 Java 21 实例完成启动、Tomcat、JPA 与数据库连接验证。
-- 生产重建后容器重启次数 0，首页和公开配置接口 HTTP 200，无 OOM；应用 RSS 从约 342MiB 降至约 290.5MiB，释放约 52MiB。
+- 生产 JVM 堆调整为 `-Xmx192m -Xms64m`；发布前已在本地 Java 21 实例完成启动、Tomcat、JPA 与数据库连接验证。
+- 初次将 Metaspace 收紧至 96MiB 后，生产出现 `OutOfMemoryError: Metaspace` 并导致项目查看请求 500；已恢复为 `-XX:MaxMetaspaceSize=128m` 并重启，容器重启次数 0，首页和公开配置接口 HTTP 200。
+- 全部项目、渠道/常规品、我的子任务、待评分等“查看项目”入口共用 `GET /api/projects/{id}`，本次异常为全局运行时内存不足，不是单独页面逻辑错误。
 - 生产切换前保持 Java 17 回滚包和数据库备份流程不变。
 
 ---
