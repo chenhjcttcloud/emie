@@ -15,6 +15,8 @@ const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const displayText = (...args) => EMIE.actions.displayText(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
 const refreshAfterMutation = (...args) => EMIE.actions.refreshAfterMutation(...args);
+const renderProjectDetailContent = (...args) => EMIE.actions.renderProjectDetailContent(...args);
+const renderProjectActions = (...args) => EMIE.actions.renderProjectActions(...args);
 const switchAssigneeType = (...args) => EMIE.actions.switchAssigneeType(...args);
 const switchEditAssigneeType = (...args) => EMIE.actions.switchEditAssigneeType(...args);
 const handleFileUpload = (...args) => EMIE.actions.handleFileUpload(...args);
@@ -186,9 +188,13 @@ async function submitAddSubTask(pid) {
   data.attachmentsJson = JSON.stringify(EMIE.projectState.subTaskAttachments.map(a => ({name: a.name, url: a.url, size: a.size, storedName: a.storedName})));
 
   try {
-    await apiPost(`/projects/${pid}/tasks`, data);
+    const detail = await apiPost(`/projects/${pid}/tasks`, data);
     sessionStorage.removeItem(`design_pm_subtask_draft_${pid}`);
     closeM('addSubTaskModal');
+    const detailBody = document.querySelector('#projectDetailModal .modal-body');
+    const detailActions = document.getElementById('detailActions');
+    if (detailBody) detailBody.innerHTML = renderProjectDetailContent(detail);
+    if (detailActions) detailActions.innerHTML = renderProjectActions(detail);
     await refreshAfterMutation(pid);
   } catch (e) {
     alert('添加失败: ' + (e.message || '未知错误'));

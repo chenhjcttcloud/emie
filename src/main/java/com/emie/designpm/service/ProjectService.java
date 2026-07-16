@@ -7,6 +7,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -15,6 +17,7 @@ import java.util.stream.Collectors;
 @Service
 @Transactional
 public class ProjectService {
+    private static final Logger log = LoggerFactory.getLogger(ProjectService.class);
 
     private final ProjectRepository projectRepository;
     private final SubTaskRepository subTaskRepository;
@@ -218,7 +221,7 @@ public class ProjectService {
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(refImagesJson, "project", saved.getId());
         fileArchiveService.bindFilesFromJson(attsJson, "project", saved.getId());
-        notificationWorkflowService.notifyUser("PROJECT_ASSIGNED", saved.getPlannerId(), "project", saved.getId(), currentUserId,
+        safeNotify("PROJECT_ASSIGNED", saved.getPlannerId(), "project", saved.getId(), currentUserId,
                 notificationContext(saved, null, currentUser, ""));
         return saved;
     }
@@ -304,8 +307,12 @@ public class ProjectService {
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
-        notificationWorkflowService.notifyUser("TASK_ASSIGNED", task.getDesignerId(), "sub_task", task.getId(),
-                (String) body.getOrDefault("currentUserId", ""), notificationContext(p, task, currentUser, ""));
+        SubTask persistedTask = saved.getTasks().stream()
+                .filter(candidate -> Objects.equals(candidate.getName(), task.getName())
+                        && Objects.equals(candidate.getDesignerId(), task.getDesignerId()))
+                .reduce((first, second) -> second).orElse(task);
+        safeNotify("TASK_ASSIGNED", persistedTask.getDesignerId(), "sub_task", persistedTask.getId(),
+                (String) body.getOrDefault("currentUserId", ""), notificationContext(saved, persistedTask, currentUser, ""));
         return saved;
     }
 
@@ -374,13 +381,22 @@ public class ProjectService {
         context.put("projectName", project.getProductName());
         context.put("deadline", task != null ? task.getPlannedDate() : project.getDeadline());
         context.put("actorName", actor == null || actor.isBlank() ? "系统" : actor);
-        context.put("projectLink", "/");
+        context.put("projectLink", "/?projectId=" + project.getId());
         if (task != null) {
             context.put("taskName", task.getName());
-            context.put("taskLink", "/");
+            context.put("taskLink", "/?projectId=" + project.getId() + "&taskId=" + task.getId());
         }
         if (reason != null && !reason.isBlank()) context.put("reason", reason);
         return context;
+    }
+
+    private void safeNotify(String eventType, String recipientUserId, String aggregateType, Long aggregateId,
+                            String actorUserId, Map<String, String> context) {
+        try {
+            notificationWorkflowService.notifyUser(eventType, recipientUserId, aggregateType, aggregateId, actorUserId, context);
+        } catch (Exception e) {
+            log.error("通知创建失败但业务操作继续: eventType={}, aggregate={}#{}", eventType, aggregateType, aggregateId, e);
+        }
     }
 
     private String toJson(Object value) {
@@ -514,7 +530,7 @@ public class ProjectService {
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
-        notificationWorkflowService.notifyUser("TASK_DELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
+        safeNotify("TASK_DELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
                 notificationContext(p, task, currentUser, ""));
         return saved;
     }
@@ -559,7 +575,7 @@ public class ProjectService {
         Project saved = projectRepository.save(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
-        notificationWorkflowService.notifyUser("TASK_REDELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
+        safeNotify("TASK_REDELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
                 notificationContext(p, task, currentUser, task.getReviewComments()));
         return saved;
     }
@@ -772,7 +788,7 @@ public class ProjectService {
         task.setReviewComments(comments);
         p.getLogs().add(new ActivityLog("子任务驳回：" + task.getName() + "（意见：" + comments + "）", currentUser, currentRole, p));
         Project saved = projectRepository.save(p);
-        notificationWorkflowService.notifyUser("TASK_REJECTED", task.getDesignerId(), "sub_task", task.getId(), currentUserId,
+        safeNotify("TASK_REJECTED", task.getDesignerId(), "sub_task", task.getId(), currentUserId,
                 notificationContext(p, task, currentUser, comments));
         return saved;
     }

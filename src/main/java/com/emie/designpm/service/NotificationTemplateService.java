@@ -1,5 +1,7 @@
 package com.emie.designpm.service;
 
+import com.emie.designpm.entity.SystemConfig;
+import com.emie.designpm.repository.SystemConfigRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -15,6 +17,11 @@ import java.util.Map;
 public class NotificationTemplateService {
 
     private static final ObjectMapper JSON = new ObjectMapper();
+    private final SystemConfigRepository configRepository;
+
+    public NotificationTemplateService(SystemConfigRepository configRepository) {
+        this.configRepository = configRepository;
+    }
 
     public record Template(String title, String content, String priority, boolean mandatory,
                            String deepLink, String feishuCardJson) {}
@@ -62,11 +69,13 @@ public class NotificationTemplateService {
         ArrayNode elements = card.putObject("body").putArray("elements");
         elements.addObject().put("tag", "markdown").put("content", content);
         elements.addObject().put("tag", "markdown").put("content", "**项目**：" + project + "\n**事项**：" + subject + "\n**截止时间**：" + deadline + "\n**触发人**：" + actor);
-        if (deepLink != null && !deepLink.isBlank()) {
+        String cardLink = toPublicUrl(deepLink);
+        if (!cardLink.isBlank()) {
             ObjectNode button = elements.addObject();
             button.put("tag", "button").put("type", "primary");
+            button.put("element_id", "view_and_process");
             button.putObject("text").put("tag", "plain_text").put("content", "查看并处理");
-            button.putArray("behaviors").addObject().put("type", "open_url").put("default_url", deepLink);
+            button.putArray("behaviors").addObject().put("type", "open_url").put("default_url", cardLink);
         }
         try {
             return JSON.writeValueAsString(card);
@@ -81,5 +90,17 @@ public class NotificationTemplateService {
     private String value(Map<String, String> context, String key, String fallback) {
         String value = context.get(key);
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    /** 飞书卡片只接受含 scheme 的绝对 HTTP(S) 链接，内部相对路径不能直接作为按钮目标。 */
+    private String toPublicUrl(String deepLink) {
+        if (deepLink == null || deepLink.isBlank()) return "";
+        if (deepLink.startsWith("https://") || deepLink.startsWith("http://")) return deepLink;
+        String baseUrl = configRepository.findByConfigKey("notification.publicBaseUrl")
+                .map(SystemConfig::getConfigValue)
+                .map(String::trim)
+                .orElse("");
+        if (!baseUrl.matches("https?://.+")) return "";
+        return baseUrl.replaceAll("/+$", "") + (deepLink.startsWith("/") ? deepLink : "/" + deepLink);
     }
 }

@@ -1,14 +1,16 @@
 package com.emie.designpm.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.emie.designpm.repository.SystemConfigRepository;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
 
 class NotificationTemplateServiceTest {
-    private final NotificationTemplateService service = new NotificationTemplateService();
+    private final NotificationTemplateService service = new NotificationTemplateService(mock(SystemConfigRepository.class));
 
     @Test
     void redeliveryTemplateKeepsDeliveryCountAndRejectionReason() throws Exception {

@@ -3,6 +3,8 @@ package com.emie.designpm.service;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.repository.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -27,6 +29,7 @@ public class NotificationWorkflowService {
         this.audits = audits; this.users = users; this.configs = configs; this.feishu = feishu;
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void notifyUser(String eventType, String recipientUserId, String aggregateType, Long aggregateId,
                            String actorUserId, Map<String, String> context) {
         if (recipientUserId == null || recipientUserId.isBlank() || recipientUserId.equals(actorUserId)) return;

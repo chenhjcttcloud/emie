@@ -176,9 +176,19 @@ async function showApp() {
     await renderRoleSwitcher();
     renderSidebar();
     render();
+    openNotificationDeepLink();
   } finally {
     EMIE.state.showAppInProgress = false;
   }
+}
+
+function openNotificationDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const projectId = Number(params.get('projectId'));
+  if (!Number.isSafeInteger(projectId) || projectId <= 0 || EMIE.state.notificationDeepLinkOpened) return;
+  EMIE.state.notificationDeepLinkOpened = true;
+  window.history.replaceState({}, document.title, window.location.pathname);
+  setTimeout(() => EMIE.actions.openProjectDetail(projectId), 0);
 }
 
 function isPendingUser(user) {
@@ -446,6 +456,7 @@ EMIE.registerActions({
   showIdleLogoutModal,
   closeIdleLogoutModal,
   startIdleMonitor,
+  openNotificationDeepLink,
   roleLabel,
 });
 
@@ -462,6 +473,7 @@ EMIE.registerModule('coreAuth', {
   checkFeishuCallback,
   handleLogout,
   startIdleMonitor,
+  openNotificationDeepLink,
   closeIdleLogoutModal,
   roleLabel,
 });
