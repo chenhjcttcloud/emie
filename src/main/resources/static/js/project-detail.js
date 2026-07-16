@@ -28,6 +28,7 @@ const taskDeliver = (...args) => EMIE.actions.taskDeliver(...args);
 const taskRedeliver = (...args) => EMIE.actions.taskRedeliver(...args);
 const taskApprove = (...args) => EMIE.actions.taskApprove(...args);
 const taskReject = (...args) => EMIE.actions.taskReject(...args);
+const clearSWRCache = (...args) => EMIE.actions.clearSWRCache(...args);
 const openScoring = (...args) => EMIE.actions.openScoring(...args);
 
 // ==================== 项目详情 ====================
@@ -298,7 +299,7 @@ async function deleteProject(pid) {
       await apiDelete(`/projects/${pid}`);
       closeM('projectDetailModal');
       EMIE.state.cache.orders = [];
-      Object.keys(SWR_CACHE).forEach(k => delete SWR_CACHE[k]);
+      clearSWRCache();
       render();
     } catch(e) { alert('删除失败: ' + e.message); }
   });

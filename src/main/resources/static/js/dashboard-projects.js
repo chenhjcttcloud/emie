@@ -19,13 +19,14 @@ const renderProjectActions = (...args) => EMIE.actions.renderProjectActions(...a
 const pauseProject = (...args) => EMIE.actions.pauseProject(...args);
 const resumeProject = (...args) => EMIE.actions.resumeProject(...args);
 const plannerAcceptFromList = (...args) => EMIE.actions.plannerAcceptFromList(...args);
+const clearSWRCache = (...args) => EMIE.actions.clearSWRCache(...args);
 
 // EMIE 工作台：主渲染、状态看板、项目列表、任务列表与待评分视图
 /** 操作后增量刷新（轻量版：不重拉全量列表） */
 async function refreshAfterMutation(pid) {
   // 清除所有缓存
   EMIE.state.cache.orders = [];
-  Object.keys(SWR_CACHE).forEach(k => delete SWR_CACHE[k]);
+  clearSWRCache();
 
   // 并发：更新徽章 + 刷新视图
   await Promise.all([
