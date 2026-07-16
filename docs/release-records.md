@@ -13,6 +13,24 @@
 
 ---
 
+## 2026-07-17 项目服务端筛选与 CRUD 规范
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 发布成功 |
+| 旧生产提交 / 新生产提交 | `b6406fc7563849f4e9eb76e650f50ddf52b4187d` / `bc396bf1f1a96815f43e4803502a575b52ac99ab` |
+| 远端核对 | Gitee `emie/project_manager_system` 与本地新提交一致 |
+| 变更范围 | 项目状态、类目、市场、关键词、截止日期筛选下推到服务端分页；新增统一分页/参数错误 DTO、动态 Criteria 查询片段、CRUD 接口规范文档和组合索引迁移 |
+| 本地验证 | Java 21 `clean package` 成功，64/64 测试通过；全部前端 JS 语法检查与 `git diff --check` 通过 |
+| 数据库备份 | `/root/emie/db-backup-before-bc396bf-20260717_000222.sql.gz`，37510 字节，`gzip -t` 通过 |
+| 数据库迁移 | `2026-07-16-add-project-search-indexes.sql` 已执行；三个 `type/status/created_at` 相关项目索引均由 `information_schema.statistics` 核验存在 |
+| 应用回滚包 | `/root/emie/app.jar.bak.pre-bc396bf-20260717_000334` |
+| 产物核验 | 本地上传与生产 `app.jar` SHA-256 均为 `1a9272fd49613a9cdf7fd4bbc95b4f10f94554f2d3b3de981a7630e473d830f4` |
+| 生产验证 | `emie-app` 已重建并持续运行；`emie-preview-converter` 持续运行；公开配置与预览健康检查 HTTP 200；未登录分页接口返回预期 401；首页确认加载 `bootstrap.js?v=145`；本次启动日志无 `ERROR`、`Exception` 或 `Failed` |
+| 待人工验收 | 使用实际账号登录后验证项目列表的关键词、条件筛选与分页结果；自动化发布不使用或伪造用户登录会话 |
+
+---
+
 ## 2026-07-16 Excel 项目批量导入与 Java 21 统一入口
 
 | 项目 | 记录 |
