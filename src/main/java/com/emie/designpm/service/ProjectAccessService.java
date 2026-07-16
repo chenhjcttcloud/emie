@@ -2,6 +2,7 @@ package com.emie.designpm.service;
 
 import com.emie.designpm.controller.AuthController;
 import com.emie.designpm.entity.Department;
+import com.emie.designpm.dto.ProjectListQuery;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.DepartmentRepository;
@@ -50,18 +51,15 @@ public class ProjectAccessService {
     /** 项目列表分页：将角色可见范围和数据库分页合并，避免默认读取整张项目表。 */
     public Page<Project> findVisibleProjectsPage(String viewerRole, String viewerUserId, String type,
                                                   boolean participating, Pageable pageable) {
-        if ("admin".equals(viewerRole)) return projectRepository.findPageLight(type, pageable);
+        ProjectListQuery query = new ProjectListQuery(type, null, null, null, null, null, null, participating, pageable);
+        if ("admin".equals(viewerRole)) return projectRepository.findVisiblePage(query, viewerRole, List.of());
         List<String> userIds = visibleUserIds(viewerRole, viewerUserId, viewerRole);
-        if (userIds.isEmpty()) return Page.empty(pageable);
-        if (participating && ("designer".equals(viewerRole) || "supplychain".equals(viewerRole))) {
-            return projectRepository.findParticipatingByAssigneeIdsPage(userIds, viewerRole, type, pageable);
-        }
-        return switch (viewerRole) {
-            case "sales" -> projectRepository.findBySalesIdsPage(userIds, type, pageable);
-            case "planner" -> projectRepository.findByPlannerIdsPage(userIds, type, pageable);
-            case "designer", "supplychain" -> projectRepository.findByAssigneeIdsPage(userIds, viewerRole, type, pageable);
-            default -> Page.empty(pageable);
-        };
+        return projectRepository.findVisiblePage(query, viewerRole, userIds);
+    }
+
+    public Page<Project> findVisibleProjectsPage(String viewerRole, String viewerUserId, ProjectListQuery query) {
+        if ("admin".equals(viewerRole)) return projectRepository.findVisiblePage(query, viewerRole, List.of());
+        return projectRepository.findVisiblePage(query, viewerRole, visibleUserIds(viewerRole, viewerUserId, viewerRole));
     }
 
     public List<Project> findVisibleProjectsWithTasks(AuthController.AuthSession session) {

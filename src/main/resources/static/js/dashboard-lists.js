@@ -15,7 +15,7 @@ async function renderOrderList(main, type, role, uid) {
   else title = '📋 全部项目';
 
   const participating = role === 'designer' || role === 'supplychain';
-  const state = EMIE.projectListState = { type, role, uid, participating, page: 0, total: 0, totalPages: 0, allOrders: null, filteredOrders: null, loading: false };
+  const state = EMIE.projectListState = { type, role, uid, participating, page: 0, total: 0, totalPages: 0, filters: {}, loading: false };
   main.innerHTML = `<div class="project-query-loading"><span class="project-query-spinner"></span>正在查询项目…</div>`;
   const result = await loadProjectListPage(0);
 
@@ -62,14 +62,12 @@ async function renderOrderList(main, type, role, uid) {
 async function loadProjectListPage(page) {
   const state = EMIE.projectListState;
   if (!state) return { items: [], total: 0, totalPages: 0, page: 0 };
-  if (state.filteredOrders) {
-    const start = page * 15;
-    const items = state.filteredOrders.slice(start, start + 15);
-    return { items, total: state.filteredOrders.length, totalPages: Math.ceil(state.filteredOrders.length / 15), page };
-  }
   const params = new URLSearchParams({ page: String(page), size: '15' });
   if (state.type) params.set('type', state.type);
   if (state.participating) params.set('participating', 'true');
+  Object.entries(state.filters || {}).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
   const result = await apiGet(`/projects/page?${params}`);
   state.total = result.total || 0;
   state.totalPages = result.totalPages || 0;
@@ -90,8 +88,8 @@ function renderProjectTable(orders, options = {}) {
 
 function renderProjectPagination(currentCount) {
   const state = EMIE.projectListState || {};
-  const total = state.filteredOrders ? state.filteredOrders.length : state.total;
-  const pages = state.filteredOrders ? Math.ceil(total / 15) : state.totalPages;
+  const total = state.total;
+  const pages = state.totalPages;
   const page = state.page || 0;
   const from = total ? page * 15 + 1 : 0;
   const to = total ? page * 15 + currentCount : 0;
@@ -124,7 +122,7 @@ async function changeProjectListPage(page) {
 function jumpProjectListPage() {
   const state = EMIE.projectListState;
   const input = document.getElementById('projectPageJumpInput');
-  const pages = state?.filteredOrders ? Math.ceil(state.filteredOrders.length / 15) : state?.totalPages;
+  const pages = state?.totalPages;
   const requested = Number.parseInt(input?.value, 10);
   if (!Number.isInteger(requested) || requested < 1 || requested > pages) {
     alert(`请输入 1 至 ${pages || 1} 的页码`);
@@ -141,48 +139,17 @@ function filterProjectList() {
 async function applyFilterProjectList() {
   const state = EMIE.projectListState;
   if (!state) return;
-  if (!state.allOrders && !state.loading) {
-    const container = document.getElementById('projectListContainer');
-    state.loading = true;
-    if (container) container.innerHTML = renderProjectListLoading();
-    try {
-      const params = new URLSearchParams();
-      if (state.type) params.set('type', state.type);
-      if (state.participating) params.set('participating', 'true');
-      state.allOrders = await apiGet(`/projects?${params}`);
-    } finally {
-      state.loading = false;
-    }
-  }
-  let filtered = [...state.allOrders];
-
-  // 状态筛选
-  const currentFilter = document.getElementById('projectStatusFilter')?.value || 'all';
-  if (currentFilter === 'in_progress') filtered = filtered.filter(o => o.status === 'in_progress' || o.status === 'planner_accepted');
-  else if (currentFilter === 'draft') filtered = filtered.filter(o => o.status === 'draft');
-  else if (currentFilter === 'paused') filtered = filtered.filter(o => o.status === 'paused');
-  else if (currentFilter === 'completed') filtered = filtered.filter(o => o.status === 'completed');
-  else if (currentFilter === 'completed_pending_score') filtered = filtered.filter(o => o.status === 'completed_pending_score');
-  else if (currentFilter === 'pending_planner') filtered = filtered.filter(o => o.status === 'pending_planner');
-  else if (currentFilter === 'pending_terminate') filtered = filtered.filter(o => o.status === 'pending_terminate');
-  else if (currentFilter === 'terminated') filtered = filtered.filter(o => o.status === 'terminated');
-
+  const status = document.getElementById('projectStatusFilter')?.value || 'all';
   const category = document.getElementById('projectCategoryFilter')?.value || 'all';
-  if (category !== 'all') filtered = filtered.filter(o => o.productCategory === category);
-
   const market = document.getElementById('projectMarketFilter')?.value || 'all';
-  if (market !== 'all') filtered = filtered.filter(o => normalizeFilterText(o.targetMarket).includes(normalizeFilterText(market)));
-
-  // 关键字覆盖项目编号、名称、需求、人员、类目、市场和价格等可见字段
-  const q = document.getElementById('searchInput')?.value || '';
-  if (q) filtered = filtered.filter(o => projectMatchesKeyword(o, q));
-
-  // 日期范围筛选（按 deadline）
-  const dateStart = document.getElementById('filterDateStart')?.value;
-  const dateEnd = document.getElementById('filterDateEnd')?.value;
-  filtered = filtered.filter(o => isDateInRange(o.deadline, dateStart, dateEnd));
-
-  state.filteredOrders = filtered;
+  state.filters = {
+    ...(status !== 'all' ? { status } : {}),
+    ...(category !== 'all' ? { category } : {}),
+    ...(market !== 'all' ? { market } : {}),
+    ...(document.getElementById('searchInput')?.value?.trim() ? { keyword: document.getElementById('searchInput').value.trim() } : {}),
+    ...(document.getElementById('filterDateStart')?.value ? { deadlineStart: document.getElementById('filterDateStart').value } : {}),
+    ...(document.getElementById('filterDateEnd')?.value ? { deadlineEnd: document.getElementById('filterDateEnd').value } : {}),
+  };
   state.page = 0;
   await changeProjectListPage(0);
 }
@@ -200,7 +167,7 @@ function resetProjectFilters() {
   if (marketEl) marketEl.value = 'all';
   if (dateStartEl) dateStartEl.value = '';
   if (dateEndEl) dateEndEl.value = '';
-  if (EMIE.projectListState) EMIE.projectListState.filteredOrders = null;
+  if (EMIE.projectListState) EMIE.projectListState.filters = {};
   changeProjectListPage(0);
 }
 

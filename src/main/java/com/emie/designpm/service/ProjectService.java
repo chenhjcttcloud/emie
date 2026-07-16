@@ -1,5 +1,6 @@
 package com.emie.designpm.service;
 
+import com.emie.designpm.dto.ProjectListQuery;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.repository.*;
 import com.emie.designpm.util.SecurityUtil;
@@ -81,6 +82,10 @@ public class ProjectService {
 
     public Page<Project> getProjectsPage(String role, String userId, String type, boolean participating, Pageable pageable) {
         return projectAccessService.findVisibleProjectsPage(role, userId, type, participating, pageable);
+    }
+
+    public Page<Project> getProjectsPage(String role, String userId, ProjectListQuery query) {
+        return projectAccessService.findVisibleProjectsPage(role, userId, query);
     }
 
     /** 批量获取子任务统计（projectId → {taskCount, approvedCount}） */

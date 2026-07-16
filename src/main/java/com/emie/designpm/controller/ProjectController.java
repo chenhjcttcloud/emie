@@ -1,6 +1,9 @@
 package com.emie.designpm.controller;
 
 import com.emie.designpm.dto.ProjectDetailDTO;
+import com.emie.designpm.dto.ApiErrorResponse;
+import com.emie.designpm.dto.PageResponse;
+import com.emie.designpm.dto.ProjectListQuery;
 import com.emie.designpm.dto.ProjectSummaryDTO;
 import com.emie.designpm.dto.TaskDetailDTO;
 import com.emie.designpm.entity.*;
@@ -17,6 +20,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.format.DateTimeFormatter;
+import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -85,8 +89,14 @@ public class ProjectController {
 
     /** 项目列表分页接口：默认每页 15 条，供全部项目、渠道定制单和公司常规品页面使用。 */
     @GetMapping("/page")
-    public ResponseEntity<Map<String, Object>> getProjectsPage(
+    public ResponseEntity<?> getProjectsPage(
             @RequestParam(required = false) String type,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String market,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String deadlineStart,
+            @RequestParam(required = false) String deadlineEnd,
             @RequestParam(required = false, defaultValue = "false") boolean participating,
             @RequestParam(required = false, defaultValue = "0") int page,
             @RequestParam(required = false, defaultValue = "15") int size,
@@ -94,18 +104,65 @@ public class ProjectController {
         AuthController.AuthSession session = getSession(request);
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 50);
-        Page<Project> projectPage = projectService.getProjectsPage(session.role(), session.userId(), type, participating,
-                PageRequest.of(safePage, safeSize));
-        List<Project> projects = projectPage.getContent();
-        Map<Long, int[]> taskCountMap = projectService.getTaskCountMap(projects);
-        Map<Long, Double> scoreMap = projectService.computeProjectScoresBatch(projects);
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("items", projects.stream().map(p -> toSummary(p, taskCountMap, scoreMap)).toList());
-        result.put("page", projectPage.getNumber());
-        result.put("size", projectPage.getSize());
-        result.put("total", projectPage.getTotalElements());
-        result.put("totalPages", projectPage.getTotalPages());
-        return ResponseEntity.ok(result);
+        try {
+            ProjectListQuery query = new ProjectListQuery(
+                    normalizeType(type), normalizeStatus(status), trimToNull(category, 50), normalizeMarket(market),
+                    trimToNull(keyword, 100), normalizeDate(deadlineStart), normalizeDate(deadlineEnd), participating,
+                    PageRequest.of(safePage, safeSize));
+            if (query.deadlineStart() != null && query.deadlineEnd() != null
+                    && query.deadlineStart().compareTo(query.deadlineEnd()) > 0) {
+                return ResponseEntity.badRequest().body(ApiErrorResponse.invalidQuery("开始日期不能晚于结束日期"));
+            }
+            Page<Project> projectPage = projectService.getProjectsPage(session.role(), session.userId(), query);
+            List<Project> projects = projectPage.getContent();
+            Map<Long, int[]> taskCountMap = projectService.getTaskCountMap(projects);
+            Map<Long, Double> scoreMap = projectService.computeProjectScoresBatch(projects);
+            List<ProjectSummaryDTO> items = projects.stream().map(p -> toSummary(p, taskCountMap, scoreMap)).toList();
+            return ResponseEntity.ok(new PageResponse<>(items, projectPage.getNumber(), projectPage.getSize(),
+                    projectPage.getTotalElements(), projectPage.getTotalPages()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiErrorResponse.invalidQuery(e.getMessage()));
+        }
+    }
+
+    private String normalizeType(String type) {
+        String value = trimToNull(type, 30);
+        if (value == null) return null;
+        if (!Set.of("channel_custom", "regular").contains(value)) throw new IllegalArgumentException("项目类型参数无效");
+        return value;
+    }
+
+    private String normalizeStatus(String status) {
+        String value = trimToNull(status, 40);
+        if (value == null || "all".equals(value)) return null;
+        Set<String> allowed = Set.of("draft", "in_progress", "paused", "completed", "completed_pending_score",
+                "pending_planner", "pending_terminate", "terminated");
+        if (!allowed.contains(value)) throw new IllegalArgumentException("项目状态参数无效");
+        return value;
+    }
+
+    private String normalizeMarket(String market) {
+        String value = trimToNull(market, 20);
+        if (value == null || "all".equals(value)) return null;
+        if (!Set.of("国内", "海外").contains(value)) throw new IllegalArgumentException("目标市场参数无效");
+        return value;
+    }
+
+    private String normalizeDate(String value) {
+        String date = trimToNull(value, 10);
+        if (date == null) return null;
+        try {
+            return LocalDate.parse(date).toString();
+        } catch (Exception ignored) {
+            throw new IllegalArgumentException("日期必须使用 yyyy-MM-dd 格式");
+        }
+    }
+
+    private String trimToNull(String value, int maxLength) {
+        if (value == null || value.isBlank()) return null;
+        String normalized = value.trim();
+        if (normalized.length() > maxLength) throw new IllegalArgumentException("查询参数长度超出限制");
+        return normalized;
     }
 
     /** 获取项目详情 */

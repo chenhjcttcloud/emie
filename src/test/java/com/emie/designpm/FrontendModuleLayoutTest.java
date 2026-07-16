@@ -93,8 +93,8 @@ class FrontendModuleLayoutTest {
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=144\"></script>"),
-                "页面应只通过 v132 ES Module 启动入口加载前端");
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=145\"></script>"),
+                "页面应只通过当前版本 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
         assertTrue(bootstrap.indexOf("./core.js") > bootstrap.indexOf("./core-ui.js"),
@@ -146,6 +146,8 @@ class FrontendModuleLayoutTest {
                 "全部项目、渠道定制单和公司常规品列表应固定每页 15 条");
         assertTrue(lists.contains("function changeProjectListPage(page)"),
                 "项目列表应提供翻页入口");
+        assertFalse(lists.contains("state.allOrders = await apiGet(`/projects?${params}`)"),
+                "项目筛选不得回退到全量项目接口，应复用服务端分页筛选");
         assertTrue(designer.contains("id=\"designerTaskStatusFilter\""));
         assertTrue(designer.contains("id=\"designerTaskTypeFilter\""));
         assertTrue(designer.contains("function resetDesignerTaskFilters()"));
