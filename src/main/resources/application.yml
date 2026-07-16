@@ -6,6 +6,11 @@ server:
     min-response-size: 512
 
 spring:
+  threads:
+    virtual:
+      enabled: ${SPRING_THREADS_VIRTUAL_ENABLED:true}
+  main:
+    keep-alive: true
   servlet:
     multipart:
       enabled: true
@@ -110,8 +115,8 @@ spring:
     username: ${DESIGNPM_DB_USER}
     password: ${DESIGNPM_DB_PASSWORD}
     hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
+      maximum-pool-size: ${DESIGNPM_DB_POOL_MAX:10}
+      minimum-idle: ${DESIGNPM_DB_POOL_MIN:2}
       connection-timeout: 5000
       idle-timeout: 300000
       max-lifetime: 1200000
@@ -128,6 +133,12 @@ spring:
 
 server:
   port: 8080
+  tomcat:
+    threads:
+      max: ${SERVER_TOMCAT_MAX_THREADS:100}
+      min-spare: ${SERVER_TOMCAT_MIN_SPARE_THREADS:10}
+    max-connections: ${SERVER_TOMCAT_MAX_CONNECTIONS:200}
+    accept-count: ${SERVER_TOMCAT_ACCEPT_COUNT:50}
   compression:
     enabled: true
     mime-types: application/json,application/javascript,text/javascript,text/css,text/html,text/xml,application/xml
