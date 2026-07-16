@@ -93,7 +93,7 @@ class FrontendModuleLayoutTest {
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=145\"></script>"),
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=146\"></script>"),
                 "页面应只通过当前版本 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
@@ -154,6 +154,19 @@ class FrontendModuleLayoutTest {
         assertTrue(scoring.contains("id=\"scoringTypeFilter\""));
         assertTrue(scoring.contains("id=\"scoringStageFilter\""));
         assertTrue(scoring.contains("reviewStage === stage"));
+    }
+
+    @Test
+    void navigationBadgesUseOneAuthoritativeRefreshPath() throws IOException {
+        String projects = readResource("/static/js/dashboard-projects.js");
+        String home = readResource("/static/js/dashboard-home.js");
+
+        assertTrue(projects.contains("async function refreshNavigationBadges()"));
+        assertTrue(projects.contains("apiGet('/projects/badge-stats')"));
+        assertFalse(projects.contains("badgeStats.totalCount || 0"),
+                "缺失字段不能被静默写成 0 覆盖导航统计");
+        assertTrue(home.contains("return refreshNavigationBadges();"),
+                "历史工作台徽章入口必须转发到统一统计源");
     }
 
     @Test

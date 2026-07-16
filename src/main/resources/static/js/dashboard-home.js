@@ -12,96 +12,10 @@ const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const displayText = (...args) => EMIE.actions.displayText(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
 const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
+const refreshNavigationBadges = (...args) => EMIE.actions.refreshNavigationBadges(...args);
 
 async function updateBadges(role, uid) {
-  try {
-    const orders = await apiGet(`/projects?role=${role}&userId=${uid}`);
-
-    if (role === 'designer' || role === 'supplychain') {
-      // 设计师：只统计自己有关联任务的项目数
-      let designerProjectCount = 0;
-      let designerTaskCount = 0;
-      let channelCount = 0;
-      let regularCount = 0;
-      for (const order of orders) {
-        const detail = await apiGet(`/projects/${order.id}`);
-        if (!detail.tasks) continue;
-        const myTasks = detail.tasks.filter(t => t.designerId === uid);
-        if (myTasks.length > 0) {
-          designerProjectCount++;
-          if (order.type === 'channel_custom') channelCount++;
-          else regularCount++;
-        }
-        designerTaskCount += detail.tasks.filter(t =>
-          t.designerId === uid && ['pending', 'accepted', 'rejected'].includes(t.status)
-        ).length;
-      }
-      document.getElementById('badgeTotal').textContent = designerProjectCount;
-      document.getElementById('badgeChannel').textContent = channelCount;
-      document.getElementById('badgeRegular').textContent = regularCount;
-      document.getElementById('badgeMyTasks').textContent = designerTaskCount;
-    } else {
-      document.getElementById('badgeTotal').textContent = orders.length;
-      document.getElementById('badgeChannel').textContent = orders.filter(x => x.type === 'channel_custom').length;
-      document.getElementById('badgeRegular').textContent = orders.filter(x => x.type === 'regular').length;
-    }
-    document.getElementById('badgeScoring').textContent = '0';
-
-    // 计算待评分数量（与 dashboard 统计逻辑对齐）
-    let pendingScoreCount = 0;
-    for (const order of orders) {
-      const detail = await apiGet(`/projects/${order.id}`);
-      if (!detail.tasks) continue;
-      for (const t of detail.tasks) {
-        if (t.status === 'approved' && t.scoringRecords) {
-          const needMe = detail.type === 'channel_custom'
-            ? (role === 'sales' || role === 'planner')
-            : (role === 'planner');
-          if (!needMe) continue;
-          const myRecord = t.scoringRecords.find(sr => sr.role === role);
-          if (myRecord && myRecord.score == null) pendingScoreCount++;
-        }
-      }
-    }
-    const elScoring = document.getElementById('badgeScoring');
-    if (elScoring) elScoring.textContent = pendingScoreCount;
-
-    let myTasks = 0;
-    if (EMIE.state.currentRole === 'designer' || EMIE.state.currentRole === 'supplychain') {
-      const myId = getCurrentUserId();
-      for (const order of orders) {
-        const detail = await apiGet(`/projects/${order.id}`);
-        if (!detail.tasks) continue;
-        for (const t of detail.tasks) {
-          if (t.designerId === myId && ['pending', 'accepted', 'rejected'].includes(t.status)) myTasks++;
-        }
-      }
-    } else if (EMIE.state.currentRole === 'sales') {
-      // 销售：统计渠道定制项目中待处理的子任务数
-      for (const order of orders) {
-        if (order.type !== 'channel_custom') continue;
-        const detail = await apiGet(`/projects/${order.id}`);
-        if (!detail.tasks) continue;
-        for (const t of detail.tasks) {
-          if (['pending', 'accepted', 'rejected', 'delivered'].includes(t.status)) myTasks++;
-        }
-      }
-    } else if (EMIE.state.currentRole === 'planner') {
-      // 企划：统计分配给自己的待处理子任务数
-      const myId = getCurrentUserId();
-      for (const order of orders) {
-        const detail = await apiGet(`/projects/${order.id}`);
-        if (!detail.tasks) continue;
-        for (const t of detail.tasks) {
-          if (t.designerId === myId && ['pending', 'accepted', 'rejected'].includes(t.status)) myTasks++;
-        }
-      }
-    } else {
-      document.getElementById('badgeMyTasks').textContent = myTasks;
-    }
-  } catch (e) {
-    console.error('徽章更新失败:', e);
-  }
+  return refreshNavigationBadges();
 }
 
 // ==================== 工作台 ====================

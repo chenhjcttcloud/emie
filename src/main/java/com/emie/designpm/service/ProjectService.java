@@ -88,6 +88,33 @@ public class ProjectService {
         return projectAccessService.findVisibleProjectsPage(role, userId, query);
     }
 
+    /**
+     * 左侧导航唯一统计口径：项目数量与项目列表一致，待评分数量与评分中心一致。
+     * 执行角色的项目页只展示已参与项目，因此此处不混入待认领的公共项目。
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Long> getNavigationBadgeStats(String role, String userId) {
+        List<Project> visibleProjects = ("designer".equals(role) || "supplychain".equals(role))
+                ? getAssigneeParticipatingProjects(userId, role)
+                : getProjectsByRoleAndUser(role, userId);
+        long channelCount = visibleProjects.stream().filter(project -> "channel_custom".equals(project.getType())).count();
+        long regularCount = visibleProjects.stream().filter(project -> "regular".equals(project.getType())).count();
+        long myTaskCount = ("designer".equals(role) || "supplychain".equals(role))
+                ? subTaskRepository.countByDesignerIdAndRoleAndActionableStatus(userId, role)
+                : 0;
+        long pendingScoreCount = getPendingScoringTasks(role, userId).stream()
+                .filter(item -> Boolean.TRUE.equals(item.get("isPending")))
+                .count();
+
+        Map<String, Long> stats = new LinkedHashMap<>();
+        stats.put("totalCount", (long) visibleProjects.size());
+        stats.put("channelCount", channelCount);
+        stats.put("regularCount", regularCount);
+        stats.put("myTaskCount", myTaskCount);
+        stats.put("pendingScoreCount", pendingScoreCount);
+        return stats;
+    }
+
     /** 批量获取子任务统计（projectId → {taskCount, approvedCount}） */
     public Map<Long, int[]> getTaskCountMap(List<Project> projects) {
         if (projects == null || projects.isEmpty()) return Collections.emptyMap();

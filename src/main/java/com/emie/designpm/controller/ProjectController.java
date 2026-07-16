@@ -367,29 +367,11 @@ public class ProjectController {
         return ResponseEntity.ok(projectService.getDesignerStatus(session.role(), session.userId()));
     }
 
-    /** 徽章统计（避免前端循环 N 次 API 调用） */
+    /** 左侧导航徽章统计：角色与用户由会话确定，禁止客户端伪造统计范围。 */
     @GetMapping("/badge-stats")
-    public ResponseEntity<Map<String, Object>> badgeStats(
-            @RequestParam String role,
-            @RequestParam String userId,
-            HttpServletRequest request) {
+    public ResponseEntity<Map<String, Long>> badgeStats(HttpServletRequest request) {
         AuthController.AuthSession session = getSession(request);
-        role = session.role();
-        userId = session.userId();
-        Map<String, Object> stats = new LinkedHashMap<>();
-        stats.put("myTaskCount", subTaskRepository.countByDesignerIdAndStatusIn(userId));
-
-        long pendingScoreCount;
-        if ("admin".equals(role)) {
-            pendingScoreCount = scoringRepository.countAllPendingScores();
-        } else if ("sales".equals(role) || "planner".equals(role)) {
-            pendingScoreCount = scoringRepository.countPendingByRole(role);
-        } else {
-            pendingScoreCount = 0;
-        }
-        stats.put("pendingScoreCount", pendingScoreCount);
-
-        return ResponseEntity.ok(stats);
+        return ResponseEntity.ok(projectService.getNavigationBadgeStats(session.role(), session.userId()));
     }
 
     /** 终止项目 */

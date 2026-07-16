@@ -22,6 +22,23 @@ const plannerAcceptFromList = (...args) => EMIE.actions.plannerAcceptFromList(..
 const clearSWRCache = (...args) => EMIE.actions.clearSWRCache(...args);
 
 // EMIE 工作台：主渲染、状态看板、项目列表、任务列表与待评分视图
+/** 左侧导航只允许由此函数写入，避免页面缓存、详情操作和工作台互相覆盖数据。 */
+async function refreshNavigationBadges() {
+  const badgeStats = await apiGet('/projects/badge-stats');
+  const values = {
+    badgeTotal: badgeStats.totalCount,
+    badgeChannel: badgeStats.channelCount,
+    badgeRegular: badgeStats.regularCount,
+    badgeMyTasks: badgeStats.myTaskCount,
+    badgeScoring: badgeStats.pendingScoreCount,
+  };
+  Object.entries(values).forEach(([id, value]) => {
+    const element = document.getElementById(id);
+    if (element) element.textContent = Number.isFinite(Number(value)) ? String(value) : '0';
+  });
+  return badgeStats;
+}
+
 /** 操作后增量刷新（轻量版：不重拉全量列表） */
 async function refreshAfterMutation(pid) {
   // 清除所有缓存
@@ -30,22 +47,7 @@ async function refreshAfterMutation(pid) {
 
   // 并发：更新徽章 + 刷新视图
   await Promise.all([
-    // 更新侧边栏徽章
-    (async () => {
-      try {
-        const badgeStats = await apiGet(`/projects/badge-stats?role=${EMIE.state.currentRole}&userId=${getCurrentUserId()}`);
-        const elScoring = document.getElementById('badgeScoring');
-        if (elScoring) elScoring.textContent = badgeStats.pendingScoreCount || 0;
-        const elMyTasks = document.getElementById('badgeMyTasks');
-        if (elMyTasks) elMyTasks.textContent = badgeStats.myTaskCount || 0;
-        const badgeTotal = document.getElementById('badgeTotal');
-        if (badgeTotal) badgeTotal.textContent = badgeStats.totalCount || 0;
-        const badgeChannel = document.getElementById('badgeChannel');
-        if (badgeChannel) badgeChannel.textContent = badgeStats.channelCount || 0;
-        const badgeRegular = document.getElementById('badgeRegular');
-        if (badgeRegular) badgeRegular.textContent = badgeStats.regularCount || 0;
-      } catch(e) {}
-    })(),
+    refreshNavigationBadges().catch(() => {}),
 
     // 按当前视图刷新
     (async () => {
@@ -161,16 +163,6 @@ async function render() {
     }
     orders = orders || [];
 
-    if (!isPagedProjectList) {
-      // 更新基础徽章（销售角色没有 total/regular 徽章，需要判空）
-      const elTotal = document.getElementById('badgeTotal');
-      if (elTotal) elTotal.textContent = orders.length;
-      const elChannel = document.getElementById('badgeChannel');
-      if (elChannel) elChannel.textContent = orders.filter(x => x.type === 'channel_custom').length;
-      const elRegular = document.getElementById('badgeRegular');
-      if (elRegular) elRegular.textContent = orders.filter(x => x.type === 'regular').length;
-    }
-
     if (EMIE.state.currentView === 'dashboard') {
       await renderDashboard(main, role, uid);
     } else if (EMIE.state.currentView === 'orders') {
@@ -187,29 +179,8 @@ async function render() {
       await renderAdmin(main, role, uid);
     }
 
-    // 计算徽章（独立 try/catch，不影响主渲染）
-    try {
-      let pendingScoreCount = 0;
-      let myTaskCount = 0;
-      // 使用批量徽章统计 API，避免 N 次详情查询
-      const badgeStats = await apiGet(`/projects/badge-stats?role=${role}&userId=${uid}`);
-      pendingScoreCount = badgeStats.pendingScoreCount || 0;
-      myTaskCount = badgeStats.myTaskCount || 0;
-
-      // 我的子任务（企划/管理员：进行中的项目数）
-      if (!isPagedProjectList && role !== 'sales' && role !== 'designer' && role !== 'supplychain') {
-        myTaskCount = orders.filter(o =>
-          o.status === 'in_progress' || o.status === 'planner_accepted'
-        ).length;
-      }
-      const elScoring = document.getElementById('badgeScoring');
-      if (elScoring) elScoring.textContent = pendingScoreCount;
-      if (document.getElementById('badgeMyTasks')) {
-        document.getElementById('badgeMyTasks').textContent = myTaskCount;
-      }
-    } catch (e) {
-      console.error('徽章计算错误:', e);
-    }
+    // 侧栏每次重建后重新请求唯一统计源，页面缓存不得参与徽章计算。
+    await refreshNavigationBadges();
   } catch (e) {
     console.error('渲染错误:', e);
     main.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${e.message}</p></div>`;
@@ -219,6 +190,7 @@ async function render() {
 // ==================== 徽章更新 ====================
 
 EMIE.registerActions({
+  refreshNavigationBadges,
   refreshAfterMutation,
   updateProjectRow,
   renderProjectRow,

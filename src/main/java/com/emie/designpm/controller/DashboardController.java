@@ -81,7 +81,7 @@ public class DashboardController {
         result.put("departments", departmentRepository.findAllByOrderBySortOrderAsc());
 
         // 5. 徽章统计
-        result.put("badgeStats", computeBadgeStats(role, userId));
+        result.put("badgeStats", projectService.getNavigationBadgeStats(role, userId));
 
         return ResponseEntity.ok(result);
     }
@@ -118,23 +118,6 @@ public class DashboardController {
         stats.put("approvedTasks", approvedTasks);
         stats.put("pendingTasks", pendingTasks);
         stats.put("pendingScore", pendingScore);
-        return stats;
-    }
-
-    private Map<String, Object> computeBadgeStats(String role, String userId) {
-        Map<String, Object> stats = new LinkedHashMap<>();
-        stats.put("pendingScoreCount", 0);
-        stats.put("myTaskCount", 0);
-        if ("designer".equals(role) || "supplychain".equals(role)) {
-            stats.put("myTaskCount", subTaskRepository.countByDesignerIdAndStatusIn(userId));
-        }
-        if (!"sales".equals(role)) {
-            if ("admin".equals(role)) {
-                stats.put("pendingScoreCount", scoringRepository.countAllPendingScores());
-            } else {
-                stats.put("pendingScoreCount", scoringRepository.countPendingByRole(role));
-            }
-        }
         return stats;
     }
 

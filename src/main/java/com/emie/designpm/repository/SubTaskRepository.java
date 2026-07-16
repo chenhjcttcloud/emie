@@ -27,6 +27,11 @@ public interface SubTaskRepository extends JpaRepository<SubTask, Long> {
     @Query("SELECT COUNT(t) FROM SubTask t WHERE t.designerId = ?1 AND t.status IN ('pending', 'accepted', 'rejected')")
     long countByDesignerIdAndStatusIn(String designerId);
 
+    /** 左侧“我的子任务”徽章：按当前执行角色隔离，兼容历史未填写角色的设计任务。 */
+    @Query("SELECT COUNT(t) FROM SubTask t WHERE t.designerId = ?1 AND t.status IN ('pending', 'accepted', 'rejected') " +
+           "AND (t.assigneeRole = ?2 OR (?2 = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = '')))")
+    long countByDesignerIdAndRoleAndActionableStatus(String designerId, String assigneeRole);
+
     /** 批量统计项目子任务数及完成数（避免 JOIN FETCH 加载全部子任务） */
     @Query("SELECT t.project.id, COUNT(t), " +
            "SUM(CASE WHEN t.status IN ('delivered','planner_approved','sales_approved','admin_approved','completed') THEN 1 ELSE 0 END) " +
