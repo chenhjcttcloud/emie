@@ -17,13 +17,16 @@
 
 | 项目 | 记录 |
 |---|---|
-| 状态 | 已推送，未部署生产 |
+| 状态 | 发布成功 |
 | 目标分支 / 提交 | `project_manager_system` / `ccd4b943acb1d120e6c21dad111bac8df0dd9a86` |
 | 变更范围 | 修复子任务派发通知聚合 ID 为空、通知独立事务与失败隔离；新增飞书卡片绝对公网 URL 配置与项目深链打开；修复新建子任务后详情即时刷新；前端资源更新至 `v136` |
 | 数据库结构变更 | 无；启动时自动补齐通知中心配置 `notification.publicBaseUrl` |
-| 本地验证 | Java 21 `./mvnw test`：60 项通过；全部前端 JS 语法检查通过；`dev` 服务 `8080` 健康检查通过；实际新建子任务的站内和飞书投递均为 `delivered` |
+| 本地验证 | Java 21 `./mvnw clean package`：60 项通过；全部前端 JS 语法检查通过；`dev` 服务 `8080` 健康检查通过；实际新建子任务的站内和飞书投递均为 `delivered` |
 | 远端核对 | Gitee `emie/project_manager_system` SHA 与本地提交一致 |
-| 生产状态 | 未部署；生产仍运行此前版本 |
+| 数据库备份 | `/root/emie/db-backup-before-c6f3be3-20260716_153951.sql.gz`，25410 字节，`gzip -t` 通过 |
+| 应用回滚包 | `/root/emie/app.jar.bak.pre-c6f3be3fef51ed3ac32123a26f8970807190c166-20260716_154028` |
+| 生产验证 | `emie-app` 与 `emie-preview-converter` 均正常运行；生产运行 SHA 为 `c6f3be3fef51ed3ac32123a26f8970807190c166`；公开配置 HTTP 200；首页加载 `bootstrap.js?v=136`；应用启动日志与后续日志无严重错误 |
+| 配置提醒 | `notification.publicBaseUrl` 已由应用自动初始化，但当前为空；需在系统管理的通知中心填入可由飞书访问的公网 HTTPS 地址后，新发送的“查看并处理”按钮才会跳转 |
 
 ---
 
