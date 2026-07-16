@@ -1,0 +1,60 @@
+package com.emie.designpm.service;
+
+import com.emie.designpm.entity.*;
+import com.emie.designpm.repository.*;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.UUID;
+
+/** 业务事件的统一通知入口：先创建站内必达通知，再尝试飞书投递并保留审计。 */
+@Service
+public class NotificationWorkflowService {
+    private final NotificationOutboxService outbox;
+    private final NotificationTemplateService templates;
+    private final NotificationRepository notifications;
+    private final NotificationDeliveryRepository deliveries;
+    private final NotificationAuditLogRepository audits;
+    private final UserRepository users;
+    private final SystemConfigRepository configs;
+    private final FeishuBaseService feishu;
+
+    public NotificationWorkflowService(NotificationOutboxService outbox, NotificationTemplateService templates,
+            NotificationRepository notifications, NotificationDeliveryRepository deliveries,
+            NotificationAuditLogRepository audits, UserRepository users, SystemConfigRepository configs, FeishuBaseService feishu) {
+        this.outbox = outbox; this.templates = templates; this.notifications = notifications; this.deliveries = deliveries;
+        this.audits = audits; this.users = users; this.configs = configs; this.feishu = feishu;
+    }
+
+    public void notifyUser(String eventType, String recipientUserId, String aggregateType, Long aggregateId,
+                           String actorUserId, Map<String, String> context) {
+        if (recipientUserId == null || recipientUserId.isBlank() || recipientUserId.equals(actorUserId)) return;
+        NotificationTemplateService.Template t = templates.render(eventType, context);
+        NotificationEvent event = outbox.publish(eventType, aggregateType, aggregateId, 1, actorUserId,
+                eventType + ":" + aggregateType + ":" + aggregateId + ":" + UUID.randomUUID(), t.content());
+        Notification n = notifications.save(Notification.builder().eventId(event.getId()).recipientUserId(recipientUserId)
+                .category("workflow").priority(t.priority()).mandatory(t.mandatory()).title(t.title()).content(t.content())
+                .deepLink(t.deepLink()).aggregateType(aggregateType).aggregateId(aggregateId).status("unread").createdAt(LocalDateTime.now()).build());
+        NotificationDelivery inApp = deliveries.save(NotificationDelivery.builder().notificationId(n.getId()).channel("in_app")
+                .status("delivered").retryCount(0).deliveredAt(LocalDateTime.now()).build());
+        audit(event, n, inApp, "in_app_delivered", actorUserId, "工作流站内通知已创建");
+        if (!enabled("notification.feishuEnabled")) return;
+        users.findByUserId(recipientUserId).ifPresent(user -> sendFeishu(event, n, user, t, actorUserId));
+    }
+
+    private void sendFeishu(NotificationEvent event, Notification n, User user, NotificationTemplateService.Template t, String actor) {
+        NotificationDelivery d = deliveries.save(NotificationDelivery.builder().notificationId(n.getId()).channel("feishu").status("pending").retryCount(0).build());
+        try {
+            if (user.getFeishuOpenId() == null || user.getFeishuOpenId().isBlank()) throw new IllegalArgumentException("收件人未绑定飞书 Open ID");
+            d.setExternalMessageId(feishu.sendInteractiveMessage(user.getFeishuOpenId(), t.feishuCardJson())); d.setStatus("delivered"); d.setDeliveredAt(LocalDateTime.now());
+            deliveries.save(d); audit(event, n, d, "feishu_delivered", actor, "工作流飞书通知已投递");
+        } catch (Exception e) {
+            d.setStatus("failed"); d.setErrorMsg(limit(e.getMessage())); deliveries.save(d);
+            audit(event, n, d, "feishu_failed", actor, "工作流飞书通知失败：" + limit(e.getMessage()));
+        }
+    }
+    private boolean enabled(String key) { return configs.findByConfigKey(key).map(SystemConfig::getConfigValue).map("true"::equalsIgnoreCase).orElse(false); }
+    private void audit(NotificationEvent e, Notification n, NotificationDelivery d, String action, String actor, String detail) { audits.save(NotificationAuditLog.builder().eventId(e.getId()).notificationId(n.getId()).deliveryId(d.getId()).action(action).operatorUserId(actor).detail(detail).createdAt(LocalDateTime.now()).build()); }
+    private String limit(String s) { return s == null ? "未知错误" : s.substring(0, Math.min(s.length(), 1000)); }
+}

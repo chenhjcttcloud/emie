@@ -40,7 +40,8 @@ class ProjectReviewWorkflowTest {
                 configs,
                 mock(SyncQueueService.class),
                 mock(FileArchiveService.class),
-                mock(ProjectAccessService.class)
+                mock(ProjectAccessService.class),
+                mock(NotificationWorkflowService.class)
         );
     }
 

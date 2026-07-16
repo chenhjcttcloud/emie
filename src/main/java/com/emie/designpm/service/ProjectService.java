@@ -26,6 +26,7 @@ public class ProjectService {
     private final SyncQueueService syncQueueService;
     private final FileArchiveService fileArchiveService;
     private final ProjectAccessService projectAccessService;
+    private final NotificationWorkflowService notificationWorkflowService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ProjectService(ProjectRepository projectRepository,
@@ -37,7 +38,7 @@ public class ProjectService {
                           SystemConfigRepository systemConfigRepository,
                           SyncQueueService syncQueueService,
                           FileArchiveService fileArchiveService,
-                          ProjectAccessService projectAccessService) {
+                          ProjectAccessService projectAccessService, NotificationWorkflowService notificationWorkflowService) {
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
         this.scoringRepository = scoringRepository;
@@ -48,6 +49,7 @@ public class ProjectService {
         this.syncQueueService = syncQueueService;
         this.fileArchiveService = fileArchiveService;
         this.projectAccessService = projectAccessService;
+        this.notificationWorkflowService = notificationWorkflowService;
     }
 
     // ==================== Query ====================
@@ -216,6 +218,8 @@ public class ProjectService {
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(refImagesJson, "project", saved.getId());
         fileArchiveService.bindFilesFromJson(attsJson, "project", saved.getId());
+        notificationWorkflowService.notifyUser("PROJECT_ASSIGNED", saved.getPlannerId(), "project", saved.getId(), currentUserId,
+                notificationContext(saved, null, currentUser, ""));
         return saved;
     }
 
@@ -300,6 +304,8 @@ public class ProjectService {
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
+        notificationWorkflowService.notifyUser("TASK_ASSIGNED", task.getDesignerId(), "sub_task", task.getId(),
+                (String) body.getOrDefault("currentUserId", ""), notificationContext(p, task, currentUser, ""));
         return saved;
     }
 
@@ -361,6 +367,20 @@ public class ProjectService {
         data.put("assigneeRole", task.getAssigneeRole());
         data.put("details", task.getDetails());
         return data;
+    }
+
+    private Map<String, String> notificationContext(Project project, SubTask task, String actor, String reason) {
+        Map<String, String> context = new HashMap<>();
+        context.put("projectName", project.getProductName());
+        context.put("deadline", task != null ? task.getPlannedDate() : project.getDeadline());
+        context.put("actorName", actor == null || actor.isBlank() ? "系统" : actor);
+        context.put("projectLink", "/");
+        if (task != null) {
+            context.put("taskName", task.getName());
+            context.put("taskLink", "/");
+        }
+        if (reason != null && !reason.isBlank()) context.put("reason", reason);
+        return context;
     }
 
     private String toJson(Object value) {
@@ -494,6 +514,8 @@ public class ProjectService {
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
+        notificationWorkflowService.notifyUser("TASK_DELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
+                notificationContext(p, task, currentUser, ""));
         return saved;
     }
 
@@ -537,6 +559,8 @@ public class ProjectService {
         Project saved = projectRepository.save(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
+        notificationWorkflowService.notifyUser("TASK_REDELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
+                notificationContext(p, task, currentUser, task.getReviewComments()));
         return saved;
     }
 
@@ -747,8 +771,10 @@ public class ProjectService {
         task.setStatus("rejected");
         task.setReviewComments(comments);
         p.getLogs().add(new ActivityLog("子任务驳回：" + task.getName() + "（意见：" + comments + "）", currentUser, currentRole, p));
-
-        return projectRepository.save(p);
+        Project saved = projectRepository.save(p);
+        notificationWorkflowService.notifyUser("TASK_REJECTED", task.getDesignerId(), "sub_task", task.getId(), currentUserId,
+                notificationContext(p, task, currentUser, comments));
+        return saved;
     }
 
     private void rejectReviewRecord(SubTask task, String role, String reviewerId,
