@@ -13,6 +13,22 @@
 
 ---
 
+## 2026-07-16 Java 17 升级 Java 21
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 待发布 |
+| 目标分支 | `project_manager_system` |
+| 当前生产提交 | `b090c68774adce61e1665f3430ad2f39895cfac3`（生产仍为 Java 17） |
+| 本地改动 | Maven、Dockerfile、README、开发/发布规范和 Java 基线文档升级至 Java 21 |
+| 数据库结构变更 | 无 |
+| 发布状态 | 已完成 Java 21 本地编译与启动验证，Docker 验证待 Docker daemon 恢复后执行；尚未提交、推送或部署生产 |
+
+- 当前 Spring Boot 3.2.5 应用代码未发现 Java 21 阻塞点；JDK 21 编译、55 项测试、class 版本 65 和本地 `dev` 启动冒烟已通过。Docker daemon 当前不可用，Java 21 Docker 构建待补。
+- 生产切换前保持 Java 17 回滚包和数据库备份流程不变。
+
+---
+
 ## 2026-07-15 五个业务列表页搜索与条件筛选
 
 | 项目 | 记录 |

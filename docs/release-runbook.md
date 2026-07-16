@@ -17,7 +17,7 @@
 
 - 代码托管：Gitee `https://gitee.com/Lucascloud/emie`
 - 当前业务分支：`project_manager_system`
-- 生产应用：Spring Boot 3.2、Java 17
+- 目标生产应用：Spring Boot 3.2、Java 21（当前生产切换前仍为 Java 17）
 - 生产数据库：MySQL
 - 生产运行方式：Docker Compose
 - 应用容器：`emie-app`

@@ -14,7 +14,7 @@
 
 ## 2. 项目基线
 
-- 技术栈：Java 17、Spring Boot 3.2、Maven、MySQL、原生 HTML/CSS/JavaScript。
+- 技术栈：Java 21、Spring Boot 3.2、Maven、MySQL、原生 HTML/CSS/JavaScript。
 - 本地构建入口：`./mvnw`。
 - 生产运行方式：Docker Compose。
 - 业务分支：`project_manager_system`。

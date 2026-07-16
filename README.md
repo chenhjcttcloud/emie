@@ -14,7 +14,7 @@ EMIE 是面向设计团队的项目管理系统，覆盖渠道定制单、公司
 
 ## 技术栈
 
-- Java 17
+- Java 21
 - Spring Boot 3.2
 - Spring Data JPA
 - MySQL
@@ -25,7 +25,7 @@ EMIE 是面向设计团队的项目管理系统，覆盖渠道定制单、公司
 
 ### 环境要求
 
-- JDK 17
+- JDK 21
 - Git
 - 可访问的 MySQL 测试数据库
 - Docker 与 Docker Compose（仅容器部署需要）

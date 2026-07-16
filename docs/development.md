@@ -4,7 +4,7 @@
 
 | 工具 | 要求 | 用途 |
 |---|---|---|
-| JDK | 17 | 编译和运行 Spring Boot |
+| JDK | 21 | 编译和运行 Spring Boot |
 | Maven | 使用 `./mvnw` | 构建与测试 |
 | MySQL | 可访问测试库 | `dev`、`local` profile 使用专用测试库 |
 | Node.js | 可选 | JavaScript 语法检查和模板工具 |
