@@ -17,16 +17,16 @@
 
 | 项目 | 记录 |
 |---|---|
-| 状态 | 已回滚 |
+| 状态 | 发布成功 |
 | 目标分支 | `project_manager_system` |
 | 当前生产提交 | `b090c68774adce61e1665f3430ad2f39895cfac3`（生产仍为 Java 17） |
 | 本地改动 | Maven、Dockerfile、README、开发/发布规范和 Java 基线文档升级至 Java 21 |
 | 数据库结构变更 | 无 |
-| 发布状态 | 提交 `af7dd39` 已推送；本地与 Docker Java 21 验证通过。生产切换因服务器独立 Dockerfile 仍使用 Java 17 导致 class 65/61 不兼容，已恢复发布前 Java 17 JAR 并验证生产可用 |
+| 发布状态 | 提交 `af7dd39` 已推送；本地与 Docker Java 21 验证通过。服务器独立 Dockerfile 已切换为 Java 21，生产重建并验证成功 |
 
 - 当前 Spring Boot 3.2.5 应用代码未发现 Java 21 阻塞点；JDK 21 编译、55 项测试、class 版本 65、本地 `dev` 启动和 Docker 镜像验证均通过。
-- 生产尝试：上传 JAR SHA-256 为 `5f7594fd4d9df395d8c6047ba9b1a63eeb24c23d07a14d242cd4433761d50729`；生产运行时为 `eclipse-temurin:17-jre`，出现 `UnsupportedClassVersionError` 后已恢复旧 JAR、重建 Java 17 镜像并启动，容器重启次数 0，公开配置接口 HTTP 200。
-- 后续必须先同步服务器 `/root/emie` 的生产 Dockerfile/Compose 到 Java 21，再重新执行生产切换。
+- 生产最终部署：服务器 `/root/emie` 的独立 Dockerfile 已更新为 `eclipse-temurin:21-jre`；上传 JAR SHA-256 为 `5f7594fd4d9df395d8c6047ba9b1a63eeb24c23d07a14d242cd4433761d50729`，`release-sha.txt` 为 `af7dd39`。
+- 生产验证：应用日志确认 Java 21，容器重启次数 0，数据库连接成功，首页 HTTP 200，公开配置接口 HTTP 200；发布前 Java 17 JAR 与 Dockerfile 已保留备份。
 - 生产切换前保持 Java 17 回滚包和数据库备份流程不变。
 
 ---
