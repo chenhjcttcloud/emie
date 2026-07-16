@@ -116,11 +116,13 @@ public class NotificationTestService {
                 .map("true"::equalsIgnoreCase).orElse(false);
     }
 
-    private String buildCard() throws Exception {
+    static String buildCard() throws Exception {
         ObjectNode card = JSON.createObjectNode();
         card.put("schema", "2.0");
-        card.putObject("header").putObject("title").put("tag", "plain_text").put("content", "EMIE 通知渠道测试");
-        card.putArray("body").addObject().put("tag", "markdown")
+        ObjectNode header = card.putObject("header");
+        header.put("template", "blue");
+        header.putObject("title").put("tag", "plain_text").put("content", "EMIE 通知渠道测试");
+        card.putObject("body").putArray("elements").addObject().put("tag", "markdown")
                 .put("content", "站内通知与飞书通知配置正在验证。若你看到此卡片，飞书通知渠道已可用。");
         return JSON.writeValueAsString(card);
     }
