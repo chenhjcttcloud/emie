@@ -69,7 +69,8 @@ set +a
 set -a
 source .env
 set +a
-java -jar target/design-pm-1.0.0.jar --spring.profiles.active=local
+scripts/mvnw-java21.sh clean package
+./dev.sh restart
 ```
 
 ## 4. 代码结构

@@ -12,9 +12,14 @@ LOG_FILE="/tmp/emie-dev.log"
 PID_FILE="/tmp/emie-dev.pid"
 PORT=8080
 PROFILE="dev"
+SCREEN_SESSION="emie-dev"
 
 # 切换到项目根目录（兼容 scripts/ 内或根目录调用）
 cd "$(dirname "$0")/.."
+
+# 无论启动脚本由哪个终端、IDE 或自动化工具调用，都固定使用 Java 21。
+# shellcheck disable=SC1091
+source scripts/java21-env.sh
 
 # 本地敏感配置只保存在已被 Git 忽略的 .env 中，启动时自动加载但不输出内容。
 if [ -f ".env" ]; then
@@ -42,22 +47,30 @@ start() {
   # 如果 jar 不存在则打包
   if [ ! -f "$JAR_PATH" ]; then
     echo "首次启动，正在打包..."
-    ./mvnw package -DskipTests -q || { echo "打包失败"; exit 1; }
+    scripts/mvnw-java21.sh package -DskipTests -q || { echo "打包失败"; exit 1; }
   fi
 
-  nohup java -jar "$JAR_PATH" \
-    --spring.profiles.active=$PROFILE \
-    --server.port=$PORT \
-    > "$LOG_FILE" 2>&1 &
-
-  PID=$!
-  echo $PID > "$PID_FILE"
-  echo "服务启动中 (PID=$PID)..."
+  rm -f "$PID_FILE"
+  if command -v screen >/dev/null 2>&1; then
+    # screen 独立于 Codex/终端会话，避免当前会话取消时连带终止本地服务。
+    screen -S "$SCREEN_SESSION" -X quit >/dev/null 2>&1 || true
+    screen -dmS "$SCREEN_SESSION" /bin/bash -lc \
+      "exec '$JAVA_HOME/bin/java' -jar '$JAR_PATH' --spring.profiles.active='$PROFILE' --server.port='$PORT' > '$LOG_FILE' 2>&1"
+    echo "服务启动中（独立 screen 会话：${SCREEN_SESSION}）..."
+  else
+    nohup "$JAVA_HOME/bin/java" -jar "$JAR_PATH" \
+      --spring.profiles.active=$PROFILE \
+      --server.port=$PORT \
+      > "$LOG_FILE" 2>&1 &
+    echo "服务启动中..."
+  fi
 
   # 等待服务启动
   for i in $(seq 1 20); do
     sleep 1
     if curl -s "http://localhost:$PORT/api/admin/public-config" > /dev/null 2>&1; then
+      PID=$(pgrep -f "java -jar $JAR_PATH" | head -n 1 || true)
+      if [ -n "$PID" ]; then echo "$PID" > "$PID_FILE"; fi
       echo "服务已就绪 -> http://localhost:$PORT"
       return 0
     fi
@@ -67,21 +80,33 @@ start() {
 }
 
 stop() {
-  if [ ! -f "$PID_FILE" ]; then
-    PID=$(ps aux | grep "java -jar" | grep "$APP_NAME" | awk '{print $2}')
-    if [ -n "$PID" ]; then
-      kill -9 $PID 2>/dev/null
-      echo "已强制停止进程 $PID"
-    else
-      echo "未找到运行中的服务"
+  if [ -f "$PID_FILE" ]; then
+    PID=$(cat "$PID_FILE")
+    if kill -0 "$PID" 2>/dev/null; then
+      kill "$PID" 2>/dev/null || true
+      for i in $(seq 1 10); do
+        kill -0 "$PID" 2>/dev/null || break
+        sleep 1
+      done
+      kill -9 "$PID" 2>/dev/null || true
+      rm -f "$PID_FILE"
+      screen -S "$SCREEN_SESSION" -X quit >/dev/null 2>&1 || true
+      echo "已停止进程 $PID"
+      return
     fi
-    return
+    # PID 文件可能在异常退出后遗留，不能因此漏掉仍占用端口的旧服务。
+    rm -f "$PID_FILE"
   fi
-
-  PID=$(cat "$PID_FILE")
-  kill -9 $PID 2>/dev/null
-  rm -f "$PID_FILE"
-  echo "已停止服务 (PID=$PID)"
+  PID=$(ps aux | grep "java -jar" | grep "$APP_NAME" | awk '{print $2}')
+  if [ -n "$PID" ]; then
+    kill "$PID" 2>/dev/null || true
+    sleep 1
+    kill -9 "$PID" 2>/dev/null || true
+    echo "已停止遗留进程 $PID"
+  else
+    echo "未找到运行中的服务"
+  fi
+  screen -S "$SCREEN_SESSION" -X quit >/dev/null 2>&1 || true
 }
 
 restart() {
@@ -89,7 +114,7 @@ restart() {
   sleep 1
   # 重新打包确保代码最新
   echo "重新打包..."
-  ./mvnw package -DskipTests -q || { echo "打包失败"; exit 1; }
+  scripts/mvnw-java21.sh package -DskipTests -q || { echo "打包失败"; exit 1; }
   start
 }
 

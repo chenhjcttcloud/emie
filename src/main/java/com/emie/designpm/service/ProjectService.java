@@ -133,6 +133,15 @@ public class ProjectService {
     }
 
     public Project createProject(Map<String, Object> body) {
+        return createProject(body, false);
+    }
+
+    /** 仅供受控历史批量导入使用；避免对既有负责人一次性发送大量实时通知。 */
+    public Project createImportedProject(Map<String, Object> body) {
+        return createProject(body, true);
+    }
+
+    private Project createProject(Map<String, Object> body, boolean suppressNotifications) {
         String type = (String) body.get("type");
         String currentRole = (String) body.getOrDefault("currentRole", "");
         String currentUserId = (String) body.getOrDefault("currentUserId", "");
@@ -222,8 +231,11 @@ public class ProjectService {
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(refImagesJson, "project", saved.getId());
         fileArchiveService.bindFilesFromJson(attsJson, "project", saved.getId());
-        safeNotify("PROJECT_ASSIGNED", saved.getPlannerId(), "project", saved.getId(), currentUserId,
-                notificationContext(saved, null, currentUser, ""));
+        // 批量历史导入不应向每位负责人逐条发送即时通知；导入本身仍保留操作日志与同步记录。
+        if (!suppressNotifications) {
+            safeNotify("PROJECT_ASSIGNED", saved.getPlannerId(), "project", saved.getId(), currentUserId,
+                    notificationContext(saved, null, currentUser, ""));
+        }
         return saved;
     }
 
