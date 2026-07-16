@@ -26,6 +26,7 @@ public class ProjectDetailDTO {
     private String complianceItems;
     private String priceRange;
     private String ipName;
+    private String ipSubOptions;
     private String referenceImagesJson;
     private String attachmentsJson;
     private List<Map<String, Object>> logs;

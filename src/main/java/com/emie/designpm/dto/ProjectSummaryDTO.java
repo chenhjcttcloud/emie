@@ -20,6 +20,7 @@ public class ProjectSummaryDTO {
     private String complianceItems;
     private String priceRange;
     private String ipName;
+    private String ipSubOptions;
     private int taskCount;
     private int approvedTaskCount;
     private int progressPercent;

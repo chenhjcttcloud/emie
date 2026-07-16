@@ -127,18 +127,20 @@ async function renderAdminIpOptions(container) {
         <button class="btn btn-primary btn-sm" data-emie-onclick="addIpOption(${nextSortOrder})">➕ 新增IP</button>
       </div>
       <div class="config-card-body">
-        <p style="font-size:13px;color:var(--gray-500);margin-bottom:14px;">启用的IP会出现在渠道定制单和公司常规品项目的新建页面中。</p>
+        <p style="font-size:13px;color:var(--gray-500);margin-bottom:14px;">启用的IP会出现在渠道定制单和公司常规品项目的新建页面中。可为每个一级IP配置二级标签，并选择单选或多选。</p>
         ${items.length === 0 ? `<div class="empty" style="padding:30px;"><div class="empty-icon">🏷️</div><p>暂未配置IP</p></div>` : `
         <div class="table-wrap"><table>
-          <thead><tr><th>ID</th><th>IP名称</th><th>排序</th><th>状态</th><th>操作</th></tr></thead>
+          <thead><tr><th>ID</th><th>IP名称</th><th>二级选项</th><th>选择方式</th><th>排序</th><th>状态</th><th>操作</th></tr></thead>
           <tbody>${items.map(item => `
             <tr>
               <td>${item.id}</td>
               <td><strong>${escHtml(item.name)}</strong></td>
+              <td>${(() => { try { return JSON.parse(item.subOptionsJson || '[]').map(escHtml).join('、') || '-'; } catch(e) { return '-'; } })()}</td>
+              <td>${item.subOptionSelectionMode === 'single' ? '单选' : '多选'}</td>
               <td>${item.sortOrder}</td>
               <td><span class="badge ${item.active ? 'badge-completed' : 'badge-rejected'}">${item.active ? '启用' : '禁用'}</span></td>
               <td style="white-space:nowrap;">
-                <button class="btn btn-outline btn-sm" data-emie-onclick="editIpOption(${item.id}, '${escHtml(escJsString(item.name))}', ${item.sortOrder}, ${item.active})">✏️ 编辑</button>
+                <button class="btn btn-outline btn-sm" data-emie-onclick="editIpOption(${item.id}, '${escHtml(escJsString(item.name))}', ${item.sortOrder}, ${item.active}, '${encodeURIComponent(item.subOptionsJson || '[]')}', '${item.subOptionSelectionMode || 'multiple'}')">✏️ 编辑</button>
                 <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-emie-onclick="deleteIpOption(${item.id})">🗑️ 删除</button>
               </td>
             </tr>`).join('')}
@@ -152,11 +154,13 @@ const addIpOption = function(nextSortOrder = 1) {
   openIpOptionModal(null, '', nextSortOrder, true);
 };
 
-const editIpOption = function(id, name, sortOrder, active) {
-  openIpOptionModal(id, name, sortOrder, active);
+const editIpOption = function(id, name, sortOrder, active, encodedSubOptions = '%5B%5D', selectionMode = 'multiple') {
+  let subOptions = [];
+  try { subOptions = JSON.parse(decodeURIComponent(encodedSubOptions)); } catch (e) {}
+  openIpOptionModal(id, name, sortOrder, active, subOptions, selectionMode);
 };
 
-function openIpOptionModal(id, name, sortOrder, active) {
+function openIpOptionModal(id, name, sortOrder, active, subOptions = [], selectionMode = 'multiple') {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'ipOptionEditModal';
@@ -166,6 +170,8 @@ function openIpOptionModal(id, name, sortOrder, active) {
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">${id ? '✏️ 编辑IP' : '🏷️ 新增IP'}</div></div></div>
       <div class="modal-body">
         <div class="form-group"><label class="form-label"><span class="required">*</span> IP名称</label><input class="form-input" id="ipOptionName" value="${escHtml(name)}" maxlength="100" placeholder="请输入IP名称"></div>
+        <div class="form-group"><label class="form-label">二级IP选项</label><textarea class="form-textarea" id="ipOptionSubOptions" maxlength="3000" placeholder="每行一个，例如：&#10;小黄人&#10;KT猫">${escHtml((subOptions || []).join('\n'))}</textarea><div class="form-hint">留空时新建项目页不会显示二级选项；支持换行或逗号分隔。</div></div>
+        <div class="form-group"><label class="form-label">二级选项选择方式</label><select class="form-select" id="ipOptionSelectionMode"><option value="multiple" ${selectionMode !== 'single' ? 'selected' : ''}>多选</option><option value="single" ${selectionMode === 'single' ? 'selected' : ''}>单选</option></select></div>
         <div class="form-group"><label class="form-label">排序号</label><input class="form-input" id="ipOptionOrder" type="number" value="${sortOrder || 0}" placeholder="数字越小越靠前"></div>
         ${id ? `<div class="form-group"><label class="form-label">状态</label>
           <select class="form-select" id="ipOptionActive">
@@ -187,7 +193,7 @@ const saveIpOption = async function(id) {
   const name = document.getElementById('ipOptionName')?.value?.trim();
   if (!name) { alert('请输入IP名称'); return; }
   const sortOrder = parseInt(document.getElementById('ipOptionOrder')?.value, 10) || 0;
-  const body = { name, sortOrder: String(sortOrder) };
+  const body = { name, sortOrder: String(sortOrder), subOptions: document.getElementById('ipOptionSubOptions')?.value || '', subOptionSelectionMode: document.getElementById('ipOptionSelectionMode')?.value || 'multiple' };
   if (id) body.active = document.getElementById('ipOptionActive')?.value || 'true';
   try {
     if (id) await apiPut(`/ip-options/${id}`, body);

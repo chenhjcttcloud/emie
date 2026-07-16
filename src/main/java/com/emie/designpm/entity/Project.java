@@ -89,6 +89,10 @@ public class Project {
     @Column(length = 100)
     private String ipName;
 
+    /** 已选二级 IP，JSON 数组；保留历史项目的完整一级/二级 IP 归属。 */
+    @Column(columnDefinition = "TEXT")
+    private String ipSubOptions;
+
     /** 终止请求发起方（用于双方确认终止流程） */
     private String terminateRequester;
 

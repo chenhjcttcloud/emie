@@ -51,6 +51,50 @@ function togglePriceRange(el) {
   formModified();
 }
 
+function parseIpSubOptions(ip) {
+  try {
+    const values = JSON.parse(ip?.subOptionsJson || '[]');
+    return Array.isArray(values) ? values.filter(value => typeof value === 'string' && value.trim()) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function onIpChange(select) {
+  const group = document.getElementById('ipSubOptionGroup');
+  const chips = document.getElementById('ipSubOptionChips');
+  const input = document.getElementById('ipSubOptionsInput');
+  const hint = document.getElementById('ipSubOptionHint');
+  if (!group || !chips || !input || !hint) return;
+  const ip = (EMIE.state.ipOptions || []).find(item => item.name === select.value);
+  const options = parseIpSubOptions(ip);
+  input.value = '[]';
+  chips.innerHTML = '';
+  if (!ip || options.length === 0) {
+    group.style.display = 'none';
+    group.dataset.selectionMode = '';
+    formModified();
+    return;
+  }
+  const mode = ip.subOptionSelectionMode === 'single' ? 'single' : 'multiple';
+  group.style.display = '';
+  group.dataset.selectionMode = mode;
+  hint.textContent = mode === 'single' ? '请选择一个二级 IP' : '可多选';
+  chips.innerHTML = options.map(value => `<span class="chip" data-value="${escHtml(value)}" data-emie-onclick="toggleIpSubOption(this)">${escHtml(value)}</span>`).join('');
+  formModified();
+}
+
+function toggleIpSubOption(el) {
+  const group = document.getElementById('ipSubOptionGroup');
+  const chips = document.getElementById('ipSubOptionChips');
+  if (!group || !chips) return;
+  if (group.dataset.selectionMode === 'single') chips.querySelectorAll('.chip').forEach(chip => chip.classList.remove('selected'));
+  el.classList.toggle('selected');
+  const selected = [...chips.querySelectorAll('.chip.selected')].map(chip => chip.dataset.value);
+  document.getElementById('ipSubOptionsInput').value = JSON.stringify(selected);
+  formModified();
+}
+
 // 切换子任务负责人类型（设计师/供应链）
 const switchAssigneeType = function(prefix, role, el) {
   // 更新 radio 选中样式
@@ -162,10 +206,16 @@ function openCreateProject(type) {
             <input class="form-input" name="productName" value="${escHtml(draft?.productName || '')}" placeholder="请输入产品名称" maxlength="200" data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">
           </div>
           <div class="form-group"><label class="form-label">IP<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可选）</span></label>
-            <select class="form-select" name="ipName" data-emie-onchange="formModified()">
+            <select class="form-select" id="ipNameSelect" name="ipName" data-emie-onchange="onIpChange(this)">
               <option value="">无IP</option>
               ${EMIE.state.ipOptions.map(ip => `<option value="${escHtml(ip.name)}" ${draft?.ipName === ip.name ? 'selected' : ''}>${escHtml(ip.name)}</option>`).join('')}
             </select>
+          </div>
+          <div class="form-group" id="ipSubOptionGroup" style="display:none;">
+            <label class="form-label">二级IP<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（按IP配置）</span></label>
+            <div class="chip-group" id="ipSubOptionChips"></div>
+            <input type="hidden" name="ipSubOptions" id="ipSubOptionsInput" value="[]">
+            <div class="form-hint" id="ipSubOptionHint"></div>
           </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 参考零售价</label>
             <div class="chip-group" id="priceRangeChips">
@@ -219,6 +269,18 @@ function openCreateProject(type) {
   document.body.appendChild(modal);
   if (EMIE.projectState.createRefImages.length) renderFileList(EMIE.projectState.createRefImages, '参考图片');
   if (EMIE.projectState.createAttachments.length) renderFileList(EMIE.projectState.createAttachments, '附件');
+
+  const ipSelect = document.getElementById('ipNameSelect');
+  if (ipSelect) {
+    onIpChange(ipSelect);
+    if (draft?.ipSubOptions) {
+      try {
+        const selected = JSON.parse(draft.ipSubOptions);
+        selected.forEach(value => document.querySelector(`#ipSubOptionChips .chip[data-value="${value}"]`)?.classList.add('selected'));
+        document.getElementById('ipSubOptionsInput').value = JSON.stringify(selected);
+      } catch (e) {}
+    }
+  }
 
   // 恢复草稿中的产品类目和目标市场
   if (draft && type === 'channel_custom') {
@@ -324,6 +386,11 @@ async function submitCreateProject(type) {
     addFieldError('targetMarket', '请选择目标市场');
   }
 
+  if (data.ipName && document.getElementById('ipSubOptionGroup')?.style.display !== 'none'
+      && (!data.ipSubOptions || data.ipSubOptions === '[]')) {
+    addFieldError('ipSubOptions', '请选择二级IP选项');
+  }
+
   // 要求完成时间
   if (!data.deadline) addFieldError('deadline', '请填写要求完成时间');
 
@@ -414,6 +481,8 @@ EMIE.registerActions({
   toggleMarket,
   toggleCompliance,
   togglePriceRange,
+  onIpChange,
+  toggleIpSubOption,
   openCreateProject,
   submitCreateProject,
   showDateError,
@@ -426,6 +495,8 @@ EMIE.registerModule('projectForm', {
   toggleMarket,
   toggleCompliance,
   togglePriceRange,
+  onIpChange,
+  toggleIpSubOption,
   switchAssigneeType,
   switchEditAssigneeType,
   openCreateProject,

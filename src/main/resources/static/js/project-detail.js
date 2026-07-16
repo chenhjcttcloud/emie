@@ -31,6 +31,16 @@ const taskReject = (...args) => EMIE.actions.taskReject(...args);
 const clearSWRCache = (...args) => EMIE.actions.clearSWRCache(...args);
 const openScoring = (...args) => EMIE.actions.openScoring(...args);
 
+function formatProjectIp(ipName, ipSubOptions) {
+  if (!ipName) return '无IP';
+  try {
+    const subOptions = JSON.parse(ipSubOptions || '[]');
+    return Array.isArray(subOptions) && subOptions.length ? `${ipName} / ${subOptions.join('、')}` : ipName;
+  } catch (e) {
+    return ipName;
+  }
+}
+
 // ==================== 项目详情 ====================
 async function openProjectDetail(pid) {
   if (!tryOpenModal('projectDetailModal')) return;
@@ -88,7 +98,7 @@ function renderProjectDetailContent(detail) {
       <div class="detail-grid">
         <div class="detail-item"><div class="detail-label">项目类型</div><div class="detail-value">${isChannel ? '渠道定制单' : '公司常规品'}</div></div>
         <div class="detail-item"><div class="detail-label">产品名称</div><div class="detail-value">${escHtml(displayText(detail.productName, '未设置'))}</div></div>
-        <div class="detail-item"><div class="detail-label">IP</div><div class="detail-value">${escHtml(displayText(detail.ipName, '无IP'))}</div></div>
+        <div class="detail-item"><div class="detail-label">IP</div><div class="detail-value">${escHtml(formatProjectIp(detail.ipName, detail.ipSubOptions))}</div></div>
         ${isChannel ? `<div class="detail-item"><div class="detail-label">需求方（销售）</div><div class="detail-value">${escHtml(detail.salesName || '-')}</div></div>` : ''}
         <div class="detail-item"><div class="detail-label">产品企划</div><div class="detail-value">${escHtml(detail.plannerName || '-')}</div></div>
         ${detail.productCategory ? `<div class="detail-item"><div class="detail-label">产品类目</div><div class="detail-value">${escHtml(detail.productCategory)}${detail.productCategory === '其他' && detail.productCategoryNote ? `（${escHtml(detail.productCategoryNote)}）` : ''}</div></div>` : ''}

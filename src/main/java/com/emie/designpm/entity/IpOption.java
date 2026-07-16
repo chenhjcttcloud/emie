@@ -19,6 +19,14 @@ public class IpOption {
     @Column(nullable = false)
     private Boolean active = true;
 
+    /** 二级 IP 选项，JSON 数组；为空时新建项目页不展示二级选择区域。 */
+    @Column(columnDefinition = "TEXT")
+    private String subOptionsJson;
+
+    /** single / multiple */
+    @Column(length = 16)
+    private String subOptionSelectionMode = "multiple";
+
     public IpOption() {}
 
     public IpOption(String name, Integer sortOrder) {
@@ -38,4 +46,10 @@ public class IpOption {
 
     public Boolean getActive() { return active; }
     public void setActive(Boolean active) { this.active = active; }
+
+    public String getSubOptionsJson() { return subOptionsJson; }
+    public void setSubOptionsJson(String subOptionsJson) { this.subOptionsJson = subOptionsJson; }
+
+    public String getSubOptionSelectionMode() { return subOptionSelectionMode; }
+    public void setSubOptionSelectionMode(String subOptionSelectionMode) { this.subOptionSelectionMode = subOptionSelectionMode; }
 }

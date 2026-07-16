@@ -207,6 +207,7 @@ public class ProjectService {
                     .filter(option -> Boolean.TRUE.equals(option.getActive()))
                     .orElseThrow(() -> new RuntimeException("请选择有效的IP"));
             p.setIpName(ipOption.getName());
+            p.setIpSubOptions(validateIpSubOptions((String) body.get("ipSubOptions"), ipOption));
         }
 
         p.setReferenceImagesJson(refImagesJson);
@@ -388,6 +389,30 @@ public class ProjectService {
         }
         if (reason != null && !reason.isBlank()) context.put("reason", reason);
         return context;
+    }
+
+    private String validateIpSubOptions(String submittedJson, IpOption ipOption) {
+        List<String> configured;
+        List<String> selected;
+        try {
+            configured = objectMapper.readValue(Optional.ofNullable(ipOption.getSubOptionsJson()).orElse("[]"), new TypeReference<List<String>>() {});
+            selected = objectMapper.readValue(Optional.ofNullable(submittedJson).orElse("[]"), new TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            throw new RuntimeException("二级IP选项格式无效");
+        }
+        if (configured.isEmpty()) return null;
+        if (selected.isEmpty()) throw new RuntimeException("请选择二级IP选项");
+        if ("single".equals(ipOption.getSubOptionSelectionMode()) && selected.size() != 1) {
+            throw new RuntimeException("该IP的二级选项仅允许单选");
+        }
+        if (selected.stream().anyMatch(value -> value == null || !configured.contains(value))) {
+            throw new RuntimeException("请选择有效的二级IP选项");
+        }
+        try {
+            return objectMapper.writeValueAsString(selected.stream().distinct().toList());
+        } catch (Exception e) {
+            throw new RuntimeException("二级IP选项保存失败");
+        }
     }
 
     private void safeNotify(String eventType, String recipientUserId, String aggregateType, Long aggregateId,
