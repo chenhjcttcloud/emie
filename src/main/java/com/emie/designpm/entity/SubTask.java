@@ -13,7 +13,8 @@ import java.time.LocalDateTime;
     @Index(name = "idx_sub_task_project", columnList = "project_id"),
     @Index(name = "idx_sub_task_status", columnList = "status"),
     @Index(name = "idx_sub_task_status_designer", columnList = "status,designerId"),
-    @Index(name = "idx_sub_task_project_status", columnList = "project_id,status")
+    @Index(name = "idx_sub_task_project_status", columnList = "project_id,status"),
+    @Index(name = "idx_sub_task_assignee_designer_status", columnList = "assigneeRole,designerId,status")
 })
 @EntityListeners(com.emie.designpm.service.SubTaskSyncListener.class)
 public class SubTask {

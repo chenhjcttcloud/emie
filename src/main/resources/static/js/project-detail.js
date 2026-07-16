@@ -3,6 +3,7 @@ const getCurrentUserName = (...args) => EMIE.actions.getCurrentUserName(...args)
 const getCurrentUserId = (...args) => EMIE.actions.getCurrentUserId(...args);
 const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const apiPost = (...args) => EMIE.actions.apiPost(...args);
+const openEditProject = (...args) => EMIE.actions.openEditProject(...args);
 const tryOpenModal = (...args) => EMIE.actions.tryOpenModal(...args);
 const doneOpenModal = (...args) => EMIE.actions.doneOpenModal(...args);
 const apiDelete = (...args) => EMIE.actions.apiDelete(...args);
@@ -69,6 +70,10 @@ async function openProjectDetail(pid) {
 
 function renderProjectDetailContent(detail) {
   const isChannel = detail.type === 'channel_custom';
+  const canEditInformation = (isChannel
+      && EMIE.state.currentRole === 'sales' && detail.salesId === getCurrentUserId())
+    || (!isChannel
+      && EMIE.state.currentRole === 'planner' && detail.plannerId === getCurrentUserId());
   // 进度：approved/completed/sales_approved/admin_approved 算完成
   const totalTasks = detail.tasks.length;
   const doneStatuses = ['delivered', 'planner_approved', 'sales_approved', 'admin_approved', 'completed'];
@@ -94,7 +99,9 @@ function renderProjectDetailContent(detail) {
     </div>
 
     <div class="detail-section">
-      <div class="detail-section-title">📋 项目信息</div>
+      <div class="detail-section-title">📋 项目信息
+        ${canEditInformation ? `<button class="btn btn-outline btn-sm" style="margin-left:auto;" data-emie-onclick="openEditProject(${detail.id})">✏️ 编辑项目信息</button>` : ''}
+      </div>
       <div class="detail-grid">
         <div class="detail-item"><div class="detail-label">项目类型</div><div class="detail-value">${isChannel ? '渠道定制单' : '公司常规品'}</div></div>
         <div class="detail-item"><div class="detail-label">产品名称</div><div class="detail-value">${escHtml(displayText(detail.productName, '未设置'))}</div></div>

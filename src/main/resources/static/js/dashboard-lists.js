@@ -9,25 +9,19 @@ const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const openCreateProject = (...args) => EMIE.actions.openCreateProject(...args);
 
 async function renderOrderList(main, type, role, uid) {
-  // 使用缓存的项目列表
-  let allOrders = EMIE.state.cache.orders;
-  if (!allOrders || !allOrders.length) {
-    const participating = role === 'designer' || role === 'supplychain' ? '&participating=true' : '';
-    allOrders = await apiGet(`/projects?role=${role}&userId=${uid}${participating}`);
-    EMIE.state.cache.orders = allOrders;
-  }
-  let orders = [...allOrders];
   let title = '全部项目';
-  if (type === 'channel_custom') { orders = orders.filter(o => o.type === 'channel_custom'); title = '📦 渠道定制单'; }
-  else if (type === 'regular') { orders = orders.filter(o => o.type === 'regular'); title = '🏭 公司常规品'; }
+  if (type === 'channel_custom') title = '📦 渠道定制单';
+  else if (type === 'regular') title = '🏭 公司常规品';
   else title = '📋 全部项目';
 
-  // 保存当前列表的完整数据用于筛选
-  EMIE.state.cache.currentFilterData = [...orders];
+  const participating = role === 'designer' || role === 'supplychain';
+  const state = EMIE.projectListState = { type, role, uid, participating, page: 0, total: 0, totalPages: 0, allOrders: null, filteredOrders: null, loading: false };
+  main.innerHTML = `<div class="project-query-loading"><span class="project-query-spinner"></span>正在查询项目…</div>`;
+  const result = await loadProjectListPage(0);
 
   main.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <h2 style="font-size:20px;">${title} <span style="font-size:13px;color:var(--gray-400);font-weight:400;">（${orders.length} 个）</span></h2>
+      <h2 style="font-size:20px;">${title} <span id="projectListCount" style="font-size:13px;color:var(--gray-400);font-weight:400;">（${result.total} 个）</span></h2>
       <div style="display:flex;gap:8px;">
         ${EMIE.state.currentRole === 'sales' && type === 'channel_custom' ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('channel_custom')">➕ 新建渠道定制项目</button>` : ''}
         ${EMIE.state.currentRole === 'planner' && type === 'regular' ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('regular')">➕ 新建常规品设计项目</button>` : ''}
@@ -61,16 +55,82 @@ async function renderOrderList(main, type, role, uid) {
       <button class="btn btn-primary btn-sm" data-emie-onclick="filterProjectList()">🔍 查询</button>
       <button class="btn btn-outline btn-sm" data-emie-onclick="resetProjectFilters()">↺ 重置</button>
     </div>
-    <div class="card" id="projectListContainer">${renderProjectTable(orders)}</div>
+    <div class="card project-list-card" id="projectListContainer">${renderProjectTable(result.items, { compact: true, showType: !type })}</div>
   `;
 }
 
-function renderProjectTable(orders) {
+async function loadProjectListPage(page) {
+  const state = EMIE.projectListState;
+  if (!state) return { items: [], total: 0, totalPages: 0, page: 0 };
+  if (state.filteredOrders) {
+    const start = page * 15;
+    const items = state.filteredOrders.slice(start, start + 15);
+    return { items, total: state.filteredOrders.length, totalPages: Math.ceil(state.filteredOrders.length / 15), page };
+  }
+  const params = new URLSearchParams({ page: String(page), size: '15' });
+  if (state.type) params.set('type', state.type);
+  if (state.participating) params.set('participating', 'true');
+  const result = await apiGet(`/projects/page?${params}`);
+  state.total = result.total || 0;
+  state.totalPages = result.totalPages || 0;
+  return result;
+}
+
+function renderProjectTable(orders, options = {}) {
   if (!orders.length) return `<div class="empty" style="padding:40px;"><div class="empty-icon">📭</div><p>暂无项目</p></div>`;
-  return `<div class="table-wrap"><table>
-    <thead><tr><th>编号</th><th>类型</th><th>产品名称</th><th>需求方</th><th>产品企划</th><th>产品类目</th><th>目标市场</th><th>价格</th><th>子任务</th><th>评分</th><th>要求时间</th><th>状态</th><th>操作</th></tr></thead>
-    <tbody>${orders.map(o => renderProjectRow(o)).join('')}</tbody>
-  </table></div>`;
+  const { compact = false, showType = true } = options;
+  const headers = compact
+    ? `<th class="col-id">编号</th>${showType ? '<th>类型</th>' : ''}<th class="col-name">产品名称</th><th>需求方 / 企划</th><th>类目 / 市场</th><th>进度</th><th>截止</th><th>状态</th><th class="col-action">操作</th>`
+    : '<th>编号</th><th>类型</th><th>产品名称</th><th>需求方</th><th>产品企划</th><th>产品类目</th><th>目标市场</th><th>价格</th><th>子任务</th><th>评分</th><th>要求时间</th><th>状态</th><th>操作</th>';
+  return `<div class="table-wrap project-table-wrap"><table class="${compact ? 'project-list-table' : ''}">
+    <thead><tr>${headers}</tr></thead>
+    <tbody>${orders.map(o => renderProjectRow(o, compact, showType)).join('')}</tbody>
+  </table></div>${compact ? renderProjectPagination(orders.length) : ''}`;
+}
+
+function renderProjectPagination(currentCount) {
+  const state = EMIE.projectListState || {};
+  const total = state.filteredOrders ? state.filteredOrders.length : state.total;
+  const pages = state.filteredOrders ? Math.ceil(total / 15) : state.totalPages;
+  const page = state.page || 0;
+  const from = total ? page * 15 + 1 : 0;
+  const to = total ? page * 15 + currentCount : 0;
+  return `<div class="project-pagination"><span>显示 ${from}-${to} / ${total} · 共 ${pages} 页</span><div><button class="btn btn-outline btn-sm" ${page <= 0 ? 'disabled' : ''} data-emie-onclick="changeProjectListPage(${page - 1})">上一页</button><span class="project-page-indicator">${pages ? `${page + 1} / ${pages}` : '0 / 0'}</span><button class="btn btn-outline btn-sm" ${page >= pages - 1 ? 'disabled' : ''} data-emie-onclick="changeProjectListPage(${page + 1})">下一页</button><span class="project-page-jump">跳至 <input id="projectPageJumpInput" type="number" min="1" max="${Math.max(pages, 1)}" value="${pages ? page + 1 : 1}" ${pages ? '' : 'disabled'}> 页</span><button class="btn btn-outline btn-sm" ${pages ? '' : 'disabled'} data-emie-onclick="jumpProjectListPage()">跳转</button></div></div>`;
+}
+
+function renderProjectListLoading() {
+  return `<div class="project-query-loading"><span class="project-query-spinner"></span>正在查询项目…</div>`;
+}
+
+async function changeProjectListPage(page) {
+  const state = EMIE.projectListState;
+  if (!state || page < 0 || state.loading) return;
+  const container = document.getElementById('projectListContainer');
+  state.loading = true;
+  if (container) container.innerHTML = renderProjectListLoading();
+  try {
+    const result = await loadProjectListPage(page);
+    state.page = result.page ?? page;
+    if (container) container.innerHTML = renderProjectTable(result.items || [], { compact: true, showType: !state.type });
+    const count = document.getElementById('projectListCount');
+    if (count) count.textContent = `（${result.total || 0} 个）`;
+  } catch (e) {
+    if (container) container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>查询失败：${escHtml(e.message)}</p></div>`;
+  } finally {
+    state.loading = false;
+  }
+}
+
+function jumpProjectListPage() {
+  const state = EMIE.projectListState;
+  const input = document.getElementById('projectPageJumpInput');
+  const pages = state?.filteredOrders ? Math.ceil(state.filteredOrders.length / 15) : state?.totalPages;
+  const requested = Number.parseInt(input?.value, 10);
+  if (!Number.isInteger(requested) || requested < 1 || requested > pages) {
+    alert(`请输入 1 至 ${pages || 1} 的页码`);
+    return;
+  }
+  changeProjectListPage(requested - 1);
 }
 
 function filterProjectList() {
@@ -78,8 +138,23 @@ function filterProjectList() {
   filterProjectList._timer = setTimeout(applyFilterProjectList, 100);
 }
 
-function applyFilterProjectList() {
-  let filtered = EMIE.state.cache.currentFilterData || [...EMIE.state.cache.orders];
+async function applyFilterProjectList() {
+  const state = EMIE.projectListState;
+  if (!state) return;
+  if (!state.allOrders && !state.loading) {
+    const container = document.getElementById('projectListContainer');
+    state.loading = true;
+    if (container) container.innerHTML = renderProjectListLoading();
+    try {
+      const params = new URLSearchParams();
+      if (state.type) params.set('type', state.type);
+      if (state.participating) params.set('participating', 'true');
+      state.allOrders = await apiGet(`/projects?${params}`);
+    } finally {
+      state.loading = false;
+    }
+  }
+  let filtered = [...state.allOrders];
 
   // 状态筛选
   const currentFilter = document.getElementById('projectStatusFilter')?.value || 'all';
@@ -107,8 +182,9 @@ function applyFilterProjectList() {
   const dateEnd = document.getElementById('filterDateEnd')?.value;
   filtered = filtered.filter(o => isDateInRange(o.deadline, dateStart, dateEnd));
 
-  const c = document.getElementById('projectListContainer');
-  if (c) c.innerHTML = renderProjectTable(filtered);
+  state.filteredOrders = filtered;
+  state.page = 0;
+  await changeProjectListPage(0);
 }
 
 function resetProjectFilters() {
@@ -124,7 +200,8 @@ function resetProjectFilters() {
   if (marketEl) marketEl.value = 'all';
   if (dateStartEl) dateStartEl.value = '';
   if (dateEndEl) dateEndEl.value = '';
-  filterProjectList();
+  if (EMIE.projectListState) EMIE.projectListState.filteredOrders = null;
+  changeProjectListPage(0);
 }
 
 // ==================== 我的子任务（企划派发任务界面） ====================
@@ -282,6 +359,8 @@ function isDateInRange(value, start, end) {
 EMIE.registerActions({
   renderOrderList,
   renderProjectTable,
+  changeProjectListPage,
+  jumpProjectListPage,
   filterProjectList,
   applyFilterProjectList,
   resetProjectFilters,
@@ -298,6 +377,8 @@ EMIE.registerActions({
 
 EMIE.registerModule('dashboardLists', {
   renderOrderList,
+  changeProjectListPage,
+  jumpProjectListPage,
   filterProjectList,
   resetProjectFilters,
   renderMyTasks,

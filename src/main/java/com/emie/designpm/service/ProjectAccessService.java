@@ -9,6 +9,8 @@ import com.emie.designpm.repository.ProjectRepository;
 import com.emie.designpm.repository.UserRepository;
 import com.emie.designpm.util.ProjectAccessPolicy;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -43,6 +45,23 @@ public class ProjectAccessService {
         return distinctProjects(visibleUserIds(viewerRole, viewerUserId, viewerRole).stream()
                 .flatMap(userId -> projectRepository.findParticipatingByAssigneeLight(userId, viewerRole).stream())
                 .toList());
+    }
+
+    /** 项目列表分页：将角色可见范围和数据库分页合并，避免默认读取整张项目表。 */
+    public Page<Project> findVisibleProjectsPage(String viewerRole, String viewerUserId, String type,
+                                                  boolean participating, Pageable pageable) {
+        if ("admin".equals(viewerRole)) return projectRepository.findPageLight(type, pageable);
+        List<String> userIds = visibleUserIds(viewerRole, viewerUserId, viewerRole);
+        if (userIds.isEmpty()) return Page.empty(pageable);
+        if (participating && ("designer".equals(viewerRole) || "supplychain".equals(viewerRole))) {
+            return projectRepository.findParticipatingByAssigneeIdsPage(userIds, viewerRole, type, pageable);
+        }
+        return switch (viewerRole) {
+            case "sales" -> projectRepository.findBySalesIdsPage(userIds, type, pageable);
+            case "planner" -> projectRepository.findByPlannerIdsPage(userIds, type, pageable);
+            case "designer", "supplychain" -> projectRepository.findByAssigneeIdsPage(userIds, viewerRole, type, pageable);
+            default -> Page.empty(pageable);
+        };
     }
 
     public List<Project> findVisibleProjectsWithTasks(AuthController.AuthSession session) {

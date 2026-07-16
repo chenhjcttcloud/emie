@@ -36,6 +36,21 @@ public final class ProjectAccessPolicy {
         };
     }
 
+    /**
+     * 编辑项目基础资料的专用规则。
+     * 渠道定制项目只能由项目所属销售编辑，常规品只能由项目所属产品企划编辑；
+     * 此规则有意不为管理员提供绕过权限，避免代替创建人修改项目归属资料。
+     */
+    public static boolean canEditProjectInformation(Project project, AuthController.AuthSession session) {
+        if (project == null || session == null) return false;
+        return ("channel_custom".equals(project.getType())
+                && "sales".equals(session.role())
+                && Objects.equals(session.userId(), project.getSalesId()))
+                || ("regular".equals(project.getType())
+                && "planner".equals(session.role())
+                && Objects.equals(session.userId(), project.getPlannerId()));
+    }
+
     static boolean canViewTask(SubTask task, String userId, String role) {
         if (!matchesAssigneeRole(task, role)) return false;
         if (Objects.equals(userId, task.getDesignerId())) return true;

@@ -12,6 +12,8 @@ import com.emie.designpm.service.ProjectAccessService;
 import com.emie.designpm.util.ProjectAccessPolicy;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.format.DateTimeFormatter;
@@ -81,6 +83,31 @@ public class ProjectController {
         return ResponseEntity.ok(result);
     }
 
+    /** 项目列表分页接口：默认每页 15 条，供全部项目、渠道定制单和公司常规品页面使用。 */
+    @GetMapping("/page")
+    public ResponseEntity<Map<String, Object>> getProjectsPage(
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false, defaultValue = "false") boolean participating,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "15") int size,
+            HttpServletRequest request) {
+        AuthController.AuthSession session = getSession(request);
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 50);
+        Page<Project> projectPage = projectService.getProjectsPage(session.role(), session.userId(), type, participating,
+                PageRequest.of(safePage, safeSize));
+        List<Project> projects = projectPage.getContent();
+        Map<Long, int[]> taskCountMap = projectService.getTaskCountMap(projects);
+        Map<Long, Double> scoreMap = projectService.computeProjectScoresBatch(projects);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("items", projects.stream().map(p -> toSummary(p, taskCountMap, scoreMap)).toList());
+        result.put("page", projectPage.getNumber());
+        result.put("size", projectPage.getSize());
+        result.put("total", projectPage.getTotalElements());
+        result.put("totalPages", projectPage.getTotalPages());
+        return ResponseEntity.ok(result);
+    }
+
     /** 获取项目详情 */
     @GetMapping("/{id}")
     public ResponseEntity<ProjectDetailDTO> getProjectDetail(@PathVariable Long id, HttpServletRequest request) {
@@ -104,6 +131,28 @@ public class ProjectController {
         try {
             Project p = projectService.createProject(withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** 编辑已创建项目的基础资料。权限不复用通用管理权限，严格限制为项目归属创建人。 */
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateProjectInformation(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        try {
+            AuthController.AuthSession session = getSession(request);
+            Project project = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
+            if (!ProjectAccessPolicy.canEditProjectInformation(project, session)) {
+                return ResponseEntity.status(403).body(Map.of("error", "仅该项目的"
+                        + ("channel_custom".equals(project.getType()) ? "销售" : "产品企划") + "可编辑项目信息"));
+            }
+            Project updated = projectService.updateProjectInformation(id, withSessionContext(body, request));
+            return ResponseEntity.ok(toDetail(updated));
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of("error", e.getMessage()));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

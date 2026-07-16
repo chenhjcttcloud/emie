@@ -19,7 +19,7 @@ public interface ScoringRepository extends JpaRepository<ScoringRecord, Long> {
     List<ScoringRecord> findBySubTaskIds(List<Long> subTaskIds);
 
     /** 批量查询多个项目的所有评分记录（通过 JOIN） */
-    @Query("SELECT s FROM ScoringRecord s JOIN s.subTask t JOIN t.project p WHERE p.id IN ?1")
+    @Query("SELECT s FROM ScoringRecord s JOIN FETCH s.subTask t JOIN t.project p WHERE p.id IN ?1")
     List<ScoringRecord> findByProjectIds(List<Long> projectIds);
 
     void deleteBySubTaskId(Long subTaskId);

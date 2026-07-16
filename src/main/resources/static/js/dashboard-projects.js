@@ -49,7 +49,7 @@ async function refreshAfterMutation(pid) {
 
     // 按当前视图刷新
     (async () => {
-      if (EMIE.state.currentView === 'tasks' || EMIE.state.currentView === 'scoring') {
+      if (['orders', 'channel', 'regular', 'tasks', 'scoring'].includes(EMIE.state.currentView)) {
         await render();
       } else if (pid) {
         try {
@@ -104,8 +104,22 @@ function updateProjectRow(pid, detail) {
 }
 
 /** 渲染单行项目 */
-function renderProjectRow(o) {
+function renderProjectRow(o, compact = false, showType = true) {
   const st = getProjectStatusInfo(o.status);
+  if (compact) {
+    const market = o.targetMarket ? (() => { try { return JSON.parse(o.targetMarket).join('/'); } catch(e) { return o.targetMarket; } })() : '-';
+    return `<tr style="cursor:pointer;">
+      <td><strong>#${o.id}</strong></td>
+      ${showType ? `<td>${o.type === 'channel_custom' ? '📦 渠道' : '🏭 常规'}</td>` : ''}
+      <td class="project-name-cell" title="${escHtml(displayText(o.productName, '未设置'))}">${escHtml(displayText(o.productName, '未设置'))}</td>
+      <td><div>${escHtml(o.salesName || '-')}</div><div class="project-muted">${escHtml(o.plannerName || '未指定')}</div></td>
+      <td><div>${escHtml(o.productCategory || '-')}</div><div class="project-muted">${escHtml(market)} · ${escHtml(o.priceRange || '-')}</div></td>
+      <td>${o.approvedTaskCount}/${o.taskCount}<span class="project-muted"> · ${renderScore(o.score)}</span></td>
+      <td>${formatDate(o.deadline)}</td>
+      <td><span class="badge ${st.cls}">${st.label}</span></td>
+      <td class="project-action-cell"><button class="btn btn-outline btn-sm" data-emie-onclick="event.stopPropagation();openProjectDetail(${o.id})">查看</button></td>
+    </tr>`;
+  }
   return `<tr style="cursor:pointer;">
     <td><strong>#${o.id}</strong></td>
     <td style="font-size:12px;">${o.type === 'channel_custom' ? '📦 渠道' : '🏭 常规'}</td>
@@ -138,20 +152,24 @@ async function render() {
     const role = EMIE.state.currentRole;
     const uid = getCurrentUserId();
 
-    // 预加载项目列表（使用缓存避免重复请求）
+    // 三个项目列表使用服务端分页；进入时不再预加载全量项目。
+    const isPagedProjectList = ['orders', 'channel', 'regular'].includes(EMIE.state.currentView);
     let orders = EMIE.state.cache.orders;
-    if (!orders || !orders.length) {
+    if (!isPagedProjectList && (!orders || !orders.length)) {
       try { orders = await apiGet(`/projects?role=${role}&userId=${uid}`); } catch(e) {}
       EMIE.state.cache.orders = orders || [];
     }
+    orders = orders || [];
 
-    // 更新基础徽章（销售角色没有 total/regular 徽章，需要判空）
-    const elTotal = document.getElementById('badgeTotal');
-    if (elTotal) elTotal.textContent = orders.length;
-    const elChannel = document.getElementById('badgeChannel');
-    if (elChannel) elChannel.textContent = orders.filter(x => x.type === 'channel_custom').length;
-    const elRegular = document.getElementById('badgeRegular');
-    if (elRegular) elRegular.textContent = orders.filter(x => x.type === 'regular').length;
+    if (!isPagedProjectList) {
+      // 更新基础徽章（销售角色没有 total/regular 徽章，需要判空）
+      const elTotal = document.getElementById('badgeTotal');
+      if (elTotal) elTotal.textContent = orders.length;
+      const elChannel = document.getElementById('badgeChannel');
+      if (elChannel) elChannel.textContent = orders.filter(x => x.type === 'channel_custom').length;
+      const elRegular = document.getElementById('badgeRegular');
+      if (elRegular) elRegular.textContent = orders.filter(x => x.type === 'regular').length;
+    }
 
     if (EMIE.state.currentView === 'dashboard') {
       await renderDashboard(main, role, uid);
@@ -179,7 +197,7 @@ async function render() {
       myTaskCount = badgeStats.myTaskCount || 0;
 
       // 我的子任务（企划/管理员：进行中的项目数）
-      if (role !== 'sales' && role !== 'designer' && role !== 'supplychain') {
+      if (!isPagedProjectList && role !== 'sales' && role !== 'designer' && role !== 'supplychain') {
         myTaskCount = orders.filter(o =>
           o.status === 'in_progress' || o.status === 'planner_accepted'
         ).length;

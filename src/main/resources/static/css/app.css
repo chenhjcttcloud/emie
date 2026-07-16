@@ -306,6 +306,28 @@ th { text-align:left; padding:10px 14px; font-size:12px; text-transform:uppercas
 td { padding:12px 14px; font-size:13px; border-bottom:1px solid var(--gray-100); }
 tr:hover td { background:var(--gray-50); }
 
+/* 三个项目列表：每页固定 15 条的一屏紧凑视图。 */
+.project-list-card { padding:0; overflow:hidden; }
+.project-table-wrap { overflow-x:hidden; }
+.project-list-table { table-layout:fixed; min-width:0; }
+.project-list-table th { padding:9px 10px; font-size:11px; letter-spacing:.02em; white-space:nowrap; background:var(--gray-50); }
+.project-list-table td { padding:8px 10px; font-size:12px; line-height:1.35; vertical-align:middle; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.project-list-table .col-id { width:58px; }
+.project-list-table .col-name { width:20%; }
+.project-list-table .col-action { width:64px; }
+.project-list-table .project-name-cell { font-weight:600; color:var(--gray-800); }
+.project-list-table .project-muted { color:var(--gray-500); font-size:11px; overflow:hidden; text-overflow:ellipsis; }
+.project-list-table .badge { padding:2px 7px; font-size:10px; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+.project-list-table .project-action-cell { overflow:visible; }
+.project-pagination { min-height:48px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px 12px; border-top:1px solid var(--gray-100); color:var(--gray-500); font-size:12px; }
+.project-pagination > div { display:flex; align-items:center; gap:8px; }
+.project-page-indicator { min-width:42px; text-align:center; color:var(--gray-600); }
+.project-page-jump { display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
+.project-page-jump input { width:52px; height:28px; padding:3px 6px; border:1px solid var(--gray-300); border-radius:5px; text-align:center; font:inherit; }
+.project-query-loading { min-height:190px; display:flex; align-items:center; justify-content:center; gap:10px; color:var(--gray-500); font-size:13px; background:#fff; border-radius:var(--radius); }
+.project-query-spinner { width:18px; height:18px; border:2px solid #DDE3FF; border-top-color:var(--primary); border-radius:50%; animation:project-query-spin .7s linear infinite; }
+@keyframes project-query-spin { to { transform:rotate(360deg); } }
+
 /* Badges */
 .badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:500; }
 .badge-pending { background:#FEF3C7; color:#92400E; }

@@ -18,7 +18,10 @@ import java.util.List;
     @Index(name = "idx_project_status_planner", columnList = "status,plannerId"),
     @Index(name = "idx_project_status_sales", columnList = "status,salesId"),
     @Index(name = "idx_project_type_status", columnList = "type,status"),
-    @Index(name = "idx_project_product_name", columnList = "productName")
+    @Index(name = "idx_project_product_name", columnList = "productName"),
+    @Index(name = "idx_project_type_created", columnList = "type,createdAt"),
+    @Index(name = "idx_project_sales_type_created", columnList = "salesId,type,createdAt"),
+    @Index(name = "idx_project_planner_type_created", columnList = "plannerId,type,createdAt")
 })
 @EntityListeners(com.emie.designpm.service.ProjectSyncListener.class)
 public class Project {

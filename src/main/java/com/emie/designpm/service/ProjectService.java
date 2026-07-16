@@ -3,6 +3,8 @@ package com.emie.designpm.service;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.repository.*;
 import com.emie.designpm.util.SecurityUtil;
+import com.emie.designpm.util.ProjectAccessPolicy;
+import com.emie.designpm.controller.AuthController;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -13,6 +15,8 @@ import org.slf4j.LoggerFactory;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Service
 @Transactional
@@ -73,6 +77,10 @@ public class ProjectService {
     /** 设计师已参与的项目（轻量版） */
     public List<Project> getAssigneeParticipatingProjects(String userId, String role) {
         return projectAccessService.findParticipatingProjectsLight(role, userId);
+    }
+
+    public Page<Project> getProjectsPage(String role, String userId, String type, boolean participating, Pageable pageable) {
+        return projectAccessService.findVisibleProjectsPage(role, userId, type, participating, pageable);
     }
 
     /** 批量获取子任务统计（projectId → {taskCount, approvedCount}） */
@@ -237,6 +245,90 @@ public class ProjectService {
                     notificationContext(saved, null, currentUser, ""));
         }
         return saved;
+    }
+
+    // ==================== Project Information Edit ====================
+
+    /** 编辑项目资料；项目类型和销售/企划归属在创建后不可通过本接口变更。 */
+    public Project updateProjectInformation(Long projectId, Map<String, Object> body) {
+        Project p = projectRepository.findById(projectId)
+                .orElseThrow(() -> new RuntimeException("项目不存在"));
+
+        AuthController.AuthSession session = new AuthController.AuthSession(
+                (String) body.getOrDefault("currentUserId", ""),
+                (String) body.getOrDefault("currentRole", ""),
+                (String) body.getOrDefault("currentUser", ""));
+        if (!ProjectAccessPolicy.canEditProjectInformation(p, session)) {
+            throw new SecurityException("仅该项目的" + ("channel_custom".equals(p.getType()) ? "销售" : "产品企划") + "可编辑项目信息");
+        }
+
+        Map<String, Object> before = snapshotProject(p);
+        String productName = SecurityUtil.sanitizeText((String) body.get("productName"), 200);
+        String productRequirements = SecurityUtil.sanitizeText((String) body.get("productRequirements"), 2000);
+        String deadline = SecurityUtil.sanitizeText((String) body.get("deadline"), 20);
+        if (productName == null || productName.isBlank()) throw new RuntimeException("产品名称不能为空");
+        if (productRequirements == null || productRequirements.isBlank()) throw new RuntimeException("产品要求不能为空");
+        if (deadline == null || deadline.isBlank()) throw new RuntimeException("要求完成时间不能为空");
+
+        p.setProductName(productName.trim());
+        p.setProductRequirements(productRequirements);
+        p.setDeadline(deadline);
+        p.setDescription(SecurityUtil.sanitizeText((String) body.getOrDefault("description", ""), 2000));
+
+        String categoryName = SecurityUtil.sanitizeText((String) body.get("productCategory"), 100);
+        if (categoryName == null || categoryName.isBlank()) {
+            p.setProductCategory(null);
+        } else {
+            p.setProductCategory(productCategoryRepository.findByName(categoryName.trim())
+                    .orElseThrow(() -> new RuntimeException("请选择有效的产品类目")));
+        }
+        p.setProductCategoryNote(SecurityUtil.sanitizeText((String) body.getOrDefault("productCategoryNote", ""), 500));
+        p.setTargetMarket(SecurityUtil.sanitizeText((String) body.getOrDefault("targetMarket", ""), 100));
+        p.setComplianceItems(SecurityUtil.sanitizeText((String) body.getOrDefault("complianceItems", ""), 500));
+        p.setPriceRange(SecurityUtil.sanitizeText((String) body.getOrDefault("priceRange", ""), 100));
+
+        String ipName = SecurityUtil.sanitizeText((String) body.getOrDefault("ipName", ""), 100);
+        if (ipName == null || ipName.isBlank()) {
+            p.setIpName(null);
+            p.setIpSubOptions(null);
+        } else {
+            IpOption ipOption = ipOptionRepository.findByName(ipName.trim())
+                    .filter(option -> Boolean.TRUE.equals(option.getActive()))
+                    .orElseThrow(() -> new RuntimeException("请选择有效的IP"));
+            p.setIpName(ipOption.getName());
+            p.setIpSubOptions(validateIpSubOptions((String) body.get("ipSubOptions"), ipOption));
+        }
+
+        String referenceImagesJson = validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true);
+        String attachmentsJson = validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false);
+        p.setReferenceImagesJson(referenceImagesJson);
+        p.setAttachmentsJson(attachmentsJson);
+
+        Map<String, Object> after = snapshotProject(p);
+        p.getLogs().add(new ActivityLog("编辑项目信息：" + p.getProductName(), session.name(), session.role(), p,
+                "project", p.getId(), toJson(before), toJson(after), changedFields(before, after)));
+        Project saved = projectRepository.saveAndFlush(p);
+        fileArchiveService.bindFilesFromJson(referenceImagesJson, "project", saved.getId());
+        fileArchiveService.bindFilesFromJson(attachmentsJson, "project", saved.getId());
+        return saved;
+    }
+
+    private Map<String, Object> snapshotProject(Project project) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("productName", project.getProductName());
+        data.put("deadline", project.getDeadline());
+        data.put("productRequirements", project.getProductRequirements());
+        data.put("description", project.getDescription());
+        data.put("productCategory", project.getProductCategory() != null ? project.getProductCategory().getName() : null);
+        data.put("productCategoryNote", project.getProductCategoryNote());
+        data.put("targetMarket", project.getTargetMarket());
+        data.put("complianceItems", project.getComplianceItems());
+        data.put("priceRange", project.getPriceRange());
+        data.put("ipName", project.getIpName());
+        data.put("ipSubOptions", project.getIpSubOptions());
+        data.put("referenceImagesJson", project.getReferenceImagesJson());
+        data.put("attachmentsJson", project.getAttachmentsJson());
+        return data;
     }
 
     // ==================== Planner Accept ====================
@@ -1210,33 +1302,25 @@ public class ProjectService {
         List<Long> projectIds = projects.stream().map(Project::getId).collect(Collectors.toList());
         // 一次 SQL 查全部
         List<ScoringRecord> allRecords = scoringRepository.findByProjectIds(projectIds);
-        // 按 project.id 分组
-        Map<Long, List<ScoringRecord>> recordsByProject = new HashMap<>();
+        // JOIN FETCH 子任务后按项目和子任务聚合，避免分页项目逐个懒加载 tasks 产生 N+1 查询。
+        Map<Long, Map<Long, List<ScoringRecord>>> recordsByProjectAndTask = new HashMap<>();
         for (ScoringRecord sr : allRecords) {
             if (sr.getSubTask() != null && sr.getSubTask().getProject() != null) {
                 Long pid = sr.getSubTask().getProject().getId();
-                recordsByProject.computeIfAbsent(pid, k -> new ArrayList<>()).add(sr);
+                recordsByProjectAndTask.computeIfAbsent(pid, k -> new HashMap<>())
+                        .computeIfAbsent(sr.getSubTask().getId(), k -> new ArrayList<>())
+                        .add(sr);
             }
         }
-        // 逐项目计算
+        // 逐项目计算：只遍历已有评分记录的子任务，未产生评分记录的项目分数为 null。
         Map<Long, Double> result = new HashMap<>();
         for (Project p : projects) {
-            List<SubTask> tasks = p.getTasks();
-            if (tasks == null || tasks.isEmpty()) { result.put(p.getId(), null); continue; }
-            List<ScoringRecord> records = recordsByProject.getOrDefault(p.getId(), List.of());
-            // 按子任务分组
-            Map<Long, List<ScoringRecord>> recordsByTask = new HashMap<>();
-            for (ScoringRecord sr : records) {
-                if (sr.getSubTask() != null) {
-                    recordsByTask.computeIfAbsent(sr.getSubTask().getId(), k -> new ArrayList<>()).add(sr);
-                }
-            }
+            Map<Long, List<ScoringRecord>> recordsByTask = recordsByProjectAndTask.getOrDefault(p.getId(), Collections.emptyMap());
             double totalScore = 0;
             int scoredCount = 0;
-            for (SubTask task : tasks) {
+            for (List<ScoringRecord> taskRecords : recordsByTask.values()) {
+                SubTask task = taskRecords.get(0).getSubTask();
                 if (!"completed".equals(task.getStatus()) && !"approved".equals(task.getStatus())) continue;
-                List<ScoringRecord> taskRecords = recordsByTask.get(task.getId());
-                if (taskRecords == null || taskRecords.isEmpty()) continue;
                 double weightedSum = 0;
                 double totalWeight = 0;
                 for (ScoringRecord sr : taskRecords) {

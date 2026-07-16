@@ -57,6 +57,34 @@ class ProjectAccessPolicyTest {
         assertFalse(ProjectAccessPolicy.canManage(project, planner));
     }
 
+    @Test
+    void onlyOwningSalesCanEditChannelProjectInformation() {
+        Project project = new Project();
+        project.setType("channel_custom");
+        project.setSalesId("sales-1");
+
+        assertTrue(ProjectAccessPolicy.canEditProjectInformation(project,
+                new AuthController.AuthSession("sales-1", "sales", "销售")));
+        assertFalse(ProjectAccessPolicy.canEditProjectInformation(project,
+                new AuthController.AuthSession("sales-2", "sales", "销售")));
+        assertFalse(ProjectAccessPolicy.canEditProjectInformation(project,
+                new AuthController.AuthSession("admin-1", "admin", "管理员")));
+    }
+
+    @Test
+    void onlyOwningPlannerCanEditRegularProjectInformation() {
+        Project project = new Project();
+        project.setType("regular");
+        project.setPlannerId("planner-1");
+
+        assertTrue(ProjectAccessPolicy.canEditProjectInformation(project,
+                new AuthController.AuthSession("planner-1", "planner", "企划")));
+        assertFalse(ProjectAccessPolicy.canEditProjectInformation(project,
+                new AuthController.AuthSession("planner-2", "planner", "企划")));
+        assertFalse(ProjectAccessPolicy.canEditProjectInformation(project,
+                new AuthController.AuthSession("sales-1", "sales", "销售")));
+    }
+
     private Project projectWithPendingTask(String assigneeRole) {
         Project project = new Project();
         SubTask task = new SubTask();

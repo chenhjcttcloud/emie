@@ -204,6 +204,8 @@ function resolveFileListContext(list, isImage) {
   if (list === EMIE.projectState.subTaskAttachments) return { listKey: 'subTaskAttachment', containerId: 'createAttachmentList' };
   if (list === EMIE.projectState.editTaskRefImages) return { listKey: 'editTaskRef', containerId: 'createRefImageList' };
   if (list === EMIE.projectState.editTaskAttachments) return { listKey: 'editTaskAttachment', containerId: 'createAttachmentList' };
+  if (list === EMIE.projectState.editProjectRefImages) return { listKey: 'editProjectRef', containerId: 'editProjectRefImageList' };
+  if (list === EMIE.projectState.editProjectAttachments) return { listKey: 'editProjectAttachment', containerId: 'editProjectAttachmentList' };
   return {
     listKey: isImage ? 'createRef' : 'createAttachment',
     containerId: isImage ? 'createRefImageList' : 'createAttachmentList'
@@ -219,7 +221,9 @@ function removeFileItem(listKey, idx) {
     subTaskRef: [EMIE.projectState.subTaskRefImages, '参考图片'],
     subTaskAttachment: [EMIE.projectState.subTaskAttachments, '附件'],
     editTaskRef: [EMIE.projectState.editTaskRefImages, '编辑参考图片'],
-    editTaskAttachment: [EMIE.projectState.editTaskAttachments, '编辑附件']
+    editTaskAttachment: [EMIE.projectState.editTaskAttachments, '编辑附件'],
+    editProjectRef: [EMIE.projectState.editProjectRefImages, '编辑项目参考图片'],
+    editProjectAttachment: [EMIE.projectState.editProjectAttachments, '编辑项目附件']
   };
   const context = contexts[listKey];
   if (!context) return;
@@ -245,6 +249,8 @@ function handleUploadDrop(input, files) {
     subTaskAttachmentInput: [EMIE.projectState.subTaskAttachments, 9, '附件', false],
     editRefImageInput: [EMIE.projectState.editTaskRefImages, 9, '编辑参考图片', true],
     editAttachmentInput: [EMIE.projectState.editTaskAttachments, 9, '编辑附件', false],
+    editProjectRefImageInput: [EMIE.projectState.editProjectRefImages, 9, '编辑项目参考图片', true],
+    editProjectAttachmentInput: [EMIE.projectState.editProjectAttachments, 5, '编辑项目附件', false],
     deliverImageInput: [EMIE.projectState.deliverImages, 9, '交付参考图片', true],
     deliverAttachmentInput: [EMIE.projectState.deliverAttachments, 5, '交付附件', false],
   }[id];

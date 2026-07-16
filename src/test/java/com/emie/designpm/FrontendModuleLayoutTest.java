@@ -87,13 +87,13 @@ class FrontendModuleLayoutTest {
         for (String module : MODULES) {
             assertNotNull(getClass().getResourceAsStream("/static/js/" + module), module + " 必须存在");
             if (module.equals("bootstrap.js")) continue;
-            int currentIndex = bootstrap.indexOf("./" + module + "?v=139");
+            int currentIndex = bootstrap.indexOf("./" + module + "?v=144");
             assertTrue(currentIndex > previousIndex, module + " 的 ES Module 加载顺序不正确");
             previousIndex = currentIndex;
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=139\"></script>"),
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=144\"></script>"),
                 "页面应只通过 v132 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
@@ -140,8 +140,12 @@ class FrontendModuleLayoutTest {
         assertTrue(lists.contains("id=\"projectMarketFilter\""));
         assertTrue(lists.contains("id=\"taskProjectTypeFilter\""));
         assertTrue(lists.contains("function projectMatchesKeyword(project, query)"));
-        assertTrue(lists.contains("let allOrders = EMIE.state.cache.orders"),
-                "项目类型切换应基于完整项目缓存，不能覆盖全量缓存");
+        assertTrue(lists.contains("/projects/page?${params}"),
+                "项目列表默认应使用服务端分页接口，避免进入页面时读取全部项目");
+        assertTrue(lists.contains("size: '15'"),
+                "全部项目、渠道定制单和公司常规品列表应固定每页 15 条");
+        assertTrue(lists.contains("function changeProjectListPage(page)"),
+                "项目列表应提供翻页入口");
         assertTrue(designer.contains("id=\"designerTaskStatusFilter\""));
         assertTrue(designer.contains("id=\"designerTaskTypeFilter\""));
         assertTrue(designer.contains("function resetDesignerTaskFilters()"));

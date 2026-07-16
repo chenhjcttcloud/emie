@@ -3,13 +3,54 @@ package com.emie.designpm.repository;
 import com.emie.designpm.entity.Project;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.EntityGraph;
 
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.repository.query.Param;
 
 public interface ProjectRepository extends JpaRepository<Project, Long> {
+
+    /** 列表页查询：仅加载当前页项目，避免首页渲染时读取全表。 */
+    @EntityGraph(attributePaths = "productCategory")
+    @Query("SELECT p FROM Project p WHERE (:type IS NULL OR p.type = :type) ORDER BY p.createdAt DESC")
+    Page<Project> findPageLight(@Param("type") String type, Pageable pageable);
+
+    @EntityGraph(attributePaths = "productCategory")
+    @Query("SELECT p FROM Project p WHERE p.salesId IN :userIds AND (:type IS NULL OR p.type = :type) ORDER BY p.createdAt DESC")
+    Page<Project> findBySalesIdsPage(@Param("userIds") List<String> userIds, @Param("type") String type, Pageable pageable);
+
+    @EntityGraph(attributePaths = "productCategory")
+    @Query("SELECT p FROM Project p WHERE (p.plannerId IN :userIds OR " +
+            "(p.type = 'channel_custom' AND p.status = 'pending_planner' AND (p.plannerId IS NULL OR p.plannerId = ''))) " +
+            "AND (:type IS NULL OR p.type = :type) ORDER BY p.createdAt DESC")
+    Page<Project> findByPlannerIdsPage(@Param("userIds") List<String> userIds, @Param("type") String type, Pageable pageable);
+
+    @EntityGraph(attributePaths = "productCategory")
+    @Query(value = "SELECT DISTINCT p FROM Project p JOIN p.tasks t WHERE " +
+            "((t.designerId IN :userIds) OR ((t.designerId IS NULL OR t.designerId = '') AND t.status = 'pending')) " +
+            "AND (t.assigneeRole = :role OR (:role = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) " +
+            "AND (:type IS NULL OR p.type = :type) ORDER BY p.createdAt DESC",
+            countQuery = "SELECT COUNT(DISTINCT p) FROM Project p JOIN p.tasks t WHERE " +
+                    "((t.designerId IN :userIds) OR ((t.designerId IS NULL OR t.designerId = '') AND t.status = 'pending')) " +
+                    "AND (t.assigneeRole = :role OR (:role = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) " +
+                    "AND (:type IS NULL OR p.type = :type)")
+    Page<Project> findByAssigneeIdsPage(@Param("userIds") List<String> userIds, @Param("role") String role,
+                                        @Param("type") String type, Pageable pageable);
+
+    @EntityGraph(attributePaths = "productCategory")
+    @Query(value = "SELECT DISTINCT p FROM Project p JOIN p.tasks t WHERE t.designerId IN :userIds AND t.status <> 'pending' " +
+            "AND (t.assigneeRole = :role OR (:role = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) " +
+            "AND (:type IS NULL OR p.type = :type) ORDER BY p.createdAt DESC",
+            countQuery = "SELECT COUNT(DISTINCT p) FROM Project p JOIN p.tasks t WHERE t.designerId IN :userIds AND t.status <> 'pending' " +
+                    "AND (t.assigneeRole = :role OR (:role = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) " +
+                    "AND (:type IS NULL OR p.type = :type)")
+    Page<Project> findParticipatingByAssigneeIdsPage(@Param("userIds") List<String> userIds, @Param("role") String role,
+                                                     @Param("type") String type, Pageable pageable);
 
     List<Project> findByTypeOrderByCreatedAtDesc(String type);
 

@@ -3,6 +3,7 @@ package com.emie.designpm;
 import com.emie.designpm.repository.ProjectRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Pageable;
 
 import java.lang.reflect.Method;
 
@@ -33,5 +34,14 @@ class ProjectRepositoryQueryRegressionTest {
                 "执行人项目查询必须按 assigneeRole 区分设计师和供应链");
         assertTrue(jpql.contains("t.status = 'pending'"),
                 "只有待接单的未分配子任务才能进入角色公共视图");
+    }
+
+    @Test
+    void pagedProjectListQueriesPreserveRoleScope() throws NoSuchMethodException {
+        Method sales = ProjectRepository.class.getMethod("findBySalesIdsPage", java.util.List.class, String.class, Pageable.class);
+        Method planner = ProjectRepository.class.getMethod("findByPlannerIdsPage", java.util.List.class, String.class, Pageable.class);
+
+        assertTrue(sales.getAnnotation(Query.class).value().contains("p.salesId IN :userIds"));
+        assertTrue(planner.getAnnotation(Query.class).value().contains("p.plannerId IN :userIds"));
     }
 }

@@ -1,6 +1,10 @@
 const EMIE = window.EMIE;
 const getCurrentUserName = (...args) => EMIE.actions.getCurrentUserName(...args);
 const apiPost = (...args) => EMIE.actions.apiPost(...args);
+const apiGet = (...args) => EMIE.actions.apiGet(...args);
+const apiPut = (...args) => EMIE.actions.apiPut(...args);
+const tryOpenModal = (...args) => EMIE.actions.tryOpenModal(...args);
+const doneOpenModal = (...args) => EMIE.actions.doneOpenModal(...args);
 const isModalOpen = (...args) => EMIE.actions.isModalOpen(...args);
 const submitGuard = (...args) => EMIE.actions.submitGuard(...args);
 const formModified = (...args) => EMIE.actions.formModified(...args);
@@ -12,6 +16,7 @@ const render = (...args) => EMIE.actions.render(...args);
 const renderFileList = (...args) => EMIE.actions.renderFileList(...args);
 const handleCreateRefImages = (...args) => EMIE.actions.handleCreateRefImages(...args);
 const handleCreateAttachments = (...args) => EMIE.actions.handleCreateAttachments(...args);
+const handleFileUpload = (...args) => EMIE.actions.handleFileUpload(...args);
 
 // ==================== 产品类目 / 目标市场选择 ====================
 function onCategoryChange(sel) {
@@ -455,6 +460,107 @@ async function submitCreateProject(type) {
   }
 }
 
+function parseJsonArray(value) {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function openEditProject(pid) {
+  if (!tryOpenModal('editProjectModal')) return;
+  apiGet(`/projects/${pid}`).then(detail => {
+    const isChannel = detail.type === 'channel_custom';
+    const canEdit = (isChannel && EMIE.state.currentRole === 'sales' && detail.salesId === EMIE.state.currentUserId)
+      || (!isChannel && EMIE.state.currentRole === 'planner' && detail.plannerId === EMIE.state.currentUserId);
+    if (!canEdit) throw new Error('仅该项目的' + (isChannel ? '销售' : '产品企划') + '可编辑项目信息');
+
+    EMIE.projectState.formModified = false;
+    EMIE.projectState.editProjectRefImages = parseJsonArray(detail.referenceImagesJson);
+    EMIE.projectState.editProjectAttachments = parseJsonArray(detail.attachmentsJson);
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'editProjectModal';
+    modal.innerHTML = `
+      <button class="modal-close-float" data-emie-onclick="closeM('editProjectModal')">✕</button>
+      <div class="modal modal-lg">
+        <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✏️ 编辑${isChannel ? '渠道定制项目' : '常规品设计项目'}</div></div></div>
+        <div class="modal-body">
+          <div style="font-size:12px;color:var(--gray-500);margin-bottom:16px;">项目类型和负责人归属不可在此修改。</div>
+          <form id="editProjectForm">
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 产品类目</label>
+              <select class="form-select" name="productCategory" id="productCategorySelect" data-emie-onchange="onCategoryChange(this)">
+                <option value="">请选择产品类目</option>
+                ${EMIE.state.categories.map(c => `<option value="${escHtml(c.name)}" ${detail.productCategory === c.name ? 'selected' : ''}>${escHtml(c.name)}</option>`).join('')}
+              </select>
+              <div id="categoryNoteWrapper" style="display:${detail.productCategory === '其他' ? 'block' : 'none'};margin-top:8px;">
+                <textarea class="form-textarea" name="productCategoryNote" placeholder="请说明其他类目的具体内容...">${escHtml(detail.productCategoryNote || '')}</textarea>
+              </div>
+            </div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 产品名称</label><input class="form-input" name="productName" value="${escHtml(detail.productName || '')}" maxlength="200" data-emie-oninput="formModified()"></div>
+            <div class="form-group"><label class="form-label">IP<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可选）</span></label>
+              <select class="form-select" id="ipNameSelect" name="ipName" data-emie-onchange="onIpChange(this)"><option value="">无IP</option>${EMIE.state.ipOptions.map(ip => `<option value="${escHtml(ip.name)}" ${detail.ipName === ip.name ? 'selected' : ''}>${escHtml(ip.name)}</option>`).join('')}</select>
+            </div>
+            <div class="form-group" id="ipSubOptionGroup" style="display:none;"><label class="form-label">二级IP</label><div class="chip-group" id="ipSubOptionChips"></div><input type="hidden" name="ipSubOptions" id="ipSubOptionsInput" value="[]"><div class="form-hint" id="ipSubOptionHint"></div></div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 参考零售价</label><div class="chip-group" id="priceRangeChips">${EMIE.state.priceRanges.map(p => `<span class="chip ${detail.priceRange === p.name ? 'selected' : ''}" data-value="${escHtml(p.name)}" data-emie-onclick="togglePriceRange(this)">${escHtml(p.name)}</span>`).join('')}</div><input type="hidden" name="priceRange" id="priceRangeInput" value="${escHtml(detail.priceRange || '')}"></div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 目标市场<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选）</span></label><div class="chip-group" id="marketChips"><span class="chip" data-value="国内" data-emie-onclick="toggleMarket(this)">国内</span><span class="chip" data-value="海外" data-emie-onclick="toggleMarket(this)">海外</span></div><input type="hidden" name="targetMarket" id="targetMarketInput" value="${escHtml(detail.targetMarket || '[]')}"></div>
+            <div class="form-group"><label class="form-label">合规处罚<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选）</span></label><div class="chip-group" id="complianceChips">${EMIE.state.complianceItems.map(c => `<span class="chip" data-value="${escHtml(c.name)}" data-emie-onclick="toggleCompliance(this)">${escHtml(c.name)}</span>`).join('')}</div><input type="hidden" name="complianceItems" id="complianceItemsInput" value="${escHtml(detail.complianceItems || '[]')}"></div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 要求完成时间</label>${renderDatePicker('deadline', {value: detail.deadline || ''})}</div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 产品要求</label><textarea class="form-textarea" name="productRequirements" data-emie-oninput="formModified()">${escHtml(detail.productRequirements || '')}</textarea></div>
+            <div class="form-group"><label class="form-label">细节描述（可选）</label><textarea class="form-textarea" name="description" data-emie-oninput="formModified()">${escHtml(detail.description || '')}</textarea></div>
+          </form>
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);"><div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片</div><div class="upload-area" data-emie-onclick="document.getElementById('editProjectRefImageInput').click()"><div>📁 点击上传参考图片</div><input type="file" id="editProjectRefImageInput" multiple accept="image/*" style="display:none" data-emie-onchange="handleEditProjectRefImages(this)"></div><div class="file-list" id="editProjectRefImageList"></div></div>
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);"><div class="form-label" style="margin-bottom:8px;">📎 附件</div><div class="upload-area" data-emie-onclick="document.getElementById('editProjectAttachmentInput').click()"><div>📁 点击上传附件</div><input type="file" id="editProjectAttachmentInput" multiple style="display:none" data-emie-onchange="handleEditProjectAttachments(this)"></div><div class="file-list" id="editProjectAttachmentList"></div></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('editProjectModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitEditProject(${pid}))">保存修改</button></div>
+      </div>`;
+    document.body.appendChild(modal);
+    doneOpenModal('editProjectModal');
+
+    const ipSelect = document.getElementById('ipNameSelect');
+    if (ipSelect) {
+      onIpChange(ipSelect);
+      const selected = parseJsonArray(detail.ipSubOptions);
+      selected.forEach(value => document.querySelector(`#ipSubOptionChips .chip[data-value="${CSS.escape(value)}"]`)?.classList.add('selected'));
+      document.getElementById('ipSubOptionsInput').value = JSON.stringify(selected);
+    }
+    parseJsonArray(detail.targetMarket).forEach(value => document.querySelector(`#marketChips .chip[data-value="${CSS.escape(value)}"]`)?.classList.add('selected'));
+    parseJsonArray(detail.complianceItems).forEach(value => document.querySelector(`#complianceChips .chip[data-value="${CSS.escape(value)}"]`)?.classList.add('selected'));
+    if (EMIE.projectState.editProjectRefImages.length) renderFileList(EMIE.projectState.editProjectRefImages, '编辑项目参考图片');
+    if (EMIE.projectState.editProjectAttachments.length) renderFileList(EMIE.projectState.editProjectAttachments, '编辑项目附件');
+  }).catch(e => {
+    doneOpenModal('editProjectModal');
+    alert('无法编辑项目: ' + e.message);
+  });
+}
+
+function handleEditProjectRefImages(input) { handleFileUpload(input, EMIE.projectState.editProjectRefImages, 9, '编辑项目参考图片', true); }
+function handleEditProjectAttachments(input) { handleFileUpload(input, EMIE.projectState.editProjectAttachments, 5, '编辑项目附件', false); }
+
+async function submitEditProject(pid) {
+  if (EMIE.projectState.uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
+  const data = Object.fromEntries(new FormData(document.getElementById('editProjectForm')).entries());
+  if (!data.productName?.trim() || !data.productCategory || !data.priceRange || data.targetMarket === '[]' || !data.deadline || !data.productRequirements?.trim()) {
+    alert('请完整填写产品类目、名称、参考零售价、目标市场、完成时间和产品要求');
+    return;
+  }
+  if (data.productCategory === '其他' && !data.productCategoryNote?.trim()) { alert('请补充其他类目的具体说明'); return; }
+  if (data.ipName && document.getElementById('ipSubOptionGroup')?.style.display !== 'none' && data.ipSubOptions === '[]') { alert('请选择二级IP选项'); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data.deadline)) { alert('日期格式不正确，请使用 yyyy-mm-dd'); return; }
+  data.referenceImagesJson = JSON.stringify(EMIE.projectState.editProjectRefImages.map(img => ({name: img.name, url: img.url, size: img.size, storedName: img.storedName})));
+  data.attachmentsJson = JSON.stringify(EMIE.projectState.editProjectAttachments.map(file => ({name: file.name, url: file.url, size: file.size, storedName: file.storedName})));
+  try {
+    await apiPut(`/projects/${pid}`, data);
+    closeM('editProjectModal', true);
+    await EMIE.actions.refreshAfterMutation(pid);
+  } catch (e) {
+    alert('编辑失败: ' + e.message);
+  }
+}
+
 // 日期字段内联错误提示
 function showDateError(inputName, msg) {
   // 找到日期选择器容器，在下方插入红色提示
@@ -485,6 +591,10 @@ EMIE.registerActions({
   toggleIpSubOption,
   openCreateProject,
   submitCreateProject,
+  openEditProject,
+  submitEditProject,
+  handleEditProjectRefImages,
+  handleEditProjectAttachments,
   showDateError,
   switchAssigneeType,
   switchEditAssigneeType,
@@ -501,4 +611,6 @@ EMIE.registerModule('projectForm', {
   switchEditAssigneeType,
   openCreateProject,
   submitCreateProject,
+  openEditProject,
+  submitEditProject,
 });

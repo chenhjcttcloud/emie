@@ -49,6 +49,8 @@ EMIE.projectState = Object.assign({
   subTaskAttachments: [],
   editTaskRefImages: [],
   editTaskAttachments: [],
+  editProjectRefImages: [],
+  editProjectAttachments: [],
   createProjectType: 'channel_custom',
 }, EMIE.projectState || {});
 EMIE.adminState = Object.assign({
