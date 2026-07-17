@@ -23,13 +23,12 @@ async function renderDashboard(main, role, uid) {
   // 使用 SWR 缓存 + 聚合端点（1次API替代8次）
   const cacheKey = `dashboard_${role}_${uid}`;
   const data = await swrFetch(cacheKey,
-    () => apiGet(`/dashboard/full?role=${role}&userId=${uid}`),
+    () => apiGet(`/dashboard/full?role=${role}&userId=${uid}&includeRoleStatus=false`),
     30000
   );
 
   const orders = data.orders || [];
   const stats = data.stats || {};
-  const roleStatus = data.roleStatus || {};
   EMIE.state.departments = data.departments || [];
 
   // 更新全局缓存
@@ -38,26 +37,8 @@ async function renderDashboard(main, role, uid) {
   const channel = orders.filter(o => o.type === 'channel_custom');
   const regular = orders.filter(o => o.type === 'regular');
 
-  // 角色状态面板（使用聚合数据中的 roleStatus）
-  let rolePanelsHtml = '';
   const myDept = EMIE.state.departments.find(d => d.headUserId === uid);
-
-  if (EMIE.state.currentRole === 'admin') {
-    // 管理员：显示全部四个角色面板（直接从聚合数据渲染，不额外请求）
-    const salesHtml = renderRolePanelFromData(roleStatus.sales || {}, 'sales');
-    const plannerHtml = renderRolePanelFromData(roleStatus.planner || {}, 'planner');
-    const supplyHtml = renderRolePanelFromData(roleStatus.supplychain || {}, 'supplychain');
-    const designerHtml = renderRolePanelFromData(roleStatus.designer || {}, 'designer');
-    rolePanelsHtml = salesHtml + plannerHtml + supplyHtml + designerHtml;
-  } else if (EMIE.state.currentRole === 'planner') {
-    const deptId = myDept?.id || null;
-    const plannerHtml = renderRolePanelFromData(roleStatus.planner || {}, 'planner', deptId, uid);
-    const designerHtml = renderRolePanelFromData(roleStatus.designer || {}, 'designer');
-    const supplyHtml = renderRolePanelFromData(roleStatus.supplychain || {}, 'supplychain');
-    rolePanelsHtml = plannerHtml + designerHtml + supplyHtml;
-  } else if (myDept) {
-    rolePanelsHtml = renderRolePanelFromData(roleStatus[myDept.role] || {}, myDept.role, myDept.id, uid);
-  }
+  const rolePanelsHtml = `<div id="dashboardRoleStatus" class="dashboard-role-status-loading">正在加载状态面板…</div>`;
 
   main.innerHTML = `
     <h2 style="font-size:22px;margin-bottom:20px;">📊 工作台 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">— ${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}（${roleLabel(EMIE.state.currentRole)}）</span></h2>
@@ -89,6 +70,32 @@ async function renderDashboard(main, role, uid) {
   // 仅 admin 可见工作量概览
   if (EMIE.state.currentRole === 'admin') {
     loadDashboardWorkloadSection();
+  }
+  loadDashboardRoleStatus(role, uid, myDept);
+}
+
+async function loadDashboardRoleStatus(role, uid, myDept) {
+  const container = document.getElementById('dashboardRoleStatus');
+  if (!container) return;
+  try {
+    const response = await apiGet('/dashboard/role-status');
+    const roleStatus = response || {};
+    let html = '';
+    if (EMIE.state.currentRole === 'admin') {
+      html = renderRolePanelFromData(roleStatus.sales || {}, 'sales')
+        + renderRolePanelFromData(roleStatus.planner || {}, 'planner')
+        + renderRolePanelFromData(roleStatus.supplychain || {}, 'supplychain')
+        + renderRolePanelFromData(roleStatus.designer || {}, 'designer');
+    } else if (EMIE.state.currentRole === 'planner') {
+      html = renderRolePanelFromData(roleStatus.planner || {}, 'planner', myDept?.id || null, uid)
+        + renderRolePanelFromData(roleStatus.designer || {}, 'designer')
+        + renderRolePanelFromData(roleStatus.supplychain || {}, 'supplychain');
+    } else if (myDept) {
+      html = renderRolePanelFromData(roleStatus[myDept.role] || {}, myDept.role, myDept.id, uid);
+    }
+    container.innerHTML = html;
+  } catch (error) {
+    container.innerHTML = '<div class="empty" style="padding:20px;"><p>状态面板暂时无法加载</p></div>';
   }
 }
 

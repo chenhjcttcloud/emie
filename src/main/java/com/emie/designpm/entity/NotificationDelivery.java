@@ -47,4 +47,7 @@ public class NotificationDelivery {
 
     @Column(columnDefinition = "TEXT")
     private String errorMsg;
+
+    @Column(columnDefinition = "LONGTEXT")
+    private String cardPayload;
 }

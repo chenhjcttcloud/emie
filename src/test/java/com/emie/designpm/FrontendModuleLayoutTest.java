@@ -87,13 +87,13 @@ class FrontendModuleLayoutTest {
         for (String module : MODULES) {
             assertNotNull(getClass().getResourceAsStream("/static/js/" + module), module + " 必须存在");
             if (module.equals("bootstrap.js")) continue;
-            int currentIndex = bootstrap.indexOf("./" + module + "?v=144");
+            int currentIndex = bootstrap.indexOf("./" + module + "?v=147");
             assertTrue(currentIndex > previousIndex, module + " 的 ES Module 加载顺序不正确");
             previousIndex = currentIndex;
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=146\"></script>"),
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=149\"></script>"),
                 "页面应只通过当前版本 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");

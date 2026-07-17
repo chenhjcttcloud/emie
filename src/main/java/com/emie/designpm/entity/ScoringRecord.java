@@ -13,7 +13,8 @@ import java.time.LocalDateTime;
     @Index(name = "idx_scoring_sub_task", columnList = "sub_task_id"),
     @Index(name = "idx_scoring_role", columnList = "role"),
     @Index(name = "idx_scoring_role_score", columnList = "role,score"),
-    @Index(name = "idx_scoring_task_role", columnList = "sub_task_id,role")
+    @Index(name = "idx_scoring_task_role", columnList = "sub_task_id,role"),
+    @Index(name = "idx_scoring_role_status_task", columnList = "role,reviewStatus,sub_task_id")
 })
 @EntityListeners(com.emie.designpm.service.ScoringSyncListener.class)
 public class ScoringRecord {
@@ -65,7 +66,20 @@ public class ScoringRecord {
     @Column(nullable = false)
     private Double weight;
 
+    @Column(nullable = false)
+    private LocalDateTime updatedAt;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "sub_task_id", nullable = false)
     private SubTask subTask;
+
+    @PrePersist
+    protected void onCreate() {
+        updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }

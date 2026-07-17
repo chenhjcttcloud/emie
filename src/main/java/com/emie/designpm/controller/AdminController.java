@@ -4,9 +4,13 @@ import com.emie.designpm.entity.SystemConfig;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.service.AdminService;
 import com.emie.designpm.service.NotificationTestService;
+import com.emie.designpm.service.NotificationRetryService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import com.emie.designpm.dto.PageResponse;
 
 import java.util.*;
 
@@ -16,10 +20,12 @@ public class AdminController {
 
     private final AdminService adminService;
     private final NotificationTestService notificationTestService;
+    private final NotificationRetryService notificationRetryService;
 
-    public AdminController(AdminService adminService, NotificationTestService notificationTestService) {
+    public AdminController(AdminService adminService, NotificationTestService notificationTestService, NotificationRetryService notificationRetryService) {
         this.adminService = adminService;
         this.notificationTestService = notificationTestService;
+        this.notificationRetryService = notificationRetryService;
     }
 
     // ==================== 公开配置 ====================
@@ -65,6 +71,23 @@ public class AdminController {
         }
     }
 
+    @GetMapping("/notifications/failures")
+    public ResponseEntity<?> getNotificationFailures(@RequestHeader("X-Auth-Token") String token) {
+        AuthController.AuthSession session = AuthController.validateToken(token);
+        if (session == null || !"admin".equals(session.role())) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可查看通知失败记录"));
+        return ResponseEntity.ok(notificationRetryService.recentFailures());
+    }
+
+    @PostMapping("/notifications/deliveries/{id}/retry")
+    public ResponseEntity<?> retryNotification(@PathVariable Long id, @RequestHeader("X-Auth-Token") String token) {
+        AuthController.AuthSession session = AuthController.validateToken(token);
+        if (session == null || !"admin".equals(session.role())) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可重试通知"));
+        try {
+            notificationRetryService.retryNow(id, session.userId());
+            return ResponseEntity.ok(Map.of("message", "通知已重新排队"));
+        } catch (IllegalArgumentException e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
+    }
+
     /** 上传管理图片（logo / login-bg） */
     @PostMapping("/upload-image")
     public ResponseEntity<Map<String, Object>> uploadImage(
@@ -89,6 +112,17 @@ public class AdminController {
     @GetMapping("/users")
     public ResponseEntity<List<Map<String, Object>>> getAllUsers() {
         return ResponseEntity.ok(adminService.getAllUsers());
+    }
+
+    @GetMapping("/users/page")
+    public ResponseEntity<PageResponse<Map<String, Object>>> getUsersPage(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "30") int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100));
+        return ResponseEntity.ok(adminService.getUsersPage(keyword, role, status, pageable));
     }
 
     /** 更新用户角色 */

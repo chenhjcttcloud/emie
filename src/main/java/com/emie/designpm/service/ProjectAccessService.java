@@ -62,6 +62,21 @@ public class ProjectAccessService {
         return projectRepository.findVisiblePage(query, viewerRole, visibleUserIds(viewerRole, viewerUserId, viewerRole));
     }
 
+    public long countVisibleProjects(String viewerRole, String viewerUserId, String type, boolean participating) {
+        ProjectListQuery query = new ProjectListQuery(type, null, null, null, null, null, null, participating,
+                Pageable.unpaged());
+        List<String> userIds = "admin".equals(viewerRole) ? List.of()
+                : visibleUserIds(viewerRole, viewerUserId, viewerRole);
+        return projectRepository.countVisible(query, viewerRole, userIds);
+    }
+
+    public List<Long> findVisibleProjectIds(String viewerRole, String viewerUserId) {
+        ProjectListQuery query = new ProjectListQuery(null, null, null, null, null, null, null, false, Pageable.unpaged());
+        List<String> userIds = "admin".equals(viewerRole) ? List.of()
+                : visibleUserIds(viewerRole, viewerUserId, viewerRole);
+        return projectRepository.findVisibleIds(query, viewerRole, userIds);
+    }
+
     public List<Project> findVisibleProjectsWithTasks(AuthController.AuthSession session) {
         if (session == null) return List.of();
         if ("admin".equals(session.role())) return projectRepository.findAllWithTasks();
@@ -83,6 +98,12 @@ public class ProjectAccessService {
     /** 返回状态看板允许展示的用户；普通成员只有自己，部门负责人包含本部门同角色成员。 */
     public List<User> visibleUsers(String viewerRole, String viewerUserId, String requestedRole) {
         if ("admin".equals(viewerRole)) return userRepository.findByRole(requestedRole);
+        // 产品企划需要查看执行团队状态面板；这里仅开放状态看板读取，不改变项目编辑权限。
+        if ("planner".equals(viewerRole) && ("designer".equals(requestedRole) || "supplychain".equals(requestedRole))) {
+            return userRepository.findByRole(requestedRole).stream()
+                    .filter(user -> user.getStatus() == null || "active".equalsIgnoreCase(user.getStatus()))
+                    .toList();
+        }
         if (!viewerRole.equals(requestedRole)) return List.of();
 
         Map<String, User> users = new LinkedHashMap<>();

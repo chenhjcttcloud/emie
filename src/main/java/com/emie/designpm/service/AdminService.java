@@ -8,6 +8,7 @@ import com.emie.designpm.repository.RoleRepository;
 import com.emie.designpm.repository.SystemConfigRepository;
 import com.emie.designpm.repository.UserRepository;
 import com.emie.designpm.util.SecurityUtil;
+import com.emie.designpm.dto.PageResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,9 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Service
 public class AdminService {
@@ -335,6 +339,24 @@ public class AdminService {
             return m;
         }).collect(Collectors.toList());
     }
+
+    public PageResponse<Map<String, Object>> getUsersPage(String keyword, String role, String status, Pageable pageable) {
+        Page<User> page = userRepository.searchPage(blankToNull(keyword), blankToNull(role), blankToNull(status), pageable);
+        return PageResponse.from(page.map(this::toUserMap));
+    }
+
+    private Map<String, Object> toUserMap(User u) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", u.getId()); m.put("userId", u.getUserId()); m.put("name", u.getName());
+        m.put("role", u.getRole()); m.put("roleLevel", u.getRoleLevel()); m.put("title", u.getTitle());
+        m.put("phone", u.getPhone()); m.put("email", u.getEmail());
+        m.put("status", u.getStatus() != null ? u.getStatus() : "active");
+        m.put("feishuBound", u.getFeishuOpenId() != null && !u.getFeishuOpenId().isBlank());
+        m.put("createdAt", u.getCreatedAt() != null ? u.getCreatedAt().toString() : "");
+        return m;
+    }
+
+    private String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
 
     /** 更新用户角色和权限 */
     @Transactional
@@ -818,10 +840,18 @@ public class AdminService {
 
     // ==================== 工作量统计 ====================
 
+    /** 工作量只需要四类业务角色，避免把管理员、待授权账号等全量加载进统计内存。 */
+    private List<User> workloadUsers() {
+        return Stream.of("sales", "planner", "designer", "supplychain")
+                .flatMap(role -> userRepository.findByRole(role).stream())
+                .filter(u -> u.getStatus() == null || "active".equalsIgnoreCase(u.getStatus()))
+                .toList();
+    }
+
     /** 获取各角色各员工的工作量统计 */
     public Map<String, Object> getWorkloadStats() {
         Map<String, Object> result = new LinkedHashMap<>();
-        List<User> allUsers = userRepository.findAll();
+        List<User> allUsers = workloadUsers();
 
         // 按角色分组
         Map<String, List<User>> byRole = allUsers.stream()
@@ -951,7 +981,7 @@ public class AdminService {
         };
 
         Map<String, Object> result = new LinkedHashMap<>();
-        List<User> allUsers = userRepository.findAll();
+        List<User> allUsers = workloadUsers();
 
         Map<String, List<User>> byRole = allUsers.stream()
                 .filter(u -> Set.of("sales", "planner", "designer", "supplychain").contains(u.getRole()))

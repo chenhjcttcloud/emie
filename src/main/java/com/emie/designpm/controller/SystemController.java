@@ -2,6 +2,7 @@ package com.emie.designpm.controller;
 
 import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.service.LogArchiveService;
+import com.emie.designpm.repository.SyncQueueRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,11 +21,31 @@ public class SystemController {
 
     private final ActivityLogRepository activityLogRepository;
     private final LogArchiveService logArchiveService;
+    private final SyncQueueRepository syncQueueRepository;
 
     public SystemController(ActivityLogRepository activityLogRepository,
-                            LogArchiveService logArchiveService) {
+                            LogArchiveService logArchiveService,
+                            SyncQueueRepository syncQueueRepository) {
         this.activityLogRepository = activityLogRepository;
         this.logArchiveService = logArchiveService;
+        this.syncQueueRepository = syncQueueRepository;
+    }
+
+    /** 管理员运行指标：用于快速判断 JVM、队列和同步是否有压力。 */
+    @GetMapping("/metrics")
+    public ResponseEntity<Map<String, Object>> metrics(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        Runtime runtime = Runtime.getRuntime();
+        Map<String, Object> result = new HashMap<>();
+        result.put("jvmUsedMb", (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024);
+        result.put("jvmMaxMb", runtime.maxMemory() / 1024 / 1024);
+        result.put("processors", runtime.availableProcessors());
+        if (syncQueueRepository != null) {
+            result.put("syncPending", syncQueueRepository.countByStatus("pending"));
+            result.put("syncProcessing", syncQueueRepository.countByStatus("processing"));
+            result.put("syncFailed", syncQueueRepository.countByStatus("fail"));
+        }
+        return ResponseEntity.ok(result);
     }
 
     /** 获取系统操作日志，支持日期范围筛选（自动合并数据库 + 归档文件） */

@@ -70,42 +70,22 @@ function renderDatePicker(name, opts = {}) {
   const val = opts.value || '';
   const req = opts.required ? 'required' : '';
   const ph = opts.placeholder || 'yyyy-mm-dd';
+  const inputId = `date_${name}_${Math.random().toString(36).slice(2, 8)}`;
   return `<div class="date-picker" style="position:relative;">
-    <input type="text" class="form-input" name="${name}" value="${val}" ${req} placeholder="${ph}" autocomplete="off" style="min-height:38px;" data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">
-    <button type="button" class="date-picker-btn" data-emie-onclick="triggerDatePicker(this)" title="选择日期">📅</button>
+    <input id="${inputId}" type="date" class="form-input" name="${name}" value="${val}" ${req} min="${new Date().toISOString().split('T')[0]}" aria-label="${ph}" autocomplete="off" style="min-height:38px;" data-emie-onclick="try{if(typeof this.showPicker==='function')this.showPicker()}catch(e){}" data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">
   </div>`;
 }
 
 function triggerDatePicker(btn) {
-  const textInput = btn.closest('.date-picker')?.querySelector('input[type="text"]');
-  if (!textInput) return;
-
-  const temp = document.createElement('input');
-  temp.type = 'date';
-  temp.min = new Date().toISOString().split('T')[0];
-  const rect = btn.getBoundingClientRect();
-  temp.style.cssText = 'position:fixed;left:' + (rect.left + window.scrollX) + 'px;top:' + (rect.top + window.scrollY) + 'px;width:40px;height:38px;opacity:0.01;z-index:9999;';
-  btn.parentNode.appendChild(temp);
-
-  temp.focus();
-  if (typeof temp.showPicker === 'function') {
-    temp.showPicker();
-  } else {
-    temp.click();
+  const dateInput = btn.closest('.date-picker')?.querySelector('input[type="date"]');
+  if (!dateInput) return;
+  dateInput.focus({ preventScroll: true });
+  try {
+    if (typeof dateInput.showPicker === 'function') dateInput.showPicker();
+    else dateInput.click();
+  } catch (e) {
+    dateInput.click();
   }
-
-  temp.addEventListener('change', function onChange() {
-    temp.removeEventListener('change', onChange);
-    if (temp.value) {
-      textInput.value = temp.value;
-      textInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-    safeRemove(temp);
-  });
-
-  temp.addEventListener('blur', function onBlur() {
-    setTimeout(() => safeRemove(temp), 300);
-  });
 }
 
 function safeRemove(el) {

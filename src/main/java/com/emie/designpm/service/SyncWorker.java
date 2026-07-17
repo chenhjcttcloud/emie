@@ -8,9 +8,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 飞书同步工作线程
@@ -21,6 +24,8 @@ import java.util.*;
 public class SyncWorker {
 
     private static final Logger log = LoggerFactory.getLogger(SyncWorker.class);
+    private static final int RECONCILE_ID_BATCH_SIZE = 500;
+    private final ReentrantLock syncLock = new ReentrantLock();
 
     private final SyncQueueRepository syncQueueRepository;
     private final ProjectRepository projectRepository;
@@ -29,6 +34,7 @@ public class SyncWorker {
     private final ActivityLogRepository activityLogRepository;
     private final FeishuBaseService feishuBaseService;
     private final SyncQueueService syncQueueService;
+    private final SystemConfigRepository systemConfigRepository;
 
     public SyncWorker(SyncQueueRepository syncQueueRepository,
                       ProjectRepository projectRepository,
@@ -36,7 +42,8 @@ public class SyncWorker {
                       ScoringRepository scoringRepository,
                       ActivityLogRepository activityLogRepository,
                       FeishuBaseService feishuBaseService,
-                      SyncQueueService syncQueueService) {
+                      SyncQueueService syncQueueService,
+                      SystemConfigRepository systemConfigRepository) {
         this.syncQueueRepository = syncQueueRepository;
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
@@ -44,12 +51,37 @@ public class SyncWorker {
         this.activityLogRepository = activityLogRepository;
         this.feishuBaseService = feishuBaseService;
         this.syncQueueService = syncQueueService;
+        this.systemConfigRepository = systemConfigRepository;
+    }
+
+    /** 保留单元测试和旧调用方的构造签名；生产由 Spring 注入配置仓库。 */
+    public SyncWorker(SyncQueueRepository syncQueueRepository,
+                      ProjectRepository projectRepository,
+                      SubTaskRepository subTaskRepository,
+                      ScoringRepository scoringRepository,
+                      ActivityLogRepository activityLogRepository,
+                      FeishuBaseService feishuBaseService,
+                      SyncQueueService syncQueueService) {
+        this(syncQueueRepository, projectRepository, subTaskRepository, scoringRepository,
+                activityLogRepository, feishuBaseService, syncQueueService, null);
     }
 
     /** 每 30 秒消费队列 */
     @Scheduled(fixedDelay = 30_000)
     @Transactional
     public void processQueue() {
+        if (!syncLock.tryLock()) {
+            log.debug("飞书同步队列跳过：已有同步轮次正在执行");
+            return;
+        }
+        try {
+            processQueueLocked();
+        } finally {
+            syncLock.unlock();
+        }
+    }
+
+    private void processQueueLocked() {
         List<SyncQueue> items = syncQueueRepository.findTop20ByStatusOrderByCreatedAtAsc("pending");
         if (items.isEmpty()) return;
 
@@ -115,15 +147,27 @@ public class SyncWorker {
             initialDelayString = "${app.feishu.reconcile-initial-delay-ms:300000}"
     )
     public void reconcileCurrentData() {
+        if (!syncLock.tryLock()) {
+            log.debug("飞书全量对账跳过：已有同步轮次正在执行");
+            return;
+        }
+        try {
+            reconcileCurrentDataLocked();
+        } finally {
+            syncLock.unlock();
+        }
+    }
+
+    private void reconcileCurrentDataLocked() {
         if (syncQueueRepository.countByStatus("pending") > 0
                 || syncQueueRepository.countByStatus("processing") > 0) {
             log.debug("飞书全量对账跳过：同步队列仍有待处理任务");
             return;
         }
-        List<Long> projectIds = projectRepository.findAll().stream().map(Project::getId).toList();
-        List<Long> taskIds = subTaskRepository.findAll().stream().map(SubTask::getId).toList();
-        List<Long> scoringIds = scoringRepository.findAll().stream().map(ScoringRecord::getId).toList();
-        List<Long> logIds = activityLogRepository.findAll().stream().map(ActivityLog::getId).toList();
+        List<Long> projectIds = readIdsInBatches(projectRepository::findIdsAfter);
+        List<Long> taskIds = readIdsInBatches(subTaskRepository::findIdsAfter);
+        List<Long> scoringIds = readIdsInBatches(scoringRepository::findIdsAfter);
+        List<Long> logIds = readIdsInBatches(activityLogRepository::findIdsAfter);
 
         try {
             Map<String, FeishuBaseService.MirrorReconcileResult> mirrorResult = feishuBaseService.reconcileMirrors(
@@ -139,10 +183,61 @@ public class SyncWorker {
             return;
         }
 
-        syncQueueService.enqueueAllForReconciliation("project", projectIds);
-        syncQueueService.enqueueAllForReconciliation("sub_task", taskIds);
-        syncQueueService.enqueueAllForReconciliation("scoring_record", scoringIds);
-        syncQueueService.enqueueAllForReconciliation("activity_log", logIds);
+        LocalDateTime until = LocalDateTime.now();
+        LocalDateTime after = systemConfigRepository == null ? LocalDateTime.MIN
+                : systemConfigRepository.findByConfigKey("feishu.sync.cursor")
+                .map(SystemConfig::getConfigValue).map(this::parseCursor).orElse(LocalDateTime.MIN);
+        enqueueUpdated("project", projectRepository::findIdsUpdatedBetween, after, until);
+        enqueueUpdated("sub_task", subTaskRepository::findIdsUpdatedBetween, after, until);
+        enqueueUpdated("scoring_record", scoringRepository::findIdsUpdatedBetween, after, until);
+        enqueueUpdated("activity_log", activityLogRepository::findIdsUpdatedBetween, after, until);
+        if (systemConfigRepository != null) {
+            SystemConfig cursor = systemConfigRepository.findByConfigKey("feishu.sync.cursor")
+                    .orElseGet(() -> SystemConfig.builder().configKey("feishu.sync.cursor").configGroup("system").valueType("text").description("飞书增量同步游标").build());
+            cursor.setConfigValue(until.toString());
+            systemConfigRepository.save(cursor);
+        }
+    }
+
+    @FunctionalInterface
+    private interface IdBatchReader {
+        List<Long> read(Long afterId, Pageable pageRequest);
+    }
+
+    private List<Long> readIdsInBatches(IdBatchReader reader) {
+        List<Long> ids = new ArrayList<>();
+        long afterId = 0L;
+        while (true) {
+            List<Long> batch = reader.read(afterId, PageRequest.of(0, RECONCILE_ID_BATCH_SIZE));
+            if (batch.isEmpty()) break;
+            ids.addAll(batch);
+            afterId = batch.get(batch.size() - 1);
+            if (batch.size() < RECONCILE_ID_BATCH_SIZE) break;
+        }
+        return ids;
+    }
+
+    @FunctionalInterface
+    private interface UpdatedIdBatchReader {
+        List<Long> read(LocalDateTime after, LocalDateTime until, Pageable pageRequest);
+    }
+
+    private void enqueueUpdated(String type, UpdatedIdBatchReader reader, LocalDateTime after, LocalDateTime until) {
+        List<Long> ids = new ArrayList<>();
+        int page = 0;
+        while (true) {
+            List<Long> batch = reader.read(after, until, PageRequest.of(page++, RECONCILE_ID_BATCH_SIZE));
+            if (batch.isEmpty()) break;
+            ids.addAll(batch);
+            if (batch.size() < RECONCILE_ID_BATCH_SIZE) break;
+        }
+        syncQueueService.enqueueAllForReconciliation(type, ids);
+        log.debug("飞书增量对账: type={}, changed={}", type, ids.size());
+    }
+
+    private LocalDateTime parseCursor(String value) {
+        try { return LocalDateTime.parse(value); }
+        catch (Exception ignored) { return LocalDateTime.MIN; }
     }
 
     private void syncProject(Long projectId) throws Exception {

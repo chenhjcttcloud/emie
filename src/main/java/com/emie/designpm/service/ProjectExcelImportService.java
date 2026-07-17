@@ -237,7 +237,9 @@ public class ProjectExcelImportService {
 
     private void ensureIpOption(ImportOptions options) {
         IpOption ip = ipOptionRepository.findByName(options.ipName()).orElseGet(() -> {
-            IpOption created = new IpOption(options.ipName(), ipOptionRepository.findAll().size() + 1);
+            int nextOrder = ipOptionRepository.findTopByOrderBySortOrderDesc()
+                    .map(i -> i.getSortOrder() == null ? 1 : i.getSortOrder() + 1).orElse(1);
+            IpOption created = new IpOption(options.ipName(), nextOrder);
             created.setActive(true);
             return created;
         });

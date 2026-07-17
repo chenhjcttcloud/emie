@@ -51,6 +51,28 @@ public class ProjectSearchRepositoryImpl implements ProjectSearchRepository {
         return new PageImpl<>(content, query.pageable(), total);
     }
 
+    @Override
+    public long countVisible(ProjectListQuery query, String viewerRole, List<String> visibleUserIds) {
+        if (!"admin".equals(viewerRole) && (visibleUserIds == null || visibleUserIds.isEmpty())) return 0L;
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Long> countQuery = cb.createQuery(Long.class);
+        Root<Project> project = countQuery.from(Project.class);
+        countQuery.select(cb.countDistinct(project.get("id")))
+                .where(predicates(cb, project, query, viewerRole, visibleUserIds));
+        return entityManager.createQuery(countQuery).getSingleResult();
+    }
+
+    @Override
+    public List<Long> findVisibleIds(ProjectListQuery query, String viewerRole, List<String> visibleUserIds) {
+        if (!"admin".equals(viewerRole) && (visibleUserIds == null || visibleUserIds.isEmpty())) return List.of();
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Long> idsQuery = cb.createQuery(Long.class);
+        Root<Project> project = idsQuery.from(Project.class);
+        idsQuery.select(project.get("id")).distinct(true)
+                .where(predicates(cb, project, query, viewerRole, visibleUserIds));
+        return entityManager.createQuery(idsQuery).getResultList();
+    }
+
     private Predicate[] predicates(CriteriaBuilder cb, Root<Project> project, ProjectListQuery query,
                                    String viewerRole, List<String> visibleUserIds) {
         List<Predicate> predicates = new ArrayList<>();

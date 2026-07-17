@@ -47,7 +47,7 @@ public class NotificationWorkflowService {
     }
 
     private void sendFeishu(NotificationEvent event, Notification n, User user, NotificationTemplateService.Template t, String actor) {
-        NotificationDelivery d = deliveries.save(NotificationDelivery.builder().notificationId(n.getId()).channel("feishu").status("pending").retryCount(0).build());
+        NotificationDelivery d = deliveries.save(NotificationDelivery.builder().notificationId(n.getId()).channel("feishu").status("pending").retryCount(0).cardPayload(t.feishuCardJson()).build());
         try {
             if (user.getFeishuOpenId() == null || user.getFeishuOpenId().isBlank()) throw new IllegalArgumentException("收件人未绑定飞书 Open ID");
             d.setExternalMessageId(feishu.sendInteractiveMessage(user.getFeishuOpenId(), t.feishuCardJson())); d.setStatus("delivered"); d.setDeliveredAt(LocalDateTime.now());

@@ -8,6 +8,8 @@ import com.emie.designpm.service.FeishuBaseService;
 import com.emie.designpm.service.SyncQueueService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.LinkedHashMap;
@@ -19,6 +21,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/admin/sync")
 public class FeishuSyncController {
+
+    private static final int SYNC_ID_BATCH_SIZE = 500;
 
     private final SyncQueueService syncQueueService;
     private final FeishuBaseService feishuBaseService;
@@ -86,10 +90,10 @@ public class FeishuSyncController {
                     "valid", false,
                     "message", "无法完成备份表预检，未执行全量重刷"));
         }
-        List<Long> projectIds = projectRepository.findAll().stream().map(p -> p.getId()).toList();
-        List<Long> taskIds = subTaskRepository.findAll().stream().map(t -> t.getId()).toList();
-        List<Long> scoringIds = scoringRepository.findAll().stream().map(s -> s.getId()).toList();
-        List<Long> logIds = activityLogRepository.findAll().stream().map(l -> l.getId()).toList();
+        List<Long> projectIds = readIdsInBatches(projectRepository::findIdsAfter);
+        List<Long> taskIds = readIdsInBatches(subTaskRepository::findIdsAfter);
+        List<Long> scoringIds = readIdsInBatches(scoringRepository::findIdsAfter);
+        List<Long> logIds = readIdsInBatches(activityLogRepository::findIdsAfter);
 
         try {
             feishuBaseService.reconcileMirrors(
@@ -107,6 +111,24 @@ public class FeishuSyncController {
         result.put("activity_log", syncQueueService.enqueueAll("activity_log", logIds));
         result.put("message", "全量重刷已入队");
         return ResponseEntity.ok(result);
+    }
+
+    @FunctionalInterface
+    private interface IdBatchReader {
+        List<Long> read(Long afterId, Pageable pageRequest);
+    }
+
+    private List<Long> readIdsInBatches(IdBatchReader reader) {
+        List<Long> ids = new java.util.ArrayList<>();
+        long afterId = 0L;
+        while (true) {
+            List<Long> batch = reader.read(afterId, PageRequest.of(0, SYNC_ID_BATCH_SIZE));
+            if (batch.isEmpty()) break;
+            ids.addAll(batch);
+            afterId = batch.get(batch.size() - 1);
+            if (batch.size() < SYNC_ID_BATCH_SIZE) break;
+        }
+        return ids;
     }
 
     /** 初始化飞书 Base（机器人自动创建多维表格） */

@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.LocalDateTime;
 import org.springframework.data.repository.query.Param;
 
 public interface ProjectRepository extends JpaRepository<Project, Long>, ProjectSearchRepository {
@@ -82,6 +83,16 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, Project
     @Query("SELECT p FROM Project p WHERE p.plannerId = ?1 OR (p.type = 'channel_custom' AND p.status = 'pending_planner' AND (p.plannerId IS NULL OR p.plannerId = '')) ORDER BY p.createdAt DESC")
     List<Project> findByPlannerViewLight(String plannerId);
 
+    /** 状态看板批量读取销售项目，避免按用户逐个查询。 */
+    @Query("SELECT p FROM Project p WHERE p.salesId IN :userIds ORDER BY p.createdAt DESC")
+    List<Project> findBySalesIdsLight(@Param("userIds") List<String> userIds);
+
+    /** 状态看板批量读取企划项目，并保留待认领的渠道定制单。 */
+    @Query("SELECT p FROM Project p WHERE p.plannerId IN :userIds OR " +
+            "(p.type = 'channel_custom' AND p.status = 'pending_planner' AND (p.plannerId IS NULL OR p.plannerId = '')) " +
+            "ORDER BY p.createdAt DESC")
+    List<Project> findByPlannerIdsLight(@Param("userIds") List<String> userIds);
+
     /** 执行角色视图（无 JOIN FETCH） */
     @Query("SELECT DISTINCT p FROM Project p LEFT JOIN p.tasks t WHERE " +
             "((t.designerId = ?1) OR ((t.designerId IS NULL OR t.designerId = '') AND t.status = 'pending')) " +
@@ -107,4 +118,11 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, Project
     /** 全部项目（管理员/上级），预加载子任务 */
     @Query("SELECT DISTINCT p FROM Project p LEFT JOIN FETCH p.tasks ORDER BY p.createdAt DESC")
     List<Project> findAllWithTasks();
+
+    /** 对账只需要业务 ID，按主键分页读取，避免把整张项目表实体加载进内存。 */
+    @Query("SELECT p.id FROM Project p WHERE p.id > :afterId ORDER BY p.id ASC")
+    List<Long> findIdsAfter(@Param("afterId") Long afterId, Pageable pageable);
+
+    @Query("SELECT p.id FROM Project p WHERE p.updatedAt > :after AND p.updatedAt <= :until ORDER BY p.updatedAt ASC, p.id ASC")
+    List<Long> findIdsUpdatedBetween(@Param("after") LocalDateTime after, @Param("until") LocalDateTime until, Pageable pageable);
 }

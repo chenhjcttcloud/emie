@@ -5,11 +5,20 @@ import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.repository.query.Param;
+import java.time.LocalDateTime;
 
 import java.util.List;
 import java.util.Optional;
 
 public interface SubTaskRepository extends JpaRepository<SubTask, Long> {
+
+    @Query("SELECT t.id FROM SubTask t WHERE t.id > :afterId ORDER BY t.id ASC")
+    List<Long> findIdsAfter(@Param("afterId") Long afterId, Pageable pageable);
+
+    @Query("SELECT t.id FROM SubTask t WHERE t.updatedAt > :after AND t.updatedAt <= :until ORDER BY t.updatedAt ASC, t.id ASC")
+    List<Long> findIdsUpdatedBetween(@Param("after") LocalDateTime after, @Param("until") LocalDateTime until, Pageable pageable);
 
     List<SubTask> findByDesignerId(String designerId);
 

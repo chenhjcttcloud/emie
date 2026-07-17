@@ -88,31 +88,46 @@ public class ProjectService {
         return projectAccessService.findVisibleProjectsPage(role, userId, query);
     }
 
+    public long countVisibleProjects(String role, String userId, String type, boolean participating) {
+        return projectAccessService.countVisibleProjects(role, userId, type, participating);
+    }
+
+    public List<Long> findVisibleProjectIds(String role, String userId) {
+        return projectAccessService.findVisibleProjectIds(role, userId);
+    }
+
     /**
      * 左侧导航唯一统计口径：项目数量与项目列表一致，待评分数量与评分中心一致。
      * 执行角色的项目页只展示已参与项目，因此此处不混入待认领的公共项目。
      */
     @Transactional(readOnly = true)
     public Map<String, Long> getNavigationBadgeStats(String role, String userId) {
-        List<Project> visibleProjects = ("designer".equals(role) || "supplychain".equals(role))
-                ? getAssigneeParticipatingProjects(userId, role)
-                : getProjectsByRoleAndUser(role, userId);
-        long channelCount = visibleProjects.stream().filter(project -> "channel_custom".equals(project.getType())).count();
-        long regularCount = visibleProjects.stream().filter(project -> "regular".equals(project.getType())).count();
+        boolean participating = "designer".equals(role) || "supplychain".equals(role);
+        long channelCount = projectAccessService.countVisibleProjects(role, userId, "channel_custom", participating);
+        long regularCount = projectAccessService.countVisibleProjects(role, userId, "regular", participating);
+        long totalCount = channelCount + regularCount;
         long myTaskCount = ("designer".equals(role) || "supplychain".equals(role))
                 ? subTaskRepository.countByDesignerIdAndRoleAndActionableStatus(userId, role)
                 : 0;
-        long pendingScoreCount = getPendingScoringTasks(role, userId).stream()
-                .filter(item -> Boolean.TRUE.equals(item.get("isPending")))
-                .count();
+        long pendingScoreCount = countPendingScoresForBadge(role, userId);
 
         Map<String, Long> stats = new LinkedHashMap<>();
-        stats.put("totalCount", (long) visibleProjects.size());
+        stats.put("totalCount", totalCount);
         stats.put("channelCount", channelCount);
         stats.put("regularCount", regularCount);
         stats.put("myTaskCount", myTaskCount);
         stats.put("pendingScoreCount", pendingScoreCount);
         return stats;
+    }
+
+    private long countPendingScoresForBadge(String role, String userId) {
+        if (!List.of("admin", "planner", "sales").contains(role)) return 0L;
+        List<String> visibleUserIds = projectAccessService.visibleUserIds(role, userId, role);
+        if ("admin".equals(role)) return scoringRepository.countPendingForRole(role);
+        if (visibleUserIds.isEmpty()) return 0L;
+        return "sales".equals(role)
+                ? scoringRepository.countPendingForSales(role, visibleUserIds)
+                : scoringRepository.countPendingForPlanners(role, visibleUserIds);
     }
 
     /** 批量获取子任务统计（projectId → {taskCount, approvedCount}） */
@@ -1196,15 +1211,26 @@ public class ProjectService {
                 result.put(u.getUserId(), info);
             }
         } else if ("sales".equals(role) || "planner".equals(role)) {
+            List<String> userIds = users.stream().map(User::getUserId).toList();
+            List<Project> allRoleProjects = userIds.isEmpty() ? List.of()
+                    : ("sales".equals(role)
+                    ? projectRepository.findBySalesIdsLight(userIds)
+                    : projectRepository.findByPlannerIdsLight(userIds));
+            Map<String, List<Project>> projectsByUser = allRoleProjects.stream()
+                    .collect(Collectors.groupingBy(p -> "sales".equals(role) ? p.getSalesId()
+                                    : (p.getPlannerId() == null ? "" : p.getPlannerId()),
+                            LinkedHashMap::new, Collectors.toList()));
+            List<Project> unassignedPlannerProjects = "planner".equals(role)
+                    ? allRoleProjects.stream().filter(p -> p.getPlannerId() == null || p.getPlannerId().isBlank()).toList()
+                    : List.of();
             for (User u : users) {
                 Map<String, Object> info = new LinkedHashMap<>();
                 info.put("id", u.getUserId());
                 info.put("name", u.getName());
                 info.put("title", u.getTitle());
 
-                List<Project> projects = "sales".equals(role)
-                        ? projectRepository.findBySalesIdLight(u.getUserId())
-                        : projectRepository.findByPlannerViewLight(u.getUserId());
+                List<Project> projects = new ArrayList<>(projectsByUser.getOrDefault(u.getUserId(), List.of()));
+                if ("planner".equals(role)) projects.addAll(unassignedPlannerProjects);
                 List<Project> activeProjects = projects.stream()
                         .filter(p -> !List.of("draft", "terminated", "completed").contains(p.getStatus()))
                         .collect(Collectors.toList());

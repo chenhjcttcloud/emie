@@ -10,6 +10,8 @@ import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.ProjectService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.format.DateTimeFormatter;
@@ -51,6 +53,7 @@ public class DashboardController {
     public ResponseEntity<Map<String, Object>> getFullDashboard(
             @RequestParam String role,
             @RequestParam String userId,
+            @RequestParam(required = false, defaultValue = "true") boolean includeRoleStatus,
             HttpServletRequest request) {
         AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
         role = session.role();
@@ -59,7 +62,9 @@ public class DashboardController {
         Map<String, Object> result = new LinkedHashMap<>();
 
         // 1. 项目列表
-        List<Project> projects = projectService.getProjectsByRoleAndUser(role, userId);
+        List<Long> visibleProjectIds = projectService.findVisibleProjectIds(role, userId);
+        Page<Project> summaryPage = projectService.getProjectsPage(role, userId, null, false, PageRequest.of(0, 15));
+        List<Project> projects = summaryPage.getContent();
         Map<Long, int[]> taskCountMap = projectService.getTaskCountMap(projects);
         Map<Long, Double> scoreMap = projectService.computeProjectScoresBatch(projects);
         List<ProjectSummaryDTO> orders = projects.stream()
@@ -68,14 +73,12 @@ public class DashboardController {
         result.put("orders", orders);
 
         // 2. Dashboard stats
-        result.put("stats", computeStats(projects));
+        result.put("stats", computeStatsByIds(visibleProjectIds, role, userId));
 
         // 3. 四个角色状态看板
-        Map<String, Object> roleStatus = new LinkedHashMap<>();
-        for (String r : ALL_ROLES) {
-            roleStatus.put(r, projectService.getRoleStatus(r, role, userId));
+        if (includeRoleStatus) {
+            result.put("roleStatus", loadRoleStatus(role, userId));
         }
-        result.put("roleStatus", roleStatus);
 
         // 4. 部门列表
         result.put("departments", departmentRepository.findAllByOrderBySortOrderAsc());
@@ -86,13 +89,39 @@ public class DashboardController {
         return ResponseEntity.ok(result);
     }
 
+    @GetMapping("/role-status")
+    public ResponseEntity<Map<String, Object>> getRoleStatus(HttpServletRequest request) {
+        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        return ResponseEntity.ok(loadRoleStatus(session.role(), session.userId()));
+    }
+
+    private Map<String, Object> loadRoleStatus(String viewerRole, String viewerUserId) {
+        Map<String, Object> roleStatus = new LinkedHashMap<>();
+        for (String r : ALL_ROLES) {
+            roleStatus.put(r, projectService.getRoleStatus(r, viewerRole, viewerUserId));
+        }
+        return roleStatus;
+    }
+
     private Map<String, Object> computeStats(List<Project> projects) {
+        return computeStats(projects, null, null);
+    }
+
+    private Map<String, Object> computeStats(List<Project> projects, String role, String userId) {
         long totalProjects = projects.size();
         long channelProjects = projects.stream().filter(p -> "channel_custom".equals(p.getType())).count();
         long regularProjects = projects.stream().filter(p -> "regular".equals(p.getType())).count();
         long inProgress = projects.stream()
                 .filter(p -> "in_progress".equals(projectService.computeProjectStatus(p))
-                        || "completed_pending_score".equals(projectService.computeProjectStatus(p))).count();
+                || "completed_pending_score".equals(projectService.computeProjectStatus(p))).count();
+
+        if (role != null && userId != null) {
+            totalProjects = projectService.countVisibleProjects(role, userId, null, false);
+            channelProjects = projectService.countVisibleProjects(role, userId, "channel_custom", false);
+            regularProjects = projectService.countVisibleProjects(role, userId, "regular", false);
+            inProgress = projectService.countVisibleProjects(role, userId, "in_progress", false)
+                    + projectService.countVisibleProjects(role, userId, "planner_accepted", false);
+        }
 
         List<Long> projectIds = projects.stream().map(Project::getId).collect(Collectors.toList());
         long allTasks = 0, approvedTasks = 0, pendingTasks = 0, pendingScore = 0;
@@ -118,6 +147,28 @@ public class DashboardController {
         stats.put("approvedTasks", approvedTasks);
         stats.put("pendingTasks", pendingTasks);
         stats.put("pendingScore", pendingScore);
+        return stats;
+    }
+
+    private Map<String, Object> computeStatsByIds(List<Long> projectIds, String role, String userId) {
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("totalProjects", projectService.countVisibleProjects(role, userId, null, false));
+        stats.put("channelProjects", projectService.countVisibleProjects(role, userId, "channel_custom", false));
+        stats.put("regularProjects", projectService.countVisibleProjects(role, userId, "regular", false));
+        stats.put("inProgress", projectService.countVisibleProjects(role, userId, "in_progress", false)
+                + projectService.countVisibleProjects(role, userId, "planner_accepted", false));
+        long allTasks = 0, approvedTasks = 0, pendingTasks = 0, pendingScore = 0;
+        if (!projectIds.isEmpty()) {
+            for (Object[] row : subTaskRepository.countStatusByProjectIds(projectIds)) {
+                long count = ((Number) row[1]).longValue();
+                allTasks += count;
+                if ("approved".equals(row[0]) || "completed".equals(row[0])) approvedTasks += count;
+                if ("pending".equals(row[0]) || "delivered".equals(row[0])) pendingTasks += count;
+            }
+            pendingScore = subTaskRepository.countPendingScoresByProjectIds(projectIds);
+        }
+        stats.put("allTasks", allTasks); stats.put("approvedTasks", approvedTasks);
+        stats.put("pendingTasks", pendingTasks); stats.put("pendingScore", pendingScore);
         return stats;
     }
 
@@ -164,6 +215,6 @@ public class DashboardController {
         userId = session.userId();
         List<Project> projects = projectService.getProjectsByRoleAndUser(role, userId);
 
-        return ResponseEntity.ok(computeStats(projects));
+        return ResponseEntity.ok(computeStats(projects, role, userId));
     }
 }

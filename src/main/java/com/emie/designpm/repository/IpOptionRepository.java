@@ -10,4 +10,5 @@ public interface IpOptionRepository extends JpaRepository<IpOption, Long> {
     List<IpOption> findByActiveTrueOrderBySortOrderAsc();
     List<IpOption> findAllByOrderBySortOrderAsc();
     Optional<IpOption> findByName(String name);
+    Optional<IpOption> findTopByOrderBySortOrderDesc();
 }

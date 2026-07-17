@@ -87,14 +87,25 @@ function authHeaders() {
 
 // 合并同一时刻发出的重复 GET 请求，避免多个组件同时初始化时重复访问接口。
 const pendingApiGets = new Map();
+const cachedApiGets = new Map();
+const API_CACHE_TTL_MS = 10000;
+const CACHEABLE_GET = /^\/(users|roles|departments|categories|ip-options|admin\/configs|dashboard\/role-status|projects\/role-status)(\/|\?|$)/;
 
 async function apiGet(url) {
+  const cacheable = CACHEABLE_GET.test(url);
+  if (cacheable) {
+    const cached = cachedApiGets.get(url);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+    if (cached) cachedApiGets.delete(url);
+  }
   if (pendingApiGets.has(url)) return pendingApiGets.get(url);
   const request = (async () => {
     const r = await fetchWithTimeout(API + url, { headers: authHeaders(), cache: 'no-store' });
     if (r.status === 401) { handleLogout(); throw new Error('登录已过期'); }
     if (!r.ok) throw new Error(`GET ${url} failed: ${r.status}`);
-    return r.json();
+    const value = await r.json();
+    if (cacheable) cachedApiGets.set(url, { value, expiresAt: Date.now() + API_CACHE_TTL_MS });
+    return value;
   })();
   pendingApiGets.set(url, request);
   try {
@@ -105,6 +116,7 @@ async function apiGet(url) {
 }
 
 async function apiPost(url, data) {
+  cachedApiGets.clear();
   const r = await fetchWithTimeout(API + url, {
     method: 'POST',
     headers: authHeaders(),
@@ -117,6 +129,8 @@ async function apiPost(url, data) {
   }
   return r.json();
 }
+
+function invalidateApiCache() { cachedApiGets.clear(); }
 
 async function optimizeUploadFile(file) {
   // 仅压缩大尺寸 JPEG/WebP，保留 PNG 透明通道和办公附件原文件。
@@ -173,6 +187,7 @@ async function uploadFile(file, onProgress) {
 }
 
 async function apiPut(url, data) {
+  cachedApiGets.clear();
   const r = await fetchWithTimeout(API + url, {
     method: 'PUT',
     headers: authHeaders(),
@@ -244,6 +259,7 @@ async function submitGuard(btn, handler) {
 }
 
 async function apiDelete(url) {
+  cachedApiGets.clear();
   const r = await fetchWithTimeout(API + url, {
     method: 'DELETE',
     headers: authHeaders(),

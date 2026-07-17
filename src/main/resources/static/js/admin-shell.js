@@ -193,6 +193,27 @@ async function renderAdminConfig(container) {
   }
 
   container.innerHTML = html;
+  if (configs.notification) {
+    container.insertAdjacentHTML('beforeend', `<div class="config-card" data-group="notification-failures">
+      <div class="config-card-header"><h3>🛠️ 飞书失败通知</h3><button class="btn btn-sm btn-secondary" data-emie-onclick="loadNotificationFailures()">🔄 刷新</button></div>
+      <div class="config-card-body" id="notificationFailures"><div class="loading">加载中</div></div>
+    </div>`);
+    await loadNotificationFailures();
+  }
+}
+
+async function loadNotificationFailures() {
+  const target = document.getElementById('notificationFailures');
+  if (!target) return;
+  try {
+    const rows = await apiGet('/admin/notifications/failures');
+    target.innerHTML = rows.length ? `<div class="table-responsive"><table class="data-table"><thead><tr><th>状态</th><th>收件人</th><th>通知</th><th>失败原因</th><th>重试次数</th><th>操作</th></tr></thead><tbody>${rows.map(r => `<tr><td>${r.status === 'dead_letter' ? '死信' : '等待重试'}</td><td>${escHtml(r.recipientUserId || '')}</td><td>${escHtml(r.title || '')}</td><td>${escHtml(r.errorMsg || '')}</td><td>${r.retryCount ?? 0}</td><td><button class="btn btn-sm btn-primary" data-emie-onclick="retryNotificationDelivery(${r.deliveryId})">重新发送</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无失败的飞书通知</div>';
+  } catch (e) { target.innerHTML = `<div class="error-state">加载失败：${escHtml(e.message)}</div>`; }
+}
+
+async function retryNotificationDelivery(id) {
+  try { await apiPost(`/admin/notifications/deliveries/${id}/retry`, {}); showAdminToast('✅ 已重新排队，系统将在下一轮发送', 'success'); await loadNotificationFailures(); }
+  catch (e) { showAdminToast('❌ 重试失败：' + e.message, 'error'); }
 }
 
 async function saveConfigGroup(group) {
@@ -446,6 +467,8 @@ EMIE.registerActions({
   renderAdminConfig,
   saveConfigGroup,
   sendNotificationTest,
+  loadNotificationFailures,
+  retryNotificationDelivery,
   renderAdminNotificationTemplates,
   insertNotificationVariable,
   saveNotificationTemplates,
@@ -463,6 +486,8 @@ EMIE.registerModule('adminShell', {
   renderAdminConfig,
   saveConfigGroup,
   sendNotificationTest,
+  loadNotificationFailures,
+  retryNotificationDelivery,
   renderAdminNotificationTemplates,
   insertNotificationVariable,
   saveNotificationTemplates,
