@@ -13,6 +13,25 @@
 
 ---
 
+## 2026-07-17 工作台、通知、同步与日期控件优化发布
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 发布成功（首次尝试因构造器注入失败回滚，修复后重新发布） |
+| 旧生产提交 / 首次提交 / 最终生产提交 | `62502d764dbe77fc9f5f8493480688d9cf56cead` / `2f5d0b53dcdc052ed3693a879da7ae566d549b2a` / `0ece99758b54f0d1ceaf786a405e45bbdae94713` |
+| Gitee 推送 | `project_manager_system` 已核对与最终本地 SHA 一致 |
+| 变更范围 | 工作台 ID+数据库聚合、前端请求缓存、通知失败/死信重试、JVM/连接池/同步队列告警、同步增量游标、查询索引、Safari/多浏览器日期控件 |
+| 本地验证 | Java 21 `clean package` 成功，65/65 测试通过；全量前端 JS 语法检查和 `git diff --check` 通过 |
+| 数据库备份 | `/root/emie/db-backup-before-236de30_20260717_123040.sql.gz`，47931 字节，`gzip -t` 通过 |
+| 数据库迁移 | `2026-07-17-add-notification-retry-payload.sql`、`2026-07-17-add-query-hotpath-indexes.sql`、`2026-07-17-add-scoring-badge-index.sql`、`2026-07-17-add-sync-change-cursors.sql` 已执行并验证；同步字段迁移按 MySQL 兼容写法重新执行 |
+| 首次发布异常 | `2f5d0b5` 启动时 Spring 无法在两个 `SyncWorker` 构造器中选择构造器，应用未监听 8080；未产生数据写入影响 |
+| 回滚 | 恢复 `/root/emie/app.jar.bak.pre-62502d7-20260717_001440`，生产 SHA 恢复为 `62502d...`；应用 HTTP 200、公开配置 HTTP 200、预览 HTTP 200 |
+| 最终产物核验 | 最终 JAR SHA-256 `6aa62496fe5b223bd35822e654bf26c4c9acd823db3d8e80abe73a2aa327fbc3`，上传前后核对一致 |
+| 最终生产验证 | `emie-app` 与 `emie-preview-converter` 持续运行；应用首页 HTTP 200、公开配置 HTTP 200、预览健康 HTTP 200；最终日志无启动异常；生产 `release-sha.txt` 为 `0ece997...` |
+| 待人工验收 | 使用实际管理员、产品企划和设计师账号检查工作台、通知失败管理、项目日期控件及飞书同步状态 |
+
+---
+
 ## 2026-07-17 左侧导航统计统一修复
 
 | 项目 | 记录 |
