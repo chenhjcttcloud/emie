@@ -5,6 +5,7 @@ import com.emie.designpm.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +37,7 @@ public class SyncWorker {
     private final SyncQueueService syncQueueService;
     private final SystemConfigRepository systemConfigRepository;
 
+    @Autowired
     public SyncWorker(SyncQueueRepository syncQueueRepository,
                       ProjectRepository projectRepository,
                       SubTaskRepository subTaskRepository,
