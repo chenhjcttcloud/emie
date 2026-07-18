@@ -15,14 +15,9 @@ const isDateInRange = (...args) => EMIE.actions.isDateInRange(...args);
 async function renderDesignerTasks(main, uid) {
   // 企划可能作为子任务负责人而非项目负责人，需查全部项目
   const roleParam = EMIE.state.currentRole === 'planner' ? 'admin' : EMIE.state.currentRole;
-  const orders = await apiGet(`/projects?role=${roleParam}&userId=${uid}`);
+  const details = await apiGet('/projects/my-tasks');
   let myTasks = [];
   const myId = uid;
-
-  // 并行拉取所有项目详情
-  const details = await Promise.all(
-    orders.map(order => apiGet(`/projects/${order.id}`).catch(() => null))
-  );
 
   for (const detail of details) {
     if (!detail || !detail.tasks) continue;

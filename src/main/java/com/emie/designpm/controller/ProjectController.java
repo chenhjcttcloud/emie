@@ -165,6 +165,20 @@ public class ProjectController {
         return normalized;
     }
 
+    /** 执行角色工作台一次性读取可见项目及子任务，避免前端逐项目请求详情。 */
+    @GetMapping("/my-tasks")
+    public ResponseEntity<List<ProjectDetailDTO>> getMyTaskProjects(HttpServletRequest request) {
+        AuthController.AuthSession session = getSession(request);
+        if (session == null || !("designer".equals(session.role()) || "supplychain".equals(session.role())
+                || "planner".equals(session.role()))) {
+            return ResponseEntity.status(403).build();
+        }
+        List<Project> projects = projectAccessService.findVisibleProjectsWithTasks(session);
+        List<Long> taskIds = projects.stream().flatMap(p -> p.getTasks().stream()).map(SubTask::getId).toList();
+        Map<Long, List<Map<String, Object>>> scoringByTask = loadScoringDetails(taskIds);
+        return ResponseEntity.ok(projects.stream().map(p -> toDetail(p, scoringByTask, false)).toList());
+    }
+
     /** 获取项目详情 */
     @GetMapping("/{id}")
     public ResponseEntity<ProjectDetailDTO> getProjectDetail(@PathVariable Long id, HttpServletRequest request) {
@@ -499,6 +513,15 @@ public class ProjectController {
     }
 
     private ProjectDetailDTO toDetail(Project p) {
+        return toDetail(p, null, true);
+    }
+
+    private ProjectDetailDTO toDetail(Project p, Map<Long, List<Map<String, Object>>> preloadedScoring) {
+        return toDetail(p, preloadedScoring, true);
+    }
+
+    private ProjectDetailDTO toDetail(Project p, Map<Long, List<Map<String, Object>>> preloadedScoring,
+                                      boolean includeLogs) {
         ProjectDetailDTO dto = new ProjectDetailDTO();
         dto.setId(p.getId());
         dto.setType(p.getType());
@@ -525,8 +548,8 @@ public class ProjectController {
         dto.setReferenceImagesJson(p.getReferenceImagesJson());
         dto.setAttachmentsJson(p.getAttachmentsJson());
 
-        // Logs
-        dto.setLogs(p.getLogs().stream().map(l -> {
+        // 详情页需要日志；工作台聚合接口不加载日志，避免历史日志膨胀拖慢响应。
+        if (includeLogs) dto.setLogs(p.getLogs().stream().map(l -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("time", l.getTime().format(DTF));
             m.put("action", l.getAction());
@@ -544,8 +567,9 @@ public class ProjectController {
         List<SubTask> taskList = p.getTasks();
         // 批量加载评分记录
         List<Long> taskIds = taskList.stream().map(SubTask::getId).collect(Collectors.toList());
-        Map<Long, List<Map<String, Object>>> scoringMap = new HashMap<>();
-        if (!taskIds.isEmpty()) {
+        Map<Long, List<Map<String, Object>>> scoringMap = preloadedScoring != null
+                ? preloadedScoring : new HashMap<>();
+        if (preloadedScoring == null && !taskIds.isEmpty()) {
             scoringRepository.findBySubTaskIds(taskIds).forEach(sr -> {
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("id", sr.getId());
@@ -579,6 +603,29 @@ public class ProjectController {
         dto.setUpdatedAt(p.getUpdatedAt().format(DTF));
 
         return dto;
+    }
+
+    private Map<Long, List<Map<String, Object>>> loadScoringDetails(List<Long> taskIds) {
+        Map<Long, List<Map<String, Object>>> scoringMap = new HashMap<>();
+        if (taskIds.isEmpty()) return scoringMap;
+        scoringRepository.findBySubTaskIds(taskIds).forEach(sr -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", sr.getId());
+            m.put("role", sr.getRole());
+            m.put("scoreType", sr.getScoreType());
+            m.put("reviewStage", sr.getReviewStage());
+            m.put("reviewStatus", sr.getReviewStatus());
+            m.put("reviewerId", sr.getReviewerId());
+            m.put("reviewerName", sr.getReviewerName());
+            m.put("reviewedAt", sr.getReviewedAt() != null ? sr.getReviewedAt().format(DTF) : null);
+            m.put("score", sr.getScore());
+            m.put("comment", sr.getComment());
+            m.put("aesthetics", sr.getAesthetics());
+            m.put("innovation", sr.getInnovation());
+            m.put("weight", sr.getWeight());
+            scoringMap.computeIfAbsent(sr.getSubTask().getId(), ignored -> new ArrayList<>()).add(m);
+        });
+        return scoringMap;
     }
 
     private TaskDetailDTO toTaskDetail(SubTask t) {

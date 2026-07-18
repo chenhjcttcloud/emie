@@ -869,6 +869,13 @@ public class AdminService {
                 "designer", "🎨", "supplychain", "📦"
         );
 
+        Map<String, Map<String, Long>> projectCountsBySales = workloadCounts(
+                "SELECT sales_id, status, COUNT(*) FROM projects GROUP BY sales_id, status");
+        Map<String, Map<String, Long>> projectCountsByPlanner = workloadCounts(
+                "SELECT planner_id, status, COUNT(*) FROM projects GROUP BY planner_id, status");
+        Map<String, Map<String, Long>> taskCountsByDesigner = workloadCounts(
+                "SELECT designer_id, status, COUNT(*) FROM sub_tasks GROUP BY designer_id, status");
+
         for (Map.Entry<String, List<User>> entry : byRole.entrySet()) {
             String role = entry.getKey();
             List<User> users = entry.getValue();
@@ -883,50 +890,20 @@ public class AdminService {
                 // 按角色类型聚合
                 switch (role) {
                     case "sales" -> {
-                        List<Object[]> byStatus = entityManager
-                                .createNativeQuery("SELECT p.status, COUNT(*) FROM projects p WHERE p.sales_id = ?1 GROUP BY p.status")
-                                .setParameter(1, u.getUserId())
-                                .getResultList();
-                        Map<String, Object> counts = new LinkedHashMap<>();
-                        int total = 0;
-                        for (Object[] row : byStatus) {
-                            String s = (String) row[0];
-                            long c = ((Number) row[1]).longValue();
-                            counts.put(s, c);
-                            total += c;
-                        }
+                        Map<String, Long> counts = projectCountsBySales.getOrDefault(u.getUserId(), Map.of());
+                        long total = counts.values().stream().mapToLong(Long::longValue).sum();
                         us.put("totalProjects", total);
                         us.put("projectCounts", counts);
                     }
                     case "planner" -> {
-                        List<Object[]> byStatus = entityManager
-                                .createNativeQuery("SELECT p.status, COUNT(*) FROM projects p WHERE p.planner_id = ?1 GROUP BY p.status")
-                                .setParameter(1, u.getUserId())
-                                .getResultList();
-                        Map<String, Object> counts = new LinkedHashMap<>();
-                        int total = 0;
-                        for (Object[] row : byStatus) {
-                            String s = (String) row[0];
-                            long c = ((Number) row[1]).longValue();
-                            counts.put(s, c);
-                            total += c;
-                        }
+                        Map<String, Long> counts = projectCountsByPlanner.getOrDefault(u.getUserId(), Map.of());
+                        long total = counts.values().stream().mapToLong(Long::longValue).sum();
                         us.put("totalProjects", total);
                         us.put("projectCounts", counts);
                     }
                     case "designer", "supplychain" -> {
-                        List<Object[]> byStatus = entityManager
-                                .createNativeQuery("SELECT t.status, COUNT(*) FROM sub_tasks t WHERE t.designer_id = ?1 GROUP BY t.status")
-                                .setParameter(1, u.getUserId())
-                                .getResultList();
-                        Map<String, Object> counts = new LinkedHashMap<>();
-                        int total = 0;
-                        for (Object[] row : byStatus) {
-                            String s = (String) row[0];
-                            long c = ((Number) row[1]).longValue();
-                            counts.put(s, c);
-                            total += c;
-                        }
+                        Map<String, Long> counts = taskCountsByDesigner.getOrDefault(u.getUserId(), Map.of());
+                        long total = counts.values().stream().mapToLong(Long::longValue).sum();
                         us.put("totalTasks", total);
                         us.put("taskCounts", counts);
                     }
@@ -967,6 +944,18 @@ public class AdminService {
         return result;
     }
 
+    @SuppressWarnings("unchecked")
+    private Map<String, Map<String, Long>> workloadCounts(String sql) {
+        Map<String, Map<String, Long>> result = new HashMap<>();
+        List<Object[]> rows = entityManager.createNativeQuery(sql).getResultList();
+        for (Object[] row : rows) {
+            if (row[0] == null || row[1] == null) continue;
+            result.computeIfAbsent(String.valueOf(row[0]), ignored -> new LinkedHashMap<>())
+                    .put(String.valueOf(row[1]), ((Number) row[2]).longValue());
+        }
+        return result;
+    }
+
     /** 获取指定时间范围内各角色的工作量统计 */
     public Map<String, Object> getWorkloadTimeline(String range) {
         // 计算截止时间
@@ -997,6 +986,18 @@ public class AdminService {
                 "designer", "🎨", "supplychain", "📦"
         );
 
+        Map<String, long[]> projectTimelineBySales = workloadTimelineCounts(
+                "SELECT sales_id, SUM(CASE WHEN created_at >= ?1 THEN 1 ELSE 0 END), "
+                        + "SUM(CASE WHEN status = 'completed' AND updated_at >= ?1 THEN 1 ELSE 0 END) "
+                        + "FROM projects WHERE created_at >= ?1 OR updated_at >= ?1 GROUP BY sales_id", cutoff);
+        Map<String, long[]> projectTimelineByPlanner = workloadTimelineCounts(
+                "SELECT planner_id, SUM(CASE WHEN created_at >= ?1 THEN 1 ELSE 0 END), "
+                        + "SUM(CASE WHEN status = 'completed' AND updated_at >= ?1 THEN 1 ELSE 0 END) "
+                        + "FROM projects WHERE created_at >= ?1 OR updated_at >= ?1 GROUP BY planner_id", cutoff);
+        Map<String, long[]> taskTimelineByDesigner = workloadTimelineCounts(
+                "SELECT designer_id, COUNT(*), SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) "
+                        + "FROM sub_tasks WHERE created_at >= ?1 GROUP BY designer_id", cutoff);
+
         for (Map.Entry<String, List<User>> entry : byRole.entrySet()) {
             String role = entry.getKey();
             List<User> users = entry.getValue();
@@ -1010,45 +1011,23 @@ public class AdminService {
 
                 switch (role) {
                     case "sales" -> {
-                        // 销售：创建的渠道定制单数
-                        long created = ((Number) entityManager
-                                .createNativeQuery("SELECT COUNT(*) FROM projects p WHERE p.sales_id = ?1 AND p.created_at >= ?2")
-                                .setParameter(1, u.getUserId())
-                                .setParameter(2, cutoff)
-                                .getSingleResult()).longValue();
-                        long completed = ((Number) entityManager
-                                .createNativeQuery("SELECT COUNT(*) FROM projects p WHERE p.sales_id = ?1 AND p.status = 'completed' AND p.updated_at >= ?2")
-                                .setParameter(1, u.getUserId())
-                                .setParameter(2, cutoff)
-                                .getSingleResult()).longValue();
+                        long[] counts = projectTimelineBySales.getOrDefault(u.getUserId(), new long[2]);
+                        long created = counts[0];
+                        long completed = counts[1];
                         us.put("created", created);
                         us.put("completed", completed);
                     }
                     case "planner" -> {
-                        long created = ((Number) entityManager
-                                .createNativeQuery("SELECT COUNT(*) FROM projects p WHERE p.planner_id = ?1 AND p.created_at >= ?2")
-                                .setParameter(1, u.getUserId())
-                                .setParameter(2, cutoff)
-                                .getSingleResult()).longValue();
-                        long completed = ((Number) entityManager
-                                .createNativeQuery("SELECT COUNT(*) FROM projects p WHERE p.planner_id = ?1 AND p.status = 'completed' AND p.updated_at >= ?2")
-                                .setParameter(1, u.getUserId())
-                                .setParameter(2, cutoff)
-                                .getSingleResult()).longValue();
+                        long[] counts = projectTimelineByPlanner.getOrDefault(u.getUserId(), new long[2]);
+                        long created = counts[0];
+                        long completed = counts[1];
                         us.put("created", created);
                         us.put("completed", completed);
                     }
                     case "designer", "supplychain" -> {
-                        long assigned = ((Number) entityManager
-                                .createNativeQuery("SELECT COUNT(*) FROM sub_tasks t WHERE t.designer_id = ?1 AND t.created_at >= ?2")
-                                .setParameter(1, u.getUserId())
-                                .setParameter(2, cutoff)
-                                .getSingleResult()).longValue();
-                        long completed = ((Number) entityManager
-                                .createNativeQuery("SELECT COUNT(*) FROM sub_tasks t WHERE t.designer_id = ?1 AND t.status = 'approved' AND t.created_at >= ?2")
-                                .setParameter(1, u.getUserId())
-                                .setParameter(2, cutoff)
-                                .getSingleResult()).longValue();
+                        long[] counts = taskTimelineByDesigner.getOrDefault(u.getUserId(), new long[2]);
+                        long assigned = counts[0];
+                        long completed = counts[1];
                         us.put("assigned", assigned);
                         us.put("completed", completed);
                     }
@@ -1065,22 +1044,22 @@ public class AdminService {
         }
 
         // 汇总
-        long totalCreated = ((Number) entityManager
-                .createNativeQuery("SELECT COUNT(*) FROM projects WHERE created_at >= ?1")
-                .setParameter(1, cutoff)
-                .getSingleResult()).longValue();
-        long totalCompleted = ((Number) entityManager
-                .createNativeQuery("SELECT COUNT(*) FROM projects WHERE status = 'completed' AND updated_at >= ?1")
-                .setParameter(1, cutoff)
-                .getSingleResult()).longValue();
-        long totalTasksAssigned = ((Number) entityManager
-                .createNativeQuery("SELECT COUNT(*) FROM sub_tasks WHERE created_at >= ?1")
-                .setParameter(1, cutoff)
-                .getSingleResult()).longValue();
-        long totalTasksCompleted = ((Number) entityManager
-                .createNativeQuery("SELECT COUNT(*) FROM sub_tasks WHERE status = 'approved' AND created_at >= ?1")
-                .setParameter(1, cutoff)
-                .getSingleResult()).longValue();
+        Object[] projectSummary = (Object[]) entityManager
+                .createNativeQuery("SELECT "
+                        + "SUM(CASE WHEN created_at >= ?1 THEN 1 ELSE 0 END), "
+                        + "SUM(CASE WHEN status = 'completed' AND updated_at >= ?1 THEN 1 ELSE 0 END) "
+                        + "FROM projects")
+                .setParameter(1, cutoff).getSingleResult();
+        Object[] taskSummary = (Object[]) entityManager
+                .createNativeQuery("SELECT "
+                        + "SUM(CASE WHEN created_at >= ?1 THEN 1 ELSE 0 END), "
+                        + "SUM(CASE WHEN status = 'approved' AND created_at >= ?1 THEN 1 ELSE 0 END) "
+                        + "FROM sub_tasks")
+                .setParameter(1, cutoff).getSingleResult();
+        long totalCreated = numberOrZero(projectSummary[0]);
+        long totalCompleted = numberOrZero(projectSummary[1]);
+        long totalTasksAssigned = numberOrZero(taskSummary[0]);
+        long totalTasksCompleted = numberOrZero(taskSummary[1]);
 
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("range", range);
@@ -1100,6 +1079,24 @@ public class AdminService {
         summary.put("totalTasksCompleted", totalTasksCompleted);
         result.put("_summary", summary);
 
+        return result;
+    }
+
+    private long numberOrZero(Object value) {
+        return value instanceof Number number ? number.longValue() : 0L;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, long[]> workloadTimelineCounts(String sql, LocalDateTime cutoff) {
+        Map<String, long[]> result = new HashMap<>();
+        for (Object[] row : (List<Object[]>) entityManager.createNativeQuery(sql)
+                .setParameter(1, cutoff).getResultList()) {
+            if (row[0] == null) continue;
+            result.put(String.valueOf(row[0]), new long[]{
+                    ((Number) row[1]).longValue(),
+                    ((Number) row[2]).longValue()
+            });
+        }
         return result;
     }
 }

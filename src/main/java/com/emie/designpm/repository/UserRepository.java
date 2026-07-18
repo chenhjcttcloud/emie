@@ -4,6 +4,7 @@ import com.emie.designpm.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -21,6 +22,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
                           @Param("status") String status, Pageable pageable);
     List<User> findByRole(String role);
     Optional<User> findByUserId(String userId);
+    List<User> findByUserIdIn(Collection<String> userIds);
     List<User> findByName(String name);
     Optional<User> findByPhone(String phone);
     Optional<User> findByEmail(String email);

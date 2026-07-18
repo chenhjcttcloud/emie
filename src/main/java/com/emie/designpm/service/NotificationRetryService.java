@@ -42,14 +42,25 @@ public class NotificationRetryService {
         List<NotificationDelivery> due = deliveries
                 .findTop50ByStatusInAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(
                         List.of("failed", "pending"), LocalDateTime.now());
-        for (NotificationDelivery delivery : due) retry(delivery);
+        Map<Long, Notification> notificationById = notifications.findByIdIn(due.stream()
+                .map(NotificationDelivery::getNotificationId).filter(java.util.Objects::nonNull).distinct().toList())
+                .stream().collect(java.util.stream.Collectors.toMap(Notification::getId, n -> n));
+        Map<String, User> userById = users.findByUserIdIn(notificationById.values().stream()
+                .map(Notification::getRecipientUserId).filter(java.util.Objects::nonNull).distinct().toList())
+                .stream().collect(java.util.stream.Collectors.toMap(User::getUserId, u -> u));
+        for (NotificationDelivery delivery : due) retry(delivery, notificationById, userById);
     }
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> recentFailures() {
         List<Map<String, Object>> result = new java.util.ArrayList<>();
-        for (NotificationDelivery d : deliveries.findRecentFeishuByStatuses(List.of("failed", "dead_letter"))) {
-            notifications.findById(d.getNotificationId()).ifPresent(n -> {
+        List<NotificationDelivery> recent = deliveries.findRecentFeishuByStatuses(List.of("failed", "dead_letter"));
+        Map<Long, Notification> byId = notifications.findByIdIn(recent.stream()
+                .map(NotificationDelivery::getNotificationId).filter(java.util.Objects::nonNull).distinct().toList())
+                .stream().collect(java.util.stream.Collectors.toMap(Notification::getId, n -> n));
+        for (NotificationDelivery d : recent) {
+            Notification n = byId.get(d.getNotificationId());
+            if (n != null) {
                 Map<String, Object> row = new HashMap<>();
                 row.put("deliveryId", d.getId());
                 row.put("notificationId", n.getId());
@@ -61,7 +72,7 @@ public class NotificationRetryService {
                 row.put("nextRetryAt", d.getNextRetryAt());
                 row.put("deliveredAt", d.getDeliveredAt());
                 result.add(row);
-            });
+            }
         }
         return result.stream().limit(100).toList();
     }
@@ -79,13 +90,13 @@ public class NotificationRetryService {
         notifications.findById(d.getNotificationId()).ifPresent(n -> audit(n, d, "admin_retry_queued", "管理员 " + operatorUserId + " 手动重新排队"));
     }
 
-    private void retry(NotificationDelivery delivery) {
-        Notification notification = notifications.findById(delivery.getNotificationId()).orElse(null);
+    private void retry(NotificationDelivery delivery, Map<Long, Notification> notificationById, Map<String, User> userById) {
+        Notification notification = notificationById.get(delivery.getNotificationId());
         if (notification == null || delivery.getCardPayload() == null || delivery.getCardPayload().isBlank()) {
             deadLetter(delivery, "通知内容或卡片载荷不存在");
             return;
         }
-        User user = users.findByUserId(notification.getRecipientUserId()).orElse(null);
+        User user = userById.get(notification.getRecipientUserId());
         if (user == null || user.getFeishuOpenId() == null || user.getFeishuOpenId().isBlank()) {
             scheduleOrDeadLetter(delivery, "收件人未绑定飞书 Open ID");
             return;
