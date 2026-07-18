@@ -774,3 +774,19 @@
 最终结论：
 
 - （填写）
+# 2026-07-18 高优先级查询与告警优化发布
+
+| 项目 | 结果 |
+|---|---|
+| 代码提交 | `9e6f6262d3e6cabfbadf9ceb06edbade829eb186` |
+| 推送 | 已推送 `emie/project_manager_system`，远端 SHA 与本地一致 |
+| 变更范围 | 工作台日志瘦身、时间线聚合、通知重试批量查询、运行时告警状态、迁移版本基础表 |
+| 本地验证 | `./mvnw clean package`、`git diff --check`、全部前端 JS 语法检查通过 |
+| 数据库备份 | `/root/emie/db-backup-before-9e6f626-20260718_172338.sql.gz`，52392 字节，`gzip -t` 通过 |
+| 应用回滚包 | `/root/emie/app.jar.bak.pre-9e6f626-20260718_172338` |
+| 数据库迁移 | `2026-07-18-add-runtime-alerts.sql`、`2026-07-18-add-schema-migrations.sql`，两张表创建并核验 |
+| 应用产物 | 本地与生产 JAR SHA-256 均为 `bb97d9624e9572c2f83c57c207a969d998ea5a818c2a723fe8328bbdce87b733` |
+| 生产运行提交 | `/root/emie/release-sha.txt` 为 `9e6f6262d3e6cabfbadf9ceb06edbade829eb186` |
+| 容器验证 | `emie-app`、`emie-preview-converter` 均正常运行；应用启动完成约 32 秒 |
+| 接口验证 | 公开配置 HTTP 200，预览健康 HTTP 200；启动日志无应用异常 |
+| 回滚 | 未执行 |
