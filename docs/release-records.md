@@ -57,6 +57,19 @@
 | 回滚包 | `/root/emie/app.jar.bak.pre-66090a4-20260720_135308` |
 | 生产验证 | `release-sha.txt` 为目标提交，公开配置 HTTP 200，首页加载 `bootstrap.js?v=167`，两个容器 running，发布后日志无新增 ERROR |
 
+## 2026-07-20 普通成员隐藏其他子任务入口发布
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 发布成功 |
+| 生产提交 | `850874141c72894fa4acb0de3299f5c5f554f201` |
+| Gitee 推送 | `project_manager_system` 已推送 |
+| 变更范围 | 普通销售/产品企划隐藏“其他子任务”，管理员及匹配部门负责人保留入口；后端权限不变 |
+| 数据库迁移 | 无 |
+| 应用产物 | JAR SHA-256：`47b20327a4772468ed183a8cb6dd6dc6b3c847a2ef3d66a73d9aede9eddc5ed7`；生产核对一致 |
+| 回滚包 | `/root/emie/app.jar.bak.pre-8508741-20260720_140430` |
+| 生产验证 | `release-sha.txt` 为目标提交，公开配置 HTTP 200，首页加载 `bootstrap.js?v=168`，两个容器 running，发布后日志无新增 ERROR |
+
 ---
 
 ## 2026-07-17 工作台、通知、同步与日期控件优化发布
