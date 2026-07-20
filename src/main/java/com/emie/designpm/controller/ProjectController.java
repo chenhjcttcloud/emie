@@ -222,7 +222,9 @@ public class ProjectController {
         AuthController.AuthSession session = getSession(request);
         if (session == null) return ResponseEntity.status(401).build();
         List<String> userIds = projectAccessService.departmentTaskUserIds(session.role(), session.userId());
-        if (userIds.isEmpty()) return ResponseEntity.status(403).build();
+        // 普通成员没有部门负责人范围时返回空列表，而不是让页面出现权限错误。
+        // 真正的部门范围仍由 departmentTaskUserIds 在服务端严格计算，不会扩大可见数据。
+        if (userIds.isEmpty()) return ResponseEntity.ok(List.of());
         List<SubTask> tasks = subTaskRepository.findDepartmentSubTasks(userIds);
         return ResponseEntity.ok(tasks.stream().map(task -> {
             Project project = task.getProject();
