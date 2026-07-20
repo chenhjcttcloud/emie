@@ -874,6 +874,7 @@ public class ProjectService {
         String secondRole = expectedReviewRoles(task).get(1);
         ScoringRecord secondReview = scoringRepository.findBySubTaskIdAndRole(task.getId(), secondRole)
                 .orElseGet(ScoringRecord::new);
+        boolean newlyActivated = !"pending".equals(secondReview.getReviewStatus());
         secondReview.setRole(secondRole);
         secondReview.setScoreType(secondRole);
         secondReview.setReviewStage("second");
@@ -881,6 +882,28 @@ public class ProjectService {
         secondReview.setWeight(getScoringPct(projectType(task), secondRole) / 100.0);
         secondReview.setSubTask(task);
         scoringRepository.save(secondReview);
+        if (newlyActivated && task.getProject() != null) {
+            Project project = task.getProject();
+            Map<String, String> context = notificationContext(project, task, "产品企划", null);
+            context.put("reviewRole", "admin".equals(secondRole) ? "管理员" : "销售");
+            if ("admin".equals(secondRole)) {
+                safeNotifyRole("REVIEW_PENDING", "admin", "sub_task", task.getId(),
+                        "system", context);
+            } else if (project.getSalesId() != null && !project.getSalesId().isBlank()) {
+                safeNotify("REVIEW_PENDING", project.getSalesId(), "sub_task", task.getId(),
+                        "system", context);
+            }
+        }
+    }
+
+    private void safeNotifyRole(String eventType, String role, String aggregateType, Long aggregateId,
+                                String actorUserId, Map<String, String> context) {
+        try {
+            notificationWorkflowService.notifyRole(eventType, role, aggregateType, aggregateId, actorUserId, context);
+        } catch (Exception e) {
+            log.error("角色通知创建失败但业务操作继续: eventType={}, role={}, aggregate={}#{}",
+                    eventType, role, aggregateType, aggregateId, e);
+        }
     }
 
     private List<String> expectedReviewRoles(SubTask task) {

@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Collection;
 import java.util.UUID;
 
 /** 业务事件的统一通知入口：先创建站内必达通知，再尝试飞书投递并保留审计。 */
@@ -44,6 +45,16 @@ public class NotificationWorkflowService {
         audit(event, n, inApp, "in_app_delivered", actorUserId, "工作流站内通知已创建");
         if (!enabled("notification.feishuEnabled")) return;
         users.findByUserId(recipientUserId).ifPresent(user -> sendFeishu(event, n, user, t, actorUserId));
+    }
+
+    /** 向指定角色的全部有效用户发送同一业务通知，并为每位收件人保留独立审计记录。 */
+    public void notifyRole(String eventType, String role, String aggregateType, Long aggregateId,
+                           String actorUserId, Map<String, String> context) {
+        users.findByRole(role).stream()
+                .filter(user -> user.getStatus() == null || "active".equalsIgnoreCase(user.getStatus()))
+                .map(User::getUserId)
+                .filter(id -> id != null && !id.isBlank())
+                .forEach(id -> notifyUser(eventType, id, aggregateType, aggregateId, actorUserId, context));
     }
 
     private void sendFeishu(NotificationEvent event, Notification n, User user, NotificationTemplateService.Template t, String actor) {
