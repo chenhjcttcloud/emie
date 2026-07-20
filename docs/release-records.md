@@ -13,6 +13,23 @@
 
 ---
 
+## 2026-07-20 公司常规品二次评分通知发布
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 发布成功 |
+| 旧生产提交 / 生产提交 | `850874141c72894fa4acb0de3299f5c5f554f201` / `dec6113` |
+| Gitee 推送 | `project_manager_system` 已推送，目标提交已确认 |
+| 变更范围 | 产品企划完成公司常规品评分后，通知全部有效管理员；逐人保留站内、飞书投递和审计记录，并防重复通知 |
+| 本地验证 | Java 21 `./mvnw test -q`、`git diff --check` 通过；生产构建使用精确提交 `dec6113` |
+| 数据库备份 | `/root/emie/db-backup-before-dec6113-20260720_143023.sql.gz`，`gzip -t` 通过；SHA-256 `2b386ec9b39811171f47901e3ed190b4b5945bb6ee29121c1e2e6fab4ea5b4e6` |
+| 数据库迁移 | 无，本次仅应用逻辑变更 |
+| 应用产物 | JAR SHA-256 `7ca4f375450f7be0c73863a1861b8d577ef65ca7daf66f845cd0e27722a52f74`，上传前后核对一致 |
+| 回滚包 | `/root/emie/app.jar.bak.pre-dec6113-20260720_143023`，旧 JAR SHA-256 `47b20327a4772468ed183a8cb6dd6dc6b3c847a2ef3d66a73d9aede9eddc5ed7` |
+| 生产验证 | `release-sha.txt=dec6113`；`emie-app`、`emie-preview-converter` 均 running；公开配置 HTTP 200；应用使用 Java 21 启动且 Tomcat 8080 正常监听 |
+| 日志 | 发布后启动日志无 `ERROR` 或异常，启动耗时约 33 秒 |
+| 回滚 | 未执行 |
+
 ## 2026-07-20 子任务视图、角色管理与剪贴板图片上传发布
 
 | 项目 | 记录 |
