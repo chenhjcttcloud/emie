@@ -13,6 +13,22 @@
 
 ---
 
+## 2026-07-20 系统时区统一发布
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 发布成功 |
+| 旧生产提交 / 生产提交 | `2f21b58` / `6ca3a45` |
+| Gitee 推送 | `project_manager_system` 已推送，目标提交已确认 |
+| 变更范围 | 本地启动脚本、生产 Compose 和 JVM 统一使用 `Asia/Shanghai`（UTC+8） |
+| 本地验证 | Java 21 测试、`git diff --check` 通过 |
+| 数据库备份 | `/root/emie/db-backup-before-6ca3a45-20260720_195430.sql.gz`，`gzip -t` 通过；SHA-256 `d75650ca7b0ecf28554f9af4a0dc93d104af332e27c4743af162214390804870` |
+| 应用产物 | JAR SHA-256 `b2f9de664deac10569cf10bc865ef0e3e8cb977f00b8d5cf28373db0ca5d5389`，上传前后核对一致 |
+| 回滚包 | `/root/emie/app.jar.bak.pre-6ca3a45-20260720_195430`，旧 JAR SHA-256 `be389f12714df203629d9081f6a929a84a52e48ff515f207a123df13cd055024` |
+| 生产配置备份 | `/root/emie/docker-compose.yml.bak.pre-timezone-20260720_195744` |
+| 生产验证 | `release-sha.txt=6ca3a45`；主机和应用容器均为 `CST`；Java 日志显示 `+08:00`；公开配置 HTTP 200；两个容器 running |
+| 回滚 | 未执行 |
+
 ## 2026-07-20 飞书同步游标异常修复发布
 
 | 项目 | 记录 |

@@ -631,6 +631,12 @@
 - 已将本地启动脚本和生产 Docker Compose 的 JVM 固定为 `-Duser.timezone=Asia/Shanghai`，并设置容器 `TZ=Asia/Shanghai`。
 - 当前改动仅在本地，待测试后提交、推送和部署生产。
 
+## 2026-07-20 系统时区统一已发布
+
+- 提交 `6ca3a45` 已推送并部署生产；生产 Compose 独立配置也已同步加入 `TZ=Asia/Shanghai` 和 `-Duser.timezone=Asia/Shanghai`。
+- 生产主机与应用容器时间已核验一致，均为北京时间；Java 日志已显示 `+08:00`，不再相差 8 小时。
+- 生产应用和预览容器正常，公开配置 HTTP 200；Compose 原配置备份已保留。
+
 ## 2026-07-20 飞书同步游标修复（本地）
 
 - 生产检查发现 `feishu.sync.cursor` 缺失时使用 `LocalDateTime.MIN`，MySQL 报 `Incorrect DATETIME value: 169087565-03-15...`，导致定时增量对账失败。
