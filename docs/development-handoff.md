@@ -501,3 +501,11 @@
 
 - 生产发布预检发现 `2026-07-18-add-my-subtask-publisher.sql` 的历史数据回填排在 `publisher_name/publisher_role` 建列之前，已调整为先建三列再回填。
 - 生产应用 JAR 尚未替换；数据库备份已生成并校验，迁移将在修复后重新执行。
+
+## 2026-07-20 子任务视图与上传交互发布完成
+
+- 提交 `dfd84d9c2bcf936ae468bfaecefab3bb00dcb55b` 已推送 Gitee 并部署生产，生产 `/root/emie/release-sha.txt` 已记录同一提交。
+- 生产数据库备份 `/root/emie/db-backup-before-373ed7e-20260720_115935.sql.gz` 已通过 `gzip -t`；发布人字段迁移已执行并验证三列存在。
+- 生产应用 JAR 上传前后 SHA-256 均为 `dded226676ef5658b6a40690b84d23dfd0d2060d40f40b0daf9b92202d7f9840`；回滚包为 `/root/emie/app.jar.bak.pre-dfd84d9-20260720_120153`。
+- 生产 `emie-app`、`emie-preview-converter` 均运行，公开配置 HTTP 200，首页加载 `bootstrap.js?v=165`，剪贴板图片上传模块可读取，发布后日志无新增 ERROR。
+- 当前后续只需人工验收登录态下的子任务、组织架构、角色徽章和飞书图片粘贴上传；本地与生产均已更新。

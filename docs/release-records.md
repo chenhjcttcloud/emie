@@ -13,6 +13,25 @@
 
 ---
 
+## 2026-07-20 子任务视图、角色管理与剪贴板图片上传发布
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 发布成功 |
+| 旧生产提交 / 生产提交 | `9e6f6262d3e6cabfbadf9ceb06edbade829eb186` / `dfd84d9c2bcf936ae468bfaecefab3bb00dcb55b` |
+| Gitee 推送 | `project_manager_system` 已推送，远端 SHA 与目标提交一致 |
+| 变更范围 | 我的子任务独立查询、部门负责人和管理员候选、用户角色显示兼容、工作台子任务统计、上传框剪贴板图片粘贴 |
+| 本地验证 | Java 21 `clean package` 成功，65/65 测试通过；全量前端 JS 语法检查和 `git diff --check` 通过 |
+| 数据库备份 | `/root/emie/db-backup-before-373ed7e-20260720_115935.sql.gz`，55034 字节，`gzip -t` 通过 |
+| 数据库迁移 | `2026-07-18-add-my-subtask-publisher.sql` 已执行；`sub_tasks` 的 `publisher_id`、`publisher_name`、`publisher_role` 三列已验证 |
+| 应用产物 | JAR SHA-256：`dded226676ef5658b6a40690b84d23dfd0d2060d40f40b0daf9b92202d7f9840`；生产上传前后核对一致 |
+| 回滚包 | `/root/emie/app.jar.bak.pre-dfd84d9-20260720_120153` |
+| 生产验证 | `release-sha.txt`、应用公开配置 HTTP 200、`bootstrap.js?v=165`、剪贴板上传模块 HTTP 200；`emie-app` 与 `emie-preview-converter` 均 running |
+| 日志 | 发布后应用日志无新增 `ERROR` |
+| 待人工验收 | 登录后检查我的子任务、组织架构管理员候选、用户角色徽章，以及飞书图片复制后粘贴上传 |
+
+---
+
 ## 2026-07-17 工作台、通知、同步与日期控件优化发布
 
 | 项目 | 记录 |
