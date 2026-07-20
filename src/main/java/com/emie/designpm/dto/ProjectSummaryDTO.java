@@ -6,6 +6,7 @@ import lombok.Data;
 @Data
 public class ProjectSummaryDTO {
     private Long id;
+    private String projectCode;
     private String type;
     private String status;
     private String statusLabel;

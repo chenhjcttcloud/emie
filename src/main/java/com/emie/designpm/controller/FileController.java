@@ -6,11 +6,13 @@ import com.emie.designpm.repository.FileRecordRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.FileArchiveService;
 import com.emie.designpm.service.FilePreviewService;
+import com.emie.designpm.service.FileThumbnailService;
 import com.emie.designpm.service.ProjectAccessService;
 import com.emie.designpm.util.SecurityUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -44,17 +46,52 @@ public class FileController {
     private final ProjectAccessService projectAccessService;
     private final SubTaskRepository subTaskRepository;
     private final FilePreviewService filePreviewService;
+    private final FileThumbnailService fileThumbnailService;
 
+    @Autowired
     public FileController(FileArchiveService fileArchiveService,
                           FileRecordRepository fileRecordRepository,
                           ProjectAccessService projectAccessService,
                           SubTaskRepository subTaskRepository,
-                          FilePreviewService filePreviewService) {
+                          FilePreviewService filePreviewService,
+                          FileThumbnailService fileThumbnailService) {
         this.fileArchiveService = fileArchiveService;
         this.fileRecordRepository = fileRecordRepository;
         this.projectAccessService = projectAccessService;
         this.subTaskRepository = subTaskRepository;
         this.filePreviewService = filePreviewService;
+        this.fileThumbnailService = fileThumbnailService;
+    }
+
+    /** 保留旧测试/嵌入式调用方的构造器兼容性。 */
+    public FileController(FileArchiveService fileArchiveService,
+                          FileRecordRepository fileRecordRepository,
+                          ProjectAccessService projectAccessService,
+                          SubTaskRepository subTaskRepository,
+                          FilePreviewService filePreviewService) {
+        this(fileArchiveService, fileRecordRepository, projectAccessService, subTaskRepository,
+                filePreviewService, new FileThumbnailService(fileArchiveService));
+    }
+
+    /** 读取受权限保护的缩略图；原图仅用于点击后的大图预览。 */
+    @GetMapping("/thumbnail/{fileName}")
+    public ResponseEntity<Object> thumbnail(@PathVariable String fileName, HttpServletRequest request) {
+        if (!SecurityUtil.isValidFileName(fileName) || !fileName.matches("(?i).+\\.(png|jpe?g|gif|webp|bmp)$")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "不是支持的图片文件"));
+        }
+        ResponseEntity<Object> authResult = checkDownloadAccess(null, fileName, request);
+        if (authResult != null) return authResult;
+        try {
+            Path thumbnail = fileThumbnailService.getOrCreate(fileName, uploadPath.resolve("thumbnail-cache"));
+            return ResponseEntity.ok().contentType(MediaType.IMAGE_JPEG)
+                    .cacheControl(org.springframework.http.CacheControl.maxAge(java.time.Duration.ofDays(7)).cachePrivate())
+                    .lastModified(Files.getLastModifiedTime(thumbnail).toMillis())
+                    .body(new UrlResource(thumbnail.toUri()));
+        } catch (FileNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        } catch (IOException e) {
+            return ResponseEntity.status(422).body(Map.of("error", "缩略图生成失败"));
+        }
     }
 
     @PostConstruct

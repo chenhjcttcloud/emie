@@ -546,6 +546,7 @@ public class ProjectController {
     private ProjectSummaryDTO toSummary(Project p, Map<Long, int[]> taskCountMap, Map<Long, Double> scoreMap) {
         ProjectSummaryDTO dto = new ProjectSummaryDTO();
         dto.setId(p.getId());
+        dto.setProjectCode(p.getProjectCode());
         dto.setType(p.getType());
         String computedStatus = projectService.computeProjectStatus(p);
         dto.setStatus(computedStatus);
@@ -589,6 +590,7 @@ public class ProjectController {
                                       boolean includeLogs) {
         ProjectDetailDTO dto = new ProjectDetailDTO();
         dto.setId(p.getId());
+        dto.setProjectCode(p.getProjectCode());
         dto.setType(p.getType());
         String computedStatus = projectService.computeProjectStatus(p);
         dto.setStatus(computedStatus);

@@ -131,6 +131,7 @@ public class ProjectSearchRepositoryImpl implements ProjectSearchRepository {
     private void addKeywordPredicate(CriteriaBuilder cb, Root<Project> project, List<Predicate> predicates, String keyword) {
         String like = contains(keyword);
         List<Predicate> fields = new ArrayList<>(List.of(
+                cb.like(cb.lower(project.get("projectCode")), like),
                 cb.like(cb.lower(project.get("productName")), like),
                 cb.like(cb.lower(project.get("description")), like),
                 cb.like(cb.lower(project.get("productRequirements")), like),

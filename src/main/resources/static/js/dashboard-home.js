@@ -440,7 +440,7 @@ function renderProjectSummary(projects, title) {
         <tbody>${display.map(o => {
           const st = getProjectStatusInfo(o.status);
           return `<tr style="cursor:pointer;">
-            <td><strong>#${o.id}</strong></td>
+            <td><strong>${escHtml(o.projectCode || ('#' + o.id))}</strong></td>
             <td>${escHtml(displayText(o.productName, '未设置'))}</td>
             <td>${o.salesName || '-'}</td>
             <td>${o.plannerName || '<span style="color:var(--gray-400);">未指定</span>'}</td>

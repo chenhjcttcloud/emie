@@ -55,7 +55,7 @@ async function openProjectDetail(pid) {
     <button class="modal-close-float" data-emie-onclick="closeM('projectDetailModal')">✕</button>
       <div class="modal modal-lg">
         <div class="modal-header">
-          <div class="modal-header-left"><div class="modal-title">${detail.type === 'channel_custom' ? '📦 渠道定制项目' : '🏭 常规品设计项目'} #${detail.id}</div></div>
+          <div class="modal-header-left"><div class="modal-title">${detail.type === 'channel_custom' ? '📦 渠道定制项目' : '🏭 常规品设计项目'} ${escHtml(detail.projectCode || ('#' + detail.id))}</div></div>
         </div>
         <div class="modal-body">${renderProjectDetailContent(detail)}</div>
         <div class="modal-footer" id="detailActions">${renderProjectActions(detail)}</div>
@@ -379,10 +379,11 @@ function renderProjectReferenceImages(detail) {
   if (!imgs || !imgs.length) return '';
   const token = localStorage.getItem('design_pm_token');
   const authUrl = u => normalizeFileUrl(u) + '?token=' + encodeURIComponent(token || '');
+  const thumbUrl = u => '/api/files/thumbnail/' + encodeURIComponent(storedNameFromFile(u)) + '?token=' + encodeURIComponent(token || '');
   return `<div style="margin-top:8px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => `<div style="position:relative;display:inline-block;">
-          <img src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" title="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+          <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" title="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
           <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>`).join('')}
     </div></div>`;
@@ -396,10 +397,11 @@ function renderSubTaskImages(jsonStr) {
   if (!imgs || !imgs.length) return '';
   const token = localStorage.getItem('design_pm_token');
   const authUrl = u => normalizeFileUrl(u) + '?token=' + encodeURIComponent(token || '');
+  const thumbUrl = u => '/api/files/thumbnail/' + encodeURIComponent(storedNameFromFile(u)) + '?token=' + encodeURIComponent(token || '');
   return `<div style="margin-top:8px;padding-left:4px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => `<div style="position:relative;display:inline-block;">
-          <img src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--gray-200);cursor:pointer;">
+          <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--gray-200);cursor:pointer;">
           <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>`).join('')}
     </div></div>`;
@@ -434,12 +436,13 @@ function renderTaskAttachments(jsonStr) {
   let html = '';
   const token = localStorage.getItem('design_pm_token');
   const authUrl = u => normalizeFileUrl(u) + '?token=' + encodeURIComponent(token || '');
+  const thumbUrl = u => '/api/files/thumbnail/' + encodeURIComponent(storedNameFromFile(u)) + '?token=' + encodeURIComponent(token || '');
   // 图片预览
   if (images.length) {
     html += `<div style="margin-top:8px;"><div class="detail-label">🖼️ 交付图片</div>
       <div class="image-preview" style="margin-top:4px;">
         ${images.map(img => `<div style="position:relative;display:inline-block;">
-            <img src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+            <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
             <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
         </div>`).join('')}
       </div></div>`;

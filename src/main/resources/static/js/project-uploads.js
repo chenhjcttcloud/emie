@@ -93,7 +93,7 @@ function previewImage(src, name) {
 document.addEventListener('click', function(e) {
   const img = e.target.closest('.img-clickable');
   if (img) {
-    previewImage(img.src, img.alt || img.title || '');
+    previewImage(img.dataset.fullSrc || img.src, img.alt || img.title || '');
   }
 });
 

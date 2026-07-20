@@ -33,11 +33,11 @@ async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.
   main.innerHTML = `
     <h2 style="font-size:22px;margin-bottom:20px;">🎨 ${bucket === 'pending' ? '待处理子任务' : bucket === 'completed' ? '已完成子任务' : '我的子任务'} <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${myTasks.length})</span></h2>
     <div class="filter-bar">
-      <select class="form-select" data-emie-onchange="filterDesignerTasks()" style="min-width:120px;" id="designerTaskFilter">
-        <option value="all">全部</option>
+      ${bucket !== 'completed' ? `<select class="form-select" data-emie-onchange="filterDesignerTasks()" style="min-width:120px;" id="designerTaskFilter" aria-label="任务归属">
+        <option value="all">全部任务</option>
         <option value="unassigned">待认领</option>
         <option value="mine">我的任务</option>
-      </select>
+      </select>` : ''}
       <select class="form-select" data-emie-onchange="filterDesignerTasks()" style="min-width:120px;" id="designerTaskStatusFilter">
         <option value="all">全部状态</option>
         <option value="pending">待接单</option>

@@ -184,13 +184,9 @@ async function renderMyTasks(main, role, uid, bucket = 'all') {
   }
 
   // 其他角色: 展示项目列表，方便查看和添加子任务
-  let orders = await apiGet(`/projects?role=${role}&userId=${uid}`);
-  // 只显示进行中的项目（需要有子任务操作的项目）
-  if (role !== 'admin') {
-    orders = orders.filter(o =>
-      o.status === 'in_progress' || o.status === 'planner_accepted'
-    );
-  }
+  EMIE.taskProjectListState = { page: 0, total: 0, totalPages: 0, filters: {} };
+  const initialPage = await loadTaskProjectPage(0);
+  const orders = initialPage.items || [];
 
   main.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
@@ -224,8 +220,19 @@ async function renderMyTasks(main, role, uid, bucket = 'all') {
   EMIE.dashboardState.taskProjectsCache = orders;
 }
 
+async function loadTaskProjectPage(page) {
+  const state = EMIE.taskProjectListState;
+  const params = new URLSearchParams({ page: String(page), size: '15' });
+  Object.entries(state?.filters || {}).forEach(([key, value]) => { if (value) params.set(key, value); });
+  const result = await apiGet(`/projects/page?${params}`);
+  if (state) { state.page = result.page ?? page; state.total = result.total || 0; state.totalPages = result.totalPages || 0; }
+  return result;
+}
+
 function renderTaskProjectTable(orders) {
   if (!orders.length) return `<div class="empty"><div class="empty-icon">📭</div><p>${EMIE.state.currentRole === 'admin' ? '暂无项目' : '暂无进行中的项目'}</p></div>`;
+  const state = EMIE.taskProjectListState || {};
+  const pagination = state.totalPages > 1 ? `<div class="project-pagination"><span>共 ${state.total} 个项目 · ${state.page + 1} / ${state.totalPages} 页</span><div><button class="btn btn-outline btn-sm" ${state.page <= 0 ? 'disabled' : ''} data-emie-onclick="changeTaskProjectPage(${state.page - 1})">上一页</button><button class="btn btn-outline btn-sm" ${state.page >= state.totalPages - 1 ? 'disabled' : ''} data-emie-onclick="changeTaskProjectPage(${state.page + 1})">下一页</button></div></div>` : '';
   return `<div class="card"><div class="table-wrap"><table>
     <thead><tr>
       <th>项目编号</th>
@@ -240,7 +247,7 @@ function renderTaskProjectTable(orders) {
     <tbody>${orders.map(o => {
       const st = getProjectStatusInfo(o.status);
       return `<tr>
-        <td><strong>#${o.id}</strong></td>
+        <td><strong>${escHtml(o.projectCode || ('#' + o.id))}</strong></td>
         <td>${o.type === 'channel_custom' ? '📦 渠道定制' : '🏭 常规品'}</td>
         <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(o.productRequirements || '')}">${escHtml(o.productRequirements || '-')}</td>
         <td>${o.plannerName ? escHtml(o.plannerName) : '<span style="color:var(--gray-400);">未指定</span>'}</td>
@@ -253,7 +260,17 @@ function renderTaskProjectTable(orders) {
         </td>
       </tr>`;
     }).join('')}</tbody>
-  </table></div></div>`;
+  </table></div>${pagination}</div>`;
+}
+
+async function changeTaskProjectPage(page) {
+  const state = EMIE.taskProjectListState;
+  if (!state || page < 0 || page >= state.totalPages) return;
+  const container = document.getElementById('taskProjectContainer');
+  if (container) container.innerHTML = renderProjectListLoading();
+  const result = await loadTaskProjectPage(page);
+  if (container) container.innerHTML = renderTaskProjectTable(result.items || []);
+  EMIE.dashboardState.taskProjectsCache = result.items || [];
 }
 
 async function renderDepartmentTasks(main, role, uid, bucket = 'all') {
@@ -265,19 +282,25 @@ function filterTaskProjects() {
   filterTaskProjects._timer = setTimeout(applyFilterTaskProjects, 100);
 }
 
-function applyFilterTaskProjects() {
+async function applyFilterTaskProjects() {
   const filter = document.getElementById('taskProjectFilter')?.value || 'all';
   const q = document.getElementById('taskProjectSearch')?.value?.toLowerCase() || '';
   const dateStart = document.getElementById('taskProjectDateStart')?.value;
   const dateEnd = document.getElementById('taskProjectDateEnd')?.value;
-  let list = EMIE.dashboardState.taskProjectsCache || [];
-  if (filter !== 'all') list = list.filter(o => o.status === filter);
+  const state = EMIE.taskProjectListState || { filters: {} };
+  state.filters = {};
+  if (filter !== 'all') state.filters.status = filter;
   const type = document.getElementById('taskProjectTypeFilter')?.value || 'all';
-  if (type !== 'all') list = list.filter(o => o.type === type);
-  if (q) list = list.filter(o => projectMatchesKeyword(o, q));
-  list = list.filter(o => isDateInRange(o.deadline, dateStart, dateEnd));
+  if (type !== 'all') state.filters.type = type;
+  if (q) state.filters.keyword = q;
+  if (dateStart) state.filters.deadlineStart = dateStart;
+  if (dateEnd) state.filters.deadlineEnd = dateEnd;
+  state.page = 0;
   const c = document.getElementById('taskProjectContainer');
-  if (c) c.innerHTML = renderTaskProjectTable(list);
+  if (c) c.innerHTML = renderProjectListLoading();
+  const result = await loadTaskProjectPage(0);
+  if (c) c.innerHTML = renderTaskProjectTable(result.items || []);
+  EMIE.dashboardState.taskProjectsCache = result.items || [];
 }
 
 function resetTaskProjectFilters() {
@@ -316,7 +339,7 @@ function matchesSearchText(query, ...values) {
 
 function projectMatchesKeyword(project, query) {
   return matchesSearchText(query,
-    project.id, project.type, project.status, project.productName,
+    project.projectCode, project.id, project.type, project.status, project.productName,
     project.productRequirements, project.salesName, project.plannerName,
     project.productCategory, project.targetMarket, project.complianceItems,
     project.priceRange, project.ipName

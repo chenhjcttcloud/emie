@@ -30,6 +30,10 @@ public class Project {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** 对外展示的项目编号：EMIE + 年月 + 当月四位序号。 */
+    @Column(length = 14, unique = true)
+    private String projectCode;
+
     /** channel_custom / regular */
     @Column(nullable = false)
     private String type;

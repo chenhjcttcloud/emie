@@ -23,6 +23,7 @@ import org.springframework.data.domain.Pageable;
 @Transactional
 public class ProjectService {
     private static final Logger log = LoggerFactory.getLogger(ProjectService.class);
+    private static final Object PROJECT_CODE_LOCK = new Object();
 
     private final ProjectRepository projectRepository;
     private final SubTaskRepository subTaskRepository;
@@ -230,6 +231,7 @@ public class ProjectService {
         String attsJson = validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false);
 
         Project p = new Project();
+        p.setProjectCode(nextProjectCode(LocalDateTime.now()));
         p.setType(type);
         p.setPlannerId(plannerId);
         p.setPlannerName(plannerId != null && !plannerId.isEmpty() ? userService.getUserName(plannerId) : "");
@@ -292,6 +294,17 @@ public class ProjectService {
                     notificationContext(saved, null, currentUser, ""));
         }
         return saved;
+    }
+
+    /** 单实例下串行分配月序号；数据库唯一约束负责最终兜底。 */
+    private String nextProjectCode(LocalDateTime now) {
+        synchronized (PROJECT_CODE_LOCK) {
+            LocalDateTime start = now.withDayOfMonth(1).toLocalDate().atStartOfDay();
+            LocalDateTime end = start.plusMonths(1);
+            long sequence = projectRepository.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(start, end) + 1;
+            if (sequence > 9999) throw new RuntimeException("本月项目编号已超过 9999 个");
+            return String.format("EMIE%04d%02d%04d", now.getYear(), now.getMonthValue(), sequence);
+        }
     }
 
     // ==================== Project Information Edit ====================

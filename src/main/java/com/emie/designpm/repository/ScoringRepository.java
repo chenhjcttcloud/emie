@@ -51,18 +51,23 @@ public interface ScoringRepository extends JpaRepository<ScoringRecord, Long> {
     /** 待评分徽章：只返回数量，不加载项目、子任务和评分明细。 */
     @Query("SELECT COUNT(s) FROM ScoringRecord s JOIN s.subTask t JOIN t.project p " +
            "WHERE s.role = :role AND (s.reviewStatus = 'pending' OR " +
-           "(s.reviewStatus IS NULL AND s.score IS NULL AND (s.aesthetics IS NULL OR s.innovation IS NULL)))")
+           "(s.reviewStatus IS NULL AND s.score IS NULL AND (s.aesthetics IS NULL OR s.innovation IS NULL))) " +
+           "AND ((:role = 'planner' AND t.status = 'delivered') " +
+           "OR (:role = 'admin' AND p.type <> 'channel_custom' AND t.status = 'planner_approved') " +
+           "OR (:role = 'sales' AND p.type = 'channel_custom' AND t.status = 'planner_approved'))")
     long countPendingForRole(@Param("role") String role);
 
     @Query("SELECT COUNT(s) FROM ScoringRecord s JOIN s.subTask t JOIN t.project p " +
            "WHERE s.role = :role AND (s.reviewStatus = 'pending' OR " +
            "(s.reviewStatus IS NULL AND s.score IS NULL AND (s.aesthetics IS NULL OR s.innovation IS NULL))) " +
+           "AND p.type = 'channel_custom' AND t.status = 'planner_approved' " +
            "AND p.salesId IN :userIds")
     long countPendingForSales(@Param("role") String role, @Param("userIds") List<String> userIds);
 
     @Query("SELECT COUNT(s) FROM ScoringRecord s JOIN s.subTask t JOIN t.project p " +
            "WHERE s.role = :role AND (s.reviewStatus = 'pending' OR " +
            "(s.reviewStatus IS NULL AND s.score IS NULL AND (s.aesthetics IS NULL OR s.innovation IS NULL))) " +
+           "AND t.status = 'delivered' " +
            "AND (p.plannerId IN :userIds OR (p.type = 'channel_custom' AND p.status = 'pending_planner' " +
            "AND (p.plannerId IS NULL OR p.plannerId = '')))")
     long countPendingForPlanners(@Param("role") String role, @Param("userIds") List<String> userIds);

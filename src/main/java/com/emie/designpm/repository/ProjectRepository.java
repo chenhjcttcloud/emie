@@ -12,9 +12,12 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import java.util.List;
 import java.util.Optional;
 import java.time.LocalDateTime;
+import java.time.LocalDateTime;
 import org.springframework.data.repository.query.Param;
 
 public interface ProjectRepository extends JpaRepository<Project, Long>, ProjectSearchRepository {
+
+    long countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(LocalDateTime start, LocalDateTime end);
 
     /** 列表页查询：仅加载当前页项目，避免首页渲染时读取全表。 */
     @EntityGraph(attributePaths = "productCategory")

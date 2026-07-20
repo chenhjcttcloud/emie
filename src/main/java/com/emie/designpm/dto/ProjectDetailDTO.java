@@ -8,6 +8,7 @@ import java.util.Map;
 @Data
 public class ProjectDetailDTO {
     private Long id;
+    private String projectCode;
     private String type;
     private String status;
     private String statusLabel;
