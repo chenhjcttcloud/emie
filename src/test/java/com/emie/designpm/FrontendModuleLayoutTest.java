@@ -101,12 +101,14 @@ class FrontendModuleLayoutTest {
             if (module.equals("admin-org.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=165");
             if (module.equals("project-uploads.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=169");
+            if (module.equals("project-form.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=174");
+            if (module.equals("project-tasks.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=174");
             assertTrue(currentIndex > previousIndex, module + " 的 ES Module 加载顺序不正确");
             previousIndex = currentIndex;
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=173\"></script>"),
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=174\"></script>"),
                 "页面应只通过当前版本 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
