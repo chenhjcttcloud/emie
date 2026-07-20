@@ -23,6 +23,7 @@ import java.util.concurrent.locks.ReentrantLock;
 @Component
 @ConditionalOnProperty(name = "app.feishu.sync-worker-enabled", havingValue = "true", matchIfMissing = true)
 public class SyncWorker {
+    private static final LocalDateTime SAFE_SYNC_CURSOR_FALLBACK = LocalDateTime.of(2000, 1, 1, 0, 0);
 
     private static final Logger log = LoggerFactory.getLogger(SyncWorker.class);
     private static final int RECONCILE_ID_BATCH_SIZE = 500;
@@ -186,9 +187,9 @@ public class SyncWorker {
         }
 
         LocalDateTime until = LocalDateTime.now();
-        LocalDateTime after = systemConfigRepository == null ? LocalDateTime.MIN
+        LocalDateTime after = systemConfigRepository == null ? SAFE_SYNC_CURSOR_FALLBACK
                 : systemConfigRepository.findByConfigKey("feishu.sync.cursor")
-                .map(SystemConfig::getConfigValue).map(this::parseCursor).orElse(LocalDateTime.MIN);
+                .map(SystemConfig::getConfigValue).map(this::parseCursor).orElse(SAFE_SYNC_CURSOR_FALLBACK);
         enqueueUpdated("project", projectRepository::findIdsUpdatedBetween, after, until);
         enqueueUpdated("sub_task", subTaskRepository::findIdsUpdatedBetween, after, until);
         enqueueUpdated("scoring_record", scoringRepository::findIdsUpdatedBetween, after, until);
@@ -239,7 +240,10 @@ public class SyncWorker {
 
     private LocalDateTime parseCursor(String value) {
         try { return LocalDateTime.parse(value); }
-        catch (Exception ignored) { return LocalDateTime.MIN; }
+        catch (Exception ignored) {
+            log.warn("飞书同步游标无效，使用安全回溯时间: value={}", value);
+            return SAFE_SYNC_CURSOR_FALLBACK;
+        }
     }
 
     private void syncProject(Long projectId) throws Exception {
