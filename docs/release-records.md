@@ -30,6 +30,20 @@
 | 日志 | 发布后应用日志无新增 `ERROR` |
 | 待人工验收 | 登录后检查我的子任务、组织架构管理员候选、用户角色徽章，以及飞书图片复制后粘贴上传 |
 
+## 2026-07-20 产品企划子任务只读页面修复发布
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 发布成功 |
+| 生产提交 | `2657128eb05ffa62b69259e96a87a867ab503a23` |
+| Gitee 推送 | `project_manager_system` 已推送，远端 SHA 与提交一致 |
+| 变更范围 | 修复产品企划打开全部子任务/待处理子任务时 `readonly is not defined` 的前端运行时错误 |
+| 本地验证 | Java 21 clean package、65/65 测试、全量 JS 语法检查、`git diff --check` 通过 |
+| 数据库迁移 | 无 |
+| 应用产物 | JAR SHA-256：`41cd0727a83c52b9e022a79dc88371487161adb28848d10378a7ca9a3a1168ae`；生产核对一致 |
+| 回滚包 | `/root/emie/app.jar.bak.pre-2657128-20260720_133934` |
+| 生产验证 | `release-sha.txt` 为目标提交，公开配置 HTTP 200，首页加载 `bootstrap.js?v=166`，`emie-app` 和 `emie-preview-converter` 均 running，发布后日志无新增 ERROR |
+
 ---
 
 ## 2026-07-17 工作台、通知、同步与日期控件优化发布

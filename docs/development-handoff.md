@@ -515,3 +515,9 @@
 - 根因：`renderDesignerTasks` 的 `readOnly` 参数未传入独立的 `renderDesignerTaskCards`，卡片模板直接引用未定义变量。
 - 已将只读状态显式传入首次渲染和筛选刷新，修复产品企划打开全部/待处理子任务页面时报 `readonly is not defined`。
 - 前端资源更新至 `dashboard-designer.js?v=166`、`bootstrap.js?v=166`；待执行本地测试，尚未提交、推送或部署生产。
+
+## 2026-07-20 产品企划子任务只读页面修复已发布
+
+- 修复提交 `2657128eb05ffa62b69259e96a87a867ab503a23` 已推送 Gitee 并部署生产。
+- 生产 JAR SHA-256 为 `41cd0727a83c52b9e022a79dc88371487161adb28848d10378a7ca9a3a1168ae`，回滚包为 `/root/emie/app.jar.bak.pre-2657128-20260720_133934`。
+- 生产首页已加载 `bootstrap.js?v=166`，公开配置 HTTP 200，两个容器正常运行，发布后日志无新增 ERROR。
