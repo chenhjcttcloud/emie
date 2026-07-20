@@ -44,6 +44,19 @@
 | 回滚包 | `/root/emie/app.jar.bak.pre-2657128-20260720_133934` |
 | 生产验证 | `release-sha.txt` 为目标提交，公开配置 HTTP 200，首页加载 `bootstrap.js?v=166`，`emie-app` 和 `emie-preview-converter` 均 running，发布后日志无新增 ERROR |
 
+## 2026-07-20 其他子任务 403 体验修复发布
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 发布成功 |
+| 生产提交 | `66090a483c44ded4f98d496e55d32eea444e465d` |
+| Gitee 推送 | `project_manager_system` 已推送 |
+| 变更范围 | 普通成员打开“其他子任务”无部门可见范围时返回空列表，不再出现 403；部门负责人和管理员权限不变 |
+| 数据库迁移 | 无 |
+| 应用产物 | JAR SHA-256：`6a1f9dcd1c97afc6cfaee9a0e061b63d9f41330b9c9955f90473fd81f39ea8b0`；生产核对一致 |
+| 回滚包 | `/root/emie/app.jar.bak.pre-66090a4-20260720_135308` |
+| 生产验证 | `release-sha.txt` 为目标提交，公开配置 HTTP 200，首页加载 `bootstrap.js?v=167`，两个容器 running，发布后日志无新增 ERROR |
+
 ---
 
 ## 2026-07-17 工作台、通知、同步与日期控件优化发布
