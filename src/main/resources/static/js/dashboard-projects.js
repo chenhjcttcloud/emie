@@ -12,6 +12,7 @@ const renderDashboard = (...args) => EMIE.actions.renderDashboard(...args);
 const renderOrderList = (...args) => EMIE.actions.renderOrderList(...args);
 const renderProjectTable = (...args) => EMIE.actions.renderProjectTable(...args);
 const renderMyTasks = (...args) => EMIE.actions.renderMyTasks(...args);
+const renderDepartmentTasks = (...args) => EMIE.actions.renderDepartmentTasks(...args);
 const renderScoringView = (...args) => EMIE.actions.renderScoringView(...args);
 const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const renderProjectDetailContent = (...args) => EMIE.actions.renderProjectDetailContent(...args);
@@ -64,6 +65,19 @@ async function refreshAfterMutation(pid) {
             if (footer) footer.innerHTML = renderProjectActions(detail);
           }
         } catch(e) {}
+      }
+    })(),
+    // 无论当前在哪个列表页，只要项目详情弹窗仍打开，就用服务端最新数据重绘。
+    (async () => {
+      if (!pid || !document.getElementById('projectDetailModal')) return;
+      try {
+        const detail = await apiGet(`/projects/${pid}`);
+        const body = document.querySelector('#projectDetailModal .modal-body');
+        const footer = document.getElementById('detailActions');
+        if (body) body.innerHTML = renderProjectDetailContent(detail);
+        if (footer) footer.innerHTML = renderProjectActions(detail);
+      } catch (e) {
+        console.warn('刷新项目详情失败', e);
       }
     })(),
   ]);
@@ -172,7 +186,9 @@ async function render() {
     } else if (EMIE.state.currentView === 'regular') {
       await renderOrderList(main, 'regular', role, uid);
     } else if (EMIE.state.currentView === 'tasks') {
-      await renderMyTasks(main, role, uid);
+      await renderMyTasks(main, role, uid, EMIE.state.taskBucket || 'all');
+    } else if (EMIE.state.currentView === 'other-tasks') {
+      await renderDepartmentTasks(main, role, uid, EMIE.state.taskBucket || 'all');
     } else if (EMIE.state.currentView === 'scoring') {
       await renderScoringView(main, role, uid);
     } else if (EMIE.state.currentView === 'admin' || EMIE.state.currentView === 'logs') {

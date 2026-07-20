@@ -169,14 +169,77 @@ public class ProjectController {
     @GetMapping("/my-tasks")
     public ResponseEntity<List<ProjectDetailDTO>> getMyTaskProjects(HttpServletRequest request) {
         AuthController.AuthSession session = getSession(request);
-        if (session == null || !("designer".equals(session.role()) || "supplychain".equals(session.role())
-                || "planner".equals(session.role()))) {
+        if (session == null || !("admin".equals(session.role()) || "designer".equals(session.role())
+                || "supplychain".equals(session.role()) || "planner".equals(session.role()))) {
             return ResponseEntity.status(403).build();
         }
         List<Project> projects = projectAccessService.findVisibleProjectsWithTasks(session);
         List<Long> taskIds = projects.stream().flatMap(p -> p.getTasks().stream()).map(SubTask::getId).toList();
         Map<Long, List<Map<String, Object>>> scoringByTask = loadScoringDetails(taskIds);
         return ResponseEntity.ok(projects.stream().map(p -> toDetail(p, scoringByTask, false)).toList());
+    }
+
+    /** 独立的“我的子任务”查询：只返回当前用户作为负责人或发布人关联的任务。 */
+    @GetMapping("/my-subtasks")
+    public ResponseEntity<List<Map<String, Object>>> getMySubTasks(HttpServletRequest request) {
+        AuthController.AuthSession session = getSession(request);
+        if (session == null) return ResponseEntity.status(401).build();
+        List<SubTask> tasks = subTaskRepository.findMySubTasks(session.userId());
+        Map<Long, List<Map<String, Object>>> scoringByTask = loadScoringDetails(tasks.stream().map(SubTask::getId).toList());
+        List<Map<String, Object>> result = tasks.stream().map(task -> {
+            Project project = task.getProject();
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", task.getId());
+            item.put("name", task.getName());
+            item.put("status", task.getStatus());
+            item.put("plannedDate", task.getPlannedDate());
+            item.put("actualDate", task.getActualDate());
+            item.put("designerId", task.getDesignerId());
+            item.put("designerName", task.getDesignerName());
+            item.put("publisherId", task.getPublisherId());
+            item.put("publisherName", task.getPublisherName());
+            item.put("publisherRole", task.getPublisherRole());
+            item.put("assigneeRole", task.getAssigneeRole());
+            item.put("details", task.getDetails());
+            item.put("deliverables", task.getDeliverables());
+            item.put("reviewComments", task.getReviewComments());
+            item.put("selfScore", task.getSelfScore());
+            item.put("selfAesthetics", task.getSelfAesthetics());
+            item.put("selfInnovation", task.getSelfInnovation());
+            item.put("projectId", project.getId());
+            item.put("projectType", project.getType());
+            item.put("projectName", project.getProductRequirements());
+            item.put("scoringRecords", scoringByTask.getOrDefault(task.getId(), List.of()));
+            item.put("relation", session.userId().equals(task.getDesignerId()) ? "assignee" : "publisher");
+            return item;
+        }).toList();
+        return ResponseEntity.ok(result);
+    }
+
+    /** 部门负责人/管理员只读查看部门成员关联任务。 */
+    @GetMapping("/department-subtasks")
+    public ResponseEntity<List<Map<String, Object>>> getDepartmentSubTasks(HttpServletRequest request) {
+        AuthController.AuthSession session = getSession(request);
+        if (session == null) return ResponseEntity.status(401).build();
+        List<String> userIds = projectAccessService.departmentTaskUserIds(session.role(), session.userId());
+        if (userIds.isEmpty()) return ResponseEntity.status(403).build();
+        List<SubTask> tasks = subTaskRepository.findDepartmentSubTasks(userIds);
+        return ResponseEntity.ok(tasks.stream().map(task -> {
+            Project project = task.getProject();
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", task.getId()); item.put("name", task.getName()); item.put("status", task.getStatus());
+            item.put("plannedDate", task.getPlannedDate()); item.put("actualDate", task.getActualDate());
+            item.put("designerId", task.getDesignerId()); item.put("designerName", task.getDesignerName());
+            item.put("publisherId", task.getPublisherId()); item.put("publisherName", task.getPublisherName());
+            item.put("publisherRole", task.getPublisherRole()); item.put("assigneeRole", task.getAssigneeRole());
+            item.put("details", task.getDetails()); item.put("reviewComments", task.getReviewComments());
+            item.put("projectId", project.getId()); item.put("projectType", project.getType());
+            item.put("projectName", project.getProductRequirements()); item.put("readOnly", true);
+            String uid = session.userId();
+            item.put("relation", uid.equals(task.getPublisherId()) ? "publisher" : "department_member");
+            item.put("relationLabel", uid.equals(task.getPublisherId()) ? "我发布的任务" : "部门成员关联任务");
+            return item;
+        }).toList());
     }
 
     /** 获取项目详情 */

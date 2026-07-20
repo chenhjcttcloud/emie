@@ -37,6 +37,9 @@ public class DepartmentController {
         if (dept.getName() == null || dept.getName().isBlank()) {
             return ResponseEntity.badRequest().build();
         }
+        if (!isValidHeadRole(dept.getRole(), dept.getHeadUserId())) {
+            return ResponseEntity.badRequest().build();
+        }
         Department saved = departmentRepository.save(dept);
         // 如果有负责人，自动分配到该部门并设为部门负责人级别
         if (dept.getHeadUserId() != null && !dept.getHeadUserId().isBlank()) {
@@ -51,6 +54,9 @@ public class DepartmentController {
         if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
         return departmentRepository.findById(id)
                 .map(existing -> {
+                    if (!isValidHeadRole(dept.getRole(), dept.getHeadUserId())) {
+                        return ResponseEntity.badRequest().<Department>build();
+                    }
                     existing.setName(dept.getName());
                     existing.setRole(dept.getRole());
 
@@ -91,6 +97,14 @@ public class DepartmentController {
             user.setTitleLevel(2); // 2=部门负责人
             userService.saveUser(user);
         }
+    }
+
+    /** 部门负责人必须与部门关联角色一致；管理员可跨部门担任负责人。 */
+    private boolean isValidHeadRole(String departmentRole, String headUserId) {
+        if (headUserId == null || headUserId.isBlank()) return true;
+        if (departmentRole == null || departmentRole.isBlank()) return false;
+        User user = userService.getUserByUserId(headUserId);
+        return user != null && (departmentRole.equals(user.getRole()) || "admin".equals(user.getRole()));
     }
 
     /** 删除部门 */

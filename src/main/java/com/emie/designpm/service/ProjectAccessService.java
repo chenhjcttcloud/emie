@@ -129,6 +129,18 @@ public class ProjectAccessService {
         return ids;
     }
 
+    /** 部门负责人可查看本部门成员关联的任务；系统管理员可查看全部。 */
+    public List<String> departmentTaskUserIds(String viewerRole, String viewerUserId) {
+        if ("admin".equals(viewerRole)) {
+            return userRepository.findAll().stream().map(User::getUserId).toList();
+        }
+        return departmentRepository.findByHeadUserId(viewerUserId)
+                .filter(d -> Boolean.TRUE.equals(d.getActive())
+                        && ("sales".equals(d.getRole()) || "planner".equals(d.getRole())))
+                .map(d -> userRepository.findByDepartmentId(d.getId()).stream().map(User::getUserId).toList())
+                .orElse(List.of());
+    }
+
     private List<Project> findForUserLight(String role, String userId) {
         return switch (role) {
             case "sales" -> projectRepository.findBySalesIdLight(userId);

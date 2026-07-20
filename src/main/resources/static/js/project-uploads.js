@@ -277,6 +277,26 @@ document.addEventListener('drop', event => {
   if (input && event.dataTransfer?.files?.length) handleUploadDrop(input, event.dataTransfer.files);
 });
 
+// 剪贴板图片上传：从飞书、微信或截图工具复制图片后，鼠标移入上传框并直接粘贴。
+// 仅处理剪贴板中的真实图片 Blob，不读取或上传剪贴板文本，避免影响原有输入框。
+let activeUploadZone = null;
+document.addEventListener('mouseover', event => {
+  const zone = event.target.closest?.('.upload-area');
+  if (zone) activeUploadZone = zone;
+});
+document.addEventListener('paste', event => {
+  const zone = event.target.closest?.('.upload-area') || activeUploadZone;
+  const item = Array.from(event.clipboardData?.items || []).find(entry => entry.kind === 'file' && /^image\//i.test(entry.type));
+  if (!zone || !item) return;
+  const input = zone.querySelector('input[type="file"]');
+  const blob = item.getAsFile();
+  if (!input || !blob) return;
+  event.preventDefault();
+  const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+  const file = new File([blob], `粘贴图片-${Date.now()}.${ext}`, { type: blob.type, lastModified: Date.now() });
+  handleUploadDrop(input, [file]);
+});
+
 
 EMIE.registerActions({
   previewImage,

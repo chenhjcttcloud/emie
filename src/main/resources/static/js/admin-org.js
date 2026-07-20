@@ -10,7 +10,15 @@ const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
 
 function adminOrgRoleClass(role) {
-  return String(role || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  const raw = String(role || '').trim().toLowerCase();
+  if (raw === '供应链' || raw === 'supply' || raw === 'supply_chain' || raw === 'supply-chain') return 'supplychain';
+  if (raw === '管理员') return 'admin';
+  const normalized = raw.replace(/[^a-z0-9]/g, '');
+  return normalized === 'supplychain' ? 'supplychain' : normalized;
+}
+
+function adminOrgRoleKey(role) {
+  return adminOrgRoleClass(role);
 }
 
 async function refreshOrgData() {
@@ -142,9 +150,15 @@ async function openCreateDeptModal() {
   document.getElementById('deptRoleSelect').onchange = function() {
     const role = this.value;
     const sel = document.getElementById('deptHeadSelect');
-    const filtered = allUsers.filter(u => u.role === role);
+    const filtered = [
+      ...allUsers.filter(u => adminOrgRoleKey(u.role) === adminOrgRoleKey(role)),
+      ...allUsers.filter(u => adminOrgRoleKey(u.role) === 'admin'),
+    ];
     sel.innerHTML = '<option value="">未设置</option>' +
-      filtered.map(u => `<option value="${escHtml(u.userId)}">${escHtml(u.name)}</option>`).join('');
+      filtered.filter(u => adminOrgRoleKey(u.role) !== 'admin').map(u => `<option value="${escHtml(u.userId)}">${escHtml(u.name)}</option>`).join('') +
+      (filtered.some(u => adminOrgRoleKey(u.role) === 'admin')
+        ? '<optgroup label="管理员">' + filtered.filter(u => adminOrgRoleKey(u.role) === 'admin').map(u => `<option value="${escHtml(u.userId)}">${escHtml(u.name)}</option>`).join('') + '</optgroup>'
+        : '');
   };
   document.getElementById('deptRoleSelect').dispatchEvent(new Event('change'));
 }
@@ -207,10 +221,19 @@ async function editDept(d) {
   const updateHeadSelect = () => {
     const role = document.getElementById('editDeptRoleSelect').value;
     const sel = document.getElementById('editDeptHeadSelect');
+    const candidates = [
+        ...allUsers.filter(u => adminOrgRoleKey(u.role) === adminOrgRoleKey(role)),
+        ...allUsers.filter(u => adminOrgRoleKey(u.role) === 'admin'),
+      ];
     sel.innerHTML = '<option value="">未设置</option>' +
-      allUsers.filter(u => u.role === role).map(u =>
+      candidates.filter(u => adminOrgRoleKey(u.role) !== 'admin').map(u =>
         `<option value="${escHtml(u.userId)}" ${u.userId === d.headUserId ? 'selected' : ''}>${escHtml(u.name)}</option>`
-      ).join('');
+      ).join('') +
+      (candidates.some(u => adminOrgRoleKey(u.role) === 'admin')
+        ? '<optgroup label="管理员">' + candidates.filter(u => adminOrgRoleKey(u.role) === 'admin').map(u =>
+          `<option value="${escHtml(u.userId)}" ${u.userId === d.headUserId ? 'selected' : ''}>${escHtml(u.name)}</option>`
+        ).join('') + '</optgroup>'
+        : '');
   };
   document.getElementById('editDeptRoleSelect').onchange = updateHeadSelect;
   updateHeadSelect();

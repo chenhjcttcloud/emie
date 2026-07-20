@@ -158,16 +158,23 @@ public class DashboardController {
         stats.put("inProgress", projectService.countVisibleProjects(role, userId, "in_progress", false)
                 + projectService.countVisibleProjects(role, userId, "planner_accepted", false));
         long allTasks = 0, approvedTasks = 0, pendingTasks = 0, pendingScore = 0;
+        long channelTasks = 0;
         if (!projectIds.isEmpty()) {
+            Set<Long> channelProjectIds = projectRepository.findByIdInAndType(projectIds, "channel_custom").stream()
+                    .map(Project::getId).collect(Collectors.toSet());
             for (Object[] row : subTaskRepository.countStatusByProjectIds(projectIds)) {
                 long count = ((Number) row[1]).longValue();
                 allTasks += count;
                 if ("approved".equals(row[0]) || "completed".equals(row[0])) approvedTasks += count;
                 if ("pending".equals(row[0]) || "delivered".equals(row[0])) pendingTasks += count;
             }
+            if (!channelProjectIds.isEmpty()) {
+                channelTasks = subTaskRepository.countTasksByProjectIds(new ArrayList<>(channelProjectIds)).stream()
+                        .mapToLong(row -> ((Number) row[1]).longValue()).sum();
+            }
             pendingScore = subTaskRepository.countPendingScoresByProjectIds(projectIds);
         }
-        stats.put("allTasks", allTasks); stats.put("approvedTasks", approvedTasks);
+        stats.put("allTasks", allTasks); stats.put("channelTasks", channelTasks); stats.put("approvedTasks", approvedTasks);
         stats.put("pendingTasks", pendingTasks); stats.put("pendingScore", pendingScore);
         return stats;
     }

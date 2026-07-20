@@ -37,6 +37,11 @@ public class SubTask {
     private String designerId;
     private String designerName;
 
+    /** 创建并派发该子任务的用户。用于“我的子任务”同时覆盖负责人与发布人。 */
+    private String publisherId;
+    private String publisherName;
+    private String publisherRole;
+
     /** 负责人角色类型：designer / supplychain（用于区分设计师和供应链的子任务） */
     private String assigneeRole;
 

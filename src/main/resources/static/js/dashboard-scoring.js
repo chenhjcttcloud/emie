@@ -36,11 +36,13 @@ async function renderScoringView(main, role, uid) {
     pendingTasks.push(t);
   }
 
-  // 待评分在前，已评分在后
+  // 先按计划完成时间，再按评分状态；同一天待评分优先，方便处理临近任务。
   pendingTasks.sort((a, b) => {
+    const dateCompare = (a.plannedDate || '9999-12-31').localeCompare(b.plannedDate || '9999-12-31');
+    if (dateCompare !== 0) return dateCompare;
     if (a.isPending && !b.isPending) return -1;
     if (!a.isPending && b.isPending) return 1;
-    return 0;
+    return b.id - a.id;
   });
 
   const pendingCount = pendingTasks.filter(t => t.isPending).length;

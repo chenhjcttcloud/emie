@@ -436,6 +436,9 @@ public class ProjectService {
         task.setPlannedDate(plannedDate);
         task.setDesignerId(designerId);
         task.setDesignerName(userService.getUserName(designerId));
+        task.setPublisherId((String) body.get("currentUserId"));
+        task.setPublisherName((String) body.getOrDefault("currentUser", ""));
+        task.setPublisherRole(role);
         // 设置负责人角色类型（designer / supplychain），默认 designer
         String assigneeRole = (String) body.get("assigneeRole");
         task.setAssigneeRole(assigneeRole != null && !assigneeRole.isBlank() ? assigneeRole : "designer");

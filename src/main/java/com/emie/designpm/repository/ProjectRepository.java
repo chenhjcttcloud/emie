@@ -55,6 +55,8 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, Project
 
     List<Project> findByTypeOrderByCreatedAtDesc(String type);
 
+    List<Project> findByIdInAndType(List<Long> ids, String type);
+
     List<Project> findByStatusOrderByCreatedAtDesc(String status);
 
     @Query("SELECT p FROM Project p WHERE p.type = ?1 AND p.status = ?2 ORDER BY p.createdAt DESC")

@@ -11,7 +11,8 @@ function renderSidebar() {
     navs.push({ view: 'orders', icon: '📋', label: '全部项目', badge: 'badgeTotal' });
     navs.push({ view: 'channel', icon: '📦', label: '渠道定制单', badge: 'badgeChannel' });
     navs.push({ view: 'regular', icon: '🏭', label: '公司常规品', badge: 'badgeRegular' });
-    navs.push({ view: 'scoring', icon: '⭐', label: '待评分', badge: 'badgeScoring' });
+    navs.push({ view: 'other-tasks', icon: '🧭', label: '其他子任务', badge: '' });
+    navs.push({ view: 'scoring', icon: '⭐', label: '评分', badge: 'badgeScoring' });
   } else if (EMIE.state.currentRole === 'admin') {
     // 管理员：工作台 + 系统管理
     navs.push({ view: 'dashboard', icon: '📊', label: '工作台', badge: '' });
@@ -19,7 +20,8 @@ function renderSidebar() {
     navs.push({ view: 'channel', icon: '📦', label: '渠道定制单', badge: 'badgeChannel' });
     navs.push({ view: 'regular', icon: '🏭', label: '公司常规品', badge: 'badgeRegular' });
     navs.push({ view: 'tasks', icon: '📌', label: '我的子任务', badge: 'badgeMyTasks' });
-    navs.push({ view: 'scoring', icon: '⭐', label: '待评分', badge: 'badgeScoring' });
+    navs.push({ view: 'other-tasks', icon: '🧭', label: '其他子任务', badge: '' });
+    navs.push({ view: 'scoring', icon: '⭐', label: '评分', badge: 'badgeScoring' });
     navs.push({ view: 'admin', icon: '⚙️', label: '系统管理', badge: '' });
   } else {
     // 其他角色：显示全部导航
@@ -28,7 +30,8 @@ function renderSidebar() {
     navs.push({ view: 'channel', icon: '📦', label: '渠道定制单', badge: 'badgeChannel' });
     navs.push({ view: 'regular', icon: '🏭', label: '公司常规品', badge: 'badgeRegular' });
     navs.push({ view: 'tasks', icon: '📌', label: '我的子任务', badge: 'badgeMyTasks' });
-    navs.push({ view: 'scoring', icon: '⭐', label: '待评分', badge: 'badgeScoring' });
+    navs.push({ view: 'other-tasks', icon: '🧭', label: '其他子任务', badge: '' });
+    navs.push({ view: 'scoring', icon: '⭐', label: '评分', badge: 'badgeScoring' });
   }
 
   const sidebar = document.getElementById('sidebarContainer');
@@ -39,12 +42,18 @@ function renderSidebar() {
       <span class="nav-icon">${n.icon}</span>${n.label}
       ${n.badge ? `<span class="nav-badge" id="${n.badge}">0</span>` : ''}
     </button>
+    ${n.view === 'tasks' && n.view === EMIE.state.currentView ? `<div class="nav-submenu">
+      <button class="nav-subitem ${EMIE.state.taskBucket !== 'pending' && EMIE.state.taskBucket !== 'completed' ? 'active' : ''}" data-emie-onclick="navigateTaskBucket('all')">全部子任务</button>
+      <button class="nav-subitem ${EMIE.state.taskBucket === 'pending' ? 'active' : ''}" data-emie-onclick="navigateTaskBucket('pending')">待处理子任务</button>
+      <button class="nav-subitem ${EMIE.state.taskBucket === 'completed' ? 'active' : ''}" data-emie-onclick="navigateTaskBucket('completed')">已完成子任务</button>
+    </div>` : ''}
   `).join('');
 }
 
 // ==================== 导航 ====================
 function navigate(view) {
   EMIE.state.currentView = view;
+  if (view !== 'tasks') EMIE.state.taskBucket = 'all';
   // 保存当前浏览页面（刷新后恢复）
   localStorage.setItem('design_pm_lastView', view);
   renderSidebar();
@@ -55,6 +64,15 @@ function navigate(view) {
     window.scrollTo(0, 0);
     document.documentElement.scrollTop = 0;
   }, 50);
+}
+
+function navigateTaskBucket(bucket) {
+  EMIE.state.currentView = 'tasks';
+  EMIE.state.taskBucket = ['pending', 'completed'].includes(bucket) ? bucket : 'all';
+  localStorage.setItem('design_pm_taskBucket', EMIE.state.taskBucket);
+  renderSidebar();
+  render();
+  closeMobileSidebar();
 }
 
 // ==================== 移动端侧栏 ====================
@@ -88,6 +106,7 @@ document.addEventListener('keydown', function(event) {
 EMIE.registerActions({
   renderSidebar,
   navigate,
+  navigateTaskBucket,
   toggleMobileSidebar,
   closeMobileSidebar,
 });

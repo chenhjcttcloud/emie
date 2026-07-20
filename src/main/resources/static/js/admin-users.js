@@ -9,10 +9,21 @@ const apiDelete = (...args) => EMIE.actions.apiDelete(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
 
-const adminUserRoleLabels = { pending: '待分配', sales: '销售', planner: '产品企划', designer: '设计师', supplychain: '供应链', admin: '管理员' };
+const adminUserRoleLabels = { pending: '待分配', sales: '销售', planner: '产品企划', designer: '设计师', supplychain: '供应链', promotion: '产品推广', admin: '管理员' };
+
+function adminUserRoleKey(role) {
+  const raw = String(role || '').trim().toLowerCase();
+  if (raw === '供应链' || raw === 'supply' || raw === 'supply_chain' || raw === 'supply-chain') return 'supplychain';
+  if (raw === '管理员') return 'admin';
+  if (raw === '销售') return 'sales';
+  if (raw === '产品企划') return 'planner';
+  if (raw === '设计师') return 'designer';
+  if (raw === '产品推广') return 'promotion';
+  return raw.replace(/[^a-z0-9]/g, '');
+}
 
 function adminUserRoleClass(role) {
-  return String(role || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  return adminUserRoleKey(role);
 }
 
 function adminUserStatusLabel(status) {
@@ -25,17 +36,18 @@ function adminUserStatusLabel(status) {
 async function renderAdminUsers(container, page = 0, filters = {}) {
   container.innerHTML = `<div class="loading">加载中</div>`;
   let users = [], roles = [];
+  let pageResult = { items: [], page, size: 30, total: 0, totalPages: 0 };
   try {
     const params = new URLSearchParams({ page: String(page), size: '30' });
     Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); });
-    const pageResult = await apiGet('/admin/users/page?' + params);
+    pageResult = await apiGet('/admin/users/page?' + params);
     users = pageResult.items || [];
     EMIE.adminUserPage = { ...pageResult, container, page, filters };
     [roles] = await Promise.all([
       apiGet('/admin/roles'),
     ]);
   } catch(e) { /* ignore */ }
-  roles.forEach(r => { adminUserRoleLabels[r.name] = r.displayName || r.name; });
+  roles.forEach(r => { if (!adminUserRoleLabels[adminUserRoleKey(r.name)]) adminUserRoleLabels[adminUserRoleKey(r.name)] = r.displayName || r.name; });
   const assignableRoles = roles.filter(r => r.name !== 'pending');
 
   container.innerHTML = `
@@ -78,11 +90,11 @@ async function renderAdminUsers(container, page = 0, filters = {}) {
             </thead>
             <tbody id="adminUserTableBody">
               ${users.map((u, i) => `
-                <tr data-user-id="${escHtml(u.userId)}" data-role="${u.role}" data-name="${escHtml(u.name)}" data-status="${u.status || 'active'}">
+                <tr data-user-id="${escHtml(u.userId)}" data-role="${adminUserRoleKey(u.role)}" data-name="${escHtml(u.name)}" data-status="${u.status || 'active'}">
                   <td style="color:var(--gray-400);">${i + 1}</td>
                   <td><strong>${escHtml(u.userId)}</strong></td>
                   <td>${escHtml(u.name)}</td>
-                  <td><span class="admin-user-role-badge role-${adminUserRoleClass(u.role)}">${adminUserRoleLabels[u.role] || u.role}</span></td>
+                  <td><span class="admin-user-role-badge role-${adminUserRoleClass(u.role)}">${adminUserRoleLabels[adminUserRoleKey(u.role)] || u.role}</span></td>
                   <td><span class="admin-user-status-badge status-${u.status || 'active'}">${adminUserStatusLabel(u.status)}</span></td>
                   <td>${escHtml(u.phone || '-')}</td>
                   <td>${escHtml(u.email || '-')}</td>
@@ -172,7 +184,7 @@ function openEditUserModal(userData) {
         </div>
         <div style="background:var(--gray-50);padding:12px 16px;border-radius:8px;margin-top:8px;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <span style="font-size:13px;color:var(--gray-500);">当前角色：<span class="admin-user-role-badge role-${adminUserRoleClass(userData.role)}">${adminUserRoleLabels[userData.role] || userData.role}</span></span>
+            <span style="font-size:13px;color:var(--gray-500);">当前角色：<span class="admin-user-role-badge role-${adminUserRoleClass(userData.role)}">${adminUserRoleLabels[adminUserRoleKey(userData.role)] || userData.role}</span></span>
             <span style="font-size:13px;color:var(--gray-500);">当前状态：<span class="admin-user-status-badge status-${userData.status || 'active'}">${adminUserStatusLabel(userData.status)}</span></span>
           </div>
         </div>
@@ -257,7 +269,7 @@ async function openChangeRoleModal(userId, existingRole, userName) {
       <div class="modal-body">
         <div class="form-group">
           <label class="form-label">当前角色</label>
-          <div><span class="admin-user-role-badge role-${adminUserRoleClass(existingRole)}">${adminUserRoleLabels[existingRole] || existingRole}</span></div>
+          <div><span class="admin-user-role-badge role-${adminUserRoleClass(existingRole)}">${adminUserRoleLabels[adminUserRoleKey(existingRole)] || existingRole}</span></div>
         </div>
         <div class="form-group">
           <label class="form-label">新角色</label>

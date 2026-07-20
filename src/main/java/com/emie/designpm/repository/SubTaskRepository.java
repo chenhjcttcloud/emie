@@ -28,6 +28,14 @@ public interface SubTaskRepository extends JpaRepository<SubTask, Long> {
 
     List<SubTask> findByStatusAndDesignerId(String status, String designerId);
 
+    @Query("SELECT DISTINCT t FROM SubTask t JOIN FETCH t.project p " +
+            "WHERE t.designerId = :userId OR t.publisherId = :userId ORDER BY t.updatedAt DESC, t.id DESC")
+    List<SubTask> findMySubTasks(@Param("userId") String userId);
+
+    @Query("SELECT DISTINCT t FROM SubTask t JOIN FETCH t.project p " +
+            "WHERE t.designerId IN :userIds OR t.publisherId IN :userIds ORDER BY t.updatedAt DESC, t.id DESC")
+    List<SubTask> findDepartmentSubTasks(@Param("userIds") List<String> userIds);
+
     /** 悲观锁：设计师接单时锁定子任务行 */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT t FROM SubTask t WHERE t.id = ?1")

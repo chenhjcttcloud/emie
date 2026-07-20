@@ -12,34 +12,25 @@ const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const matchesSearchText = (...args) => EMIE.actions.matchesSearchText(...args);
 const isDateInRange = (...args) => EMIE.actions.isDateInRange(...args);
 
-async function renderDesignerTasks(main, uid) {
-  // 企划可能作为子任务负责人而非项目负责人，需查全部项目
-  const roleParam = EMIE.state.currentRole === 'planner' ? 'admin' : EMIE.state.currentRole;
-  const details = await apiGet('/projects/my-tasks');
-  let myTasks = [];
-  const myId = uid;
+async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.currentRole,
+                                   endpoint = '/projects/my-subtasks', readOnly = false) {
+  let myTasks = (await apiGet(endpoint)).map(task => ({
+    ...task,
+    projectName: (task.projectName || '').substring(0, 30),
+    _unassigned: !task.designerId
+  }));
 
-  for (const detail of details) {
-    if (!detail || !detail.tasks) continue;
-    for (const t of detail.tasks) {
-      const isMine = t.designerId === myId;
-      const isUnassigned = !t.designerId || t.designerId === '';
-      if (isMine) {
-        myTasks.push({ ...t, projectId: detail.id, projectType: detail.type, projectName: (detail.productRequirements || '').substring(0, 30) });
-      } else if (isUnassigned && t.status === 'pending') {
-        myTasks.push({ ...t, projectId: detail.id, projectType: detail.type, projectName: (detail.productRequirements || '').substring(0, 30), _unassigned: true });
-      }
-      if ((t.status === 'approved' || t.status === 'completed') && t.scoringRecords) {
-        const needScore = t.scoringRecords.some(sr => sr.score == null && (sr.role === 'designer' || sr.role === 'supplychain'));
-        if (needScore && !myTasks.find(mt => mt.id === t.id)) {
-          myTasks.push({ ...t, projectId: detail.id, projectType: detail.type, projectName: (detail.productRequirements || '').substring(0, 30) });
-        }
-      }
-    }
-  }
+  if (bucket === 'pending') myTasks = myTasks.filter(t => !['approved', 'completed'].includes(t.status));
+  if (bucket === 'completed') myTasks = myTasks.filter(t => ['approved', 'completed'].includes(t.status));
+  myTasks.sort((a, b) => {
+    const done = task => ['approved', 'completed'].includes(task.status);
+    const overdue = task => !done(task) && task.plannedDate && task.plannedDate < new Date().toISOString().slice(0, 10);
+    const rank = task => overdue(task) ? 0 : (task.status === 'rejected' ? 1 : (task.status === 'delivered' ? 2 : (done(task) ? 4 : 3)));
+    return rank(a) - rank(b) || (a.plannedDate || '9999-12-31').localeCompare(b.plannedDate || '9999-12-31') || (b.id - a.id);
+  });
 
   main.innerHTML = `
-    <h2 style="font-size:22px;margin-bottom:20px;">🎨 我的子任务 <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${myTasks.length})</span></h2>
+    <h2 style="font-size:22px;margin-bottom:20px;">🎨 ${bucket === 'pending' ? '待处理子任务' : bucket === 'completed' ? '已完成子任务' : '我的子任务'} <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${myTasks.length})</span></h2>
     <div class="filter-bar">
       <select class="form-select" data-emie-onchange="filterDesignerTasks()" style="min-width:120px;" id="designerTaskFilter">
         <option value="all">全部</option>
@@ -118,18 +109,19 @@ function resetDesignerTaskFilters() {
 
 function renderDesignerTaskCards(tasks) {
   if (!tasks.length) return `<div class="empty"><div class="empty-icon">🎉</div><p>暂无子任务</p></div>`;
-  return `<div class="card">
+  return `<div class="subtask-list">
       ${tasks.map(t => {
         const tsi = getTaskStatusInfo(t.status);
         const needScore = t.scoringRecords && t.scoringRecords.some(sr => sr.score == null && (sr.role === 'designer' || sr.role === 'supplychain'));
         return `<div class="subtask-card" style="${t._unassigned ? 'border-left:3px solid var(--warning);' : ''}">
           <div class="subtask-header">
-            <div class="subtask-name">${t._unassigned ? '📋' : tsi.icon} ${escHtml(t.name || '-')}</div>
+            <div class="subtask-name">${t._unassigned ? '📋' : tsi.icon} 子任务：${escHtml(t.name || '-')} <span style="font-size:11px;color:var(--gray-400);font-weight:400;">#${t.id}</span></div>
             <span class="badge ${t._unassigned ? 'badge-pending' : tsi.cls}">${t._unassigned ? '待接单' : tsi.label}</span>
           </div>
-          <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">📁 项目 #${t.projectId}：${escHtml(t.projectName || '-')}</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;padding:6px 8px;background:var(--gray-50);border-radius:6px;">所属项目：#${t.projectId} ${escHtml(t.projectName || '-')}</div>
           <div class="subtask-meta">
             <div class="subtask-meta-item">👤 负责人：<strong>${t.designerName || '<span style="color:var(--warning);">待认领</span>'}</strong>${t.assigneeRole ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;${t.assigneeRole === 'supplychain' ? 'background:#F0FDFA;color:#0D9488;' : t.assigneeRole === 'planner' ? 'background:#EFF6FF;color:#1D4ED8;' : 'background:#FEF2F2;color:#DC2626;'}">${t.assigneeRole === 'supplychain' ? '供应链' : t.assigneeRole === 'planner' ? '企划' : '设计师'}</span>` : ''}</div>
+            ${t.relation ? `<div class="subtask-meta-item">🔗 我的关系：<strong>${t.relation === 'publisher' ? '我发布的任务' : '我负责的任务'}</strong></div>` : ''}
             <div class="subtask-meta-item">📅 计划完成：<strong>${formatDate(t.plannedDate)}</strong></div>
             ${t.actualDate ? `<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(t.actualDate)}</strong></div>` : ''}
           </div>
@@ -137,11 +129,11 @@ function renderDesignerTaskCards(tasks) {
           ${t.reviewComments ? `<div class="review-box ${t.status === 'rejected' ? 'rejected' : 'approved'}">${t.status === 'rejected' ? '驳回意见' : '验收意见'}：${escHtml(t.reviewComments)}</div>` : ''}
           ${t.scoringRecords ? renderScoringMini(t) : ''}
           <div class="subtask-actions">
-            ${t.status === 'pending' && !t._unassigned ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskAccept(${t.projectId},${t.id})">✅ 接单</button>` : ''}
-            ${t._unassigned ? `<button class="btn btn-success btn-sm" data-emie-onclick="taskAccept(${t.projectId},${t.id})">📋 认领并接单</button>` : ''}
-            ${t.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskDeliver(${t.projectId},${t.id})">📤 交付成果</button>` : ''}
-            ${t.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-onclick="taskRedeliver(${t.projectId},${t.id})">📤 重新交付</button>` : ''}
-            ${needScore ? `<button class="btn btn-warning btn-sm" data-emie-onclick="openScoring(${t.projectId},${t.id})">⭐ 评分</button>` : ''}
+            ${!readOnly && t.status === 'pending' && !t._unassigned ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskAccept(${t.projectId},${t.id})">✅ 接单</button>` : ''}
+            ${!readOnly && t._unassigned ? `<button class="btn btn-success btn-sm" data-emie-onclick="taskAccept(${t.projectId},${t.id})">📋 认领并接单</button>` : ''}
+            ${!readOnly && t.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskDeliver(${t.projectId},${t.id})">📤 交付成果</button>` : ''}
+            ${!readOnly && t.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-onclick="taskRedeliver(${t.projectId},${t.id})">📤 重新交付</button>` : ''}
+            ${!readOnly && needScore ? `<button class="btn btn-warning btn-sm" data-emie-onclick="openScoring(${t.projectId},${t.id})">⭐ 评分</button>` : ''}
             <button class="btn btn-outline btn-sm" data-emie-onclick="openProjectDetail(${t.projectId})">查看项目</button>
           </div>
         </div>`;

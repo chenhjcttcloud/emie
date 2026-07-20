@@ -30,7 +30,6 @@ async function renderOrderList(main, type, role, uid) {
     <div class="filter-bar" style="margin-bottom:16px;">
       <select class="form-select" data-emie-onchange="filterProjectList()" style="min-width:120px;" id="projectStatusFilter">
         <option value="all">全部状态</option>
-        <option value="draft">草稿</option>
         <option value="in_progress">进行中</option>
         <option value="paused">已暂停</option>
         <option value="completed">已完成</option>
@@ -172,10 +171,15 @@ function resetProjectFilters() {
 }
 
 // ==================== 我的子任务（企划派发任务界面） ====================
-async function renderMyTasks(main, role, uid) {
+async function renderMyTasks(main, role, uid, bucket = 'all') {
   if (role === 'designer' || role === 'supplychain' || role === 'planner') {
     // 设计师/供应链/企划: 展示分配给自己的子任务卡片
-    await renderDesignerTasks(main, uid);
+    await renderDesignerTasks(main, uid, bucket);
+    return;
+  }
+
+  if (role === 'admin') {
+    await renderDesignerTasks(main, uid, bucket, role);
     return;
   }
 
@@ -195,7 +199,6 @@ async function renderMyTasks(main, role, uid) {
     <div class="filter-bar">
       <select class="form-select" data-emie-onchange="filterTaskProjects()" style="min-width:120px;" id="taskProjectFilter">
         <option value="all">全部项目</option>
-        <option value="draft">草稿</option>
         <option value="paused">已暂停</option>
         <option value="in_progress">进行中</option>
         <option value="planner_accepted">待添加子任务</option>
@@ -251,6 +254,10 @@ function renderTaskProjectTable(orders) {
       </tr>`;
     }).join('')}</tbody>
   </table></div></div>`;
+}
+
+async function renderDepartmentTasks(main, role, uid, bucket = 'all') {
+  await renderDesignerTasks(main, uid, bucket, role, '/projects/department-subtasks', true);
 }
 
 function filterTaskProjects() {
@@ -332,6 +339,7 @@ EMIE.registerActions({
   applyFilterProjectList,
   resetProjectFilters,
   renderMyTasks,
+  renderDepartmentTasks,
   renderTaskProjectTable,
   filterTaskProjects,
   applyFilterTaskProjects,
@@ -349,6 +357,7 @@ EMIE.registerModule('dashboardLists', {
   filterProjectList,
   resetProjectFilters,
   renderMyTasks,
+  renderDepartmentTasks,
   filterTaskProjects,
   resetTaskProjectFilters,
 });
