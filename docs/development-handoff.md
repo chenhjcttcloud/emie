@@ -625,6 +625,12 @@
 - 发布前数据库备份和应用回滚包已保留；应用与预览容器正常，公开配置 HTTP 200。
 - 发布后日志未再出现 `Incorrect DATETIME`；同步队列历史失败数仍为 3 条，未发现新增同类失败。
 
+## 2026-07-20 系统时区统一（本地）
+
+- 根因：生产主机为北京时间，但应用容器默认 UTC，`LocalDateTime.now()` 产生的日志时间比北京时间少 8 小时。
+- 已将本地启动脚本和生产 Docker Compose 的 JVM 固定为 `-Duser.timezone=Asia/Shanghai`，并设置容器 `TZ=Asia/Shanghai`。
+- 当前改动仅在本地，待测试后提交、推送和部署生产。
+
 ## 2026-07-20 飞书同步游标修复（本地）
 
 - 生产检查发现 `feishu.sync.cursor` 缺失时使用 `LocalDateTime.MIN`，MySQL 报 `Incorrect DATETIME value: 169087565-03-15...`，导致定时增量对账失败。

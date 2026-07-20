@@ -55,10 +55,10 @@ start() {
     # screen 独立于 Codex/终端会话，避免当前会话取消时连带终止本地服务。
     screen -S "$SCREEN_SESSION" -X quit >/dev/null 2>&1 || true
     screen -dmS "$SCREEN_SESSION" /bin/bash -lc \
-      "exec '$JAVA_HOME/bin/java' -jar '$JAR_PATH' --spring.profiles.active='$PROFILE' --server.port='$PORT' > '$LOG_FILE' 2>&1"
+      "exec '$JAVA_HOME/bin/java' -Duser.timezone=Asia/Shanghai -jar '$JAR_PATH' --spring.profiles.active='$PROFILE' --server.port='$PORT' > '$LOG_FILE' 2>&1"
     echo "服务启动中（独立 screen 会话：${SCREEN_SESSION}）..."
   else
-    nohup "$JAVA_HOME/bin/java" -jar "$JAR_PATH" \
+    nohup "$JAVA_HOME/bin/java" -Duser.timezone=Asia/Shanghai -jar "$JAR_PATH" \
       --spring.profiles.active=$PROFILE \
       --server.port=$PORT \
       > "$LOG_FILE" 2>&1 &

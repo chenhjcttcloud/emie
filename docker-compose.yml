@@ -12,7 +12,8 @@ services:
       APP_PREVIEW_MAX_SOURCE_BYTES: ${APP_PREVIEW_MAX_SOURCE_BYTES:-52428800}
       APP_PREVIEW_MAX_CACHE_BYTES: ${APP_PREVIEW_MAX_CACHE_BYTES:-2147483648}
       APP_PREVIEW_TIMEOUT_SECONDS: ${APP_PREVIEW_TIMEOUT_SECONDS:-120}
-      JAVA_TOOL_OPTIONS: -Xmx192m -Xms64m -XX:+UseSerialGC -Xss512k -XX:MaxMetaspaceSize=128m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/app/logs/heapdump.hprof
+      TZ: Asia/Shanghai
+      JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Shanghai -Xmx192m -Xms64m -XX:+UseSerialGC -Xss512k -XX:MaxMetaspaceSize=128m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/app/logs/heapdump.hprof
     mem_limit: 640m
     mem_reservation: 512m
     volumes:

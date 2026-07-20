@@ -4,6 +4,8 @@
 
 生产应用必须显式启用 `prod` profile，并提供 `DESIGNPM_DB_HOST`、`DESIGNPM_DB_NAME`、`DESIGNPM_DB_USER`、`DESIGNPM_DB_PASSWORD`。仓库不再为这些变量提供可连接数据库的默认值；缺少任意变量时应让部署失败，不得回退到其他数据库。`DESIGNPM_DB_USE_SSL` 默认建议保持为 `true`，只有已确认的受保护内网环境才可按实际情况调整。
 
+应用容器 JVM 固定使用 `Asia/Shanghai`（UTC+8），由 `JAVA_TOOL_OPTIONS=-Duser.timezone=Asia/Shanghai` 和 `TZ=Asia/Shanghai` 注入，确保日志与业务时间一致。
+
 ## 当前生产部署结构
 
 > 当前生产切换前仍运行 Java 17；Java 21 升级完成本地和容器验证后，才允许按发布手册执行生产切换。
