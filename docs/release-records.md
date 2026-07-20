@@ -13,6 +13,23 @@
 
 ---
 
+## 2026-07-20 项目编号与子任务分页发布
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 发布成功 |
+| 旧生产提交 / 生产提交 | `dec6113` / `31f4140` |
+| Gitee 推送 | `project_manager_system` 已推送，目标提交已确认 |
+| 变更范围 | 项目编号 `EMIEyyyyMM####`、编号搜索、待评分统计口径修复、子任务管理服务端分页、任务筛选简化、图片缩略图加载优化 |
+| 本地验证 | Java 21 测试、全量前端 JS 语法检查、`git diff --check` 通过；生产构建使用精确提交 `31f4140` |
+| 数据库备份 | `/root/emie/db-backup-before-31f4140-20260720_154128.sql.gz`，`gzip -t` 通过；SHA-256 `324ef1dc11f17d20d27cd51858e5f9973544bdc402861f41f1b5b47d2dff689b` |
+| 数据库迁移 | `2026-07-20-add-project-code.sql` 已执行；生产 34 个项目均已具备项目编号 |
+| 应用产物 | JAR SHA-256 `acec0608dc817c48260a5e5865a8d5770a97aff34f2b4677bb115acd0ba1e2d3`，上传前后核对一致 |
+| 回滚包 | `/root/emie/app.jar.bak.pre-31f4140-20260720_154128`，旧 JAR SHA-256 `7ca4f375450f7be0c73863a1861b8d577ef65ca7daf66f845cd0e27722a52f74` |
+| 生产验证 | `release-sha.txt=31f4140`；`emie-app`、`emie-preview-converter` 均 running；公开配置 HTTP 200；Java 21、Tomcat 8080 正常启动 |
+| 日志 | 发布后启动日志无 `ERROR` 或异常，启动耗时约 33 秒 |
+| 回滚 | 未执行 |
+
 ## 2026-07-20 公司常规品二次评分通知发布
 
 | 项目 | 记录 |
