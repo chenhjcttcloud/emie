@@ -509,3 +509,9 @@
 - 生产应用 JAR 上传前后 SHA-256 均为 `dded226676ef5658b6a40690b84d23dfd0d2060d40f40b0daf9b92202d7f9840`；回滚包为 `/root/emie/app.jar.bak.pre-dfd84d9-20260720_120153`。
 - 生产 `emie-app`、`emie-preview-converter` 均运行，公开配置 HTTP 200，首页加载 `bootstrap.js?v=165`，剪贴板图片上传模块可读取，发布后日志无新增 ERROR。
 - 当前后续只需人工验收登录态下的子任务、组织架构、角色徽章和飞书图片粘贴上传；本地与生产均已更新。
+
+## 2026-07-20 产品企划子任务只读页面报错修复（本地）
+
+- 根因：`renderDesignerTasks` 的 `readOnly` 参数未传入独立的 `renderDesignerTaskCards`，卡片模板直接引用未定义变量。
+- 已将只读状态显式传入首次渲染和筛选刷新，修复产品企划打开全部/待处理子任务页面时报 `readonly is not defined`。
+- 前端资源更新至 `dashboard-designer.js?v=166`、`bootstrap.js?v=166`；待执行本地测试，尚未提交、推送或部署生产。

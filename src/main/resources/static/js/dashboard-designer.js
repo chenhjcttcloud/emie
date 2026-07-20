@@ -29,6 +29,7 @@ async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.
     return rank(a) - rank(b) || (a.plannedDate || '9999-12-31').localeCompare(b.plannedDate || '9999-12-31') || (b.id - a.id);
   });
 
+  EMIE.dashboardState.designerTasksReadOnly = readOnly;
   main.innerHTML = `
     <h2 style="font-size:22px;margin-bottom:20px;">🎨 ${bucket === 'pending' ? '待处理子任务' : bucket === 'completed' ? '已完成子任务' : '我的子任务'} <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${myTasks.length})</span></h2>
     <div class="filter-bar">
@@ -60,7 +61,7 @@ async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.
       <input type="date" class="form-input" id="designerTaskDateEnd" data-emie-onchange="filterDesignerTasks()" style="min-width:130px;" title="计划完成日期止">
       <button class="btn btn-outline btn-sm" data-emie-onclick="resetDesignerTaskFilters()">↺ 重置</button>
     </div>
-    <div id="designerTaskContainer">${renderDesignerTaskCards(myTasks)}</div>
+    <div id="designerTaskContainer">${renderDesignerTaskCards(myTasks, readOnly)}</div>
   `;
   EMIE.dashboardState.designerTaskCache = myTasks;
 }
@@ -88,7 +89,7 @@ function applyFilterDesignerTasks() {
   list = list.filter(t => isDateInRange(t.plannedDate, dateStart, dateEnd));
 
   const c = document.getElementById('designerTaskContainer');
-  if (c) c.innerHTML = renderDesignerTaskCards(list);
+  if (c) c.innerHTML = renderDesignerTaskCards(list, EMIE.dashboardState.designerTasksReadOnly === true);
 }
 
 function resetDesignerTaskFilters() {
@@ -107,7 +108,7 @@ function resetDesignerTaskFilters() {
   filterDesignerTasks();
 }
 
-function renderDesignerTaskCards(tasks) {
+function renderDesignerTaskCards(tasks, readOnly = false) {
   if (!tasks.length) return `<div class="empty"><div class="empty-icon">🎉</div><p>暂无子任务</p></div>`;
   return `<div class="subtask-list">
       ${tasks.map(t => {

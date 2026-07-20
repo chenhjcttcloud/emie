@@ -89,7 +89,7 @@ class FrontendModuleLayoutTest {
             if (module.equals("bootstrap.js")) continue;
             int currentIndex = bootstrap.indexOf("./" + module + "?v=147");
             if (module.equals("dashboard-designer.js")) {
-                currentIndex = bootstrap.indexOf("./" + module + "?v=154");
+                currentIndex = bootstrap.indexOf("./" + module + "?v=166");
             }
             if (module.equals("dashboard-lists.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=155");
             if (module.equals("core-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=155");
@@ -105,7 +105,7 @@ class FrontendModuleLayoutTest {
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=165\"></script>"),
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=166\"></script>"),
                 "页面应只通过当前版本 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
