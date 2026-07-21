@@ -52,6 +52,10 @@ function addSubTask(pid) {
     ? `<option value="">请选择企划</option>` +
     EMIE.state.users.planner.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
     : `<option value="">暂无企划人员</option>`;
+  const salesOpts = EMIE.state.users.sales && EMIE.state.users.sales.length
+    ? `<option value="">请选择销售</option>` +
+      EMIE.state.users.sales.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
+    : `<option value="">暂无销售人员</option>`;
 
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
@@ -77,6 +81,9 @@ function addSubTask(pid) {
               <label class="checkbox-item" style="cursor:pointer;" data-emie-onclick="switchAssigneeType('add', 'planner', this)">
                 <input type="radio" name="assigneeRole" value="planner" data-emie-onchange="switchAssigneeType('add', 'planner')" style="display:none;"> 📋 企划
               </label>
+              <label class="checkbox-item" style="cursor:pointer;" data-emie-onclick="switchAssigneeType('add', 'sales', this)">
+                <input type="radio" name="assigneeRole" value="sales" data-emie-onchange="switchAssigneeType('add', 'sales')" style="display:none;"> 💼 销售
+              </label>
             </div>
           </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 指派子任务负责人</label>
@@ -97,7 +104,7 @@ function addSubTask(pid) {
           <div class="form-label" style="margin-bottom:8px;">📎 附件（可选）</div>
           <div class="upload-area" data-emie-onclick="document.getElementById('subTaskAttachmentInput').click()">
             <div>📁 拖拽文件到此处，或点击选择文件</div>
-            <input type="file" id="subTaskAttachmentInput" multiple style="display:none" data-emie-onchange="handleSubTaskAttachments(this)">
+            <input type="file" id="subTaskAttachmentInput" multiple accept=".ai,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleSubTaskAttachments(this)">
           </div>
           <div class="file-list" id="createAttachmentList"></div>
         </div>
@@ -221,6 +228,11 @@ function editTask(pid, tid) {
           ? '<option value="">请选择企划</option>' +
             EMIE.state.users.planner.map(u => `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
           : '<option value="">暂无企划人员</option>')
+      : task.assigneeRole === 'sales'
+        ? (EMIE.state.users.sales && EMIE.state.users.sales.length
+            ? '<option value="">请选择销售</option>' +
+              EMIE.state.users.sales.map(u => `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
+            : '<option value="">暂无销售人员</option>')
       : task.assigneeRole === 'supplychain'
         ? (EMIE.state.users.supplychain && EMIE.state.users.supplychain.length
             ? '<option value="">请选择供应链</option>' +
@@ -253,6 +265,9 @@ function editTask(pid, tid) {
                 <label class="checkbox-item ${task.assigneeRole === 'planner' ? 'checked' : ''}" style="cursor:pointer;" data-emie-onclick="switchEditAssigneeType('planner', this)">
                   <input type="radio" name="assigneeRole" value="planner" ${task.assigneeRole === 'planner' ? 'checked' : ''} style="display:none;"> 📋 企划
                 </label>
+                <label class="checkbox-item ${task.assigneeRole === 'sales' ? 'checked' : ''}" style="cursor:pointer;" data-emie-onclick="switchEditAssigneeType('sales', this)">
+                  <input type="radio" name="assigneeRole" value="sales" ${task.assigneeRole === 'sales' ? 'checked' : ''} style="display:none;"> 💼 销售
+                </label>
               </div>
             </div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 指派子任务负责人</label>
@@ -273,7 +288,7 @@ function editTask(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">📎 附件（可选）</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('editAttachmentInput').click()">
               <div>📁 拖拽文件到此处，或点击选择文件</div>
-              <input type="file" id="editAttachmentInput" multiple style="display:none" data-emie-onchange="handleEditAttachments(this)">
+            <input type="file" id="editAttachmentInput" multiple accept=".ai,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleEditAttachments(this)">
             </div>
             <div class="file-list" id="createAttachmentList"></div>
           </div>
@@ -431,7 +446,7 @@ async function taskDeliver(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">📎 交付附件</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('deliverAttachmentInput').click()">
               <div>📁 拖拽文件到此处，或点击选择文件</div>
-              <input type="file" id="deliverAttachmentInput" multiple style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
+            <input type="file" id="deliverAttachmentInput" multiple accept=".ai,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
             </div>
             <div class="file-list" id="deliverAttachmentList"></div>
           </div>
@@ -526,7 +541,7 @@ async function taskRedeliver(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">📎 交付附件</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('deliverAttachmentInput').click()">
               <div>📁 拖拽文件到此处，或点击选择文件</div>
-              <input type="file" id="deliverAttachmentInput" multiple style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
+            <input type="file" id="deliverAttachmentInput" multiple accept=".ai,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
             </div>
             <div class="file-list" id="deliverAttachmentList"></div>
           </div>

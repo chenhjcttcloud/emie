@@ -47,6 +47,14 @@ async function renderOrderList(main, type, role, uid) {
         <option value="国内">国内</option>
         <option value="海外">海外</option>
       </select>
+      <select class="form-select" id="projectOwnerRoleFilter" data-emie-onchange="changeProjectOwnerRole(this.value)" style="min-width:140px;">
+        <option value="all">全部负责人</option>
+        <option value="sales">需求方（销售）</option>
+        <option value="planner">产品企划</option>
+      </select>
+      <select class="form-select" id="projectOwnerFilter" style="min-width:150px;" disabled>
+        <option value="">请先选择负责人类型</option>
+      </select>
       <input class="form-input" placeholder="🔍 搜索编号/描述..." data-emie-oninput="filterProjectList()" style="min-width:180px;" id="searchInput">
       <input type="date" class="form-input" id="filterDateStart" data-emie-onchange="filterProjectList()" style="min-width:130px;" title="开始日期">
       <span style="color:var(--gray-400);font-size:12px;">~</span>
@@ -141,10 +149,13 @@ async function applyFilterProjectList() {
   const status = document.getElementById('projectStatusFilter')?.value || 'all';
   const category = document.getElementById('projectCategoryFilter')?.value || 'all';
   const market = document.getElementById('projectMarketFilter')?.value || 'all';
+  const ownerRole = document.getElementById('projectOwnerRoleFilter')?.value || 'all';
+  const ownerId = document.getElementById('projectOwnerFilter')?.value || '';
   state.filters = {
     ...(status !== 'all' ? { status } : {}),
     ...(category !== 'all' ? { category } : {}),
     ...(market !== 'all' ? { market } : {}),
+    ...(ownerRole !== 'all' && ownerId ? { ownerRole, ownerId } : {}),
     ...(document.getElementById('searchInput')?.value?.trim() ? { keyword: document.getElementById('searchInput').value.trim() } : {}),
     ...(document.getElementById('filterDateStart')?.value ? { deadlineStart: document.getElementById('filterDateStart').value } : {}),
     ...(document.getElementById('filterDateEnd')?.value ? { deadlineEnd: document.getElementById('filterDateEnd').value } : {}),
@@ -161,13 +172,31 @@ function resetProjectFilters() {
   if (statusEl) statusEl.value = 'all';
   const categoryEl = document.getElementById('projectCategoryFilter');
   const marketEl = document.getElementById('projectMarketFilter');
+  const ownerRoleEl = document.getElementById('projectOwnerRoleFilter');
+  const ownerEl = document.getElementById('projectOwnerFilter');
   if (searchEl) searchEl.value = '';
   if (categoryEl) categoryEl.value = 'all';
   if (marketEl) marketEl.value = 'all';
+  if (ownerRoleEl) ownerRoleEl.value = 'all';
+  if (ownerEl) { ownerEl.innerHTML = '<option value="">请先选择负责人类型</option>'; ownerEl.disabled = true; }
   if (dateStartEl) dateStartEl.value = '';
   if (dateEndEl) dateEndEl.value = '';
   if (EMIE.projectListState) EMIE.projectListState.filters = {};
   changeProjectListPage(0);
+}
+
+function changeProjectOwnerRole(role) {
+  const select = document.getElementById('projectOwnerFilter');
+  if (!select) return;
+  if (role === 'all') {
+    select.innerHTML = '<option value="">请先选择负责人类型</option>';
+    select.disabled = true;
+    return;
+  }
+  const users = EMIE.state.users?.[role] || [];
+  select.innerHTML = '<option value="">请选择具体负责人</option>' +
+    users.map(u => `<option value="${escHtml(u.userId)}">${escHtml(u.name)}${u.title ? `（${escHtml(u.title)}）` : ''}</option>`).join('');
+  select.disabled = users.length === 0;
 }
 
 // ==================== 我的子任务（企划派发任务界面） ====================
@@ -360,6 +389,7 @@ EMIE.registerActions({
   jumpProjectListPage,
   filterProjectList,
   applyFilterProjectList,
+  changeProjectOwnerRole,
   resetProjectFilters,
   renderMyTasks,
   renderDepartmentTasks,

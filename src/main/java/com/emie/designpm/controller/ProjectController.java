@@ -97,6 +97,8 @@ public class ProjectController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String deadlineStart,
             @RequestParam(required = false) String deadlineEnd,
+            @RequestParam(required = false) String ownerRole,
+            @RequestParam(required = false) String ownerId,
             @RequestParam(required = false, defaultValue = "false") boolean participating,
             @RequestParam(required = false, defaultValue = "0") int page,
             @RequestParam(required = false, defaultValue = "15") int size,
@@ -108,7 +110,7 @@ public class ProjectController {
             ProjectListQuery query = new ProjectListQuery(
                     normalizeType(type), normalizeStatus(status), trimToNull(category, 50), normalizeMarket(market),
                     trimToNull(keyword, 100), normalizeDate(deadlineStart), normalizeDate(deadlineEnd), participating,
-                    PageRequest.of(safePage, safeSize));
+                    PageRequest.of(safePage, safeSize), normalizeOwnerRole(ownerRole), trimToNull(ownerId, 100));
             if (query.deadlineStart() != null && query.deadlineEnd() != null
                     && query.deadlineStart().compareTo(query.deadlineEnd()) > 0) {
                 return ResponseEntity.badRequest().body(ApiErrorResponse.invalidQuery("开始日期不能晚于结束日期"));
@@ -123,6 +125,15 @@ public class ProjectController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(ApiErrorResponse.invalidQuery(e.getMessage()));
         }
+    }
+
+    private String normalizeOwnerRole(String role) {
+        String value = trimToNull(role, 30);
+        if (value == null || "all".equals(value)) return null;
+        if (!List.of("sales", "planner").contains(value)) {
+            throw new IllegalArgumentException("负责人类型不合法");
+        }
+        return value;
     }
 
     private String normalizeType(String type) {

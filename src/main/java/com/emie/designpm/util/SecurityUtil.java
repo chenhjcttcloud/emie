@@ -19,7 +19,7 @@ public class SecurityUtil {
     private static final List<String> ALLOWED_ATTACHMENT_EXTS = Arrays.asList(
         "jpg", "jpeg", "png", "gif", "bmp", "webp",
         "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
-        "txt", "csv", "zip", "rar", "7z"
+        "txt", "csv", "zip", "rar", "7z", "ai"
     );
 
     // 禁止上传的扩展名（高危）

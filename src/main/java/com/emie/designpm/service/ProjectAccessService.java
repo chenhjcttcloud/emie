@@ -18,7 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** 统一解析本人及部门负责人可见的项目范围。部门负责人只有查看权限，不自动获得项目写权限。 */
+/** 统一解析角色可见的项目范围；企划项目视角统一，部门负责人只有查看权限，不自动获得项目写权限。 */
 @Service
 public class ProjectAccessService {
 
@@ -98,6 +98,13 @@ public class ProjectAccessService {
     /** 返回状态看板允许展示的用户；普通成员只有自己，部门负责人包含本部门同角色成员。 */
     public List<User> visibleUsers(String viewerRole, String viewerUserId, String requestedRole) {
         if ("admin".equals(viewerRole)) return userRepository.findByRole(requestedRole);
+        // 所有产品企划使用统一项目视角，不再按部门负责人或所属部门切分项目范围。
+        // 写入/编辑权限仍由 ProjectService 按项目负责人单独校验。
+        if ("planner".equals(viewerRole) && "planner".equals(requestedRole)) {
+            return userRepository.findByRole("planner").stream()
+                    .filter(user -> user.getStatus() == null || "active".equalsIgnoreCase(user.getStatus()))
+                    .toList();
+        }
         // 产品企划需要查看执行团队状态面板；这里仅开放状态看板读取，不改变项目编辑权限。
         if ("planner".equals(viewerRole) && ("designer".equals(requestedRole) || "supplychain".equals(requestedRole))) {
             return userRepository.findByRole(requestedRole).stream()
@@ -134,10 +141,24 @@ public class ProjectAccessService {
         if ("admin".equals(viewerRole)) {
             return userRepository.findAll().stream().map(User::getUserId).toList();
         }
+        if ("planner".equals(viewerRole)) {
+            return userRepository.findByUserId(viewerUserId)
+                    .map(User::getDepartmentId)
+                    .map(userRepository::findByDepartmentId)
+                    .orElseGet(() -> userRepository.findByRole("planner"))
+                    .stream()
+                    .filter(user -> "planner".equals(user.getRole()))
+                    .map(User::getUserId)
+                    .filter(id -> !id.equals(viewerUserId))
+                    .toList();
+        }
         return departmentRepository.findByHeadUserId(viewerUserId)
                 .filter(d -> Boolean.TRUE.equals(d.getActive())
                         && ("sales".equals(d.getRole()) || "planner".equals(d.getRole())))
-                .map(d -> userRepository.findByDepartmentId(d.getId()).stream().map(User::getUserId).toList())
+                .map(d -> userRepository.findByDepartmentId(d.getId()).stream()
+                        .map(User::getUserId)
+                        .filter(id -> !id.equals(viewerUserId))
+                        .toList())
                 .orElse(List.of());
     }
 

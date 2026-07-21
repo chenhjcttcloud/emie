@@ -33,6 +33,20 @@ public class AdminService {
 
     private static final Set<String> BUSINESS_ROLES = Set.of("sales", "planner", "designer", "supplychain", "admin");
 
+    /** 将用户管理端可能传入的历史别名统一为系统标准角色标识。 */
+    private static String normalizeBusinessRole(String role) {
+        if (role == null) return null;
+        String value = role.trim();
+        return switch (value.toLowerCase(Locale.ROOT)) {
+            case "供应链", "supply", "supply_chain", "supply-chain" -> "supplychain";
+            case "管理员", "administrator" -> "admin";
+            case "销售" -> "sales";
+            case "产品企划", "企划" -> "planner";
+            case "设计师" -> "designer";
+            default -> value;
+        };
+    }
+
     private final SystemConfigRepository configRepository;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
@@ -363,6 +377,7 @@ public class AdminService {
     public User updateUserRole(Long userId, String newRole, String updatedBy) {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+        newRole = normalizeBusinessRole(newRole);
         Role assignedRole = roleRepository.findByName(newRole).orElse(null);
         if (assignedRole == null && !BUSINESS_ROLES.contains(newRole)) {
             throw new IllegalArgumentException("角色不存在或不可分配");

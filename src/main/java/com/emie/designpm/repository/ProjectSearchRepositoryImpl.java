@@ -96,6 +96,10 @@ public class ProjectSearchRepositoryImpl implements ProjectSearchRepository {
         if (query.deadlineStart() != null) predicates.add(cb.greaterThanOrEqualTo(project.get("deadline"), query.deadlineStart()));
         if (query.deadlineEnd() != null) predicates.add(cb.lessThanOrEqualTo(project.get("deadline"), query.deadlineEnd()));
         if (query.keyword() != null) addKeywordPredicate(cb, project, predicates, query.keyword());
+        if (query.ownerRole() != null && query.ownerId() != null) {
+            predicates.add(cb.equal("sales".equals(query.ownerRole())
+                    ? project.get("salesId") : project.get("plannerId"), query.ownerId()));
+        }
         return predicates.toArray(Predicate[]::new);
     }
 

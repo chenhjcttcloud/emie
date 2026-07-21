@@ -112,6 +112,16 @@ stop() {
 restart() {
   stop
   sleep 1
+  # 兼容旧版脚本未记录 PID 的情况，确保端口释放后再启动新 JAR。
+  if command -v lsof >/dev/null 2>&1; then
+    LISTENING_PIDS=$(lsof -tiTCP:$PORT -sTCP:LISTEN 2>/dev/null || true)
+    if [ -n "$LISTENING_PIDS" ]; then
+      echo "清理占用端口 $PORT 的旧进程..."
+      kill $LISTENING_PIDS 2>/dev/null || true
+      sleep 1
+      kill -9 $LISTENING_PIDS 2>/dev/null || true
+    fi
+  fi
   # 重新打包确保代码最新
   echo "重新打包..."
   scripts/mvnw-java21.sh package -DskipTests -q || { echo "打包失败"; exit 1; }

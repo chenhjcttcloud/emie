@@ -103,11 +103,11 @@ public class ProjectService {
      */
     @Transactional(readOnly = true)
     public Map<String, Long> getNavigationBadgeStats(String role, String userId) {
-        boolean participating = "designer".equals(role) || "supplychain".equals(role);
+        boolean participating = List.of("designer", "supplychain", "sales").contains(role);
         long channelCount = projectAccessService.countVisibleProjects(role, userId, "channel_custom", participating);
         long regularCount = projectAccessService.countVisibleProjects(role, userId, "regular", participating);
         long totalCount = channelCount + regularCount;
-        long myTaskCount = ("designer".equals(role) || "supplychain".equals(role))
+        long myTaskCount = List.of("designer", "supplychain", "sales").contains(role)
                 ? subTaskRepository.countByDesignerIdAndRoleAndActionableStatus(userId, role)
                 : 0;
         long pendingScoreCount = countPendingScoresForBadge(role, userId);
@@ -452,9 +452,10 @@ public class ProjectService {
         task.setPublisherId((String) body.get("currentUserId"));
         task.setPublisherName((String) body.getOrDefault("currentUser", ""));
         task.setPublisherRole(role);
-        // 设置负责人角色类型（designer / supplychain），默认 designer
+        // 设置负责人角色类型（designer / supplychain / planner / sales），默认 designer
         String assigneeRole = (String) body.get("assigneeRole");
         task.setAssigneeRole(assigneeRole != null && !assigneeRole.isBlank() ? assigneeRole : "designer");
+        validateSubTaskAssignee(designerId, task.getAssigneeRole());
         task.setDetails(details);
         task.setReferenceImagesJson(validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true));
         task.setAttachmentsJson(validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
@@ -482,6 +483,17 @@ public class ProjectService {
         safeNotify("TASK_ASSIGNED", persistedTask.getDesignerId(), "sub_task", persistedTask.getId(),
                 (String) body.getOrDefault("currentUserId", ""), notificationContext(saved, persistedTask, currentUser, ""));
         return saved;
+    }
+
+    private void validateSubTaskAssignee(String userId, String assigneeRole) {
+        if (!List.of("designer", "supplychain", "planner", "sales").contains(assigneeRole)) {
+            throw new RuntimeException("不支持的子任务负责人类型");
+        }
+        if (userId == null || userId.isBlank()) return;
+        User assignee = userService.getUserByUserId(userId);
+        if (assignee == null || !assigneeRole.equals(assignee.getRole())) {
+            throw new RuntimeException("子任务负责人和负责人类型不匹配");
+        }
     }
 
     public Project updateSubTask(Long projectId, Long taskId, Map<String, Object> body) {
@@ -517,6 +529,7 @@ public class ProjectService {
         if (body.containsKey("assigneeRole")) {
             task.setAssigneeRole((String) body.get("assigneeRole"));
         }
+        validateSubTaskAssignee(task.getDesignerId(), task.getAssigneeRole() == null ? "designer" : task.getAssigneeRole());
         if (body.containsKey("details")) task.setDetails(SecurityUtil.sanitizeText((String) body.get("details"), 2000));
         if (body.containsKey("referenceImagesJson")) task.setReferenceImagesJson(validateAndCleanFiles((String) body.get("referenceImagesJson"), true));
         if (body.containsKey("attachmentsJson")) task.setAttachmentsJson(validateAndCleanFiles((String) body.get("attachmentsJson"), false));

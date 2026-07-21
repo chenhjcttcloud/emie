@@ -4,6 +4,7 @@ const render = (...args) => EMIE.actions.render(...args);
 // ==================== 侧边栏 ====================
 function canViewOtherTasksNav() {
   if (EMIE.state.currentRole === 'admin') return true;
+  if (EMIE.state.currentRole === 'planner') return true;
   if (!['sales', 'planner'].includes(EMIE.state.currentRole)) return false;
   const uid = EMIE.state.currentUserId;
   return (EMIE.state.departments || []).some(d =>
@@ -17,11 +18,12 @@ function renderSidebar() {
   if (!showOtherTasks && EMIE.state.currentView === 'other-tasks') EMIE.state.currentView = 'dashboard';
 
   if (EMIE.state.currentRole === 'sales') {
-    // 销售：工作台、全部项目、渠道定制单、公司常规品、待评分
+    // 销售：工作台、项目、我的子任务、评分
     navs.push({ view: 'dashboard', icon: '📊', label: '工作台', badge: '' });
     navs.push({ view: 'orders', icon: '📋', label: '全部项目', badge: 'badgeTotal' });
     navs.push({ view: 'channel', icon: '📦', label: '渠道定制单', badge: 'badgeChannel' });
     navs.push({ view: 'regular', icon: '🏭', label: '公司常规品', badge: 'badgeRegular' });
+    navs.push({ view: 'tasks', icon: '📌', label: '我的子任务', badge: 'badgeMyTasks' });
     if (showOtherTasks) navs.push({ view: 'other-tasks', icon: '🧭', label: '其他子任务', badge: '' });
     navs.push({ view: 'scoring', icon: '⭐', label: '评分', badge: 'badgeScoring' });
   } else if (EMIE.state.currentRole === 'admin') {

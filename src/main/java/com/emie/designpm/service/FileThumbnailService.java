@@ -12,11 +12,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Iterator;
+import java.util.concurrent.Semaphore;
 
 /** 生成并缓存图片缩略图，原图只在用户点击预览时读取。 */
 @Service
 public class FileThumbnailService {
     private static final int MAX_SIDE = 480;
+    private static final Semaphore THUMBNAIL_SLOTS = new Semaphore(2);
     private final FileArchiveService fileArchiveService;
 
     public FileThumbnailService(FileArchiveService fileArchiveService) {
@@ -36,20 +38,55 @@ public class FileThumbnailService {
         if (Files.exists(target) && Files.getLastModifiedTime(target).toMillis() >= Files.getLastModifiedTime(source).toMillis()) {
             return target;
         }
-        BufferedImage input = ImageIO.read(source.toFile());
-        if (input == null) throw new IOException("无法读取图片");
-        double scale = Math.min(1d, (double) MAX_SIDE / Math.max(input.getWidth(), input.getHeight()));
-        int width = Math.max(1, (int) Math.round(input.getWidth() * scale));
-        int height = Math.max(1, (int) Math.round(input.getHeight() * scale));
-        BufferedImage output = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        Graphics2D graphics = output.createGraphics();
-        graphics.setColor(Color.WHITE);
-        graphics.fillRect(0, 0, width, height);
-        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        graphics.drawImage(input, 0, 0, width, height, null);
-        graphics.dispose();
-        writeJpeg(output, target);
-        return target;
+        boolean acquired = false;
+        try {
+            THUMBNAIL_SLOTS.acquire();
+            acquired = true;
+            if (Files.exists(target) && Files.getLastModifiedTime(target).toMillis() >= Files.getLastModifiedTime(source).toMillis()) {
+                return target;
+            }
+            BufferedImage input = ImageIO.read(source.toFile());
+            if (input == null) throw new IOException("无法读取图片");
+            try {
+                double scale = Math.min(1d, (double) MAX_SIDE / Math.max(input.getWidth(), input.getHeight()));
+                int width = Math.max(1, (int) Math.round(input.getWidth() * scale));
+                int height = Math.max(1, (int) Math.round(input.getHeight() * scale));
+                BufferedImage output = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+                try {
+                    Graphics2D graphics = output.createGraphics();
+                    try {
+                        graphics.setColor(Color.WHITE);
+                        graphics.fillRect(0, 0, width, height);
+                        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                        graphics.drawImage(input, 0, 0, width, height, null);
+                    } finally {
+                        graphics.dispose();
+                    }
+                    writeJpegAtomically(output, target);
+                } finally {
+                    output.flush();
+                }
+            } finally {
+                input.flush();
+            }
+            return target;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("缩略图生成被中断", e);
+        } finally {
+            if (acquired) THUMBNAIL_SLOTS.release();
+        }
+    }
+
+    private void writeJpegAtomically(BufferedImage image, Path target) throws IOException {
+        Path temp = target.resolveSibling(target.getFileName() + ".tmp-" + Thread.currentThread().getId());
+        try {
+            writeJpeg(image, temp);
+            Files.move(temp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } finally {
+            Files.deleteIfExists(temp);
+        }
     }
 
     private void writeJpeg(BufferedImage image, Path target) throws IOException {
