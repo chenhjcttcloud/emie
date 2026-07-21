@@ -262,7 +262,7 @@ function openCreateProject(type) {
           <div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片</div>
           <div class="upload-area" data-emie-onclick="document.getElementById('createRefImageInput').click()">
             <div>📁 拖拽图片到此处，或点击选择图片</div>
-            <input type="file" id="createRefImageInput" multiple accept="image/*" style="display:none" data-emie-onchange="handleCreateRefImages(this)">
+            <input type="file" id="createRefImageInput" multiple accept="image/*,.ai" style="display:none" data-emie-onchange="handleCreateRefImages(this)">
           </div>
           <div class="file-list" id="createRefImageList"></div>
         </div>
@@ -522,7 +522,7 @@ function openEditProject(pid) {
             <div class="form-group"><label class="form-label"><span class="required">*</span> 产品要求</label><textarea class="form-textarea" name="productRequirements" data-emie-oninput="formModified()">${escHtml(detail.productRequirements || '')}</textarea></div>
             <div class="form-group"><label class="form-label">细节描述（可选）</label><textarea class="form-textarea" name="description" data-emie-oninput="formModified()">${escHtml(detail.description || '')}</textarea></div>
           </form>
-          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);"><div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片</div><div class="upload-area" data-emie-onclick="document.getElementById('editProjectRefImageInput').click()"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="editProjectRefImageInput" multiple accept="image/*" style="display:none" data-emie-onchange="handleEditProjectRefImages(this)"></div><div class="file-list" id="editProjectRefImageList"></div></div>
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);"><div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片</div><div class="upload-area" data-emie-onclick="document.getElementById('editProjectRefImageInput').click()"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="editProjectRefImageInput" multiple accept="image/*,.ai" style="display:none" data-emie-onchange="handleEditProjectRefImages(this)"></div><div class="file-list" id="editProjectRefImageList"></div></div>
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);"><div class="form-label" style="margin-bottom:8px;">📎 附件</div><div class="upload-area" data-emie-onclick="document.getElementById('editProjectAttachmentInput').click()"><div>📁 拖拽文件到此处，或点击选择文件</div><input type="file" id="editProjectAttachmentInput" multiple accept=".ai,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleEditProjectAttachments(this)"></div><div class="file-list" id="editProjectAttachmentList"></div></div>
         </div>
         <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('editProjectModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitEditProject(${pid}))">保存修改</button></div>

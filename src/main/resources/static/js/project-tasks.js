@@ -96,7 +96,7 @@ function addSubTask(pid) {
           <div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片（可选）</div>
           <div class="upload-area" data-emie-onclick="document.getElementById('subTaskRefImageInput').click()">
             <div>📁 拖拽图片到此处，或点击选择图片</div>
-            <input type="file" id="subTaskRefImageInput" multiple accept="image/*" style="display:none" data-emie-onchange="handleSubTaskRefImages(this)">
+            <input type="file" id="subTaskRefImageInput" multiple accept="image/*,.ai" style="display:none" data-emie-onchange="handleSubTaskRefImages(this)">
           </div>
           <div class="file-list" id="createRefImageList"></div>
         </div>
@@ -280,7 +280,7 @@ function editTask(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片（可选）</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('editRefImageInput').click()">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
-              <input type="file" id="editRefImageInput" multiple accept="image/*" style="display:none" data-emie-onchange="handleEditRefImages(this)">
+              <input type="file" id="editRefImageInput" multiple accept="image/*,.ai" style="display:none" data-emie-onchange="handleEditRefImages(this)">
             </div>
             <div class="file-list" id="createRefImageList"></div>
           </div>
@@ -438,7 +438,7 @@ async function taskDeliver(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('deliverImageInput').click()">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
-              <input type="file" id="deliverImageInput" multiple accept="image/*" style="display:none" data-emie-onchange="handleDeliverImages(this)">
+              <input type="file" id="deliverImageInput" multiple accept="image/*,.ai" style="display:none" data-emie-onchange="handleDeliverImages(this)">
             </div>
             <div class="file-list" id="deliverImageList"></div>
           </div>
@@ -533,7 +533,7 @@ async function taskRedeliver(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('deliverImageInput').click()">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
-              <input type="file" id="deliverImageInput" multiple accept="image/*" style="display:none" data-emie-onchange="handleDeliverImages(this)">
+              <input type="file" id="deliverImageInput" multiple accept="image/*,.ai" style="display:none" data-emie-onchange="handleDeliverImages(this)">
             </div>
             <div class="file-list" id="deliverImageList"></div>
           </div>
