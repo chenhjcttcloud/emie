@@ -71,6 +71,15 @@ public class AdminController {
         }
     }
 
+    @PostMapping("/notifications/temporary-broadcast")
+    public ResponseEntity<?> sendTemporaryBroadcast(@RequestBody Map<String, String> body,
+                                                     @RequestHeader("X-Auth-Token") String token) {
+        AuthController.AuthSession session = AuthController.validateToken(token);
+        if (session == null || !"admin".equals(session.role())) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可发送临时通知"));
+        try { return ResponseEntity.ok(notificationTestService.sendTemporaryBroadcast(body.get("title"), body.get("content"), session.userId())); }
+        catch (IllegalArgumentException e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
+    }
+
     @GetMapping("/notifications/failures")
     public ResponseEntity<?> getNotificationFailures(@RequestHeader("X-Auth-Token") String token) {
         AuthController.AuthSession session = AuthController.validateToken(token);

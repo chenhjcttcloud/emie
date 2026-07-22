@@ -491,22 +491,13 @@ function renderProjectPipeline(detail) {
   const isChannel = detail.type === 'channel_custom';
   const tasks = detail.tasks || [];
 
-  // 定义一个管道的 5 个阶段
-  const stages = isChannel
-    ? [
-        { key: 'create', label: '创建项目', detail: '销售 ' + (detail.salesName || '') },
-        { key: 'accept', label: '企划接单', detail: detail.plannerName || '' },
-        { key: 'execute', label: '子任务执行', detail: '' },
-        { key: 'planner_score', label: '企划评分', detail: '' },
-        { key: 'sales_confirm', label: '销售确认', detail: '' },
-      ]
-    : [
-        { key: 'create', label: '创建项目', detail: '销售 ' + (detail.salesName || '') },
-        { key: 'accept', label: '企划接单', detail: detail.plannerName || '' },
-        { key: 'execute', label: '子任务执行', detail: '' },
-        { key: 'planner_score', label: '企划评分', detail: '' },
-        { key: 'admin_confirm', label: '管理确认', detail: '' },
-      ];
+  // 项目总进度只展示项目生命周期；评分属于子任务验收细节，不作为项目节点。
+  const stages = [
+    { key: 'create', label: '创建项目', detail: isChannel ? '销售 ' + (detail.salesName || '') : '' },
+    { key: 'accept', label: '企划接单', detail: detail.plannerName || '' },
+    { key: 'execute', label: '子任务进行中', detail: '' },
+    { key: 'complete', label: '项目完结', detail: '' },
+  ];
 
   // 计算各阶段状态: done / current / pending / error
   const status = detail.status;
@@ -520,26 +511,13 @@ function renderProjectPipeline(detail) {
         return !['pending_planner'].includes(status) ? 'done' : 'current';
       case 'execute': {
         if (taskStatuses.length === 0) return status === 'completed' ? 'done' : 'current';
-        const allDelivered = taskStatuses.every(s => ['delivered','planner_approved','sales_approved','admin_approved','completed'].includes(s));
-        if (allDelivered) return 'done';
-        const anyActive = taskStatuses.some(s => ['accepted','delivered'].includes(s));
-        return anyActive ? 'current' : 'pending';
+        if (status === 'completed') return 'done';
+        return !['pending_planner'].includes(status) ? 'current' : 'pending';
       }
-      case 'planner_score': {
-        if (taskStatuses.length === 0) return 'pending';
-        const allScored = taskStatuses.every(s => ['planner_approved','sales_approved','admin_approved','completed'].includes(s));
-        if (allScored) return 'done';
-        const anyDelivered = taskStatuses.some(s => s === 'delivered');
-        return anyDelivered ? 'current' : 'pending';
-      }
-      case 'sales_confirm':
-      case 'admin_confirm': {
-        if (taskStatuses.length === 0) return 'pending';
-        const targetStatus = key === 'sales_confirm' ? 'sales_approved' : 'admin_approved';
-        const allDone = taskStatuses.every(s => s === 'completed');
-        if (allDone) return 'done';
-        const awaitingConfirm = taskStatuses.some(s => s === 'planner_approved');
-        return awaitingConfirm ? 'current' : 'pending';
+      case 'complete': {
+        if (status === 'completed') return 'done';
+        const allTasksFinished = taskStatuses.length > 0 && taskStatuses.every(s => ['planner_approved', 'sales_approved', 'admin_approved', 'completed'].includes(s));
+        return allTasksFinished ? 'current' : 'pending';
       }
     }
     return 'pending';

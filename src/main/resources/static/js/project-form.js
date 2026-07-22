@@ -17,6 +17,7 @@ const renderFileList = (...args) => EMIE.actions.renderFileList(...args);
 const handleCreateRefImages = (...args) => EMIE.actions.handleCreateRefImages(...args);
 const handleCreateAttachments = (...args) => EMIE.actions.handleCreateAttachments(...args);
 const handleFileUpload = (...args) => EMIE.actions.handleFileUpload(...args);
+const roleLabel = (...args) => EMIE.actions.roleLabel(...args);
 
 // ==================== 产品类目 / 目标市场选择 ====================
 function onCategoryChange(sel) {
@@ -188,7 +189,7 @@ function openCreateProject(type) {
   const salesOpts = `<option value="">请选择需求方</option>` + EMIE.state.users.sales.map(u =>
     `<option value="${u.userId}" ${defaultSales === u.userId ? 'selected' : ''}>${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`
   ).join('');
-  const title = type === 'channel_custom' ? '新建渠道定制项目' : '新建常规品设计项目';
+  const title = type === 'channel_custom' ? '新建渠道定制项目' : (type === 'design_requirement' ? '新建设计/送审需求' : '新建常规品设计项目');
 
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
@@ -204,10 +205,12 @@ function openCreateProject(type) {
             <select class="form-select" name="salesId" ${EMIE.state.currentRole === 'sales' ? 'disabled' : ''} data-emie-onchange="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">${salesOpts}</select>
             ${EMIE.state.currentRole === 'sales' ? `<input type="hidden" name="salesId" value="${EMIE.state.currentUserId}">` : ''}
           </div>` : ''}
+          ${type === 'design_requirement' ? `<div class="form-group"><label class="form-label"><span class="required">*</span> 需求负责人</label><input class="form-input" value="${escHtml(getCurrentUserName())}" disabled><input type="hidden" name="responsibleId" value="${escHtml(EMIE.state.currentUserId)}"></div>` : ''}
           <div class="form-group"><label class="form-label"><span class="required">*</span> 产品企划</label>
             <select class="form-select" name="plannerId" ${EMIE.state.currentRole === 'planner' ? 'disabled' : ''} data-emie-onchange="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">${plannerOpts}</select>
             ${EMIE.state.currentRole === 'planner' ? `<input type="hidden" name="plannerId" value="${EMIE.state.currentUserId}">` : ''}
           </div>
+          ${type === 'design_requirement' ? `<div class="form-group"><label class="form-label">客户名称<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可选）</span></label><input class="form-input" name="customerName" placeholder="请输入客户名称（可选）" maxlength="100" data-emie-oninput="formModified()"></div>` : ''}
           <div class="form-group"><label class="form-label"><span class="required">*</span> 产品类目</label>
             <select class="form-select" name="productCategory" id="productCategorySelect" data-emie-onchange="onCategoryChange(this)">
               <option value="">请选择产品类目</option>
@@ -232,13 +235,13 @@ function openCreateProject(type) {
             <input type="hidden" name="ipSubOptions" id="ipSubOptionsInput" value="[]">
             <div class="form-hint" id="ipSubOptionHint"></div>
           </div>
-          <div class="form-group"><label class="form-label"><span class="required">*</span> 参考零售价</label>
+          <div class="form-group" style="${type === 'design_requirement' ? 'display:none;' : ''}"><label class="form-label"><span class="required">*</span> 参考零售价</label>
             <div class="chip-group" id="priceRangeChips">
               ${EMIE.state.priceRanges.map(p => `<span class="chip" data-value="${p.name}" data-emie-onclick="togglePriceRange(this)">${p.name}</span>`).join('')}
             </div>
             <input type="hidden" name="priceRange" id="priceRangeInput" value="">
           </div>
-          <div class="form-group"><label class="form-label"><span class="required">*</span> 目标市场<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选）</span></label>
+          <div class="form-group" style="${type === 'design_requirement' ? 'display:none;' : ''}"><label class="form-label"><span class="required">*</span> 目标市场<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选）</span></label>
             <div class="chip-group" id="marketChips">
               <span class="chip" data-value="国内" data-emie-onclick="toggleMarket(this)">国内</span>
               <span class="chip" data-value="海外" data-emie-onclick="toggleMarket(this)">海外</span>
@@ -246,7 +249,7 @@ function openCreateProject(type) {
             <input type="hidden" name="targetMarket" id="targetMarketInput" value="">
             <div class="form-hint">可多选</div>
           </div>
-          <div class="form-group"><label class="form-label">合规处罚<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选，非必选）</span></label>
+          <div class="form-group" style="${type === 'design_requirement' ? 'display:none;' : ''}"><label class="form-label">合规处罚<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选，非必选）</span></label>
             <div class="chip-group" id="complianceChips">
               ${EMIE.state.complianceItems.map(c => `<span class="chip" data-value="${c.name}" data-emie-onclick="toggleCompliance(this)">${c.name}</span>`).join('')}
             </div>
@@ -391,13 +394,13 @@ async function submitCreateProject(type) {
   }
 
   // 参考零售价
-  if (!data.priceRange) {
+  if (type !== 'design_requirement' && !data.priceRange) {
     addFieldError('priceRange', '请选择参考零售价');
   }
 
   // 目标市场
   const marketVal = data.targetMarket || '';
-  if (!marketVal || marketVal === '[]') {
+  if (type !== 'design_requirement' && (!marketVal || marketVal === '[]')) {
     addFieldError('targetMarket', '请选择目标市场');
   }
 
@@ -455,7 +458,7 @@ async function submitCreateProject(type) {
   }
 
   try {
-    await apiPost('/projects', data);
+    await apiPost(type === 'design_requirement' ? '/design-requirements' : '/projects', data);
     // 创建成功，清除草稿和缓存
     sessionStorage.removeItem('design_pm_create_draft');
     EMIE.state.cache.orders = []; // 清除项目列表缓存
@@ -463,6 +466,8 @@ async function submitCreateProject(type) {
     // 创建渠道定制项目后跳转到渠道列表视图
     if (type === 'channel_custom') {
       EMIE.state.currentView = 'channel';
+    } else if (type === 'design_requirement') {
+      EMIE.state.currentView = 'design-needs';
     }
     render();
   } catch (e) {

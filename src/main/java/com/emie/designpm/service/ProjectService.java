@@ -1242,8 +1242,9 @@ public class ProjectService {
                 info.put("title", u.getTitle());
 
                 List<SubTask> userTasks = tasksByUser.getOrDefault(u.getUserId(), List.of());
+                // pending 代表尚未接单，不应把设计师标记为进行中/忙碌。
                 List<SubTask> activeTasks = userTasks.stream()
-                        .filter(t -> List.of("pending", "accepted", "rejected", "delivered").contains(t.getStatus()))
+                        .filter(t -> List.of("accepted", "rejected", "delivered").contains(t.getStatus()))
                         .collect(Collectors.toList());
                 List<SubTask> completedTasks = userTasks.stream()
                         .filter(t -> List.of("approved", "completed", "sales_approved", "admin_approved").contains(t.getStatus()))

@@ -84,7 +84,6 @@ async function renderAdminWorkload(container) {
         html += `<div style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid var(--gray-100);">
           <div style="min-width:140px;flex-shrink:0;">
             <div style="font-size:13px;font-weight:500;color:#1f2937;">${escHtml(u.name)}</div>
-            <div style="font-size:11px;color:var(--gray-400);">${escHtml(u.userId)}</div>
           </div>
           <div style="flex:1;display:flex;gap:16px;align-items:center;">
             <span style="width:60px;font-size:13px;font-weight:600;color:#374151;">${created}</span>

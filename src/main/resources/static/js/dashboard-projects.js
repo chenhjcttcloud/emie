@@ -52,7 +52,7 @@ async function refreshAfterMutation(pid) {
 
     // 按当前视图刷新
     (async () => {
-      if (['orders', 'channel', 'regular', 'tasks', 'scoring'].includes(EMIE.state.currentView)) {
+      if (['orders', 'channel', 'regular', 'design-needs', 'tasks', 'scoring'].includes(EMIE.state.currentView)) {
         await render();
       } else if (pid) {
         try {
@@ -169,7 +169,7 @@ async function render() {
     const uid = getCurrentUserId();
 
     // 三个项目列表使用服务端分页；进入时不再预加载全量项目。
-    const isPagedProjectList = ['orders', 'channel', 'regular'].includes(EMIE.state.currentView);
+    const isPagedProjectList = ['orders', 'channel', 'regular', 'design-needs'].includes(EMIE.state.currentView);
     let orders = EMIE.state.cache.orders;
     if (!isPagedProjectList && (!orders || !orders.length)) {
       try { orders = await apiGet(`/projects?role=${role}&userId=${uid}`); } catch(e) {}
@@ -185,6 +185,8 @@ async function render() {
       await renderOrderList(main, 'channel_custom', role, uid);
     } else if (EMIE.state.currentView === 'regular') {
       await renderOrderList(main, 'regular', role, uid);
+    } else if (EMIE.state.currentView === 'design-needs') {
+      await renderOrderList(main, 'design_requirement', role, uid, '🎨 设计/送审需求', '/design-requirements/page');
     } else if (EMIE.state.currentView === 'tasks') {
       await renderMyTasks(main, role, uid, EMIE.state.taskBucket || 'all');
     } else if (EMIE.state.currentView === 'other-tasks') {

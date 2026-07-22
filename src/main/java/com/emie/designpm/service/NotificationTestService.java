@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 
 /** 管理员用于验证站内与飞书通知配置的真实投递闭环。 */
@@ -109,6 +110,58 @@ public class NotificationTestService {
             result.put("message", "站内测试通知已发送；飞书发送失败：" + limitError(e.getMessage()));
         }
         return result;
+    }
+
+    @Transactional
+    public Map<String, Object> sendTemporaryBroadcast(String title, String content, String operatorUserId) {
+        if (title == null || title.isBlank() || content == null || content.isBlank()) {
+            throw new IllegalArgumentException("通知标题和内容不能为空");
+        }
+        if (!isEnabled("notification.feishuEnabled")) {
+            throw new IllegalArgumentException("飞书通知当前未启用");
+        }
+        int total = 0, delivered = 0, failed = 0, unbound = 0;
+        for (User user : userRepository.findAll()) {
+            if (user.getStatus() != null && "disabled".equalsIgnoreCase(user.getStatus())) continue;
+            total++;
+            NotificationEvent event = outboxService.publish("TEMPORARY_FEISHU_BROADCAST", "temporary_broadcast",
+                    user.getId(), 1, operatorUserId, "temporary-broadcast-" + UUID.randomUUID(), title);
+            Notification notification = notificationRepository.save(Notification.builder()
+                    .eventId(event.getId()).recipientUserId(user.getUserId()).category("system")
+                    .priority("high").mandatory(false).title(title).content(content)
+                    .deepLink("/").aggregateType("temporary_broadcast").aggregateId(user.getId())
+                    .status("unread").createdAt(LocalDateTime.now()).build());
+            if (user.getFeishuOpenId() == null || user.getFeishuOpenId().isBlank()) {
+                unbound++;
+                NotificationDelivery d = deliveryRepository.save(NotificationDelivery.builder().notificationId(notification.getId())
+                        .channel("feishu").status("blocked").retryCount(0).errorMsg("未绑定飞书 Open ID").build());
+                audit(notification, d, "temporary_broadcast_unbound", operatorUserId, "未绑定飞书 Open ID");
+                continue;
+            }
+            try {
+                String messageId = feishuBaseService.sendInteractiveMessage(user.getFeishuOpenId(), buildBroadcastCard(title, content));
+                delivered++;
+                NotificationDelivery d = deliveryRepository.save(NotificationDelivery.builder().notificationId(notification.getId())
+                        .channel("feishu").status("delivered").retryCount(0).externalMessageId(messageId)
+                        .deliveredAt(LocalDateTime.now()).build());
+                audit(notification, d, "temporary_broadcast_delivered", operatorUserId, "临时飞书通知已发送");
+            } catch (Exception e) {
+                failed++;
+                NotificationDelivery d = deliveryRepository.save(NotificationDelivery.builder().notificationId(notification.getId())
+                        .channel("feishu").status("failed").retryCount(0).errorMsg(limitError(e.getMessage())).build());
+                audit(notification, d, "temporary_broadcast_failed", operatorUserId, "临时飞书通知失败：" + limitError(e.getMessage()));
+            }
+        }
+        return Map.of("total", total, "delivered", delivered, "failed", failed, "unbound", unbound);
+    }
+
+    private String buildBroadcastCard(String title, String content) throws Exception {
+        ObjectNode card = JSON.createObjectNode();
+        card.put("schema", "2.0");
+        ObjectNode header = card.putObject("header"); header.put("template", "blue");
+        header.putObject("title").put("tag", "plain_text").put("content", title);
+        card.putObject("body").putArray("elements").addObject().put("tag", "markdown").put("content", content);
+        return JSON.writeValueAsString(card);
     }
 
     private boolean isEnabled(String key) {

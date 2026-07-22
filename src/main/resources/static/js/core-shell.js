@@ -20,31 +20,34 @@ function renderSidebar() {
   if (EMIE.state.currentRole === 'sales') {
     // 销售：工作台、项目、我的子任务、评分
     navs.push({ view: 'dashboard', icon: '📊', label: '工作台', badge: '' });
-    navs.push({ view: 'orders', icon: '📋', label: '全部项目', badge: 'badgeTotal' });
-    navs.push({ view: 'channel', icon: '📦', label: '渠道定制单', badge: 'badgeChannel' });
-    navs.push({ view: 'regular', icon: '🏭', label: '公司常规品', badge: 'badgeRegular' });
-    navs.push({ view: 'tasks', icon: '📌', label: '我的子任务', badge: 'badgeMyTasks' });
+    navs.push({ view: 'orders', icon: '📋', label: '全部项目', badge: '' });
+    navs.push({ view: 'channel', icon: '📦', label: '渠道定制单', badge: '' });
+    navs.push({ view: 'regular', icon: '🏭', label: '公司常规品', badge: '' });
+    navs.push({ view: 'design-needs', icon: '🎨', label: '设计/送审需求', badge: '' });
+    navs.push({ view: 'tasks', icon: '📌', label: '我的子任务', badge: '' });
     if (showOtherTasks) navs.push({ view: 'other-tasks', icon: '🧭', label: '其他子任务', badge: '' });
-    navs.push({ view: 'scoring', icon: '⭐', label: '评分', badge: 'badgeScoring' });
+    navs.push({ view: 'scoring', icon: '⭐', label: '评分', badge: '' });
   } else if (EMIE.state.currentRole === 'admin') {
     // 管理员：工作台 + 系统管理
     navs.push({ view: 'dashboard', icon: '📊', label: '工作台', badge: '' });
-    navs.push({ view: 'orders', icon: '📋', label: '全部项目', badge: 'badgeTotal' });
-    navs.push({ view: 'channel', icon: '📦', label: '渠道定制单', badge: 'badgeChannel' });
-    navs.push({ view: 'regular', icon: '🏭', label: '公司常规品', badge: 'badgeRegular' });
-    navs.push({ view: 'tasks', icon: '📌', label: '我的子任务', badge: 'badgeMyTasks' });
+    navs.push({ view: 'orders', icon: '📋', label: '全部项目', badge: '' });
+    navs.push({ view: 'channel', icon: '📦', label: '渠道定制单', badge: '' });
+    navs.push({ view: 'regular', icon: '🏭', label: '公司常规品', badge: '' });
+    navs.push({ view: 'design-needs', icon: '🎨', label: '设计/送审需求', badge: '' });
+    navs.push({ view: 'tasks', icon: '📌', label: '我的子任务', badge: '' });
     if (showOtherTasks) navs.push({ view: 'other-tasks', icon: '🧭', label: '其他子任务', badge: '' });
-    navs.push({ view: 'scoring', icon: '⭐', label: '评分', badge: 'badgeScoring' });
+    navs.push({ view: 'scoring', icon: '⭐', label: '评分', badge: '' });
     navs.push({ view: 'admin', icon: '⚙️', label: '系统管理', badge: '' });
   } else {
     // 其他角色：显示全部导航
     navs.push({ view: 'dashboard', icon: '📊', label: '工作台', badge: '' });
-    navs.push({ view: 'orders', icon: '📋', label: '全部项目', badge: 'badgeTotal' });
-    navs.push({ view: 'channel', icon: '📦', label: '渠道定制单', badge: 'badgeChannel' });
-    navs.push({ view: 'regular', icon: '🏭', label: '公司常规品', badge: 'badgeRegular' });
-    navs.push({ view: 'tasks', icon: '📌', label: '我的子任务', badge: 'badgeMyTasks' });
+    navs.push({ view: 'orders', icon: '📋', label: '全部项目', badge: '' });
+    navs.push({ view: 'channel', icon: '📦', label: '渠道定制单', badge: '' });
+    navs.push({ view: 'regular', icon: '🏭', label: '公司常规品', badge: '' });
+    navs.push({ view: 'design-needs', icon: '🎨', label: '设计/送审需求', badge: '' });
+    navs.push({ view: 'tasks', icon: '📌', label: '我的子任务', badge: '' });
     if (showOtherTasks) navs.push({ view: 'other-tasks', icon: '🧭', label: '其他子任务', badge: '' });
-    navs.push({ view: 'scoring', icon: '⭐', label: '评分', badge: 'badgeScoring' });
+    navs.push({ view: 'scoring', icon: '⭐', label: '评分', badge: '' });
   }
 
   const sidebar = document.getElementById('sidebarContainer');

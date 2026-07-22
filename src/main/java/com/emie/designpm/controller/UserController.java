@@ -26,17 +26,29 @@ public class UserController {
     public ResponseEntity<Map<String, List<Map<String, String>>>> getUsers() {
         Map<String, List<Map<String, String>>> result = new LinkedHashMap<>();
 
-        for (String role : List.of("sales", "planner", "designer", "supplychain", "admin")) {
+        for (String role : List.of("sales", "planner", "designer", "supplychain", "promotion", "admin")) {
             result.put(role, new ArrayList<>());
         }
 
         for (User user : userService.getAllUsers()) {
-            String role = user.getRole();
+            String rawRole = user.getRole();
+            String role = normalizeRole(rawRole);
             if (role == null || role.isBlank() || "pending".equals(role)) continue;
             result.computeIfAbsent(role, ignored -> new ArrayList<>()).add(toUserMap(user));
+            // 保留历史大小写角色键，兼容旧版管理员视角；业务前端使用标准小写键。
+            if ("Promotion".equals(rawRole)) {
+                result.computeIfAbsent(rawRole, ignored -> new ArrayList<>()).add(toUserMap(user));
+            }
         }
 
         return ResponseEntity.ok(result);
+    }
+
+    private String normalizeRole(String role) {
+        if (role == null) return null;
+        if ("promotion".equalsIgnoreCase(role) || "product_promotion".equalsIgnoreCase(role)
+                || "product-promotion".equalsIgnoreCase(role)) return "promotion";
+        return role;
     }
 
     private Map<String, String> toUserMap(User user) {

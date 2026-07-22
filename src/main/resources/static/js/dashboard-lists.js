@@ -8,14 +8,15 @@ const renderProjectRow = (...args) => EMIE.actions.renderProjectRow(...args);
 const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const openCreateProject = (...args) => EMIE.actions.openCreateProject(...args);
 
-async function renderOrderList(main, type, role, uid) {
+async function renderOrderList(main, type, role, uid, titleOverride = '', endpoint = '/projects/page') {
   let title = '全部项目';
   if (type === 'channel_custom') title = '📦 渠道定制单';
   else if (type === 'regular') title = '🏭 公司常规品';
   else title = '📋 全部项目';
+  if (titleOverride) title = titleOverride;
 
   const participating = role === 'designer' || role === 'supplychain';
-  const state = EMIE.projectListState = { type, role, uid, participating, page: 0, total: 0, totalPages: 0, filters: {}, loading: false };
+  const state = EMIE.projectListState = { type, role, uid, endpoint, page: 0, total: 0, totalPages: 0, filters: {}, loading: false };
   main.innerHTML = `<div class="project-query-loading"><span class="project-query-spinner"></span>正在查询项目…</div>`;
   const result = await loadProjectListPage(0);
 
@@ -25,6 +26,7 @@ async function renderOrderList(main, type, role, uid) {
       <div style="display:flex;gap:8px;">
         ${EMIE.state.currentRole === 'sales' && type === 'channel_custom' ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('channel_custom')">➕ 新建渠道定制项目</button>` : ''}
         ${EMIE.state.currentRole === 'planner' && type === 'regular' ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('regular')">➕ 新建常规品设计项目</button>` : ''}
+        ${type === 'design_requirement' && ['planner','sales','promotion','product_promotion','product-promotion'].includes(EMIE.state.currentRole) ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('design_requirement')">➕ 新建设计/送审需求</button>` : ''}
       </div>
     </div>
     <div class="filter-bar" style="margin-bottom:16px;">
@@ -75,7 +77,7 @@ async function loadProjectListPage(page) {
   Object.entries(state.filters || {}).forEach(([key, value]) => {
     if (value) params.set(key, value);
   });
-  const result = await apiGet(`/projects/page?${params}`);
+  const result = await apiGet(`${state.endpoint}?${params}`);
   state.total = result.total || 0;
   state.totalPages = result.totalPages || 0;
   return result;
