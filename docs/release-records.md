@@ -13,6 +13,22 @@
 
 ---
 
+## 2026-07-23 子任务驳回快照与列表整行交互发布
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 发布成功 |
+| 旧生产提交 / 生产提交 | `7106c73a02fc51a720d0ccaf8ab1bb21ba3ac9e5` / `a38d9ff72e8a89b007195a5dff2d4674fc503518` |
+| Gitee 推送 | `project_manager_system` 已推送，本地与远端目标提交一致 |
+| 变更范围 | 子任务卡片逐行展示每次驳回及不可覆盖的当轮提交快照；渠道定制单、公司常规品和设计/送审需求支持整行打开详情；设计需求新增独立详情接口和弹窗 |
+| 本地验证 | Java 21 `clean package` 成功，82 项测试通过；全量前端 JavaScript 语法检查和 `git diff --check` 通过 |
+| 数据库备份 | `/root/emie/db-backup-before-a38d9ff-20260723_180350.sql.gz`，151399 字节，`gzip -t` 通过 |
+| 数据库迁移 | 无表结构变更，不需迁移 |
+| 应用产物 | 本地与生产 JAR SHA-256 均为 `3f50f4fc8a59747a64995b90091ae0eea01a551cf5ebfc27a975100e247cbc91` |
+| 回滚包 | `/root/emie/app.jar.bak.pre-a38d9ff-20260723_180417` |
+| 生产验证 | `release-sha.txt` 与目标提交一致；应用和预览容器 running、重启次数均为 0；首页、公开配置和预览健康接口 HTTP 200；未登录项目及设计需求详情接口均为 401；生产加载 `bootstrap.js?v=213`、`dashboard-projects.js?v=158`、`dashboard-lists.js?v=180`、`project-detail.js?v=182`；启动日志无严重错误 |
+| 回滚 | 未执行 |
+
 ## 2026-07-23 六阶段子任务进度与动态角色发布
 
 | 项目 | 记录 |
