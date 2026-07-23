@@ -7,9 +7,26 @@ const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const render = (...args) => EMIE.actions.render(...args);
 
 // ==================== 用户视角切换（天花板版） ====================
-const ROLE_LABELS = { admin: '管理员', sales: '销售', planner: '企划', designer: '设计师', supplychain: '供应链' };
+const ROLE_LABELS = { admin: '管理员', sales: '销售', planner: '产品企划', designer: '设计师', supplychain: '供应链', promotion: '产品推广' };
 const ROLE_COLORS = { admin: 'admin', sales: 'sales', planner: 'planner', designer: 'designer', supplychain: 'supplychain' };
+let _identityRoleLabels = { ...ROLE_LABELS };
+let _identityRoleOrder = ['sales', 'planner', 'designer', 'supplychain', 'promotion', 'admin'];
 let _roleSwitcherRenderToken = 0;
+
+function normalizeIdentityRole(role) {
+  if (!role) return '';
+  if (['Promotion', 'product_promotion', 'product-promotion'].includes(role)) return 'promotion';
+  return role;
+}
+
+function identityRoleLabel(role) {
+  const normalized = normalizeIdentityRole(role);
+  return _identityRoleLabels[normalized] || roleLabel(normalized);
+}
+
+function identityRoleColor(role) {
+  return ROLE_COLORS[normalizeIdentityRole(role)] || (normalizeIdentityRole(role) === 'promotion' ? 'promotion' : 'admin');
+}
 
 async function renderRoleSwitcher() {
   const headerRight = document.querySelector('.header-right');
@@ -19,8 +36,14 @@ async function renderRoleSwitcher() {
     document.getElementById('identitySwitcher')?.remove();
     return;
   }
-  // 刷新用户列表，确保新增/角色变更及时同步
-  try { EMIE.state.users = await apiGet('/users'); } catch(e) {}
+  // 同时刷新角色定义和用户列表，新增角色或用户后无需修改前端硬编码。
+  let roles = [];
+  try {
+    [EMIE.state.users, roles] = await Promise.all([
+      apiGet('/users'),
+      apiGet('/users/roles').catch(() => []),
+    ]);
+  } catch(e) {}
   // 丢弃旧的异步渲染，避免多个请求各自插入一个切换器。
   if (renderToken !== _roleSwitcherRenderToken) return;
   if (!EMIE.state.users || Object.keys(EMIE.state.users).length === 0) {
@@ -30,20 +53,34 @@ async function renderRoleSwitcher() {
 
   document.getElementById('identitySwitcher')?.remove();
 
-  // 构建所有用户列表
+  _identityRoleLabels = { ...ROLE_LABELS };
+  roles.forEach(role => {
+    const key = normalizeIdentityRole(role.name);
+    if (key) _identityRoleLabels[key] = role.displayName || role.name;
+  });
+
+  // 构建所有用户列表；后端为历史兼容可能同时返回 promotion/Promotion，按 userId 去重。
   const allUsers = [];
-  const roleOrder = ['sales', 'planner', 'designer', 'supplychain', 'admin'];
-  for (const role of roleOrder) {
-    const users = EMIE.state.users[role];
-    if (!users || users.length === 0) continue;
-    for (const u of users) {
-      allUsers.push({ userId: u.userId, name: u.name, role });
+  const seenUserIds = new Set();
+  for (const [groupRole, users] of Object.entries(EMIE.state.users)) {
+    for (const u of users || []) {
+      if (!u.userId || seenUserIds.has(u.userId)) continue;
+      seenUserIds.add(u.userId);
+      allUsers.push({
+        userId: u.userId,
+        name: u.name,
+        role: normalizeIdentityRole(u.role || groupRole),
+      });
     }
   }
+  const preferredOrder = ['sales', 'planner', 'designer', 'supplychain', 'promotion', 'admin'];
+  const configuredRoles = roles.map(role => normalizeIdentityRole(role.name)).filter(Boolean);
+  const discoveredRoles = allUsers.map(user => user.role).filter(Boolean);
+  _identityRoleOrder = [...new Set([...preferredOrder, ...configuredRoles, ...discoveredRoles])];
 
   const isSwitched = EMIE.state.currentUserId !== EMIE.state.originalUser.userId;
   const initial = EMIE.state.authUser.name.charAt(0);
-  const roleKey = ROLE_COLORS[EMIE.state.authUser.role] || 'admin';
+  const roleKey = identityRoleColor(EMIE.state.authUser.role);
 
   const container = document.createElement('div');
   container.id = 'identitySwitcher';
@@ -53,7 +90,7 @@ async function renderRoleSwitcher() {
       <span class="identity-avatar role-${roleKey}">${initial}</span>
       <span class="identity-info">
         <span class="identity-name">${EMIE.state.authUser.name}</span>
-        <span class="identity-role-tag">${ROLE_LABELS[EMIE.state.authUser.role] || EMIE.state.authUser.role}</span>
+        <span class="identity-role-tag">${escHtml(identityRoleLabel(EMIE.state.authUser.role))}</span>
       </span>
       <svg class="identity-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
     </button>
@@ -93,13 +130,13 @@ function renderUserList(users) {
     if (!groups[u.role]) groups[u.role] = [];
     groups[u.role].push(u);
   }
-  const roleOrder = ['sales', 'planner', 'designer', 'supplychain', 'admin'];
+  const roleOrder = [...new Set([..._identityRoleOrder, ...Object.keys(groups)])];
   let html = '';
   for (const role of roleOrder) {
     const group = groups[role];
     if (!group || group.length === 0) continue;
-    const label = ROLE_LABELS[role] || role;
-    const dotClass = 'g-' + (ROLE_COLORS[role] || role);
+    const label = identityRoleLabel(role);
+    const dotClass = 'g-' + identityRoleColor(role);
     html += `<div class="identity-group" data-role="${role}">
       <div class="identity-group-label">
         <span class="identity-group-dot ${dotClass}"></span>${label}
@@ -107,8 +144,8 @@ function renderUserList(users) {
     for (const u of group) {
       const isActive = u.userId === EMIE.state.currentUserId;
       const avatarInitial = u.name.charAt(0);
-      const uClass = 'u-' + (ROLE_COLORS[u.role] || u.role);
-      const rClass = 'r-' + (ROLE_COLORS[u.role] || u.role);
+      const uClass = 'u-' + identityRoleColor(u.role);
+      const rClass = 'r-' + identityRoleColor(u.role);
       html += `<div class="identity-user${isActive ? ' active' : ''}" data-userid="${u.userId}" data-emie-onclick="switchToUser('${u.userId}')">
         <span class="identity-user-avatar ${uClass}">${avatarInitial}</span>
         <span class="identity-user-info">
@@ -133,7 +170,7 @@ async function switchToUser(targetUserId) {
     EMIE.state.authUser = { userId: result.userId, name: result.name, role: result.role, title: result.title };
     EMIE.state.currentRole = result.role;
     EMIE.state.currentUserId = result.userId;
-    document.getElementById('userDisplay').textContent = `${EMIE.state.authUser.name}（${roleLabel(EMIE.state.authUser.role)}）`;
+    document.getElementById('userDisplay').textContent = `${EMIE.state.authUser.name}（${identityRoleLabel(EMIE.state.authUser.role)}）`;
     await renderRoleSwitcher();
     // 角色切换后保留当前业务页面，避免先渲染旧角色再被重置到工作台。
     EMIE.state.currentView = viewBeforeSwitch;

@@ -13,6 +13,7 @@ public class TaskDetailDTO {
     private String statusLabel;
     private String statusCls;
     private String statusIcon;
+    private String workflowStage;
     private String plannedDate;
     private String actualDate;
     private String designerId;

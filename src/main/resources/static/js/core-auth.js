@@ -435,7 +435,7 @@ function startIdleMonitor() {
 }
 
 function roleLabel(r) {
-  return { sales: '需求方/销售', planner: '产品企划', designer: '设计师', supplychain: '供应链', admin: '管理员', pending: '待分配角色' }[r] || r;
+  return { sales: '需求方/销售', planner: '产品企划', designer: '设计师', supplychain: '供应链', promotion: '产品推广', admin: '管理员', pending: '待分配角色' }[r] || r;
 }
 
 

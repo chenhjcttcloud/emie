@@ -2,6 +2,7 @@ package com.emie.designpm.controller;
 
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.DepartmentRepository;
+import com.emie.designpm.repository.RoleRepository;
 import com.emie.designpm.service.UserService;
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +20,8 @@ class UserControllerRoleGroupingTest {
     @Test
     void usersEndpointIncludesCustomRolesAndKeepsStandardEmptyGroups() {
         UserService users = mock(UserService.class);
-        UserController controller = new UserController(users, mock(DepartmentRepository.class));
+        UserController controller = new UserController(users, mock(DepartmentRepository.class),
+                mock(RoleRepository.class));
         User promotion = User.builder()
                 .id(1L)
                 .userId("promotion_user")

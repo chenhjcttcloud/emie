@@ -56,7 +56,6 @@ function addSubTask(pid) {
     ? `<option value="">请选择销售</option>` +
       EMIE.state.users.sales.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
     : `<option value="">暂无销售人员</option>`;
-
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'addSubTaskModal';
@@ -68,6 +67,17 @@ function addSubTask(pid) {
         <form id="addSubTaskForm">
           <div class="form-group"><label class="form-label"><span class="required">*</span> 子任务名称</label><input type="text" class="form-input" name="name" required placeholder="如：首页Banner设计、详情页布局..." data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor=''"></div>
           <div class="form-row">
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 所属阶段</label>
+              <select class="form-select" name="workflowStage" required>
+                <option value="">请选择子任务所属阶段</option>
+                <option value="design">设计</option>
+                <option value="design_review">设计送审</option>
+                <option value="three_d_review">3D送审</option>
+                <option value="sample_review">打样送审</option>
+                <option value="promotion">产品宣发</option>
+                <option value="bulk">大货</option>
+              </select>
+            </div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 计划要求完成时间</label>${renderDatePicker('plannedDate', {required:true})}</div>
           </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 负责人类型</label>
@@ -83,6 +93,9 @@ function addSubTask(pid) {
               </label>
               <label class="checkbox-item" style="cursor:pointer;" data-emie-onclick="switchAssigneeType('add', 'sales', this)">
                 <input type="radio" name="assigneeRole" value="sales" data-emie-onchange="switchAssigneeType('add', 'sales')" style="display:none;"> 💼 销售
+              </label>
+              <label class="checkbox-item" style="cursor:pointer;" data-emie-onclick="switchAssigneeType('add', 'promotion', this)">
+                <input type="radio" name="assigneeRole" value="promotion" data-emie-onchange="switchAssigneeType('add', 'promotion')" style="display:none;"> 📣 产品推广
               </label>
             </div>
           </div>
@@ -158,6 +171,7 @@ async function submitAddSubTask(pid) {
   let hasErr = false;
 
   if (!data.name) { showError('name', '请填写子任务名称'); hasErr = true; }
+  if (!data.workflowStage) { showError('workflowStage', '请选择子任务所属阶段'); hasErr = true; }
   if (!data.plannedDate) { showError('plannedDate', '请选择计划完成时间'); hasErr = true; }
   else if (!/^\d{4}-\d{2}-\d{2}$/.test(data.plannedDate) || isNaN(new Date(data.plannedDate).getTime())) {
     showError('plannedDate', '日期格式不正确（yyyy-mm-dd）');
@@ -223,7 +237,12 @@ function editTask(pid, tid) {
       try { EMIE.projectState.editTaskAttachments = JSON.parse(task.attachmentsJson); } catch(e) {}
     }
 
-    const designerOpts = task.assigneeRole === 'planner'
+    const designerOpts = task.assigneeRole === 'promotion'
+      ? (EMIE.state.users.promotion && EMIE.state.users.promotion.length
+          ? '<option value="">请选择产品推广</option>' +
+            EMIE.state.users.promotion.map(u => `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
+          : '<option value="">暂无产品推广人员</option>')
+      : task.assigneeRole === 'planner'
       ? (EMIE.state.users.planner && EMIE.state.users.planner.length
           ? '<option value="">请选择企划</option>' +
             EMIE.state.users.planner.map(u => `<option value="${u.userId}" ${(task.designerId === u.userId) ? 'selected' : ''}>${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
@@ -252,6 +271,16 @@ function editTask(pid, tid) {
           <form id="editTaskForm">
             <div class="form-group"><label class="form-label">子任务名称</label><input type="text" class="form-input" name="name" value="${escHtml(task.name)}"></div>
             <div class="form-row">
+              <div class="form-group"><label class="form-label"><span class="required">*</span> 所属阶段</label>
+                <select class="form-select" name="workflowStage" required>
+                  <option value="design" ${!task.workflowStage || task.workflowStage === 'design' ? 'selected' : ''}>设计</option>
+                  <option value="design_review" ${task.workflowStage === 'design_review' ? 'selected' : ''}>设计送审</option>
+                  <option value="three_d_review" ${task.workflowStage === 'three_d_review' ? 'selected' : ''}>3D送审</option>
+                  <option value="sample_review" ${task.workflowStage === 'sample_review' ? 'selected' : ''}>打样送审</option>
+                  <option value="promotion" ${task.workflowStage === 'promotion' ? 'selected' : ''}>产品宣发</option>
+                  <option value="bulk" ${task.workflowStage === 'bulk' ? 'selected' : ''}>大货</option>
+                </select>
+              </div>
               <div class="form-group"><label class="form-label">计划完成时间</label>${renderDatePicker('plannedDate', {value: task.plannedDate || ''})}</div>
             </div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 负责人类型</label>
@@ -267,6 +296,9 @@ function editTask(pid, tid) {
                 </label>
                 <label class="checkbox-item ${task.assigneeRole === 'sales' ? 'checked' : ''}" style="cursor:pointer;" data-emie-onclick="switchEditAssigneeType('sales', this)">
                   <input type="radio" name="assigneeRole" value="sales" ${task.assigneeRole === 'sales' ? 'checked' : ''} style="display:none;"> 💼 销售
+                </label>
+                <label class="checkbox-item ${task.assigneeRole === 'promotion' ? 'checked' : ''}" style="cursor:pointer;" data-emie-onclick="switchEditAssigneeType('promotion', this)">
+                  <input type="radio" name="assigneeRole" value="promotion" ${task.assigneeRole === 'promotion' ? 'checked' : ''} style="display:none;"> 📣 产品推广
                 </label>
               </div>
             </div>

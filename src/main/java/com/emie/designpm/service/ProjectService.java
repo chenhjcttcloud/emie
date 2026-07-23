@@ -442,10 +442,15 @@ public class ProjectService {
         String plannedDate = (String) body.get("plannedDate");
         String designerId = SecurityUtil.sanitizeText((String) body.get("designerId"), 100);
         String details = SecurityUtil.sanitizeText((String) body.getOrDefault("details", ""), 2000);
+        String workflowStage = SecurityUtil.sanitizeText((String) body.get("workflowStage"), 30);
+        if (!ProjectWorkflowService.STAGES.contains(workflowStage)) {
+            throw new RuntimeException("请选择有效的子任务所属阶段");
+        }
 
         SubTask task = new SubTask();
         task.setName(name);
         task.setStatus("pending");
+        task.setWorkflowStage(workflowStage);
         task.setPlannedDate(plannedDate);
         task.setDesignerId(designerId);
         task.setDesignerName(userService.getUserName(designerId));
@@ -461,7 +466,12 @@ public class ProjectService {
         task.setAttachmentsJson(validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
         task.setProject(p);
 
+        boolean firstSubTask = p.getTasks().isEmpty();
         p.getTasks().add(task);
+        if (firstSubTask) {
+            p.setWorkflowStage(workflowStage);
+            p.setWorkflowStatus("current");
+        }
         if ("planner_accepted".equals(p.getStatus())) {
             p.setStatus("in_progress");
         }
@@ -486,14 +496,22 @@ public class ProjectService {
     }
 
     private void validateSubTaskAssignee(String userId, String assigneeRole) {
-        if (!List.of("designer", "supplychain", "planner", "sales").contains(assigneeRole)) {
+        String normalizedRole = normalizeAssigneeRole(assigneeRole);
+        if (!List.of("designer", "supplychain", "planner", "sales", "promotion").contains(normalizedRole)) {
             throw new RuntimeException("不支持的子任务负责人类型");
         }
         if (userId == null || userId.isBlank()) return;
         User assignee = userService.getUserByUserId(userId);
-        if (assignee == null || !assigneeRole.equals(assignee.getRole())) {
+        if (assignee == null || !normalizedRole.equals(normalizeAssigneeRole(assignee.getRole()))) {
             throw new RuntimeException("子任务负责人和负责人类型不匹配");
         }
+    }
+
+    private String normalizeAssigneeRole(String role) {
+        if (role == null) return "";
+        if ("promotion".equalsIgnoreCase(role) || "product_promotion".equalsIgnoreCase(role)
+                || "product-promotion".equalsIgnoreCase(role)) return "promotion";
+        return role;
     }
 
     public Project updateSubTask(Long projectId, Long taskId, Map<String, Object> body) {
@@ -520,6 +538,13 @@ public class ProjectService {
         Map<String, Object> before = snapshotSubTask(task);
 
         if (body.containsKey("name")) task.setName(SecurityUtil.sanitizeText((String) body.get("name"), 200));
+        if (body.containsKey("workflowStage")) {
+            String workflowStage = SecurityUtil.sanitizeText((String) body.get("workflowStage"), 30);
+            if (!ProjectWorkflowService.STAGES.contains(workflowStage)) {
+                throw new RuntimeException("请选择有效的子任务所属阶段");
+            }
+            task.setWorkflowStage(workflowStage);
+        }
         if (body.containsKey("plannedDate")) task.setPlannedDate((String) body.get("plannedDate"));
         if (body.containsKey("designerId")) {
             String did = SecurityUtil.sanitizeText((String) body.get("designerId"), 100);
@@ -549,6 +574,7 @@ public class ProjectService {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("name", task.getName());
         data.put("status", task.getStatus());
+        data.put("workflowStage", task.getWorkflowStage());
         data.put("plannedDate", task.getPlannedDate());
         data.put("designerId", task.getDesignerId());
         data.put("designerName", task.getDesignerName());
@@ -664,7 +690,7 @@ public class ProjectService {
             throw new RuntimeException("当前登录用户无效，无法接单");
         }
         if (task.getAssigneeRole() != null && !task.getAssigneeRole().isBlank()
-                && !task.getAssigneeRole().equals(currentRole)) {
+                && !normalizeAssigneeRole(task.getAssigneeRole()).equals(normalizeAssigneeRole(currentRole))) {
             throw new RuntimeException("当前角色无法接此子任务");
         }
 
@@ -980,7 +1006,14 @@ public class ProjectService {
         // 检查项目是否所有子任务都已完成
         if ("completed".equals(task.getStatus())) {
             boolean allDone = project.getTasks().stream().allMatch(t -> "completed".equals(t.getStatus()));
-            if (allDone) {
+            boolean bulkStageDone = project.getTasks().stream()
+                    .filter(t -> "bulk".equals(t.getWorkflowStage()))
+                    .findAny()
+                    .isPresent()
+                    && project.getTasks().stream()
+                    .filter(t -> "bulk".equals(t.getWorkflowStage()))
+                    .allMatch(t -> "completed".equals(t.getStatus()));
+            if (allDone && bulkStageDone) {
                 project.setStatus("completed");
             }
         }
@@ -1314,14 +1347,19 @@ public class ProjectService {
 
     public String computeProjectStatus(Project p) {
         String status = p.getStatus();
+        if ("completed".equals(status)) return status;
         if (List.of("draft", "pending_planner", "planner_accepted", "paused", "pending_terminate", "terminated").contains(status)) {
             return status;
         }
         if (p.getTasks().isEmpty()) return status;
+        boolean bulkStageDone = p.getTasks().stream().anyMatch(t -> "bulk".equals(t.getWorkflowStage()))
+                && p.getTasks().stream()
+                .filter(t -> "bulk".equals(t.getWorkflowStage()))
+                .allMatch(t -> "completed".equals(t.getStatus()));
         // 所有子任务是否都已通过验收（兼容旧 approved 和新 completed 状态）
         boolean allApproved = p.getTasks().stream().allMatch(t ->
             "completed".equals(t.getStatus()) || "approved".equals(t.getStatus()));
-        if (!allApproved) return "in_progress";
+        if (!allApproved || !bulkStageDone) return "in_progress";
         // 所有子任务已通过 → 检查评分是否全部完成
         boolean allScored = p.getTasks().stream().allMatch(t -> isTaskFullyCompleted(t));
         return allScored ? "completed" : "completed_pending_score";
@@ -1329,13 +1367,18 @@ public class ProjectService {
 
     public static String computeProjectStatusStatic(Project p) {
         String status = p.getStatus();
+        if ("completed".equals(status)) return status;
         if (List.of("draft", "pending_planner", "planner_accepted", "paused", "pending_terminate", "terminated").contains(status)) {
             return status;
         }
         if (p.getTasks().isEmpty()) return status;
+        boolean bulkStageDone = p.getTasks().stream().anyMatch(t -> "bulk".equals(t.getWorkflowStage()))
+                && p.getTasks().stream()
+                .filter(t -> "bulk".equals(t.getWorkflowStage()))
+                .allMatch(t -> "completed".equals(t.getStatus()));
         boolean allApproved = p.getTasks().stream().allMatch(t ->
             "completed".equals(t.getStatus()) || "approved".equals(t.getStatus()));
-        return allApproved ? "completed" : "in_progress";
+        return allApproved && bulkStageDone ? "completed" : "in_progress";
     }
 
     public static Map<String, String> getProjectStatusInfo(String status) {

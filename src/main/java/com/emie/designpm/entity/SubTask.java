@@ -30,6 +30,10 @@ public class SubTask {
     @Column(nullable = false)
     private String status = "pending";
 
+    /** 所属产品阶段：design / design_review / three_d_review / sample_review / promotion / bulk */
+    @Column(length = 30)
+    private String workflowStage;
+
     @Column(nullable = false)
     private String plannedDate;
 

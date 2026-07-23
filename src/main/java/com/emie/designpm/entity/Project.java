@@ -42,6 +42,14 @@ public class Project {
     @Column(nullable = false)
     private String status = "draft";
 
+    /** 项目级子任务总流程：design / design_review / three_d_review / sample_review / promotion / bulk */
+    @Column(length = 30)
+    private String workflowStage = "design";
+
+    /** current / under_review / rejected / completed */
+    @Column(length = 30)
+    private String workflowStatus = "current";
+
     // 渠道定制单特有
     private String salesId;
     private String salesName;
@@ -125,10 +133,14 @@ public class Project {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
         if (status == null) status = "draft";
+        if (workflowStage == null) workflowStage = "design";
+        if (workflowStatus == null) workflowStatus = "current";
     }
 
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+        if (workflowStage == null) workflowStage = "design";
+        if (workflowStatus == null) workflowStatus = "current";
     }
 }

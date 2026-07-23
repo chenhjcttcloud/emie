@@ -8,6 +8,7 @@ const isModalOpen = (...args) => EMIE.actions.isModalOpen(...args);
 const apiDelete = (...args) => EMIE.actions.apiDelete(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
+const renderRoleSwitcher = (...args) => EMIE.actions.renderRoleSwitcher(...args);
 
 // ===== Admin: 角色管理 =====
 async function renderAdminRoles(container) {
@@ -162,6 +163,7 @@ async function submitCreateRole() {
     await apiPost('/admin/roles', { name, displayName, description, permissions: perms });
     showAdminToast('✅ 角色已创建', 'success');
     closeM('roleFormModal');
+    await renderRoleSwitcher();
     await renderAdminContent();
   } catch (e) {
     errEl.textContent = e.message; errEl.style.display = '';
@@ -182,6 +184,7 @@ async function submitEditRole(roleId) {
     await apiPut(`/admin/roles/${roleId}`, { displayName, description, permissions: perms });
     showAdminToast('✅ 角色已更新', 'success');
     closeM('roleFormModal');
+    await renderRoleSwitcher();
     await renderAdminContent();
   } catch (e) {
     errEl.textContent = e.message; errEl.style.display = '';
@@ -197,6 +200,7 @@ async function submitDeleteRole(roleId) {
   try {
     await apiDelete(`/admin/roles/${roleId}`);
     showAdminToast('✅ 角色已删除', 'success');
+    await renderRoleSwitcher();
     await renderAdminContent();
   } catch (e) {
     showAdminToast('❌ 删除失败: ' + e.message, 'error');

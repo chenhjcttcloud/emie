@@ -127,6 +127,11 @@ const switchAssigneeType = function(prefix, role, el) {
       ? '<option value="">请选择销售</option>' +
         EMIE.state.users.sales.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
       : '<option value="">暂无销售人员</option>');
+  } else if (role === 'promotion') {
+    sel.innerHTML = (EMIE.state.users.promotion && EMIE.state.users.promotion.length
+      ? '<option value="">请选择产品推广</option>' +
+        EMIE.state.users.promotion.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
+      : '<option value="">暂无产品推广人员</option>');
   } else {
     sel.innerHTML = (EMIE.state.users.supplychain && EMIE.state.users.supplychain.length
       ? '<option value="">请选择供应链</option>' +
@@ -155,6 +160,11 @@ const switchEditAssigneeType = function(role, el) {
       ? '<option value="">请选择销售</option>' +
         EMIE.state.users.sales.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
       : '<option value="">暂无销售人员</option>');
+  } else if (role === 'promotion') {
+    sel.innerHTML = (EMIE.state.users.promotion && EMIE.state.users.promotion.length
+      ? '<option value="">请选择产品推广</option>' +
+        EMIE.state.users.promotion.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('')
+      : '<option value="">暂无产品推广人员</option>');
   } else {
     sel.innerHTML = (EMIE.state.users.supplychain && EMIE.state.users.supplychain.length
       ? '<option value="">请选择供应链</option>' +

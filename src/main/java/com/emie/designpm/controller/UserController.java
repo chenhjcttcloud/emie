@@ -2,6 +2,7 @@ package com.emie.designpm.controller;
 
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.DepartmentRepository;
+import com.emie.designpm.repository.RoleRepository;
 import com.emie.designpm.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -15,11 +16,25 @@ public class UserController {
 
     private final UserService userService;
     private final DepartmentRepository departmentRepository;
+    private final RoleRepository roleRepository;
 
     public UserController(UserService userService,
-                          DepartmentRepository departmentRepository) {
+                          DepartmentRepository departmentRepository,
+                          RoleRepository roleRepository) {
         this.userService = userService;
         this.departmentRepository = departmentRepository;
+        this.roleRepository = roleRepository;
+    }
+
+    /** 当前身份切换器使用的轻量角色字典；登录用户均可读取，不暴露权限配置。 */
+    @GetMapping("/roles")
+    public ResponseEntity<List<Map<String, String>>> getRoleDefinitions() {
+        List<Map<String, String>> roles = roleRepository.findAll().stream()
+                .map(role -> Map.of(
+                        "name", role.getName(),
+                        "displayName", role.getDisplayName()))
+                .toList();
+        return ResponseEntity.ok(roles);
     }
 
     @GetMapping

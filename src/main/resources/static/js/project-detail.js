@@ -70,19 +70,18 @@ async function openProjectDetail(pid) {
 
 function renderProjectDetailContent(detail) {
   const isChannel = detail.type === 'channel_custom';
-  const canManageSubTasks = EMIE.state.currentRole === 'admin'
-    || (EMIE.state.currentRole === 'planner' && detail.plannerId === getCurrentUserId());
+  const canManageSubTasks = EMIE.state.currentRole === 'planner'
+    && detail.plannerId === getCurrentUserId();
   const canEditInformation = (isChannel
       && EMIE.state.currentRole === 'sales' && detail.salesId === getCurrentUserId())
     || (!isChannel
       && EMIE.state.currentRole === 'planner' && detail.plannerId === getCurrentUserId());
-  // 进度：approved/completed/sales_approved/admin_approved 算完成
+  // 子任务只有完成验收后才计为完成，已交付仍属于待验收。
   const totalTasks = detail.tasks.length;
-  const doneStatuses = ['delivered', 'planner_approved', 'sales_approved', 'admin_approved', 'completed'];
+  const doneStatuses = ['planner_approved', 'sales_approved', 'admin_approved', 'completed'];
   const doneTasks = detail.tasks.filter(t => {
     return doneStatuses.includes(t.status);
   }).length;
-  const pct = totalTasks ? Math.round(doneTasks / totalTasks * 100) : 0;
 
   return `
     ${detail.complianceItems ? (() => { try {
@@ -97,7 +96,6 @@ function renderProjectDetailContent(detail) {
       <span class="badge ${escHtml(detail.statusCls)}" style="font-size:13px;padding:5px 14px;">${escHtml(detail.statusLabel)}</span>
       <span style="font-size:12px;color:var(--gray-400);">创建：${fmtDT(detail.createdAt)}</span>
       <span style="font-size:12px;color:var(--gray-400);">更新：${fmtDT(detail.updatedAt)}</span>
-      ${detail.tasks.length > 0 ? `<div class="progress-bar" style="flex:1;max-width:200px;"><div class="progress-fill" style="width:${pct}%;"></div></div><span style="font-size:12px;color:var(--gray-500);">${pct}%</span>` : ''}
     </div>
 
     <div class="detail-section">
@@ -139,6 +137,8 @@ function renderProjectDetailContent(detail) {
 
     ${renderProjectScoringSummary(detail)}
 
+    ${renderSubTaskProgress(detail)}
+
     ${renderProjectPipeline(detail)}
 
     <div class="detail-section">
@@ -172,10 +172,18 @@ function renderLogLabel(l) {
 function renderSubTaskCard(detail, task, idx) {
   const tsi = getTaskStatusInfo(task.status);
   const isPlanner = EMIE.state.currentRole === 'planner';
-  const myTask = ['designer', 'supplychain', 'planner'].includes(EMIE.state.currentRole) && task.designerId === getCurrentUserId();
+  const myTask = ['designer', 'supplychain', 'planner', 'promotion'].includes(EMIE.state.currentRole) && task.designerId === getCurrentUserId();
   const needScore = task.scoringRecords && task.scoringRecords.some(sr => sr.score == null && sr.role === EMIE.state.currentRole);
   const doneStatuses = ['delivered', 'planner_approved', 'sales_approved', 'admin_approved', 'completed'];
   const isDone = doneStatuses.includes(task.status);
+  const workflowStageLabel = {
+    design: '设计',
+    design_review: '设计送审',
+    three_d_review: '3D送审',
+    sample_review: '打样送审',
+    promotion: '产品宣发',
+    bulk: '大货',
+  }[task.workflowStage] || '未设置阶段';
 
   return `<div class="subtask-card${isDone ? ' completed' : ''}">
     <div class="subtask-header">
@@ -183,7 +191,8 @@ function renderSubTaskCard(detail, task, idx) {
       <span class="badge ${tsi.cls}">${tsi.label}</span>
     </div>
     <div class="subtask-meta">
-      <div class="subtask-meta-item">👤 负责人：<strong>${escHtml(task.designerName || '待分配')}</strong>${task.assigneeRole ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;${task.assigneeRole === 'supplychain' ? 'background:#F0FDFA;color:#0D9488;' : task.assigneeRole === 'planner' ? 'background:#EFF6FF;color:#1D4ED8;' : 'background:#FEF2F2;color:#DC2626;'}">${task.assigneeRole === 'supplychain' ? '供应链' : task.assigneeRole === 'planner' ? '企划' : '设计师'}</span>` : ''}</div>
+      <div class="subtask-meta-item">📍 所属阶段：<strong>${escHtml(workflowStageLabel)}</strong></div>
+      <div class="subtask-meta-item">👤 负责人：<strong>${escHtml(task.designerName || '待分配')}</strong>${task.assigneeRole ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;${task.assigneeRole === 'supplychain' ? 'background:#F0FDFA;color:#0D9488;' : task.assigneeRole === 'planner' ? 'background:#EFF6FF;color:#1D4ED8;' : task.assigneeRole === 'promotion' ? 'background:#F5F3FF;color:#7C3AED;' : 'background:#FEF2F2;color:#DC2626;'}">${task.assigneeRole === 'supplychain' ? '供应链' : task.assigneeRole === 'planner' ? '企划' : task.assigneeRole === 'promotion' ? '产品推广' : task.assigneeRole === 'sales' ? '销售' : '设计师'}</span>` : ''}</div>
       <div class="subtask-meta-item">📅 计划完成：<strong>${formatDate(task.plannedDate)}</strong></div>
       ${task.actualDate ? `<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(task.actualDate)}</strong></div>` : ''}
     </div>
@@ -488,7 +497,115 @@ function renderProjectScoringSummary(detail) {
   return html;
 }
 
-// ===== 项目进度管道 =====
+// ===== 子任务进度 =====
+function renderSubTaskProgress(detail) {
+  const workflow = detail.subTaskWorkflow || {};
+  const stages = workflow.stages || [
+    { key: 'design', label: '设计' },
+    { key: 'design_review', label: '设计送审' },
+    { key: 'three_d_review', label: '3D送审' },
+    { key: 'sample_review', label: '打样送审' },
+    { key: 'promotion', label: '产品宣发' },
+    { key: 'bulk', label: '大货' },
+  ];
+  const tasks = Array.isArray(detail.tasks) ? detail.tasks : [];
+  const completedStatuses = ['completed'];
+
+  const stageHtml = stages.map((stage, index) => {
+    const stageTasks = tasks.filter(task => (task.workflowStage || 'design') === stage.key);
+    const completedCount = stageTasks.filter(task => completedStatuses.includes(task.status)).length;
+    const rejectedCount = stageTasks.filter(task => task.status === 'rejected').length;
+    const state = stageTasks.length === 0 ? 'pending'
+      : rejectedCount > 0 ? 'error'
+        : completedCount === stageTasks.length ? 'done' : 'current';
+    const dotStyle = state === 'done'
+      ? 'background:#3B6D11;'
+      : state === 'current'
+        ? 'background:#EF9F27;box-shadow:0 0 0 4px #FAEEDA;'
+        : state === 'error'
+          ? 'background:#E24B4A;box-shadow:0 0 0 4px #FCEBEB;'
+          : 'background:var(--gray-50);border:2px solid var(--gray-300);';
+    const labelColor = state === 'done' ? '#3B6D11'
+      : state === 'error' ? '#A32D2D'
+        : state === 'current' ? '#854F0B' : 'var(--gray-400)';
+    let summary = state === 'pending' ? '待进行'
+      : state === 'error' ? `${rejectedCount} 个被驳回`
+        : state === 'done' ? `${completedCount}/${stageTasks.length} 已完成`
+          : `${completedCount}/${stageTasks.length} 已完成`;
+    const connector = index < stages.length - 1
+      ? `<div style="position:absolute;top:14px;left:56%;right:-16px;height:3px;background:${state === 'done' ? '#3B6D11' : 'var(--gray-200)'};z-index:-1;"></div>`
+      : '';
+    const dotInner = state === 'done' ? '<span style="color:#fff;font-size:11px;">✓</span>'
+      : state === 'error' ? '<span style="color:#fff;font-size:12px;">!</span>'
+        : state === 'current' ? '<span style="color:#fff;font-size:12px;">●</span>'
+          : `<span style="color:var(--gray-500);font-size:11px;font-weight:600;">${index + 1}</span>`;
+    return `<div style="flex:1;text-align:center;position:relative;min-width:92px;">
+      <div style="width:28px;height:28px;border-radius:50%;margin:0 auto 6px;display:flex;align-items:center;justify-content:center;${dotStyle}">${dotInner}</div>
+      <div style="font-size:11px;color:${labelColor};font-weight:${state === 'current' || state === 'error' ? '600' : '500'};">${escHtml(stage.label)}</div>
+      <div style="font-size:10px;color:${labelColor};margin-top:2px;">${summary}</div>
+      ${connector}
+    </div>`;
+  }).join('');
+
+  return `<div class="detail-section">
+    <div class="detail-section-title">📌 子任务进度
+      <span style="font-size:12px;color:var(--gray-400);font-weight:400;">按各阶段子任务的实际完成情况自动更新</span>
+    </div>
+    <div style="padding:20px 8px 8px;overflow-x:auto;">
+      <div style="display:flex;gap:0;min-width:520px;">${stageHtml}</div>
+    </div>
+  </div>`;
+}
+
+async function completeWorkflowExecution(projectId) {
+  if (!confirm('确认完成当前阶段并进入下一阶段？')) return;
+  try {
+    await apiPost(`/projects/${projectId}/workflow/complete-execution`, {});
+    await refreshAfterMutation(projectId);
+  } catch (e) { alert('操作失败：' + e.message); }
+}
+
+async function submitWorkflowReview(projectId) {
+  if (!confirm('确认提交本轮审核？提交后将等待审核人处理。')) return;
+  try {
+    await apiPost(`/projects/${projectId}/workflow/submit-review`, {});
+    await refreshAfterMutation(projectId);
+  } catch (e) { alert('提交失败：' + e.message); }
+}
+
+function openWorkflowReviewModal(projectId, decision, stageLabel) {
+  if (document.getElementById('workflowReviewModal')) return;
+  const isReject = decision === 'rejected';
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'workflowReviewModal';
+  modal.innerHTML = `<div class="modal" style="max-width:480px;">
+    <div class="modal-header"><button class="modal-close" data-emie-onclick="closeM('workflowReviewModal')">✕</button>
+      <div class="modal-header-left"><div class="modal-title">${isReject ? '↩️ 驳回' : '✅ 通过'}：${escHtml(stageLabel)}</div></div>
+    </div>
+    <div class="modal-body">
+      <label class="form-label">${isReject ? '<span class="required">*</span>驳回原因' : '审核说明（选填）'}</label>
+      <textarea class="form-textarea" id="workflowReviewComment" rows="4" maxlength="1000" placeholder="${isReject ? '请说明需要修改的内容，便于下一轮准确处理' : '可填写本轮审核说明'}"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" data-emie-onclick="closeM('workflowReviewModal')">取消</button>
+      <button class="btn ${isReject ? 'btn-danger' : 'btn-primary'}" data-emie-onclick="submitWorkflowDecision(${projectId},'${decision}')">确认${isReject ? '驳回' : '通过'}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+async function submitWorkflowDecision(projectId, decision) {
+  const comment = document.getElementById('workflowReviewComment')?.value?.trim() || '';
+  if (decision === 'rejected' && !comment) { alert('请填写驳回原因'); return; }
+  try {
+    await apiPost(`/projects/${projectId}/workflow/review`, { decision, comment });
+    closeM('workflowReviewModal');
+    await refreshAfterMutation(projectId);
+  } catch (e) { alert('审核失败：' + e.message); }
+}
+
+// ===== 项目总进度管道 =====
 function renderProjectPipeline(detail) {
   const isChannel = detail.type === 'channel_custom';
   const tasks = detail.tasks || [];
@@ -504,6 +621,9 @@ function renderProjectPipeline(detail) {
   // 计算各阶段状态: done / current / pending / error
   const status = detail.status;
   const taskStatuses = tasks.map(t => t.status);
+  const bulkTasks = tasks.filter(t => t.workflowStage === 'bulk');
+  const bulkStageCompleted = bulkTasks.length > 0 && bulkTasks.every(t => t.status === 'completed');
+  const allTasksCompleted = tasks.length > 0 && tasks.every(t => t.status === 'completed');
 
   function stageState(key) {
     switch (key) {
@@ -513,13 +633,12 @@ function renderProjectPipeline(detail) {
         return !['pending_planner'].includes(status) ? 'done' : 'current';
       case 'execute': {
         if (taskStatuses.length === 0) return status === 'completed' ? 'done' : 'current';
-        if (status === 'completed') return 'done';
+        if (status === 'completed' || (bulkStageCompleted && allTasksCompleted)) return 'done';
         return !['pending_planner'].includes(status) ? 'current' : 'pending';
       }
       case 'complete': {
         if (status === 'completed') return 'done';
-        const allTasksFinished = taskStatuses.length > 0 && taskStatuses.every(s => ['planner_approved', 'sales_approved', 'admin_approved', 'completed'].includes(s));
-        return allTasksFinished ? 'current' : 'pending';
+        return bulkStageCompleted && allTasksCompleted ? 'current' : 'pending';
       }
     }
     return 'pending';
@@ -592,12 +711,15 @@ function renderProjectPipeline(detail) {
       labelColor = 'color:#A32D2D;';
       detailColor = 'color:#A32D2D;';
     } else {
-      dotStyle = 'background:var(--color-border-tertiary);';
-      labelColor = 'color:var(--color-text-tertiary);';
-      detailColor = 'color:var(--color-text-tertiary);';
+      dotStyle = 'background:var(--gray-50);border:2px solid var(--gray-300);';
+      labelColor = 'color:var(--gray-400);';
+      detailColor = 'color:var(--gray-400);';
     }
-    const connector = !isLast ? `<div style="position:absolute;top:14px;left:56%;right:-16px;height:3px;background:${st === 'done' ? '#3B6D11' : 'var(--color-border-tertiary)'};z-index:-1;"></div>` : '';
-    const dotInner = st === 'done' ? '<span style="color:#fff;font-size:11px;">✓</span>' : st === 'current' ? '<span style="color:#fff;font-size:12px;">●</span>' : '';
+    const connector = !isLast ? `<div style="position:absolute;top:14px;left:56%;right:-16px;height:3px;background:${st === 'done' ? '#3B6D11' : 'var(--gray-200)'};z-index:-1;"></div>` : '';
+    const dotInner = st === 'done' ? '<span style="color:#fff;font-size:11px;">✓</span>'
+      : st === 'current' ? '<span style="color:#fff;font-size:12px;">●</span>'
+        : st === 'error' ? '<span style="color:#fff;font-size:12px;">!</span>'
+          : `<span style="color:var(--gray-500);font-size:11px;font-weight:600;">${i + 1}</span>`;
     return `<div style="flex:1;text-align:center;position:relative;">
       <div style="width:28px;height:28px;border-radius:50%;margin:0 auto 6px;display:flex;align-items:center;justify-content:center;${dotStyle}">${dotInner}</div>
       <div style="font-size:11px;${labelColor}">${s.label}</div>
@@ -619,7 +741,7 @@ function renderProjectPipeline(detail) {
     </div>` : '';
 
   return `<div class="detail-section">
-    <div class="detail-section-title">🔵 项目进度 <span style="font-size:12px;color:var(--gray-400);font-weight:400;">${isChannel ? '渠道定制单' : '公司常规品'}</span></div>
+    <div class="detail-section-title">🔵 项目总进度 <span style="font-size:12px;color:var(--gray-400);font-weight:400;">${isChannel ? '渠道定制单' : '公司常规品'}</span></div>
     <div style="padding:20px 8px 8px;">
       <div style="display:flex;gap:0;">${stageHtml}</div>
       ${hintHtml}
@@ -627,7 +749,7 @@ function renderProjectPipeline(detail) {
     <div style="margin-top:8px;font-size:11px;color:var(--color-text-tertiary);display:flex;gap:16px;padding:0 4px;">
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3B6D11;vertical-align:middle;margin-right:4px;"></span>已完成</span>
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#EF9F27;vertical-align:middle;margin-right:4px;"></span>进行中</span>
-      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--color-border-tertiary);vertical-align:middle;margin-right:4px;"></span>待进行</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--gray-50);border:1px solid var(--gray-300);vertical-align:middle;margin-right:4px;"></span>待进行</span>
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#E24B4A;vertical-align:middle;margin-right:4px;"></span>异常</span>
     </div>
   </div>`;
@@ -675,6 +797,11 @@ EMIE.registerActions({
   renderProjectAttachments,
   renderTaskAttachments,
   renderProjectScoringSummary,
+  renderSubTaskProgress,
+  completeWorkflowExecution,
+  submitWorkflowReview,
+  openWorkflowReviewModal,
+  submitWorkflowDecision,
   renderProjectPipeline,
   plannerAcceptProject,
   plannerAcceptFromList,

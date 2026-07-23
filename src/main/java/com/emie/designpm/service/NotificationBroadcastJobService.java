@@ -1,6 +1,7 @@
 package com.emie.designpm.service;
 
 import jakarta.annotation.PreDestroy;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -19,6 +20,7 @@ public class NotificationBroadcastJobService {
     private final Map<String, BroadcastJob> jobs = new LinkedHashMap<>();
     private String runningJobId;
 
+    @Autowired
     public NotificationBroadcastJobService(NotificationTestService notificationTestService) {
         this(notificationTestService, Executors.newSingleThreadExecutor(runnable -> {
             Thread thread = new Thread(runnable, "notification-broadcast");

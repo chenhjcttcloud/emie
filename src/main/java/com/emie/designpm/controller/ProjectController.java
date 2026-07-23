@@ -12,6 +12,7 @@ import com.emie.designpm.repository.ScoringRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.ProjectService;
 import com.emie.designpm.service.ProjectAccessService;
+import com.emie.designpm.service.ProjectWorkflowService;
 import com.emie.designpm.util.ProjectAccessPolicy;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +34,7 @@ public class ProjectController {
     private final ActivityLogRepository activityLogRepository;
     private final SubTaskRepository subTaskRepository;
     private final ProjectAccessService projectAccessService;
+    private final ProjectWorkflowService projectWorkflowService;
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
@@ -40,12 +42,14 @@ public class ProjectController {
                              ScoringRepository scoringRepository,
                              ActivityLogRepository activityLogRepository,
                              SubTaskRepository subTaskRepository,
-                             ProjectAccessService projectAccessService) {
+                             ProjectAccessService projectAccessService,
+                             ProjectWorkflowService projectWorkflowService) {
         this.projectService = projectService;
         this.scoringRepository = scoringRepository;
         this.activityLogRepository = activityLogRepository;
         this.subTaskRepository = subTaskRepository;
         this.projectAccessService = projectAccessService;
+        this.projectWorkflowService = projectWorkflowService;
     }
 
     /** 获取所有项目列表（轻量版：计数查询代替 JOIN FETCH） */
@@ -329,6 +333,43 @@ public class ProjectController {
             Project p = projectService.addSubTask(id, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{id}/workflow/complete-execution")
+    public ResponseEntity<?> completeWorkflowExecution(@PathVariable Long id, HttpServletRequest request) {
+        AuthController.AuthSession session = getSession(request);
+        try {
+            Project project = projectWorkflowService.completeExecution(
+                    id, session.userId(), session.name(), session.role());
+            return ResponseEntity.ok(projectWorkflowService.build(project));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{id}/workflow/submit-review")
+    public ResponseEntity<?> submitWorkflowReview(@PathVariable Long id, HttpServletRequest request) {
+        AuthController.AuthSession session = getSession(request);
+        try {
+            return ResponseEntity.ok(projectWorkflowService.submitReview(
+                    id, session.userId(), session.name(), session.role()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{id}/workflow/review")
+    public ResponseEntity<?> reviewWorkflow(@PathVariable Long id,
+                                             @RequestBody Map<String, String> body,
+                                             HttpServletRequest request) {
+        AuthController.AuthSession session = getSession(request);
+        try {
+            return ResponseEntity.ok(projectWorkflowService.review(
+                    id, body.get("decision"), body.get("comment"),
+                    session.userId(), session.name(), session.role()));
+        } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
@@ -675,6 +716,7 @@ public class ProjectController {
             tDto.setScoringRecords(scoringMap.getOrDefault(t.getId(), List.of()));
             return tDto;
         }).collect(Collectors.toList()));
+        dto.setSubTaskWorkflow(projectWorkflowService.build(p));
 
         // Progress（基于子任务完成状态，不依赖评分完成度）
         int taskCount = p.getTasks().size();
@@ -727,6 +769,7 @@ public class ProjectController {
         dto.setStatusLabel(statusInfo.get("label"));
         dto.setStatusCls(statusInfo.get("cls"));
         dto.setStatusIcon(statusInfo.get("icon"));
+        dto.setWorkflowStage(t.getWorkflowStage());
         dto.setPlannedDate(t.getPlannedDate());
         dto.setActualDate(t.getActualDate());
         dto.setDesignerId(t.getDesignerId());

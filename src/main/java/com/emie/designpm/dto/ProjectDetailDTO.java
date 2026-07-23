@@ -32,6 +32,7 @@ public class ProjectDetailDTO {
     private String attachmentsJson;
     private List<Map<String, Object>> logs;
     private List<TaskDetailDTO> tasks;
+    private Map<String, Object> subTaskWorkflow;
     private int progressPercent;
     private String createdAt;
     private String updatedAt;

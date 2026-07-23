@@ -7,6 +7,7 @@ import com.emie.designpm.repository.ScoringRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.ProjectAccessService;
 import com.emie.designpm.service.ProjectService;
+import com.emie.designpm.service.ProjectWorkflowService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -27,7 +28,8 @@ class ProjectControllerSubTaskTest {
         doThrow(new RuntimeException("仅项目负责人企划可创建子任务"))
                 .when(projects).addSubTask(org.mockito.ArgumentMatchers.eq(9L), org.mockito.ArgumentMatchers.anyMap());
         ProjectController controller = new ProjectController(projects, mock(ScoringRepository.class),
-                mock(ActivityLogRepository.class), mock(SubTaskRepository.class), mock(ProjectAccessService.class));
+                mock(ActivityLogRepository.class), mock(SubTaskRepository.class), mock(ProjectAccessService.class),
+                mock(ProjectWorkflowService.class));
 
         var response = controller.addTask(9L, Map.of("name", "包装设计"),
                 request("planner-2", "planner"));
@@ -70,7 +72,7 @@ class ProjectControllerSubTaskTest {
 
     private ProjectController controller(SubTaskRepository tasks, ScoringRepository scoring) {
         return new ProjectController(mock(ProjectService.class), scoring, mock(ActivityLogRepository.class),
-                tasks, mock(ProjectAccessService.class));
+                tasks, mock(ProjectAccessService.class), mock(ProjectWorkflowService.class));
     }
 
     private MockHttpServletRequest request(String userId, String role) {

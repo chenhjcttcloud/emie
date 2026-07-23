@@ -132,6 +132,7 @@ class ProjectReviewWorkflowTest {
     @Test
     void regularAdminApprovalCompletesSecondReviewAndTask() {
         Project project = projectWithTask("regular", "planner_approved");
+        project.getTasks().get(0).setWorkflowStage("bulk");
         ScoringRecord secondReview = review(project.getTasks().get(0), "admin", "second");
         when(projects.findById(1L)).thenReturn(Optional.of(project));
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -149,6 +150,16 @@ class ProjectReviewWorkflowTest {
         assertEquals("管理员甲", secondReview.getReviewerName());
         assertEquals("completed", project.getTasks().get(0).getStatus());
         assertEquals("completed", project.getStatus());
+    }
+
+    @Test
+    void projectOnlyCompletesAfterBulkStageTasksAreComplete() {
+        Project project = projectWithTask("regular", "completed");
+        project.getTasks().get(0).setWorkflowStage("design");
+        assertEquals("in_progress", ProjectService.computeProjectStatusStatic(project));
+
+        project.getTasks().get(0).setWorkflowStage("bulk");
+        assertEquals("completed", ProjectService.computeProjectStatusStatic(project));
     }
 
     @Test

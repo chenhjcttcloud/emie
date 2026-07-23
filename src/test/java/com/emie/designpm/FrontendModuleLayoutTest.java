@@ -94,24 +94,27 @@ class FrontendModuleLayoutTest {
             if (module.equals("dashboard-lists.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=179");
             if (module.equals("core-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=172");
             if (module.equals("core-runtime.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=152");
+            if (module.equals("core-auth.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
+            if (module.equals("core-identity.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             if (module.equals("dashboard-projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=157");
             if (module.equals("dashboard-home.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=160");
             if (module.equals("admin-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=150");
             if (module.equals("dashboard-scoring.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=160");
             if (module.equals("admin-users.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=166");
+            if (module.equals("admin-roles.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             if (module.equals("admin-workload.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             if (module.equals("admin-org.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=165");
             if (module.equals("project-uploads.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
-            if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=171");
-            if (module.equals("project-form.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=179");
-            if (module.equals("project-tasks.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=177");
+            if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=181");
+            if (module.equals("project-form.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=180");
+            if (module.equals("project-tasks.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=180");
             if (module.equals("projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             assertTrue(currentIndex > previousIndex, module + " 的 ES Module 加载顺序不正确");
             previousIndex = currentIndex;
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=200\"></script>"),
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=211\"></script>"),
                 "页面应只通过当前版本 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
@@ -152,6 +155,25 @@ class FrontendModuleLayoutTest {
                 "组织架构应显示角色管理中的角色名称");
         assertFalse(adminOrg.contains("const roles = ['sales','planner','designer','supplychain','admin']"),
                 "部门新建和编辑不应继续使用固定角色列表");
+    }
+
+    @Test
+    void identitySwitcherUsesCurrentRolesAndUsers() throws IOException {
+        String identity = readResource("/static/js/core-identity.js");
+        String adminRoles = readResource("/static/js/admin-roles.js");
+
+        assertTrue(identity.contains("apiGet('/users/roles')"),
+                "管理员身份切换器应实时读取角色管理数据");
+        assertTrue(identity.contains("apiGet('/users')"),
+                "管理员身份切换器应实时读取最新用户数据");
+        assertTrue(identity.contains("promotion: '产品推广'"),
+                "身份切换器应内置显示产品推广角色");
+        assertTrue(identity.contains("configuredRoles"),
+                "身份切换器应纳入后续新增的自定义角色");
+        assertTrue(identity.contains("seenUserIds"),
+                "兼容角色别名时应按用户 ID 去重");
+        assertTrue(adminRoles.contains("await renderRoleSwitcher()"),
+                "新增、编辑或删除角色后应立即刷新身份切换器");
     }
 
     @Test
@@ -196,15 +218,36 @@ class FrontendModuleLayoutTest {
     }
 
     @Test
-    void addSubTaskButtonRequiresProjectOwnershipOrAdminRole() throws IOException {
+    void addSubTaskButtonRequiresProjectPlannerOwnership() throws IOException {
         String detail = readResource("/static/js/project-detail.js");
 
-        assertTrue(detail.contains("EMIE.state.currentRole === 'admin'"),
-                "管理员应可以管理项目子任务");
+        assertFalse(detail.contains("const canManageSubTasks = EMIE.state.currentRole === 'admin'"),
+                "管理员不能代替产品企划创建子任务");
+        assertTrue(detail.contains("const canManageSubTasks = EMIE.state.currentRole === 'planner'"),
+                "添加子任务入口必须限定为产品企划角色");
         assertTrue(detail.contains("detail.plannerId === getCurrentUserId()"),
                 "企划只有作为当前项目负责人时才应看到添加子任务按钮");
         assertTrue(detail.contains("canManageSubTasks &&"),
                 "添加子任务按钮必须复用负责人权限判断");
+        assertTrue(detail.contains("📌 子任务进度"),
+                "项目详情应在项目总进度上方展示独立子任务进度");
+        assertTrue(detail.contains("design_review") && detail.contains("three_d_review")
+                        && detail.contains("sample_review")
+                        && detail.contains("promotion") && detail.contains("bulk"),
+                "子任务总流程应完整展示六个固定阶段");
+        assertTrue(detail.contains("completedCount === stageTasks.length")
+                        && detail.contains("(task.workflowStage || 'design') === stage.key"),
+                "每个阶段必须根据所属子任务是否全部完成自动计算节点状态");
+        assertTrue(detail.contains("bulkStageCompleted && allTasksCompleted"),
+                "只有大货节点与全部子任务完成后才可进入项目完结");
+        String tasks = readResource("/static/js/project-tasks.js");
+        assertTrue(tasks.contains("switchAssigneeType('add', 'promotion'") && tasks.contains("📣 产品推广"),
+                "新建子任务负责人类型应包含产品推广");
+        assertTrue(detail.contains("🔵 项目总进度"),
+                "项目生命周期进度应明确命名为项目总进度");
+        assertTrue(detail.indexOf("renderSubTaskProgress(detail)")
+                        < detail.indexOf("renderProjectPipeline(detail)"),
+                "子任务进度应排列在项目总进度上方");
     }
 
     @Test
