@@ -34,6 +34,20 @@ public class DesignRequirementController {
                 result.getTotalElements(), result.getTotalPages()));
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<?> detail(@PathVariable Long id, HttpServletRequest request) {
+        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        if (session == null) return ResponseEntity.status(401).build();
+        DesignRequirement requirement = repository.findById(id).orElse(null);
+        if (requirement == null) return ResponseEntity.notFound().build();
+        boolean visible = "admin".equals(session.role())
+                || session.userId().equals(requirement.getOwnerId())
+                || session.userId().equals(requirement.getResponsibleId())
+                || session.userId().equals(requirement.getPlannerId());
+        if (!visible) return ResponseEntity.status(403).body(java.util.Map.of("error", "无权查看该设计/送审需求"));
+        return ResponseEntity.ok(toDetail(requirement));
+    }
+
     @PostMapping
     public ResponseEntity<?> create(@RequestBody java.util.Map<String, Object> body, HttpServletRequest request) {
         AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
@@ -80,6 +94,19 @@ public class DesignRequirementController {
         row.put("createdAt", d.getCreatedAt() == null ? null : d.getCreatedAt().format(DTF));
         row.put("updatedAt", d.getUpdatedAt() == null ? null : d.getUpdatedAt().format(DTF));
         return row;
+    }
+
+    private java.util.Map<String, Object> toDetail(DesignRequirement d) {
+        var detail = new java.util.LinkedHashMap<>(toRow(d));
+        detail.put("description", d.getDescription());
+        detail.put("attachmentsJson", d.getAttachmentsJson());
+        detail.put("responsibleId", d.getResponsibleId());
+        detail.put("responsibleName", d.getResponsibleName());
+        detail.put("responsibleRole", d.getResponsibleRole());
+        detail.put("plannerId", d.getPlannerId());
+        detail.put("ownerId", d.getOwnerId());
+        detail.put("ownerName", d.getOwnerName());
+        return detail;
     }
 
     private String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }

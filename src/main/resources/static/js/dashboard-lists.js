@@ -7,6 +7,54 @@ const renderDesignerTasks = (...args) => EMIE.actions.renderDesignerTasks(...arg
 const renderProjectRow = (...args) => EMIE.actions.renderProjectRow(...args);
 const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const openCreateProject = (...args) => EMIE.actions.openCreateProject(...args);
+const closeM = (...args) => EMIE.actions.closeM(...args);
+
+function openListItemDetail(type, id) {
+  if (type === 'design_requirement') {
+    openDesignRequirementDetail(id);
+    return;
+  }
+  openProjectDetail(id);
+}
+
+async function openDesignRequirementDetail(id) {
+  if (document.getElementById('designRequirementDetailModal')) return;
+  try {
+    const detail = await apiGet(`/design-requirements/${id}`);
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'designRequirementDetailModal';
+    modal.innerHTML = `
+      <button class="modal-close-float" data-emie-onclick="closeM('designRequirementDetailModal')">✕</button>
+      <div class="modal modal-lg">
+        <div class="modal-header"><div class="modal-header-left">
+          <div class="modal-title">🎨 设计/送审需求详情</div>
+          <div style="font-size:12px;color:var(--gray-400);margin-top:3px;">${escHtml(detail.projectCode || ('#' + detail.id))}</div>
+        </div></div>
+        <div class="modal-body">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+            <span class="badge ${escHtml(detail.statusCls || 'badge-progress')}">${escHtml(detail.statusLabel || detail.status || '-')}</span>
+            <span style="font-size:12px;color:var(--gray-400);">创建：${detail.createdAt ? new Date(detail.createdAt).toLocaleString('zh-CN', { hour12: false }) : '-'}</span>
+          </div>
+          <div class="detail-section">
+            <div class="detail-section-title">📋 基本信息</div>
+            <div class="detail-grid">
+              <div class="detail-item"><div class="detail-label">产品名称</div><div class="detail-value">${escHtml(detail.productName || '-')}</div></div>
+              <div class="detail-item"><div class="detail-label">要求完成时间</div><div class="detail-value">${formatDate(detail.deadline)}</div></div>
+              <div class="detail-item"><div class="detail-label">需求负责人</div><div class="detail-value">${escHtml(detail.responsibleName || detail.ownerName || '-')}</div></div>
+              <div class="detail-item"><div class="detail-label">客户名称</div><div class="detail-value">${escHtml(detail.customerName || '-')}</div></div>
+            </div>
+            <div style="margin-top:12px;"><div class="detail-label">产品要求</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(detail.productRequirements || '-')}</div></div>
+            ${detail.description ? `<div style="margin-top:12px;"><div class="detail-label">细节描述</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(detail.description)}</div></div>` : ''}
+          </div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('designRequirementDetailModal')">关闭</button></div>
+      </div>`;
+    document.body.appendChild(modal);
+  } catch (error) {
+    alert('加载详情失败：' + error.message);
+  }
+}
 
 async function renderOrderList(main, type, role, uid, titleOverride = '', endpoint = '/projects/page') {
   let title = '全部项目';
@@ -386,6 +434,8 @@ function isDateInRange(value, start, end) {
 
 EMIE.registerActions({
   renderOrderList,
+  openListItemDetail,
+  openDesignRequirementDetail,
   renderProjectTable,
   changeProjectListPage,
   jumpProjectListPage,
@@ -407,6 +457,8 @@ EMIE.registerActions({
 
 EMIE.registerModule('dashboardLists', {
   renderOrderList,
+  openListItemDetail,
+  openDesignRequirementDetail,
   changeProjectListPage,
   jumpProjectListPage,
   filterProjectList,

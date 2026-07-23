@@ -28,5 +28,6 @@ public class TaskDetailDTO {
     private Double selfAesthetics;
     private Double selfInnovation;
     private List<Map<String, Object>> scoringRecords;
+    private List<Map<String, Object>> rejectionRecords;
     private String createdAt;
 }

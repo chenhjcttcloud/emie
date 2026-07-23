@@ -122,9 +122,10 @@ function updateProjectRow(pid, detail) {
 /** 渲染单行项目 */
 function renderProjectRow(o, compact = false, showType = true) {
   const st = getProjectStatusInfo(o.status);
+  const rowOpen = `openListItemDetail('${o.type}',${o.id})`;
   if (compact) {
     const market = o.targetMarket ? (() => { try { return JSON.parse(o.targetMarket).join('/'); } catch(e) { return o.targetMarket; } })() : '-';
-    return `<tr style="cursor:pointer;">
+    return `<tr style="cursor:pointer;" tabindex="0" data-emie-onclick="${rowOpen}" data-emie-onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();${rowOpen}}">
       <td><strong>#${o.id}</strong></td>
       ${showType ? `<td>${o.type === 'channel_custom' ? '📦 渠道' : '🏭 常规'}</td>` : ''}
       <td class="project-name-cell" title="${escHtml(displayText(o.productName, '未设置'))}">${escHtml(displayText(o.productName, '未设置'))}</td>
@@ -133,10 +134,10 @@ function renderProjectRow(o, compact = false, showType = true) {
       <td>${o.approvedTaskCount}/${o.taskCount}<span class="project-muted"> · ${renderScore(o.score)}</span></td>
       <td>${formatDate(o.deadline)}</td>
       <td><span class="badge ${st.cls}">${st.label}</span></td>
-      <td class="project-action-cell"><button class="btn btn-outline btn-sm" data-emie-onclick="event.stopPropagation();openProjectDetail(${o.id})">查看</button></td>
+      <td class="project-action-cell"><button class="btn btn-outline btn-sm" data-emie-onclick="event.stopPropagation();${rowOpen}">查看</button></td>
     </tr>`;
   }
-  return `<tr style="cursor:pointer;">
+  return `<tr style="cursor:pointer;" tabindex="0" data-emie-onclick="${rowOpen}" data-emie-onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();${rowOpen}}">
     <td><strong>#${o.id}</strong></td>
     <td style="font-size:12px;">${o.type === 'channel_custom' ? '📦 渠道' : '🏭 常规'}</td>
     <td>${escHtml(displayText(o.productName, '未设置'))}</td>
@@ -150,7 +151,7 @@ function renderProjectRow(o, compact = false, showType = true) {
     <td style="font-size:12px;">${formatDate(o.deadline)}</td>
     <td><span class="badge ${st.cls}" style="font-size:11px;">${st.label}</span></td>
     <td style="white-space:nowrap;">
-      <button class="btn btn-outline btn-sm" data-emie-onclick="event.stopPropagation();openProjectDetail(${o.id})">查看</button>
+      <button class="btn btn-outline btn-sm" data-emie-onclick="event.stopPropagation();${rowOpen}">查看</button>
       ${o.status === 'pending_planner' && EMIE.state.currentRole === 'planner' ? `<button class="btn btn-outline btn-sm" data-emie-onclick="event.stopPropagation();plannerAcceptFromList(${o.id})" style="color:var(--success);border-color:var(--success);margin-left:4px;">接单</button>` : ''}
       ${['planner_accepted','in_progress','paused'].includes(o.status) ? `<button class="btn btn-outline btn-sm" data-emie-onclick="event.stopPropagation();${o.status === 'paused' ? `resumeProject(${o.id})` : `pauseProject(${o.id})`}" style="font-size:11px;margin-left:4px;color:${o.status === 'paused' ? 'var(--success)' : 'var(--primary)'};border-color:${o.status === 'paused' ? 'var(--success)' : 'var(--primary)'};">${o.status === 'paused' ? '▶ 继续' : '⏸ 暂停'}</button>` : ''}
     </td>

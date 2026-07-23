@@ -69,6 +69,7 @@ async function openProjectDetail(pid) {
 }
 
 function renderProjectDetailContent(detail) {
+  EMIE.projectState.currentProjectDetail = detail;
   const isChannel = detail.type === 'channel_custom';
   const canManageSubTasks = EMIE.state.currentRole === 'planner'
     && detail.plannerId === getCurrentUserId();
@@ -184,6 +185,7 @@ function renderSubTaskCard(detail, task, idx) {
     promotion: '产品宣发',
     bulk: '大货',
   }[task.workflowStage] || '未设置阶段';
+  const rejectionRecords = Array.isArray(task.rejectionRecords) ? task.rejectionRecords : [];
 
   return `<div class="subtask-card${isDone ? ' completed' : ''}">
     <div class="subtask-header">
@@ -203,6 +205,17 @@ function renderSubTaskCard(detail, task, idx) {
     ${task.status === 'delivered' || task.status === 'planner_approved' || task.status === 'sales_approved' || task.status === 'admin_approved' || task.status === 'approved' || task.status === 'completed' || task.status === 'rejected' ? `
     <div class="subtask-deliver">
       ${task.deliverables ? `<div class="detail-item"><div class="detail-label">交付成果</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.deliverables)}</div></div>` : ''}
+    </div>` : ''}
+
+    ${rejectionRecords.length ? `<div style="margin-top:10px;border-top:1px solid var(--gray-100);">
+      ${rejectionRecords.map(record => `
+        <button type="button" data-emie-onclick="openTaskRejectionRecord(${task.id},${record.attemptNo})"
+          style="width:100%;display:flex;align-items:center;gap:8px;padding:8px 4px;border:0;border-bottom:1px solid var(--gray-100);background:transparent;cursor:pointer;text-align:left;font-size:11px;color:var(--gray-500);">
+          <span style="color:#A32D2D;font-weight:600;white-space:nowrap;">↩ 第 ${record.attemptNo} 次驳回</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escHtml(record.reason || '未填写驳回意见')}</span>
+          <span style="white-space:nowrap;color:var(--gray-400);">${fmtDT(record.reviewedAt)}</span>
+          <span style="color:var(--primary);white-space:nowrap;">查看详情 ›</span>
+        </button>`).join('')}
     </div>` : ''}
 
     ${task.reviewComments ? `<div class="review-box ${task.status === 'rejected' ? 'rejected' : 'approved'}"><strong>${task.status === 'rejected' ? '驳回意见' : '验收意见'}：</strong>${escHtml(task.reviewComments)}</div>` : ''}
@@ -234,6 +247,51 @@ function renderSubTaskCard(detail, task, idx) {
       ${needScore ? `<button class="btn btn-warning btn-sm" data-emie-onclick="openScoring(${detail.id},${task.id})">⭐ 评分</button>` : ''}
     </div>
   </div>`;
+}
+
+function openTaskRejectionRecord(taskId, attemptNo) {
+  if (document.getElementById('taskRejectionRecordModal')) return;
+  const task = EMIE.projectState.currentProjectDetail?.tasks?.find(item => Number(item.id) === Number(taskId));
+  const record = task?.rejectionRecords?.find(item => Number(item.attemptNo) === Number(attemptNo));
+  if (!task || !record) return;
+  const roleNames = { planner: '产品企划', sales: '销售', admin: '管理员', designer: '设计师', supplychain: '供应链', promotion: '产品推广' };
+  const submittedImages = record.referenceImagesJson ? renderSubTaskImages(record.referenceImagesJson) : '';
+  const submittedAttachments = record.attachmentsJson ? renderTaskAttachments(record.attachmentsJson) : '';
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'taskRejectionRecordModal';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:700px;">
+      <div class="modal-header">
+        <button class="modal-close" data-emie-onclick="closeM('taskRejectionRecordModal')">✕</button>
+        <div class="modal-header-left">
+          <div class="modal-title">↩ 第 ${record.attemptNo} 次驳回详情</div>
+          <div style="font-size:12px;color:var(--gray-400);margin-top:3px;">${escHtml(task.name)} · ${fmtDT(record.reviewedAt)}</div>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:14px;">
+          <div class="detail-item"><div class="detail-label">本次提交人</div><div class="detail-value">${escHtml(record.submittedByName || task.designerName || '-')}</div></div>
+          <div class="detail-item"><div class="detail-label">实际提交时间</div><div class="detail-value">${record.actualDate ? formatDate(record.actualDate) : '-'}</div></div>
+        </div>
+        <div style="padding:14px 16px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:9px;">
+          <div class="detail-label">本次提交内容</div>
+          <div class="detail-value" style="white-space:pre-wrap;margin-top:5px;">${escHtml(record.deliverables || '未填写文字交付内容')}</div>
+          ${submittedImages}
+          ${submittedAttachments}
+          ${record.legacy ? '<div style="font-size:11px;color:var(--gray-400);margin-top:8px;">历史记录创建时未保存独立快照，附件展示为当前可恢复内容。</div>' : ''}
+        </div>
+        <div style="margin-top:14px;padding:14px 16px;background:#FFF8F8;border:1px solid #F7C1C1;border-radius:9px;">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:7px;">
+            <span style="font-size:12px;font-weight:600;color:#A32D2D;">驳回意见</span>
+            <span style="font-size:11px;color:var(--gray-500);">${escHtml(roleNames[record.reviewerRole] || record.reviewerRole || '')} · ${escHtml(record.reviewerName || '-')}</span>
+          </div>
+          <div style="font-size:13px;line-height:1.7;color:var(--gray-700);white-space:pre-wrap;">${escHtml(record.reason || '未填写驳回意见')}</div>
+        </div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskRejectionRecordModal')">关闭</button></div>
+    </div>`;
+  document.body.appendChild(modal);
 }
 
 function renderProjectActions(detail) {
@@ -781,6 +839,7 @@ EMIE.registerActions({
   cleanLogAction,
   renderLogLabel,
   renderSubTaskCard,
+  openTaskRejectionRecord,
   renderProjectActions,
   showConfirmDialog,
   terminateProject,

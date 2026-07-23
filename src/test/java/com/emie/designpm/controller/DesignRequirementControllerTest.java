@@ -9,6 +9,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -64,6 +65,25 @@ class DesignRequirementControllerTest {
 
         verify(repository).findPage(null, null, "sales-1", org.springframework.data.domain.PageRequest.of(0, 15));
         verify(repository).findPage(null, null, null, org.springframework.data.domain.PageRequest.of(0, 15));
+    }
+
+    @Test
+    void detailAllowsParticipantButRejectsUnrelatedUser() {
+        DesignRequirementRepository repository = mock(DesignRequirementRepository.class);
+        DesignRequirement requirement = new DesignRequirement();
+        requirement.setId(9L);
+        requirement.setName("包装送审");
+        requirement.setRequirements("完成包装方案");
+        requirement.setDeadline("2026-08-01");
+        requirement.setOwnerId("sales-1");
+        requirement.setResponsibleId("promotion-1");
+        when(repository.findById(9L)).thenReturn(Optional.of(requirement));
+        DesignRequirementController controller = new DesignRequirementController(repository);
+
+        assertEquals(HttpStatus.OK,
+                controller.detail(9L, authenticated("promotion-1", "promotion", "推广一")).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN,
+                controller.detail(9L, authenticated("designer-1", "designer", "设计师")).getStatusCode());
     }
 
     private MockHttpServletRequest authenticated(String userId, String role, String name) {

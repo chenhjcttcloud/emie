@@ -91,12 +91,12 @@ class FrontendModuleLayoutTest {
             if (module.equals("dashboard-designer.js")) {
                 currentIndex = bootstrap.indexOf("./" + module + "?v=174");
             }
-            if (module.equals("dashboard-lists.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=179");
+            if (module.equals("dashboard-lists.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=180");
             if (module.equals("core-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=172");
             if (module.equals("core-runtime.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=152");
             if (module.equals("core-auth.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             if (module.equals("core-identity.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
-            if (module.equals("dashboard-projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=157");
+            if (module.equals("dashboard-projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=158");
             if (module.equals("dashboard-home.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=160");
             if (module.equals("admin-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=150");
             if (module.equals("dashboard-scoring.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=160");
@@ -105,7 +105,7 @@ class FrontendModuleLayoutTest {
             if (module.equals("admin-workload.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             if (module.equals("admin-org.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=165");
             if (module.equals("project-uploads.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
-            if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=181");
+            if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=182");
             if (module.equals("project-form.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=180");
             if (module.equals("project-tasks.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=180");
             if (module.equals("projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
@@ -114,7 +114,7 @@ class FrontendModuleLayoutTest {
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=211\"></script>"),
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=213\"></script>"),
                 "页面应只通过当前版本 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
@@ -243,6 +243,18 @@ class FrontendModuleLayoutTest {
         String tasks = readResource("/static/js/project-tasks.js");
         assertTrue(tasks.contains("switchAssigneeType('add', 'promotion'") && tasks.contains("📣 产品推广"),
                 "新建子任务负责人类型应包含产品推广");
+        assertTrue(detail.contains("第 ${record.attemptNo} 次驳回")
+                        && detail.contains("openTaskRejectionRecord")
+                        && detail.contains("本次提交内容"),
+                "子任务卡片应逐行展示驳回记录，并可查看当轮提交快照");
+        String projects = readResource("/static/js/dashboard-projects.js");
+        String lists = readResource("/static/js/dashboard-lists.js");
+        assertTrue(projects.contains("data-emie-onclick=\"${rowOpen}\"")
+                        && projects.contains("tabindex=\"0\""),
+                "项目列表整行应支持鼠标和键盘打开详情");
+        assertTrue(lists.contains("openDesignRequirementDetail")
+                        && lists.contains("/design-requirements/${id}"),
+                "设计/送审需求应使用独立详情接口和弹窗");
         assertTrue(detail.contains("🔵 项目总进度"),
                 "项目生命周期进度应明确命名为项目总进度");
         assertTrue(detail.indexOf("renderSubTaskProgress(detail)")

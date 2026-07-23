@@ -127,6 +127,10 @@ class ProjectReviewWorkflowTest {
         assertEquals("二审需修改", secondReview.getComment());
         assertNotNull(secondReview.getReviewedAt());
         assertEquals("rejected", project.getTasks().get(0).getStatus());
+        assertEquals("sub_task", project.getLogs().get(0).getEntityType());
+        assertEquals(11L, project.getLogs().get(0).getEntityId());
+        assertTrue(project.getLogs().get(0).getBeforeData().contains("\"deliverables\""));
+        assertTrue(project.getLogs().get(0).getAfterData().contains("二审需修改"));
     }
 
     @Test

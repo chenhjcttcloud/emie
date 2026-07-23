@@ -1047,7 +1047,19 @@ public class ProjectService {
         rejectReviewRecord(task, currentRole, currentUserId, currentUser, comments);
         task.setStatus("rejected");
         task.setReviewComments(comments);
-        p.getLogs().add(new ActivityLog("子任务驳回：" + task.getName() + "（意见：" + comments + "）", currentUser, currentRole, p));
+        Map<String, Object> submittedSnapshot = new LinkedHashMap<>();
+        submittedSnapshot.put("deliverables", task.getDeliverables());
+        submittedSnapshot.put("referenceImagesJson", task.getReferenceImagesJson());
+        submittedSnapshot.put("attachmentsJson", task.getAttachmentsJson());
+        submittedSnapshot.put("actualDate", task.getActualDate());
+        submittedSnapshot.put("submittedById", task.getDesignerId());
+        submittedSnapshot.put("submittedByName", task.getDesignerName());
+        p.getLogs().add(new ActivityLog(
+                "子任务驳回：" + task.getName() + "（意见：" + comments + "）",
+                currentUser, currentRole, p, "sub_task", task.getId(),
+                toJson(submittedSnapshot),
+                toJson(Map.of("reason", comments == null ? "" : comments)),
+                "status,reviewComments"));
         Project saved = projectRepository.save(p);
         safeNotify("TASK_REJECTED", task.getDesignerId(), "sub_task", task.getId(), currentUserId,
                 notificationContext(p, task, currentUser, comments));

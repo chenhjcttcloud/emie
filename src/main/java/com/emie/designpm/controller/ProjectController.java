@@ -14,6 +14,8 @@ import com.emie.designpm.service.ProjectService;
 import com.emie.designpm.service.ProjectAccessService;
 import com.emie.designpm.service.ProjectWorkflowService;
 import com.emie.designpm.util.ProjectAccessPolicy;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.data.domain.Page;
@@ -35,6 +37,7 @@ public class ProjectController {
     private final SubTaskRepository subTaskRepository;
     private final ProjectAccessService projectAccessService;
     private final ProjectWorkflowService projectWorkflowService;
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
@@ -714,6 +717,7 @@ public class ProjectController {
         dto.setTasks(taskList.stream().map(t -> {
             TaskDetailDTO tDto = toTaskDetail(t);
             tDto.setScoringRecords(scoringMap.getOrDefault(t.getId(), List.of()));
+            tDto.setRejectionRecords(rejectionRecords(p, t));
             return tDto;
         }).collect(Collectors.toList()));
         dto.setSubTaskWorkflow(projectWorkflowService.build(p));
@@ -727,6 +731,50 @@ public class ProjectController {
         dto.setUpdatedAt(p.getUpdatedAt().format(DTF));
 
         return dto;
+    }
+
+    private List<Map<String, Object>> rejectionRecords(Project project, SubTask task) {
+        String legacyPrefix = "子任务驳回：" + task.getName() + "（意见：";
+        List<ActivityLog> logs = project.getLogs().stream()
+                .filter(log -> log.getAction() != null && log.getAction().startsWith("子任务驳回："))
+                .filter(log -> ("sub_task".equals(log.getEntityType()) && Objects.equals(log.getEntityId(), task.getId()))
+                        || (!"sub_task".equals(log.getEntityType()) && log.getAction().startsWith(legacyPrefix)))
+                .sorted(Comparator.comparing(ActivityLog::getTime))
+                .toList();
+        List<Map<String, Object>> records = new ArrayList<>();
+        for (int index = 0; index < logs.size(); index++) {
+            ActivityLog log = logs.get(index);
+            Map<String, Object> snapshot = parseJsonMap(log.getBeforeData());
+            String action = log.getAction();
+            int reasonStart = action.indexOf("（意见：");
+            String reason = reasonStart >= 0
+                    ? action.substring(reasonStart + 4, action.endsWith("）") ? action.length() - 1 : action.length())
+                    : "";
+            Map<String, Object> record = new LinkedHashMap<>();
+            record.put("id", log.getId());
+            record.put("attemptNo", index + 1);
+            record.put("reviewerName", log.getUsername());
+            record.put("reviewerRole", log.getRole());
+            record.put("reviewedAt", log.getTime().format(DTF));
+            record.put("reason", reason);
+            record.put("deliverables", snapshot.getOrDefault("deliverables", task.getDeliverables()));
+            record.put("referenceImagesJson", snapshot.getOrDefault("referenceImagesJson", task.getReferenceImagesJson()));
+            record.put("attachmentsJson", snapshot.getOrDefault("attachmentsJson", task.getAttachmentsJson()));
+            record.put("actualDate", snapshot.getOrDefault("actualDate", task.getActualDate()));
+            record.put("submittedByName", snapshot.getOrDefault("submittedByName", task.getDesignerName()));
+            record.put("legacy", snapshot.isEmpty());
+            records.add(record);
+        }
+        return records;
+    }
+
+    private Map<String, Object> parseJsonMap(String json) {
+        if (json == null || json.isBlank()) return Map.of();
+        try {
+            return JSON.readValue(json, new TypeReference<>() {});
+        } catch (Exception ignored) {
+            return Map.of();
+        }
     }
 
     private Map<Long, List<Map<String, Object>>> loadScoringDetails(List<Long> taskIds) {
