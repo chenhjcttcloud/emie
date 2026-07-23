@@ -13,6 +13,23 @@
 
 ---
 
+## 2026-07-23 六阶段子任务进度与动态角色发布
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 发布成功 |
+| 旧生产提交 / 生产提交 | `961cd1bd8f0939e89f00b5483e281831badca1f6` / `7106c73a02fc51a720d0ccaf8ab1bb21ba3ac9e5` |
+| Gitee 推送 | `project_manager_system` 已推送，本地、远端目标提交一致 |
+| 变更范围 | 全员通知后台任务启动修复；管理员子任务创建权限；动态管理员身份切换；子任务六阶段聚合进度、3D送审、产品推广负责人；项目总进度与大货完成联动 |
+| 本地验证 | Java 21 `clean package` 成功，81 项测试通过；全量前端 JavaScript 语法检查、`git diff --check` 通过 |
+| 数据库备份 | `/root/emie/db-backup-before-7106c73-20260723_174342.sql.gz`，151016 字节，`gzip -t` 通过；前两次不满足标准的产物已分别标记为 `.invalid`、`.partial`，不作为恢复点 |
+| 数据库迁移 | `2026-07-23-add-project-workflow.sql` 已执行；`projects` 两个流程字段、`sub_tasks.workflow_stage` 和 `project_workflow_attempts` 表均存在，历史项目及子任务阶段空值为 0 |
+| 应用产物 | 本地与生产 JAR SHA-256 均为 `a71cd1c9527718fc1ca0f2616af42f33bd4c843fe42b3a5d17192f79571af261` |
+| 回滚包 | `/root/emie/app.jar.bak.pre-7106c73-20260723_174623` |
+| 生产验证 | `release-sha.txt` 与目标提交一致；应用和预览容器 running、重启次数均为 0；首页、公开配置和预览健康接口 HTTP 200；未登录项目接口 401；生产加载 `bootstrap.js?v=211`、`project-form.js?v=180`、`project-detail.js?v=181`、`project-tasks.js?v=180`；启动日志无严重错误 |
+| 外部动作 | 发布过程未触发全员通知发送接口，未产生飞书群发 |
+| 回滚 | 未执行 |
+
 ## 2026-07-23 子任务、评分中心、设计需求与系统更新通知发布
 
 | 项目 | 记录 |
