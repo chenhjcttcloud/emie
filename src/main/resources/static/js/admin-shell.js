@@ -195,7 +195,7 @@ async function renderAdminConfig(container) {
   container.innerHTML = html;
   if (configs.notification) {
     container.insertAdjacentHTML('beforeend', `<div class="config-card" data-group="temporary-broadcast">
-      <div class="config-card-header"><h3>📣 系统更新通知</h3><button class="btn btn-primary" data-emie-onclick="sendTemporaryBroadcast()">发送给全部用户</button></div>
+      <div class="config-card-header"><h3>📣 系统更新通知</h3><button class="btn btn-primary" id="temporaryBroadcastSendButton" data-emie-onclick="sendTemporaryBroadcast()">发送给全部用户</button></div>
       <div class="config-card-body">
         <p style="margin:0 0 6px;color:var(--gray-700);font-size:13px;">编辑完成后，将向除已停用账号外的所有系统用户发送飞书通知。</p>
         <p style="margin:0 0 12px;color:var(--gray-500);font-size:12px;">未绑定飞书的用户无法投递，并会计入发送结果；本次内容不会保存为通知模板。</p>
@@ -215,12 +215,31 @@ async function sendTemporaryBroadcast() {
   const content = document.getElementById('temporaryBroadcastContent')?.value?.trim();
   if (!title || !content) { showAdminToast('❌ 请填写通知标题和内容', 'error'); return; }
   if (!window.confirm('确认发送给全部系统用户？\n\n发送后，已绑定飞书的用户将立即收到这条通知。')) return;
+  const button = document.getElementById('temporaryBroadcastSendButton');
+  if (button) { button.disabled = true; button.textContent = '正在后台发送…'; }
   try {
-    const result = await apiPost('/admin/notifications/temporary-broadcast', { title, content });
+    const job = await apiPost('/admin/notifications/temporary-broadcast', { title, content });
+    showAdminToast('📨 已提交后台发送，可停留此页查看最终结果', 'success');
+    const result = await waitForTemporaryBroadcast(job.jobId);
     showAdminToast(`✅ 发送完成：成功 ${result.delivered}，失败 ${result.failed}，未绑定飞书 ${result.unbound}`, 'success');
     document.getElementById('temporaryBroadcastTitle').value = '';
     document.getElementById('temporaryBroadcastContent').value = '';
-  } catch (e) { showAdminToast('❌ 发送失败：' + e.message, 'error'); }
+  } catch (e) {
+    showAdminToast('❌ ' + e.message, 'error');
+  } finally {
+    if (button) { button.disabled = false; button.textContent = '发送给全部用户'; }
+  }
+}
+
+async function waitForTemporaryBroadcast(jobId) {
+  if (!jobId) throw new Error('后台发送任务创建失败');
+  for (let attempt = 0; attempt < 600; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    const job = await apiGet(`/admin/notifications/temporary-broadcast/${encodeURIComponent(jobId)}`);
+    if (job.status === 'completed') return job.result;
+    if (job.status === 'failed') throw new Error(`后台发送失败：${job.error || '未知错误'}`);
+  }
+  throw new Error('后台发送仍在继续，请稍后查看飞书失败通知记录');
 }
 
 async function loadNotificationFailures() {

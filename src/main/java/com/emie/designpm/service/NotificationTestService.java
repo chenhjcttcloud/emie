@@ -114,12 +114,7 @@ public class NotificationTestService {
 
     @Transactional
     public Map<String, Object> sendTemporaryBroadcast(String title, String content, String operatorUserId) {
-        if (title == null || title.isBlank() || content == null || content.isBlank()) {
-            throw new IllegalArgumentException("通知标题和内容不能为空");
-        }
-        if (!isEnabled("notification.feishuEnabled")) {
-            throw new IllegalArgumentException("飞书通知当前未启用");
-        }
+        validateTemporaryBroadcast(title, content);
         int total = 0, delivered = 0, failed = 0, unbound = 0;
         for (User user : userRepository.findAll()) {
             if (user.getStatus() != null && "disabled".equalsIgnoreCase(user.getStatus())) continue;
@@ -153,6 +148,15 @@ public class NotificationTestService {
             }
         }
         return Map.of("total", total, "delivered", delivered, "failed", failed, "unbound", unbound);
+    }
+
+    public void validateTemporaryBroadcast(String title, String content) {
+        if (title == null || title.isBlank() || content == null || content.isBlank()) {
+            throw new IllegalArgumentException("通知标题和内容不能为空");
+        }
+        if (!isEnabled("notification.feishuEnabled")) {
+            throw new IllegalArgumentException("飞书通知当前未启用");
+        }
     }
 
     private String buildBroadcastCard(String title, String content) throws Exception {

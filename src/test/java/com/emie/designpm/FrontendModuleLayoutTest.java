@@ -96,7 +96,7 @@ class FrontendModuleLayoutTest {
             if (module.equals("core-runtime.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=152");
             if (module.equals("dashboard-projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=157");
             if (module.equals("dashboard-home.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=160");
-            if (module.equals("admin-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=149");
+            if (module.equals("admin-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=150");
             if (module.equals("dashboard-scoring.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=160");
             if (module.equals("admin-users.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=166");
             if (module.equals("admin-workload.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
@@ -111,7 +111,7 @@ class FrontendModuleLayoutTest {
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=199\"></script>"),
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=200\"></script>"),
                 "页面应只通过当前版本 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
@@ -127,6 +127,8 @@ class FrontendModuleLayoutTest {
                 "管理后台应提供明确的系统更新通知入口");
         assertTrue(readResource("/static/js/admin-shell.js").contains("确认发送给全部系统用户"),
                 "全员飞书通知发送前必须二次确认");
+        assertTrue(readResource("/static/js/admin-shell.js").contains("waitForTemporaryBroadcast(job.jobId)"),
+                "全员飞书通知应提交后台任务并轮询最终结果");
     }
 
     @Test

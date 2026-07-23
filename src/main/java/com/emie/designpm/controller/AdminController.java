@@ -3,6 +3,7 @@ package com.emie.designpm.controller;
 import com.emie.designpm.entity.SystemConfig;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.service.AdminService;
+import com.emie.designpm.service.NotificationBroadcastJobService;
 import com.emie.designpm.service.NotificationTestService;
 import com.emie.designpm.service.NotificationRetryService;
 import org.springframework.http.ResponseEntity;
@@ -20,11 +21,15 @@ public class AdminController {
 
     private final AdminService adminService;
     private final NotificationTestService notificationTestService;
+    private final NotificationBroadcastJobService notificationBroadcastJobService;
     private final NotificationRetryService notificationRetryService;
 
-    public AdminController(AdminService adminService, NotificationTestService notificationTestService, NotificationRetryService notificationRetryService) {
+    public AdminController(AdminService adminService, NotificationTestService notificationTestService,
+                           NotificationBroadcastJobService notificationBroadcastJobService,
+                           NotificationRetryService notificationRetryService) {
         this.adminService = adminService;
         this.notificationTestService = notificationTestService;
+        this.notificationBroadcastJobService = notificationBroadcastJobService;
         this.notificationRetryService = notificationRetryService;
     }
 
@@ -76,8 +81,26 @@ public class AdminController {
                                                      @RequestHeader("X-Auth-Token") String token) {
         AuthController.AuthSession session = AuthController.validateToken(token);
         if (session == null || !"admin".equals(session.role())) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可发送临时通知"));
-        try { return ResponseEntity.ok(notificationTestService.sendTemporaryBroadcast(body.get("title"), body.get("content"), session.userId())); }
-        catch (IllegalArgumentException e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
+        try {
+            return ResponseEntity.accepted().body(notificationBroadcastJobService.start(
+                    body.get("title"), body.get("content"), session.userId()));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/notifications/temporary-broadcast/{jobId}")
+    public ResponseEntity<?> getTemporaryBroadcastStatus(@PathVariable String jobId,
+                                                          @RequestHeader("X-Auth-Token") String token) {
+        AuthController.AuthSession session = AuthController.validateToken(token);
+        if (session == null || !"admin".equals(session.role())) {
+            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可查看全员通知进度"));
+        }
+        try {
+            return ResponseEntity.ok(notificationBroadcastJobService.status(jobId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        }
     }
 
     @GetMapping("/notifications/failures")
