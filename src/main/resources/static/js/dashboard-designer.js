@@ -116,10 +116,9 @@ function renderDesignerTaskCards(tasks, readOnly = false) {
         const needScore = t.scoringRecords && t.scoringRecords.some(sr => sr.score == null && (sr.role === 'designer' || sr.role === 'supplychain'));
         return `<div class="subtask-card" style="${t._unassigned ? 'border-left:3px solid var(--warning);' : ''}">
           <div class="subtask-header">
-            <div class="subtask-name">${t._unassigned ? '📋' : tsi.icon} 子任务：${escHtml(t.name || '-')} <span style="font-size:11px;color:var(--gray-400);font-weight:400;">#${t.id}</span></div>
+            <div class="subtask-name">${t._unassigned ? '📋' : tsi.icon} 子任务：${escHtml(t.name || '-')} <span class="subtask-project-inline">（所属项目：${escHtml(t.projectName || '未命名项目')}）</span> <span style="font-size:11px;color:var(--gray-400);font-weight:400;">#${t.id}</span></div>
             <span class="badge ${t._unassigned ? 'badge-pending' : tsi.cls}">${t._unassigned ? '待接单' : tsi.label}</span>
           </div>
-          <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;padding:6px 8px;background:var(--gray-50);border-radius:6px;">所属项目：#${t.projectId} ${escHtml(t.projectName || '-')}</div>
           <div class="subtask-meta">
             <div class="subtask-meta-item">👤 负责人：<strong>${t.designerName || '<span style="color:var(--warning);">待认领</span>'}</strong>${t.assigneeRole ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;${t.assigneeRole === 'supplychain' ? 'background:#F0FDFA;color:#0D9488;' : t.assigneeRole === 'planner' ? 'background:#EFF6FF;color:#1D4ED8;' : 'background:#FEF2F2;color:#DC2626;'}">${t.assigneeRole === 'supplychain' ? '供应链' : t.assigneeRole === 'planner' ? '企划' : '设计师'}</span>` : ''}</div>
             ${t.relation ? `<div class="subtask-meta-item">🔗 我的关系：<strong>${t.relation === 'publisher' ? '我发布的任务' : '我负责的任务'}</strong></div>` : ''}

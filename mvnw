@@ -27,9 +27,10 @@ if [ ! -f "${MVN_DIR}/bin/mvn" ]; then
   # Try multiple mirrors
   for url in \
     "https://mirrors.aliyun.com/apache/maven/maven-3/${MVN_VERSION}/binaries/apache-maven-${MVN_VERSION}-bin.tar.gz" \
-    "https://dlcdn.apache.org/maven/maven-3/${MVN_VERSION}/binaries/apache-maven-${MVN_VERSION}-bin.tar.gz"; do
+    "https://dlcdn.apache.org/maven/maven-3/${MVN_VERSION}/binaries/apache-maven-${MVN_VERSION}-bin.tar.gz" \
+    "https://archive.apache.org/dist/maven/maven-3/${MVN_VERSION}/binaries/apache-maven-${MVN_VERSION}-bin.tar.gz"; do
     if curl -fsSL "$url" -o /tmp/maven-wrapper.tar.gz 2>/dev/null; then
-      if [ $(stat -f%z /tmp/maven-wrapper.tar.gz 2>/dev/null) -gt 1000000 ]; then
+      if [ "$(wc -c < /tmp/maven-wrapper.tar.gz 2>/dev/null)" -gt 1000000 ]; then
         tar xzf /tmp/maven-wrapper.tar.gz -C "${MVN_DIR}" --strip-components=1 2>/dev/null
         break
       fi

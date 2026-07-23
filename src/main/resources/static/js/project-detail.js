@@ -70,6 +70,8 @@ async function openProjectDetail(pid) {
 
 function renderProjectDetailContent(detail) {
   const isChannel = detail.type === 'channel_custom';
+  const canManageSubTasks = EMIE.state.currentRole === 'admin'
+    || (EMIE.state.currentRole === 'planner' && detail.plannerId === getCurrentUserId());
   const canEditInformation = (isChannel
       && EMIE.state.currentRole === 'sales' && detail.salesId === getCurrentUserId())
     || (!isChannel
@@ -124,7 +126,7 @@ function renderProjectDetailContent(detail) {
       <div class="detail-section-title">
         📌 子任务列表
         <span style="font-size:12px;color:var(--gray-400);font-weight:400;">${doneTasks}/${detail.tasks.length} 完成</span>
-        ${(EMIE.state.currentRole === 'planner') && (detail.status === 'planner_accepted' || detail.status === 'in_progress' || detail.status === 'completed' || detail.status === 'completed_pending_score') ? `<button class="btn btn-primary btn-sm" style="margin-left:auto;" data-emie-onclick="addSubTask(${detail.id})">➕ 添加子任务</button>` : ''}
+        ${canManageSubTasks && (detail.status === 'planner_accepted' || detail.status === 'in_progress' || detail.status === 'completed' || detail.status === 'completed_pending_score') ? `<button class="btn btn-primary btn-sm" style="margin-left:auto;" data-emie-onclick="addSubTask(${detail.id})">➕ 添加子任务</button>` : ''}
       </div>
       ${detail.tasks.length === 0 ? `<div class="empty" style="padding:30px;"><div class="empty-icon">📭</div><p>暂无子任务，等待产品企划添加</p></div>` : ''}
       ${detail.tasks.filter(t => {

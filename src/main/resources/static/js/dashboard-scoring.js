@@ -5,6 +5,7 @@ const swrFetch = (...args) => EMIE.actions.swrFetch(...args);
 const formatDate = (...args) => EMIE.actions.formatDate(...args);
 const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const openScoring = (...args) => EMIE.actions.openScoring(...args);
+const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const matchesSearchText = (...args) => EMIE.actions.matchesSearchText(...args);
 const isDateInRange = (...args) => EMIE.actions.isDateInRange(...args);
 
@@ -24,6 +25,8 @@ async function renderScoringView(main, role, uid) {
       projectId: item.projectId,
       projectType: item.projectType,
       projectName: item.projectName,
+      plannerId: item.plannerId,
+      plannerName: item.plannerName,
       plannedDate: item.plannedDate,
       designerId: item.designerId,
       designerName: item.designerName,
@@ -36,17 +39,20 @@ async function renderScoringView(main, role, uid) {
     pendingTasks.push(t);
   }
 
-  // 先按计划完成时间，再按评分状态；同一天待评分优先，方便处理临近任务。
+  // 待评分任务始终置顶；各分组内按计划完成时间升序，临期任务优先处理。
   pendingTasks.sort((a, b) => {
+    if (a.isPending !== b.isPending) return a.isPending ? -1 : 1;
     const dateCompare = (a.plannedDate || '9999-12-31').localeCompare(b.plannedDate || '9999-12-31');
     if (dateCompare !== 0) return dateCompare;
-    if (a.isPending && !b.isPending) return -1;
-    if (!a.isPending && b.isPending) return 1;
     return b.id - a.id;
   });
 
   const pendingCount = pendingTasks.filter(t => t.isPending).length;
   const doneCount = pendingTasks.filter(t => !t.isPending).length;
+  const plannerOptions = [...new Map((EMIE.state.users?.planner || [])
+    .filter(user => user.userId)
+    .map(user => [user.userId, user.name || user.userId])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1], 'zh-CN'));
 
   main.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
@@ -67,6 +73,10 @@ async function renderScoringView(main, role, uid) {
         <option value="all">全部审核阶段</option>
         <option value="first">一审</option>
         <option value="second">二审</option>
+      </select>
+      <select class="form-select" data-emie-onchange="filterScoringView()" style="min-width:140px;" id="scoringPlannerFilter">
+        <option value="all">全部产品企划</option>
+        ${plannerOptions.map(([id, name]) => `<option value="${escHtml(id)}">${escHtml(name)}</option>`).join('')}
       </select>
       <input class="form-input" placeholder="🔍 搜索任务名/项目号..." data-emie-oninput="filterScoringView()" style="min-width:180px;" id="scoringSearch">
       <input type="date" class="form-input" id="scoringDateStart" data-emie-onchange="filterScoringView()" style="min-width:130px;" title="计划完成日期起">
@@ -89,6 +99,7 @@ function applyFilterScoringView() {
   const filter = document.getElementById('scoringFilter')?.value || 'all';
   const projectType = document.getElementById('scoringTypeFilter')?.value || 'all';
   const stage = document.getElementById('scoringStageFilter')?.value || 'all';
+  const plannerId = document.getElementById('scoringPlannerFilter')?.value || 'all';
   const q = document.getElementById('scoringSearch')?.value || '';
   const dateStart = document.getElementById('scoringDateStart')?.value;
   const dateEnd = document.getElementById('scoringDateEnd')?.value;
@@ -98,8 +109,9 @@ function applyFilterScoringView() {
   else if (filter === 'done') list = list.filter(t => !t.isPending);
   if (projectType !== 'all') list = list.filter(t => t.projectType === projectType);
   if (stage !== 'all') list = list.filter(t => t.scoringRecords?.some(r => r.reviewStage === stage));
+  if (plannerId !== 'all') list = list.filter(t => t.plannerId === plannerId);
 
-  if (q) list = list.filter(t => matchesSearchText(q, t.id, t.projectId, t.name, t.projectName, t.designerName));
+  if (q) list = list.filter(t => matchesSearchText(q, t.id, t.projectId, t.name, t.projectName, t.plannerName, t.designerName));
   list = list.filter(t => isDateInRange(t.plannedDate, dateStart, dateEnd));
 
   const c = document.getElementById('scoringContainer');
@@ -110,12 +122,14 @@ function resetScoringFilters() {
   const filterEl = document.getElementById('scoringFilter');
   const typeEl = document.getElementById('scoringTypeFilter');
   const stageEl = document.getElementById('scoringStageFilter');
+  const plannerEl = document.getElementById('scoringPlannerFilter');
   const searchEl = document.getElementById('scoringSearch');
   const dateStartEl = document.getElementById('scoringDateStart');
   const dateEndEl = document.getElementById('scoringDateEnd');
   if (filterEl) filterEl.value = 'all';
   if (typeEl) typeEl.value = 'all';
   if (stageEl) stageEl.value = 'all';
+  if (plannerEl) plannerEl.value = 'all';
   if (searchEl) searchEl.value = '';
   if (dateStartEl) dateStartEl.value = '';
   if (dateEndEl) dateEndEl.value = '';
@@ -141,6 +155,7 @@ function renderScoringCards(tasks) {
         </div>
         <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
           📁 项目 #${t.projectId} ${t.projectType === 'channel_custom' ? '📦 渠道定制' : '🏭 常规品'} — ${t.projectName || ''}
+          ${t.plannerName ? ` · 👤 产品企划：${escHtml(t.plannerName)}` : ''}
           ${t.plannedDate ? ` · 📅 ${formatDate(t.plannedDate)}` : ''}
         </div>
         <div style="margin-top:8px;">

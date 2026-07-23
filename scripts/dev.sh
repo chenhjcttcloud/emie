@@ -16,6 +16,7 @@ SCREEN_SESSION="emie-dev"
 
 # 切换到项目根目录（兼容 scripts/ 内或根目录调用）
 cd "$(dirname "$0")/.."
+PROJECT_ROOT="$(pwd -P)"
 
 # 无论启动脚本由哪个终端、IDE 或自动化工具调用，都固定使用 Java 21。
 # shellcheck disable=SC1091
@@ -30,6 +31,31 @@ if [ -f ".env" ]; then
 fi
 
 JAR_PATH="target/$APP_NAME-1.0.0.jar"
+JAR_ABS="$PROJECT_ROOT/$JAR_PATH"
+
+find_project_pid() {
+  local candidate command executable
+  for candidate in $(pgrep -f -- "$JAR_ABS" 2>/dev/null || true); do
+    command="$(ps -p "$candidate" -o command= 2>/dev/null || true)"
+    executable="${command%% *}"
+    case "$executable" in
+      */java|java)
+        echo "$candidate"
+        return 0
+        ;;
+    esac
+  done
+}
+
+pid_is_project() {
+  local pid="${1:-}"
+  local command executable
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || return 1
+  command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  executable="${command%% *}"
+  case "$executable" in */java|java) ;; *) return 1 ;; esac
+  printf '%s\n' "$command" | grep -F -- "$JAR_ABS" >/dev/null
+}
 
 start() {
   for var_name in DESIGNPM_TEST_DB_HOST DESIGNPM_TEST_DB_NAME DESIGNPM_TEST_DB_USER DESIGNPM_TEST_DB_PASSWORD; do
@@ -39,8 +65,11 @@ start() {
     fi
   done
 
-  if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
-    echo "服务已在运行 PID=$(cat $PID_FILE)"
+  local existing_pid
+  existing_pid="$(find_project_pid)"
+  if pid_is_project "$existing_pid"; then
+    echo "$existing_pid" > "$PID_FILE"
+    echo "服务已在运行 PID=$existing_pid"
     exit 1
   fi
 
@@ -55,10 +84,10 @@ start() {
     # screen 独立于 Codex/终端会话，避免当前会话取消时连带终止本地服务。
     screen -S "$SCREEN_SESSION" -X quit >/dev/null 2>&1 || true
     screen -dmS "$SCREEN_SESSION" /bin/bash -lc \
-      "exec '$JAVA_HOME/bin/java' -Duser.timezone=Asia/Shanghai -jar '$JAR_PATH' --spring.profiles.active='$PROFILE' --server.address=0.0.0.0 --server.port='$PORT' > '$LOG_FILE' 2>&1"
+      "cd '$PROJECT_ROOT' && exec '$JAVA_HOME/bin/java' -Duser.timezone=Asia/Shanghai -jar '$JAR_ABS' --spring.profiles.active='$PROFILE' --server.address=0.0.0.0 --server.port='$PORT' > '$LOG_FILE' 2>&1"
     echo "服务启动中（独立 screen 会话：${SCREEN_SESSION}）..."
   else
-    nohup "$JAVA_HOME/bin/java" -Duser.timezone=Asia/Shanghai -jar "$JAR_PATH" \
+    nohup "$JAVA_HOME/bin/java" -Duser.timezone=Asia/Shanghai -jar "$JAR_ABS" \
       --spring.profiles.active=$PROFILE \
       --server.address=0.0.0.0 \
       --server.port=$PORT \
@@ -69,9 +98,9 @@ start() {
   # 等待服务启动
   for i in $(seq 1 20); do
     sleep 1
-    if curl -s "http://localhost:$PORT/api/admin/public-config" > /dev/null 2>&1; then
-      PID=$(pgrep -f "java -jar $JAR_PATH" | head -n 1 || true)
-      if [ -n "$PID" ]; then echo "$PID" > "$PID_FILE"; fi
+    PID="$(find_project_pid)"
+    if pid_is_project "$PID" && curl -fsS "http://localhost:$PORT/api/admin/public-config" > /dev/null 2>&1; then
+      echo "$PID" > "$PID_FILE"
       echo "服务已就绪 -> http://localhost:$PORT"
       return 0
     fi
@@ -83,7 +112,7 @@ start() {
 stop() {
   if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")
-    if kill -0 "$PID" 2>/dev/null; then
+    if pid_is_project "$PID"; then
       kill "$PID" 2>/dev/null || true
       for i in $(seq 1 10); do
         kill -0 "$PID" 2>/dev/null || break
@@ -98,8 +127,8 @@ stop() {
     # PID 文件可能在异常退出后遗留，不能因此漏掉仍占用端口的旧服务。
     rm -f "$PID_FILE"
   fi
-  PID=$(ps aux | grep "java -jar" | grep "$APP_NAME" | awk '{print $2}')
-  if [ -n "$PID" ]; then
+  PID="$(find_project_pid)"
+  if pid_is_project "$PID"; then
     kill "$PID" 2>/dev/null || true
     sleep 1
     kill -9 "$PID" 2>/dev/null || true
@@ -113,14 +142,12 @@ stop() {
 restart() {
   stop
   sleep 1
-  # 兼容旧版脚本未记录 PID 的情况，确保端口释放后再启动新 JAR。
+  # 不清理无关进程；端口仍被占用时中止并要求人工确认。
   if command -v lsof >/dev/null 2>&1; then
     LISTENING_PIDS=$(lsof -tiTCP:$PORT -sTCP:LISTEN 2>/dev/null || true)
     if [ -n "$LISTENING_PIDS" ]; then
-      echo "清理占用端口 $PORT 的旧进程..."
-      kill $LISTENING_PIDS 2>/dev/null || true
-      sleep 1
-      kill -9 $LISTENING_PIDS 2>/dev/null || true
+      echo "端口 $PORT 仍被进程 $LISTENING_PIDS 占用；为避免终止无关服务，已中止重启。"
+      exit 1
     fi
   fi
   # 重新打包确保代码最新

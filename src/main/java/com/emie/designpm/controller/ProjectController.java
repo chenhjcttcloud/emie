@@ -219,7 +219,7 @@ public class ProjectController {
             item.put("selfInnovation", task.getSelfInnovation());
             item.put("projectId", project.getId());
             item.put("projectType", project.getType());
-            item.put("projectName", project.getProductRequirements());
+            item.put("projectName", projectDisplayName(project));
             item.put("scoringRecords", scoringByTask.getOrDefault(task.getId(), List.of()));
             item.put("relation", session.userId().equals(task.getDesignerId()) ? "assignee" : "publisher");
             return item;
@@ -247,7 +247,7 @@ public class ProjectController {
             item.put("publisherRole", task.getPublisherRole()); item.put("assigneeRole", task.getAssigneeRole());
             item.put("details", task.getDetails()); item.put("reviewComments", task.getReviewComments());
             item.put("projectId", project.getId()); item.put("projectType", project.getType());
-            item.put("projectName", project.getProductRequirements()); item.put("readOnly", true);
+            item.put("projectName", projectDisplayName(project)); item.put("readOnly", true);
             String uid = session.userId();
             item.put("relation", uid.equals(task.getPublisherId()) ? "publisher" : "department_member");
             item.put("relationLabel", uid.equals(task.getPublisherId()) ? "我发布的任务" : "部门成员关联任务");
@@ -321,12 +321,16 @@ public class ProjectController {
 
     /** 添加子任务 */
     @PostMapping("/{id}/tasks")
-    public ResponseEntity<ProjectDetailDTO> addTask(
+    public ResponseEntity<?> addTask(
             @PathVariable Long id,
             @RequestBody Map<String, Object> body,
             HttpServletRequest request) {
-        Project p = projectService.addSubTask(id, withSessionContext(body, request));
-        return ResponseEntity.ok(toDetail(p));
+        try {
+            Project p = projectService.addSubTask(id, withSessionContext(body, request));
+            return ResponseEntity.ok(toDetail(p));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     /** 编辑子任务 */
@@ -704,6 +708,14 @@ public class ProjectController {
             scoringMap.computeIfAbsent(sr.getSubTask().getId(), ignored -> new ArrayList<>()).add(m);
         });
         return scoringMap;
+    }
+
+    /** 子任务卡片优先展示正式产品名称，兼容迁移前没有 productName 的历史项目。 */
+    private String projectDisplayName(Project project) {
+        if (project.getProductName() != null && !project.getProductName().isBlank()) {
+            return project.getProductName().trim();
+        }
+        return project.getProductRequirements();
     }
 
     private TaskDetailDTO toTaskDetail(SubTask t) {

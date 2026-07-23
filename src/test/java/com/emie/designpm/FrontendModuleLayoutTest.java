@@ -89,20 +89,20 @@ class FrontendModuleLayoutTest {
             if (module.equals("bootstrap.js")) continue;
             int currentIndex = bootstrap.indexOf("./" + module + "?v=147");
             if (module.equals("dashboard-designer.js")) {
-                currentIndex = bootstrap.indexOf("./" + module + "?v=172");
+                currentIndex = bootstrap.indexOf("./" + module + "?v=174");
             }
             if (module.equals("dashboard-lists.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=179");
             if (module.equals("core-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=172");
             if (module.equals("core-runtime.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=152");
             if (module.equals("dashboard-projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=157");
             if (module.equals("dashboard-home.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=160");
-            if (module.equals("admin-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
-            if (module.equals("dashboard-scoring.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=157");
+            if (module.equals("admin-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=149");
+            if (module.equals("dashboard-scoring.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=160");
             if (module.equals("admin-users.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=166");
             if (module.equals("admin-workload.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             if (module.equals("admin-org.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=165");
             if (module.equals("project-uploads.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
-            if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=170");
+            if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=171");
             if (module.equals("project-form.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=179");
             if (module.equals("project-tasks.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=177");
             if (module.equals("projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
@@ -111,7 +111,7 @@ class FrontendModuleLayoutTest {
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=193\"></script>"),
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=199\"></script>"),
                 "页面应只通过当前版本 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
@@ -123,6 +123,10 @@ class FrontendModuleLayoutTest {
                 "projects.js 项目域门面必须在子模块之后加载");
         assertTrue(bootstrap.indexOf("./admin.js") > bootstrap.indexOf("./admin-workload.js"),
                 "admin.js 管理域门面必须在子模块之后加载");
+        assertTrue(readResource("/static/js/admin-shell.js").contains("系统更新通知"),
+                "管理后台应提供明确的系统更新通知入口");
+        assertTrue(readResource("/static/js/admin-shell.js").contains("确认发送给全部系统用户"),
+                "全员飞书通知发送前必须二次确认");
     }
 
     @Test
@@ -169,9 +173,36 @@ class FrontendModuleLayoutTest {
         assertTrue(designer.contains("id=\"designerTaskStatusFilter\""));
         assertTrue(designer.contains("id=\"designerTaskTypeFilter\""));
         assertTrue(designer.contains("function resetDesignerTaskFilters()"));
+        assertTrue(designer.contains("class=\"subtask-project-inline\""),
+                "子任务标题后应内联展示所属项目名称");
+        assertTrue(designer.contains("（所属项目：${escHtml(t.projectName || '未命名项目')}）"),
+                "所属项目名称应紧跟在子任务名称之后");
         assertTrue(scoring.contains("id=\"scoringTypeFilter\""));
         assertTrue(scoring.contains("id=\"scoringStageFilter\""));
+        assertTrue(scoring.contains("id=\"scoringPlannerFilter\""),
+                "评分页面应提供产品企划筛选卡");
+        assertTrue(scoring.contains("EMIE.state.users?.planner || []"),
+                "产品企划筛选应列出系统内全部产品企划，不应只列当前结果中的人员");
+        assertTrue(scoring.contains("t.plannerId === plannerId"),
+                "产品企划筛选应按稳定的用户 ID 匹配");
+        assertTrue(scoring.contains("if (a.isPending !== b.isPending) return a.isPending ? -1 : 1;"),
+                "评分列表应始终把待评分任务排在已评分任务之前");
+        assertTrue(scoring.indexOf("a.isPending !== b.isPending")
+                        < scoring.indexOf("const dateCompare"),
+                "评分列表必须先按待评分状态分组，再在组内按时间排序");
         assertTrue(scoring.contains("reviewStage === stage"));
+    }
+
+    @Test
+    void addSubTaskButtonRequiresProjectOwnershipOrAdminRole() throws IOException {
+        String detail = readResource("/static/js/project-detail.js");
+
+        assertTrue(detail.contains("EMIE.state.currentRole === 'admin'"),
+                "管理员应可以管理项目子任务");
+        assertTrue(detail.contains("detail.plannerId === getCurrentUserId()"),
+                "企划只有作为当前项目负责人时才应看到添加子任务按钮");
+        assertTrue(detail.contains("canManageSubTasks &&"),
+                "添加子任务按钮必须复用负责人权限判断");
     }
 
     @Test

@@ -22,6 +22,7 @@ class ProjectReviewWorkflowTest {
     private ProjectRepository projects;
     private ScoringRepository scoring;
     private SystemConfigRepository configs;
+    private ProjectAccessService access;
     private ProjectService service;
 
     @BeforeEach
@@ -29,6 +30,7 @@ class ProjectReviewWorkflowTest {
         projects = mock(ProjectRepository.class);
         scoring = mock(ScoringRepository.class);
         configs = mock(SystemConfigRepository.class);
+        access = mock(ProjectAccessService.class);
         when(configs.findByConfigKey(anyString())).thenReturn(Optional.empty());
         service = new ProjectService(
                 projects,
@@ -40,7 +42,7 @@ class ProjectReviewWorkflowTest {
                 configs,
                 mock(SyncQueueService.class),
                 mock(FileArchiveService.class),
-                mock(ProjectAccessService.class),
+                access,
                 mock(NotificationWorkflowService.class)
         );
     }
@@ -147,6 +149,32 @@ class ProjectReviewWorkflowTest {
         assertEquals("管理员甲", secondReview.getReviewerName());
         assertEquals("completed", project.getTasks().get(0).getStatus());
         assertEquals("completed", project.getStatus());
+    }
+
+    @Test
+    void scoringCenterExcludesRejectedTasks() {
+        Project project = projectWithTask("regular", "rejected");
+        SubTask rejected = project.getTasks().get(0);
+        ScoringRecord rejectedReview = review(rejected, "planner", "first");
+        rejectedReview.setReviewStatus("rejected");
+
+        SubTask pending = new SubTask();
+        pending.setId(12L);
+        pending.setName("保留的待评分任务");
+        pending.setStatus("delivered");
+        pending.setPlannedDate("2026-07-22");
+        pending.setProject(project);
+        project.getTasks().add(pending);
+        ScoringRecord pendingReview = review(pending, "planner", "first");
+
+        when(access.findVisibleProjectsLight("planner", "planner-1")).thenReturn(List.of(project));
+        when(scoring.findBySubTaskIds(List.of(11L, 12L))).thenReturn(List.of(rejectedReview, pendingReview));
+
+        List<Map<String, Object>> result = service.getPendingScoringTasks("planner", "planner-1");
+
+        assertEquals(1, result.size());
+        assertEquals(12L, result.getFirst().get("taskId"));
+        assertEquals(true, result.getFirst().get("isPending"));
     }
 
     private Project projectWithTask(String type, String taskStatus) {

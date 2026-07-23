@@ -1465,6 +1465,10 @@ public class ProjectService {
 
         for (Project p : projects) {
             for (SubTask t : p.getTasks()) {
+                // 驳回任务等待负责人修改并重新交付，不属于评分中心的待办或历史评分结果。
+                if ("rejected".equals(t.getStatus())) {
+                    continue;
+                }
                 List<ScoringRecord> records = recordsByTask.getOrDefault(t.getId(), List.of());
                 Optional<ScoringRecord> myRecord = records.stream()
                         .filter(sr -> role.equals(sr.getRole()))
@@ -1479,7 +1483,10 @@ public class ProjectService {
                 item.put("taskStatus", t.getStatus());
                 item.put("projectId", p.getId());
                 item.put("projectType", p.getType());
-                item.put("projectName", p.getProductRequirements());
+                item.put("projectName", p.getProductName() != null && !p.getProductName().isBlank()
+                        ? p.getProductName().trim() : p.getProductRequirements());
+                item.put("plannerId", p.getPlannerId());
+                item.put("plannerName", p.getPlannerName());
                 item.put("plannedDate", t.getPlannedDate());
                 item.put("designerId", t.getDesignerId());
                 item.put("designerName", t.getDesignerName());

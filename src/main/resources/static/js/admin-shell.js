@@ -195,10 +195,12 @@ async function renderAdminConfig(container) {
   container.innerHTML = html;
   if (configs.notification) {
     container.insertAdjacentHTML('beforeend', `<div class="config-card" data-group="temporary-broadcast">
-      <div class="config-card-header"><h3>📣 临时飞书通知</h3><button class="btn btn-primary" data-emie-onclick="sendTemporaryBroadcast()">立即发送</button></div>
-      <div class="config-card-body"><p style="margin:0 0 12px;color:var(--gray-500);font-size:13px;">临时消息只用于本次发送，不会保存为通知模板。</p>
-        <input class="form-input" id="temporaryBroadcastTitle" placeholder="通知标题，例如：系统将于今晚更新" maxlength="100" style="margin-bottom:8px;">
-        <textarea class="form-textarea" id="temporaryBroadcastContent" placeholder="输入要发送给大家的消息" maxlength="2000" rows="5"></textarea>
+      <div class="config-card-header"><h3>📣 系统更新通知</h3><button class="btn btn-primary" data-emie-onclick="sendTemporaryBroadcast()">发送给全部用户</button></div>
+      <div class="config-card-body">
+        <p style="margin:0 0 6px;color:var(--gray-700);font-size:13px;">编辑完成后，将向除已停用账号外的所有系统用户发送飞书通知。</p>
+        <p style="margin:0 0 12px;color:var(--gray-500);font-size:12px;">未绑定飞书的用户无法投递，并会计入发送结果；本次内容不会保存为通知模板。</p>
+        <input class="form-input" id="temporaryBroadcastTitle" placeholder="通知标题，例如：系统更新安排" maxlength="100" style="margin-bottom:8px;">
+        <textarea class="form-textarea" id="temporaryBroadcastContent" placeholder="请输入更新时间、影响范围和注意事项" maxlength="2000" rows="5"></textarea>
       </div></div>`);
     container.insertAdjacentHTML('beforeend', `<div class="config-card" data-group="notification-failures">
       <div class="config-card-header"><h3>🛠️ 飞书失败通知</h3><button class="btn btn-sm btn-secondary" data-emie-onclick="loadNotificationFailures()">🔄 刷新</button></div>
@@ -212,9 +214,10 @@ async function sendTemporaryBroadcast() {
   const title = document.getElementById('temporaryBroadcastTitle')?.value?.trim();
   const content = document.getElementById('temporaryBroadcastContent')?.value?.trim();
   if (!title || !content) { showAdminToast('❌ 请填写通知标题和内容', 'error'); return; }
+  if (!window.confirm('确认发送给全部系统用户？\n\n发送后，已绑定飞书的用户将立即收到这条通知。')) return;
   try {
     const result = await apiPost('/admin/notifications/temporary-broadcast', { title, content });
-    showAdminToast(`✅ 已发送：成功 ${result.delivered}，失败 ${result.failed}，未绑定 ${result.unbound}`, 'success');
+    showAdminToast(`✅ 发送完成：成功 ${result.delivered}，失败 ${result.failed}，未绑定飞书 ${result.unbound}`, 'success');
     document.getElementById('temporaryBroadcastTitle').value = '';
     document.getElementById('temporaryBroadcastContent').value = '';
   } catch (e) { showAdminToast('❌ 发送失败：' + e.message, 'error'); }
