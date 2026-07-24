@@ -96,7 +96,7 @@ class FrontendModuleLayoutTest {
             if (module.equals("core-runtime.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=152");
             if (module.equals("core-auth.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=149");
             if (module.equals("core-identity.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=149");
-            if (module.equals("dashboard-projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=158");
+            if (module.equals("dashboard-projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=159");
             if (module.equals("dashboard-home.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=160");
             if (module.equals("admin-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=150");
             if (module.equals("dashboard-scoring.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=161");
@@ -114,7 +114,7 @@ class FrontendModuleLayoutTest {
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=215\"></script>"),
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=216\"></script>"),
                 "页面应只通过当前版本 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
@@ -252,6 +252,9 @@ class FrontendModuleLayoutTest {
         assertTrue(projects.contains("data-emie-onclick=\"${rowOpen}\"")
                         && projects.contains("tabindex=\"0\""),
                 "项目列表整行应支持鼠标和键盘打开详情");
+        assertTrue(projects.contains("o.statusLabel || fallbackStatus.label")
+                        && projects.contains("o.statusCls || fallbackStatus.cls"),
+                "项目列表应优先展示接口返回的业务状态，避免设计需求显示内部状态码");
         assertTrue(lists.contains("openDesignRequirementDetail")
                         && lists.contains("/design-requirements/${id}"),
                 "设计/送审需求应使用独立详情接口和弹窗");

@@ -121,7 +121,13 @@ function updateProjectRow(pid, detail) {
 
 /** 渲染单行项目 */
 function renderProjectRow(o, compact = false, showType = true) {
-  const st = getProjectStatusInfo(o.status);
+  const fallbackStatus = getProjectStatusInfo(o.status);
+  // 独立业务类型可返回自己的状态文案（如设计需求 draft=待设计交付），
+  // 不应再被通用项目状态字典覆盖。
+  const st = {
+    label: o.statusLabel || fallbackStatus.label,
+    cls: o.statusCls || fallbackStatus.cls,
+  };
   const rowOpen = `openListItemDetail('${o.type}',${o.id})`;
   if (compact) {
     const market = o.targetMarket ? (() => { try { return JSON.parse(o.targetMarket).join('/'); } catch(e) { return o.targetMarket; } })() : '-';
