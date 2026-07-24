@@ -13,6 +13,7 @@
 - 生产备份 `/root/emie/db-backup-before-d2b6782-20260724_153416.sql.gz` 已通过 `gzip -t` 和关键表检查；迁移 7 个字段、评分表、3 个索引及外键均验证并登记校验和。
 - 生产 `release-sha.txt`、应用 JAR SHA、容器、接口、前端资源版本和启动日志均验证通过；回滚 JAR 为 `/root/emie/app.jar.bak.pre-d2b6782-20260724_153506`，未执行回滚。
 - 发布后发现设计需求列表忽略后端 `statusLabel`，将内部状态 `draft` 按通用项目字典显示为“草稿”；已改为列表优先采用接口业务状态文案，并递增 `dashboard-projects.js` 与启动入口缓存版本。该问题只影响显示，不影响需求流程或数据库状态。
+- 状态文案修复提交 `0abd63a16ed4fa37a2ca6f1e516d9cba3a75eda7` 已推送并部署生产；生产加载 `bootstrap.js?v=216` → `dashboard-projects.js?v=159`，应用与预览容器 running、重启次数 0，首页 HTTP 200，近期严重日志 0。
 
 ## 2026-07-23 管理员身份切换动态角色
 

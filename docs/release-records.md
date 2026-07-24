@@ -13,6 +13,21 @@
 
 ---
 
+## 2026-07-24 设计需求“草稿”状态文案修复发布
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 发布成功 |
+| 旧生产提交 / 生产提交 | `d2b67823aff0323140fb6f2289128ba36f8abe3c` / `0abd63a16ed4fa37a2ca6f1e516d9cba3a75eda7` |
+| Gitee 推送 | `project_manager_system` 已推送，功能提交的本地与远端完整 SHA 一致 |
+| 变更范围 | 项目列表优先采用接口返回的业务状态文案，修复设计需求内部状态 `draft` 错误显示为“草稿”，正确展示“待设计交付” |
+| 本地验证 | Java 21 `clean package` 成功，85 项测试通过；全量前端 JavaScript 语法和差异检查通过 |
+| 数据库 | 无结构或数据变更；复用同轮发布已验证备份 `/root/emie/db-backup-before-d2b6782-20260724_153416.sql.gz` |
+| 应用产物 | 本地与生产 JAR SHA-256 均为 `acd22851d2fdff6660fac9aad7634f011e59082f7a9ae58f7ee89a03eb540b21` |
+| 回滚包 | `/root/emie/app.jar.bak.pre-0abd63a-20260724_155428` |
+| 生产验证 | `release-sha.txt` 与目标提交一致；首页 HTTP 200；生产加载 `bootstrap.js?v=216`、`dashboard-projects.js?v=159`；应用和预览容器 running、重启次数均为 0；近期严重日志 0 |
+| 回滚 | 未执行 |
+
 ## 2026-07-24 设计/送审需求交付与评分发布
 
 | 项目 | 记录 |
