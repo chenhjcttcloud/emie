@@ -13,6 +13,24 @@
 
 ---
 
+## 2026-07-24 设计/送审需求交付与评分发布
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 发布成功 |
+| 旧生产提交 / 生产提交 | `a38d9ff72e8a89b007195a5dff2d4674fc503518` / `d2b67823aff0323140fb6f2289128ba36f8abe3c` |
+| Gitee 推送 | `project_manager_system` 已推送，功能提交的本地与远端完整 SHA 一致 |
+| 变更范围 | 修复产品推广角色显示及设计需求创建入口；设计需求增加真实设计师/企划校验、成果图片与附件交付、设计师自评和按创建人动态双人复评；评分任务接入评分中心 |
+| 本地验证 | Java 21 `clean package` 成功，85 项测试通过；全量前端 JavaScript 语法检查、`git diff --check` 和本地页面加载检查通过 |
+| 数据库备份 | `/root/emie/db-backup-before-d2b6782-20260724_153416.sql.gz`，156425 字节，SHA-256 `7183fe163a7a469be94945b10822c599a275942c4b192537ec03a16c56afb241`，`gzip -t` 及关键表检查通过 |
+| 数据库迁移 | `2026-07-24-add-design-requirement-scoring.sql` 已执行并登记；7 个新字段、`design_requirement_scores` 表、3 个索引和外键均验证存在；迁移前历史设计需求为 0 条 |
+| 应用产物 | 本地与生产 JAR SHA-256 均为 `ef5e1bd000429e59a20eb5914ed76acebce64b8c3309491cbf2ea820e442265a` |
+| 回滚包 | `/root/emie/app.jar.bak.pre-d2b6782-20260724_153506` |
+| 生产验证 | `release-sha.txt` 与目标提交一致；应用和预览容器 running；首页、公开配置 HTTP 200；未登录设计需求列表和评分接口均为 401；生产加载 `bootstrap.js?v=215`、`dashboard-lists.js?v=182`、`dashboard-scoring.js?v=161`、`project-form.js?v=181`；启动日志无严重错误 |
+| 备份异常 | 首次备份尝试因临时 MySQL 容器网络和表空间权限提示未作为恢复点；改用宿主网络及 `--no-tablespaces` 后生成并验证上述有效备份，迁移前未改动数据库 |
+| 外部动作 | 发布过程未触发系统通知或飞书群发接口 |
+| 回滚 | 未执行 |
+
 ## 2026-07-23 子任务驳回快照与列表整行交互发布
 
 | 项目 | 记录 |
