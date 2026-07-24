@@ -199,6 +199,9 @@ function openCreateProject(type) {
   const salesOpts = `<option value="">请选择需求方</option>` + EMIE.state.users.sales.map(u =>
     `<option value="${u.userId}" ${defaultSales === u.userId ? 'selected' : ''}>${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`
   ).join('');
+  const designerOpts = `<option value="">请选择设计师</option>` + (EMIE.state.users.designer || []).map(u =>
+    `<option value="${u.userId}" ${draft?.designerId === u.userId ? 'selected' : ''}>${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`
+  ).join('');
   const title = type === 'channel_custom' ? '新建渠道定制项目' : (type === 'design_requirement' ? '新建设计/送审需求' : '新建常规品设计项目');
 
   const modal = document.createElement('div');
@@ -216,6 +219,7 @@ function openCreateProject(type) {
             ${EMIE.state.currentRole === 'sales' ? `<input type="hidden" name="salesId" value="${EMIE.state.currentUserId}">` : ''}
           </div>` : ''}
           ${type === 'design_requirement' ? `<div class="form-group"><label class="form-label"><span class="required">*</span> 需求负责人</label><input class="form-input" value="${escHtml(getCurrentUserName())}" disabled><input type="hidden" name="responsibleId" value="${escHtml(EMIE.state.currentUserId)}"></div>` : ''}
+          ${type === 'design_requirement' ? `<div class="form-group"><label class="form-label"><span class="required">*</span> 交付设计师</label><select class="form-select" name="designerId" data-emie-onchange="formModified()">${designerOpts}</select></div>` : ''}
           <div class="form-group"><label class="form-label"><span class="required">*</span> 产品企划</label>
             <select class="form-select" name="plannerId" ${EMIE.state.currentRole === 'planner' ? 'disabled' : ''} data-emie-onchange="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">${plannerOpts}</select>
             ${EMIE.state.currentRole === 'planner' ? `<input type="hidden" name="plannerId" value="${EMIE.state.currentUserId}">` : ''}
@@ -388,6 +392,7 @@ async function submitCreateProject(type) {
 
   // 产品企划（必选）
   if (!data.plannerId) addFieldError('plannerId', '请选择产品企划');
+  if (type === 'design_requirement' && !data.designerId) addFieldError('designerId', '请选择交付设计师');
 
   // 产品名称（两类项目均必填）
   if (!data.productName || !data.productName.trim()) addFieldError('productName', '请填写产品名称');
@@ -452,6 +457,12 @@ async function submitCreateProject(type) {
   data.type = type;
   data.currentUser = getCurrentUserName();
   data.currentRole = EMIE.state.currentRole;
+  if (type === 'design_requirement') {
+    const designer = (EMIE.state.users.designer || []).find(u => u.userId === data.designerId);
+    const planner = (EMIE.state.users.planner || []).find(u => u.userId === data.plannerId);
+    data.designerName = designer?.name || '';
+    data.plannerName = planner?.name || (EMIE.state.currentRole === 'planner' ? getCurrentUserName() : '');
+  }
 
   // 组装参考图JSON（改用url引用，不再传base64）
   const refImgs = EMIE.projectState.createRefImages.map(img => ({ name: img.name, url: img.url, size: img.size, storedName: img.storedName }));

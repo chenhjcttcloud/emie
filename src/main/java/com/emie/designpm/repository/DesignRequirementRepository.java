@@ -12,7 +12,7 @@ public interface DesignRequirementRepository extends JpaRepository<DesignRequire
             "(:keyword IS NULL OR LOWER(d.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
             "OR LOWER(COALESCE(d.requirementCode, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
             "AND (:status IS NULL OR d.status = :status) " +
-            "AND (:userId IS NULL OR d.ownerId = :userId OR d.plannerId = :userId) " +
+            "AND (:userId IS NULL OR d.ownerId = :userId OR d.plannerId = :userId OR d.designerId = :userId) " +
             "ORDER BY d.createdAt DESC")
     Page<DesignRequirement> findPage(@Param("keyword") String keyword, @Param("status") String status,
                                      @Param("userId") String userId, Pageable pageable);

@@ -1,6 +1,7 @@
 package com.emie.designpm.controller;
 
 import com.emie.designpm.service.ProjectService;
+import com.emie.designpm.service.DesignRequirementScoringService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -12,9 +13,12 @@ import java.util.*;
 public class ScoringController {
 
     private final ProjectService projectService;
+    private final DesignRequirementScoringService designRequirementScoringService;
 
-    public ScoringController(ProjectService projectService) {
+    public ScoringController(ProjectService projectService,
+                             DesignRequirementScoringService designRequirementScoringService) {
         this.projectService = projectService;
+        this.designRequirementScoringService = designRequirementScoringService;
     }
 
     /**
@@ -28,6 +32,8 @@ public class ScoringController {
         AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
         role = session.role();
         userId = session.userId();
-        return ResponseEntity.ok(projectService.getPendingScoringTasks(role, userId));
+        List<Map<String, Object>> result = new ArrayList<>(projectService.getPendingScoringTasks(role, userId));
+        result.addAll(designRequirementScoringService.pendingItems(role, userId));
+        return ResponseEntity.ok(result);
     }
 }

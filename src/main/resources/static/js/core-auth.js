@@ -154,7 +154,8 @@ async function showApp() {
     } catch(e) { /* ignore */ }
 
     document.getElementById('userDisplay').textContent = `${EMIE.state.authUser.name}（${roleLabel(EMIE.state.authUser.role)}）`;
-    EMIE.state.currentRole = EMIE.state.authUser.role;
+    EMIE.state.currentRole = ['promotion', 'product_promotion', 'product-promotion'].includes(String(EMIE.state.authUser.role || '').toLowerCase())
+      ? 'promotion' : String(EMIE.state.authUser.role || '').toLowerCase();
     EMIE.state.currentUserId = EMIE.state.authUser.userId;
 
     // 基础数据并行加载：单个接口失败只影响对应功能，不阻塞首屏。
@@ -435,7 +436,10 @@ function startIdleMonitor() {
 }
 
 function roleLabel(r) {
-  return { sales: '需求方/销售', planner: '产品企划', designer: '设计师', supplychain: '供应链', promotion: '产品推广', admin: '管理员', pending: '待分配角色' }[r] || r;
+  const raw = String(r || '');
+  const lower = raw.toLowerCase();
+  const normalized = ['promotion', 'product_promotion', 'product-promotion'].includes(lower) ? 'promotion' : lower;
+  return { sales: '需求方/销售', planner: '产品企划', designer: '设计师', supplychain: '供应链', promotion: '产品推广', admin: '管理员', pending: '待分配角色' }[normalized] || raw;
 }
 
 

@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
         @Index(name = "idx_design_requirement_status", columnList = "status"),
         @Index(name = "idx_design_requirement_owner", columnList = "ownerId"),
         @Index(name = "idx_design_requirement_planner", columnList = "plannerId"),
+        @Index(name = "idx_design_requirement_designer", columnList = "designerId"),
         @Index(name = "idx_design_requirement_created", columnList = "createdAt")
 })
 public class DesignRequirement {
@@ -38,6 +39,8 @@ public class DesignRequirement {
     private String responsibleRole;
     private String plannerId;
     private String plannerName;
+    private String designerId;
+    private String designerName;
     private String deadline;
 
     @Column(columnDefinition = "TEXT")
@@ -48,6 +51,20 @@ public class DesignRequirement {
 
     @Column(columnDefinition = "LONGTEXT")
     private String attachmentsJson;
+
+    @Column(columnDefinition = "LONGTEXT")
+    private String referenceImagesJson;
+
+    @Column(columnDefinition = "TEXT")
+    private String deliveryContent;
+
+    @Column(columnDefinition = "LONGTEXT")
+    private String deliveryAttachmentsJson;
+
+    @Column(columnDefinition = "LONGTEXT")
+    private String deliveryReferenceImagesJson;
+
+    private LocalDateTime deliveredAt;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;

@@ -1,5 +1,7 @@
 const EMIE = window.EMIE;
 const apiGet = (...args) => EMIE.actions.apiGet(...args);
+const apiPost = (...args) => EMIE.actions.apiPost(...args);
+const roleLabel = (...args) => EMIE.actions.roleLabel(...args);
 const getProjectStatusInfo = (...args) => EMIE.actions.getProjectStatusInfo(...args);
 const formatDate = (...args) => EMIE.actions.formatDate(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
@@ -21,6 +23,10 @@ async function openDesignRequirementDetail(id) {
   if (document.getElementById('designRequirementDetailModal')) return;
   try {
     const detail = await apiGet(`/design-requirements/${id}`);
+    const myRole = String(EMIE.state.currentRole || '').toLowerCase();
+    const myScore = (detail.scoringRecords || []).find(s =>
+      s.reviewerId === EMIE.state.currentUserId || (!s.reviewerId && s.role === myRole));
+    const canDeliver = myRole === 'designer' && detail.designerId === EMIE.state.currentUserId;
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
     modal.id = 'designRequirementDetailModal';
@@ -42,18 +48,105 @@ async function openDesignRequirementDetail(id) {
               <div class="detail-item"><div class="detail-label">产品名称</div><div class="detail-value">${escHtml(detail.productName || '-')}</div></div>
               <div class="detail-item"><div class="detail-label">要求完成时间</div><div class="detail-value">${formatDate(detail.deadline)}</div></div>
               <div class="detail-item"><div class="detail-label">需求负责人</div><div class="detail-value">${escHtml(detail.responsibleName || detail.ownerName || '-')}</div></div>
+              <div class="detail-item"><div class="detail-label">交付设计师</div><div class="detail-value">${escHtml(detail.designerName || '待指定')}</div></div>
+              <div class="detail-item"><div class="detail-label">产品企划</div><div class="detail-value">${escHtml(detail.plannerName || '待指定')}</div></div>
               <div class="detail-item"><div class="detail-label">客户名称</div><div class="detail-value">${escHtml(detail.customerName || '-')}</div></div>
             </div>
             <div style="margin-top:12px;"><div class="detail-label">产品要求</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(detail.productRequirements || '-')}</div></div>
             ${detail.description ? `<div style="margin-top:12px;"><div class="detail-label">细节描述</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(detail.description)}</div></div>` : ''}
           </div>
+          <div class="detail-section">
+            <div class="detail-section-title">📦 交付与评分</div>
+            ${detail.deliveryContent
+              ? `<div class="detail-label">设计师交付成果</div><div class="detail-value" style="white-space:pre-wrap;margin-bottom:12px;">${escHtml(detail.deliveryContent)}</div>`
+              : '<div style="color:var(--gray-400);font-size:13px;margin-bottom:12px;">设计师尚未提交交付成果</div>'}
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              ${(detail.scoringRecords || []).map(s => `<span class="badge ${s.status === 'completed' ? 'badge-completed' : 'badge-pending'}">${escHtml(s.stage === 'self' ? '设计师自评' : roleLabel(s.role) + '评分')}：${s.status === 'completed' ? `${s.score}分` : s.status === 'pending' ? '待评分' : '等待中'}</span>`).join('')}
+            </div>
+          </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('designRequirementDetailModal')">关闭</button></div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" data-emie-onclick="closeM('designRequirementDetailModal')">关闭</button>
+          ${canDeliver && !detail.deliveryContent ? `<button class="btn btn-primary" data-emie-onclick="openDesignRequirementDelivery(${id})">📦 提交交付成果</button>` : ''}
+          ${myScore?.status === 'pending' && myScore.stage === 'self' ? `<button class="btn btn-warning" data-emie-onclick="openDesignRequirementScore(${id},true)">⭐ 完成自评</button>` : ''}
+          ${myScore?.status === 'pending' && myScore.stage === 'review' ? `<button class="btn btn-primary" data-emie-onclick="openDesignRequirementScore(${id},false)">⭐ 立即评分</button>` : ''}
+        </div>
       </div>`;
     document.body.appendChild(modal);
   } catch (error) {
     alert('加载详情失败：' + error.message);
   }
+}
+
+function openDesignRequirementDelivery(id) {
+  closeM('designRequirementDetailModal');
+  EMIE.projectState.deliverImages = [];
+  EMIE.projectState.deliverAttachments = [];
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'designRequirementDeliveryModal';
+  modal.innerHTML = `<div class="modal"><div class="modal-header"><div class="modal-title">📦 提交设计成果</div></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">交付内容</label><textarea class="form-textarea" id="designRequirementDeliveryContent" rows="7" placeholder="请填写本次交付内容或送审说明"></textarea></div>
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
+        <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
+        <div class="upload-area" data-emie-onclick="document.getElementById('designRequirementDeliverImageInput').click()">
+          <div>📁 拖拽图片到此处，或点击选择图片</div>
+          <input type="file" id="designRequirementDeliverImageInput" multiple accept="image/*,.ai" style="display:none" data-emie-onchange="handleDeliverImages(this)">
+        </div>
+        <div class="file-list" id="deliverImageList"></div>
+      </div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
+        <div class="form-label" style="margin-bottom:8px;">📎 交付附件</div>
+        <div class="upload-area" data-emie-onclick="document.getElementById('designRequirementDeliverAttachmentInput').click()">
+          <div>📁 拖拽文件到此处，或点击选择文件</div>
+          <input type="file" id="designRequirementDeliverAttachmentInput" multiple accept=".ai,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
+        </div>
+        <div class="file-list" id="deliverAttachmentList"></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('designRequirementDeliveryModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitDesignRequirementDelivery(${id})">提交交付</button></div></div>`;
+  document.body.appendChild(modal);
+}
+
+async function submitDesignRequirementDelivery(id) {
+  if (EMIE.projectState.uploadingCount > 0) return alert('文件正在上传中，请等待上传完成');
+  const deliveryContent = document.getElementById('designRequirementDeliveryContent')?.value?.trim();
+  if (!deliveryContent) return alert('请填写交付成果');
+  try {
+    await apiPost(`/design-requirements/${id}/deliver`, {
+      deliveryContent,
+      deliveryReferenceImagesJson: JSON.stringify((EMIE.projectState.deliverImages || []).map(i => ({
+        name: i.name, url: i.url, size: i.size, storedName: i.storedName
+      }))),
+      deliveryAttachmentsJson: JSON.stringify(EMIE.projectState.deliverAttachments || []),
+    });
+    closeM('designRequirementDeliveryModal');
+    await openDesignRequirementDetail(id);
+  } catch (e) { alert('提交失败：' + e.message); }
+}
+
+function openDesignRequirementScore(id, selfScore) {
+  closeM('designRequirementDetailModal');
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'designRequirementScoreModal';
+  modal.innerHTML = `<div class="modal"><div class="modal-header"><div class="modal-title">⭐ ${selfScore ? '设计师自评' : '需求评分'}</div></div>
+    <div class="modal-body"><p style="color:var(--gray-500);margin-bottom:16px;">请对本次设计交付进行综合评分（1-100分）</p><input type="number" class="form-input" id="designRequirementScoreValue" min="1" max="100" style="font-size:24px;text-align:center;"></div>
+    <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('designRequirementScoreModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitDesignRequirementScore(${id},${selfScore})">提交评分</button></div></div>`;
+  document.body.appendChild(modal);
+}
+
+async function submitDesignRequirementScore(id, selfScore) {
+  const score = Number(document.getElementById('designRequirementScoreValue')?.value);
+  if (!Number.isInteger(score) || score < 1 || score > 100) return alert('请输入1-100的整数评分');
+  try {
+    await apiPost(`/design-requirements/${id}/${selfScore ? 'self-score' : 'score'}`, { score });
+    closeM('designRequirementScoreModal');
+    EMIE.actions.clearSWRCache?.();
+    if (EMIE.state.currentView === 'scoring') await EMIE.actions.renderScoringView(document.getElementById('mainContent'), EMIE.state.currentRole, EMIE.state.currentUserId);
+    else await openDesignRequirementDetail(id);
+  } catch (e) { alert('评分失败：' + e.message); }
 }
 
 async function renderOrderList(main, type, role, uid, titleOverride = '', endpoint = '/projects/page') {
@@ -74,7 +167,7 @@ async function renderOrderList(main, type, role, uid, titleOverride = '', endpoi
       <div style="display:flex;gap:8px;">
         ${EMIE.state.currentRole === 'sales' && type === 'channel_custom' ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('channel_custom')">➕ 新建渠道定制项目</button>` : ''}
         ${EMIE.state.currentRole === 'planner' && type === 'regular' ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('regular')">➕ 新建常规品设计项目</button>` : ''}
-        ${type === 'design_requirement' && ['planner','sales','promotion','product_promotion','product-promotion'].includes(EMIE.state.currentRole) ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('design_requirement')">➕ 新建设计/送审需求</button>` : ''}
+        ${type === 'design_requirement' && ['planner','sales','promotion','product_promotion','product-promotion'].includes(String(EMIE.state.currentRole || '').toLowerCase()) ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('design_requirement')">➕ 新建设计/送审需求</button>` : ''}
       </div>
     </div>
     <div class="filter-bar" style="margin-bottom:16px;">
@@ -436,6 +529,10 @@ EMIE.registerActions({
   renderOrderList,
   openListItemDetail,
   openDesignRequirementDetail,
+  openDesignRequirementDelivery,
+  submitDesignRequirementDelivery,
+  openDesignRequirementScore,
+  submitDesignRequirementScore,
   renderProjectTable,
   changeProjectListPage,
   jumpProjectListPage,
@@ -459,6 +556,8 @@ EMIE.registerModule('dashboardLists', {
   renderOrderList,
   openListItemDetail,
   openDesignRequirementDetail,
+  openDesignRequirementDelivery,
+  openDesignRequirementScore,
   changeProjectListPage,
   jumpProjectListPage,
   filterProjectList,

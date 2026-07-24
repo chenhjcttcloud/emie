@@ -1,7 +1,11 @@
 package com.emie.designpm.controller;
 
 import com.emie.designpm.entity.DesignRequirement;
+import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.DesignRequirementRepository;
+import com.emie.designpm.repository.DesignRequirementScoreRepository;
+import com.emie.designpm.service.DesignRequirementScoringService;
+import com.emie.designpm.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.http.HttpStatus;
@@ -22,23 +26,36 @@ class DesignRequirementControllerTest {
     @Test
     void createUsesAuthenticatedUserAndIgnoresSubmittedOwnerIdentity() {
         DesignRequirementRepository repository = mock(DesignRequirementRepository.class);
+        DesignRequirementScoreRepository scoreRepository = mock(DesignRequirementScoreRepository.class);
+        DesignRequirementScoringService scoringService = mock(DesignRequirementScoringService.class);
+        UserService userService = mock(UserService.class);
+        when(userService.getUserByUserId("designer-1")).thenReturn(User.builder()
+                .userId("designer-1").name("真实设计师").role("designer").status("active").build());
+        when(userService.getUserByUserId("planner-1")).thenReturn(User.builder()
+                .userId("planner-1").name("真实企划").role("planner").status("active").build());
         when(repository.save(any())).thenAnswer(invocation -> {
             DesignRequirement saved = invocation.getArgument(0);
             saved.setId(42L);
             return saved;
         });
-        DesignRequirementController controller = new DesignRequirementController(repository);
+        DesignRequirementController controller = new DesignRequirementController(
+                repository, scoreRepository, scoringService, userService);
         MockHttpServletRequest request = authenticated("sales-1", "sales", "销售一");
 
         var response = controller.create(Map.of(
                 "productName", "新产品", "deadline", "2026-08-01",
-                "productRequirements", "完成包装设计", "ownerId", "forged-user"), request);
+                "productRequirements", "完成包装设计", "ownerId", "forged-user",
+                "designerId", "designer-1", "designerName", "伪造设计师",
+                "plannerId", "planner-1", "plannerName", "伪造企划"), request);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         DesignRequirement saved = captureSaved(repository);
         assertEquals("sales-1", saved.getOwnerId());
         assertEquals("sales-1", saved.getResponsibleId());
         assertEquals("销售一", saved.getResponsibleName());
+        assertEquals("真实设计师", saved.getDesignerName());
+        assertEquals("真实企划", saved.getPlannerName());
+        verify(scoringService).initialize(saved);
     }
 
     @Test
@@ -47,7 +64,8 @@ class DesignRequirementControllerTest {
         DesignRequirementController controller = new DesignRequirementController(repository);
 
         assertEquals(HttpStatus.FORBIDDEN, controller.create(Map.of(
-                "productName", "产品", "deadline", "2026-08-01", "productRequirements", "要求"),
+                "productName", "产品", "deadline", "2026-08-01", "productRequirements", "要求",
+                "designerId", "designer-1", "plannerId", "planner-1"),
                 authenticated("designer-1", "designer", "设计师")).getStatusCode());
         assertEquals(HttpStatus.BAD_REQUEST, controller.create(Map.of("productName", "产品"),
                 authenticated("sales-1", "sales", "销售一")).getStatusCode());
