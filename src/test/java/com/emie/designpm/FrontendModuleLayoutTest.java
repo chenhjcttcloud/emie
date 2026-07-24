@@ -161,6 +161,7 @@ class FrontendModuleLayoutTest {
     void identitySwitcherUsesCurrentRolesAndUsers() throws IOException {
         String identity = readResource("/static/js/core-identity.js");
         String adminRoles = readResource("/static/js/admin-roles.js");
+        String appCss = readResource("/static/css/app.css");
 
         assertTrue(identity.contains("apiGet('/users/roles')"),
                 "管理员身份切换器应实时读取角色管理数据");
@@ -172,6 +173,8 @@ class FrontendModuleLayoutTest {
                 "身份切换器应纳入后续新增的自定义角色");
         assertTrue(identity.contains("seenUserIds"),
                 "兼容角色别名时应按用户 ID 去重");
+        assertTrue(appCss.contains(".identity-user-role.r-promotion"),
+                "产品推广在身份切换器中应显示独立角色徽章");
         assertTrue(adminRoles.contains("await renderRoleSwitcher()"),
                 "新增、编辑或删除角色后应立即刷新身份切换器");
     }

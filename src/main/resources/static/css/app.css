@@ -218,6 +218,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 .identity-user-role.r-sales { background:#ECFDF5; color:#059669; }
 .identity-user-role.r-planner { background:#FFFBEB; color:#D97706; }
 .identity-user-role.r-designer { background:#FEF2F2; color:#DC2626; }
+.identity-user-role.r-promotion { background:#F5F3FF; color:#7C3AED; }
 .identity-user-role.r-supplychain { background:#F0FDFA; color:#0D9488; }
 
 /* 搜索高亮时隐藏不匹配项 */
