@@ -38,6 +38,7 @@ public class NotificationTemplateService {
 
         return switch (eventType) {
             case "PROJECT_ASSIGNED" -> create(eventType, "有新的项目待接单", "“{{projectName}}”已由{{actorName}}指定给你，请及时接单并安排任务。", "high", true, projectLink(context), project, "项目待接单", deadline, actor, context);
+            case "DESIGN_REQUIREMENT_ASSIGNED" -> create(eventType, "有新的设计/送审需求", "“{{projectName}}”已由{{actorName}}创建并指定给你，请及时查看并跟进。", "high", true, projectLink(context), project, "设计/送审需求待跟进", deadline, actor, context);
             case "TASK_ASSIGNED", "TASK_REASSIGNED" -> create(eventType, "有新的子任务待处理", "子任务“{{taskName}}”已指派给你，所属项目：{{projectName}}；计划完成：{{deadline}}。", "high", true, taskLink(context), project, "子任务待处理：" + task, deadline, actor, context);
             case "TASK_ACCEPTED" -> create(eventType, "子任务已接单", "{{actorName}}已接单子任务“{{taskName}}”。", "normal", false, taskLink(context), project, "子任务已接单：" + task, deadline, actor, context);
             case "TASK_DELIVERED" -> create(eventType, "子任务待审核", "{{actorName}}已交付子任务“{{taskName}}”，请查看成果并完成审核。", "high", true, taskLink(context), project, "待审核：" + task, deadline, actor, context);

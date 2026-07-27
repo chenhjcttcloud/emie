@@ -279,7 +279,7 @@ function openCreateProject(type) {
           <div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片</div>
           <div class="upload-area" data-emie-onclick="document.getElementById('createRefImageInput').click()">
             <div>📁 拖拽图片到此处，或点击选择图片</div>
-            <input type="file" id="createRefImageInput" multiple accept="image/*,.ai" style="display:none" data-emie-onchange="handleCreateRefImages(this)">
+            <input type="file" id="createRefImageInput" multiple accept="image/*,.ai,.step" style="display:none" data-emie-onchange="handleCreateRefImages(this)">
           </div>
           <div class="file-list" id="createRefImageList"></div>
         </div>
@@ -288,7 +288,7 @@ function openCreateProject(type) {
           <div class="form-label" style="margin-bottom:8px;">📎 附件</div>
           <div class="upload-area" data-emie-onclick="document.getElementById('createAttachmentInput').click()">
             <div>📁 拖拽文件到此处，或点击选择文件</div>
-            <input type="file" id="createAttachmentInput" multiple accept=".ai,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleCreateAttachments(this)">
+            <input type="file" id="createAttachmentInput" multiple accept=".ai,.step,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleCreateAttachments(this)">
           </div>
           <div class="file-list" id="createAttachmentList"></div>
         </div>
@@ -511,6 +511,8 @@ function openEditProject(pid) {
     const isChannel = detail.type === 'channel_custom';
     const canEdit = (isChannel && EMIE.state.currentRole === 'sales' && detail.salesId === EMIE.state.currentUserId)
       || (!isChannel && EMIE.state.currentRole === 'planner' && detail.plannerId === EMIE.state.currentUserId);
+    const permission = isChannel ? 'project.channel.edit' : 'project.regular.edit';
+    if (!EMIE.actions.hasPermission(permission)) throw new Error('当前账号没有编辑此类项目的权限');
     if (!canEdit) throw new Error('仅该项目的' + (isChannel ? '销售' : '产品企划') + '可编辑项目信息');
 
     EMIE.projectState.formModified = false;
@@ -548,8 +550,8 @@ function openEditProject(pid) {
             <div class="form-group"><label class="form-label"><span class="required">*</span> 产品要求</label><textarea class="form-textarea" name="productRequirements" data-emie-oninput="formModified()">${escHtml(detail.productRequirements || '')}</textarea></div>
             <div class="form-group"><label class="form-label">细节描述（可选）</label><textarea class="form-textarea" name="description" data-emie-oninput="formModified()">${escHtml(detail.description || '')}</textarea></div>
           </form>
-          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);"><div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片</div><div class="upload-area" data-emie-onclick="document.getElementById('editProjectRefImageInput').click()"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="editProjectRefImageInput" multiple accept="image/*,.ai" style="display:none" data-emie-onchange="handleEditProjectRefImages(this)"></div><div class="file-list" id="editProjectRefImageList"></div></div>
-          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);"><div class="form-label" style="margin-bottom:8px;">📎 附件</div><div class="upload-area" data-emie-onclick="document.getElementById('editProjectAttachmentInput').click()"><div>📁 拖拽文件到此处，或点击选择文件</div><input type="file" id="editProjectAttachmentInput" multiple accept=".ai,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleEditProjectAttachments(this)"></div><div class="file-list" id="editProjectAttachmentList"></div></div>
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);"><div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片</div><div class="upload-area" data-emie-onclick="document.getElementById('editProjectRefImageInput').click()"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="editProjectRefImageInput" multiple accept="image/*,.ai,.step" style="display:none" data-emie-onchange="handleEditProjectRefImages(this)"></div><div class="file-list" id="editProjectRefImageList"></div></div>
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);"><div class="form-label" style="margin-bottom:8px;">📎 附件</div><div class="upload-area" data-emie-onclick="document.getElementById('editProjectAttachmentInput').click()"><div>📁 拖拽文件到此处，或点击选择文件</div><input type="file" id="editProjectAttachmentInput" multiple accept=".ai,.step,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleEditProjectAttachments(this)"></div><div class="file-list" id="editProjectAttachmentList"></div></div>
         </div>
         <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('editProjectModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitEditProject(${pid}))">保存修改</button></div>
       </div>`;

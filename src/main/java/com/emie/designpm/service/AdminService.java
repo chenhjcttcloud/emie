@@ -211,6 +211,7 @@ public class AdminService {
         String[][] templates = {
             {"PROJECT_ASSIGNED", "项目指派", "有新的项目待接单", "“{{projectName}}”已由{{actorName}}指定给你，请及时接单并安排任务。"},
             {"TASK_ASSIGNED", "子任务派发", "有新的子任务待处理", "子任务“{{taskName}}”已指派给你，所属项目：{{projectName}}；计划完成：{{deadline}}。"},
+            {"DESIGN_REQUIREMENT_ASSIGNED", "设计送审需求派发", "有新的设计/送审需求", "“{{projectName}}”已由{{actorName}}创建并指定给你，请及时查看并跟进。"},
             {"TASK_REASSIGNED", "子任务改派", "有新的子任务待处理", "子任务“{{taskName}}”已改派给你，所属项目：{{projectName}}；计划完成：{{deadline}}。"},
             {"TASK_ACCEPTED", "子任务接单", "子任务已接单", "{{actorName}}已接单子任务“{{taskName}}”。"},
             {"TASK_DELIVERED", "子任务首次交付", "子任务待审核", "{{actorName}}已交付子任务“{{taskName}}”，请查看成果并完成审核。"},

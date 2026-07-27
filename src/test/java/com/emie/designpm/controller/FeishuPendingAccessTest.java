@@ -4,6 +4,7 @@ import com.emie.designpm.config.AuthFilter;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.SystemConfigRepository;
 import com.emie.designpm.repository.UserRepository;
+import com.emie.designpm.service.PermissionService;
 import com.lark.oapi.service.authen.v1.model.GetUserInfoRespBody;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -113,5 +114,25 @@ class FeishuPendingAccessTest {
                 .anyMatch("/register"::equals);
 
         assertFalse(hasRegisterHandler);
+    }
+
+    @Test
+    void systemManagementRouteUsesSpecificPermissionInsteadOfAdminRoleName() throws Exception {
+        String userId = "security-manager-test";
+        String token = AuthController.generateToken(userId, "security_manager", "安全管理员");
+        PermissionService permissions = mock(PermissionService.class);
+        when(permissions.has("security_manager", "admin.user.manage")).thenReturn(true);
+        AuthFilter filter = new AuthFilter(permissions);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/admin/users");
+        request.addHeader("X-Auth-Token", token);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertNotNull(chain.getRequest());
+        assertEquals(Boolean.TRUE, request.getAttribute("permissionGranted"));
+        assertEquals("admin.user.manage", request.getAttribute("requiredPermission"));
+        AuthController.clearUserTokens(userId);
     }
 }

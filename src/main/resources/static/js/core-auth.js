@@ -159,13 +159,14 @@ async function showApp() {
     EMIE.state.currentUserId = EMIE.state.authUser.userId;
 
     // 基础数据并行加载：单个接口失败只影响对应功能，不阻塞首屏。
-    const [categories, compliance, priceRanges, ipOptions, departments, users] = await Promise.all([
+    const [categories, compliance, priceRanges, ipOptions, departments, users, capabilities] = await Promise.all([
       apiGet('/categories').catch(() => []),
       apiGet('/compliance').catch(() => []),
       apiGet('/price-ranges').catch(() => []),
       apiGet('/ip-options').catch(() => []),
       apiGet('/departments').catch(() => []),
-      apiGet('/users').catch(() => ({}))
+      apiGet('/users').catch(() => ({})),
+      apiGet('/auth/permissions').catch(() => null)
     ]);
     EMIE.state.categories = categories;
     EMIE.state.complianceItems = compliance;
@@ -173,6 +174,11 @@ async function showApp() {
     EMIE.state.ipOptions = ipOptions;
     EMIE.state.departments = departments;
     EMIE.state.users = users;
+    EMIE.state.permissions = Array.isArray(capabilities?.permissions) ? capabilities.permissions : null;
+    EMIE.state.permissionScopes = capabilities?.scopes && typeof capabilities.scopes === 'object'
+      ? capabilities.scopes : {};
+    EMIE.state.permissionVersion = capabilities?.permissionVersion ?? null;
+    EMIE.state.permissionMode = capabilities?.mode || 'unavailable';
     // 用户列表加载后重新渲染切换器（否则下拉选项为空）
     await renderRoleSwitcher();
     renderSidebar();

@@ -1,5 +1,24 @@
 const EMIE = window.EMIE;
 const render = (...args) => EMIE.actions.render(...args);
+const hasPermission = (...args) => EMIE.actions.hasPermission(...args);
+
+const NAV_DEFINITIONS = [
+  { view: 'dashboard', icon: '📊', label: '工作台', permission: 'page.dashboard.view' },
+  { view: 'orders', icon: '📋', label: '全部项目', permission: 'page.projects.view' },
+  { view: 'channel', icon: '📦', label: '渠道定制单', permission: 'page.projects.channel.view' },
+  { view: 'regular', icon: '🏭', label: '公司常规品', permission: 'page.projects.regular.view' },
+  { view: 'design-needs', icon: '🎨', label: '设计/送审需求', permission: 'page.design_requirements.view' },
+  { view: 'tasks', icon: '📌', label: '我的子任务', permission: 'page.subtasks.mine.view' },
+  { view: 'other-tasks', icon: '🧭', label: '其他子任务', permission: 'page.subtasks.department.view' },
+  { view: 'scoring', icon: '⭐', label: '评分', permission: 'page.scoring.view' },
+  { view: 'admin', icon: '⚙️', label: '系统管理', permission: 'page.admin.view' },
+];
+
+function canNavigateTo(view) {
+  const nav = NAV_DEFINITIONS.find(item => item.view === view);
+  if (!nav || !hasPermission(nav.permission)) return false;
+  return view !== 'other-tasks' || canViewOtherTasksNav();
+}
 
 // ==================== 侧边栏 ====================
 function canViewOtherTasksNav() {
@@ -13,41 +32,11 @@ function canViewOtherTasksNav() {
 }
 
 function renderSidebar() {
-  const navs = [];
-  const showOtherTasks = canViewOtherTasksNav();
-  if (!showOtherTasks && EMIE.state.currentView === 'other-tasks') EMIE.state.currentView = 'dashboard';
-
-  if (EMIE.state.currentRole === 'sales') {
-    // 销售：工作台、项目、我的子任务、评分
-    navs.push({ view: 'dashboard', icon: '📊', label: '工作台', badge: '' });
-    navs.push({ view: 'orders', icon: '📋', label: '全部项目', badge: '' });
-    navs.push({ view: 'channel', icon: '📦', label: '渠道定制单', badge: '' });
-    navs.push({ view: 'regular', icon: '🏭', label: '公司常规品', badge: '' });
-    navs.push({ view: 'design-needs', icon: '🎨', label: '设计/送审需求', badge: '' });
-    navs.push({ view: 'tasks', icon: '📌', label: '我的子任务', badge: '' });
-    if (showOtherTasks) navs.push({ view: 'other-tasks', icon: '🧭', label: '其他子任务', badge: '' });
-    navs.push({ view: 'scoring', icon: '⭐', label: '评分', badge: '' });
-  } else if (EMIE.state.currentRole === 'admin') {
-    // 管理员：工作台 + 系统管理
-    navs.push({ view: 'dashboard', icon: '📊', label: '工作台', badge: '' });
-    navs.push({ view: 'orders', icon: '📋', label: '全部项目', badge: '' });
-    navs.push({ view: 'channel', icon: '📦', label: '渠道定制单', badge: '' });
-    navs.push({ view: 'regular', icon: '🏭', label: '公司常规品', badge: '' });
-    navs.push({ view: 'design-needs', icon: '🎨', label: '设计/送审需求', badge: '' });
-    navs.push({ view: 'tasks', icon: '📌', label: '我的子任务', badge: '' });
-    if (showOtherTasks) navs.push({ view: 'other-tasks', icon: '🧭', label: '其他子任务', badge: '' });
-    navs.push({ view: 'scoring', icon: '⭐', label: '评分', badge: '' });
-    navs.push({ view: 'admin', icon: '⚙️', label: '系统管理', badge: '' });
-  } else {
-    // 其他角色：显示全部导航
-    navs.push({ view: 'dashboard', icon: '📊', label: '工作台', badge: '' });
-    navs.push({ view: 'orders', icon: '📋', label: '全部项目', badge: '' });
-    navs.push({ view: 'channel', icon: '📦', label: '渠道定制单', badge: '' });
-    navs.push({ view: 'regular', icon: '🏭', label: '公司常规品', badge: '' });
-    navs.push({ view: 'design-needs', icon: '🎨', label: '设计/送审需求', badge: '' });
-    navs.push({ view: 'tasks', icon: '📌', label: '我的子任务', badge: '' });
-    if (showOtherTasks) navs.push({ view: 'other-tasks', icon: '🧭', label: '其他子任务', badge: '' });
-    navs.push({ view: 'scoring', icon: '⭐', label: '评分', badge: '' });
+  const navs = NAV_DEFINITIONS
+    .filter(item => canNavigateTo(item.view))
+    .map(item => ({ ...item, badge: '' }));
+  if (!canNavigateTo(EMIE.state.currentView)) {
+    EMIE.state.currentView = canNavigateTo('dashboard') ? 'dashboard' : navs[0]?.view || 'dashboard';
   }
 
   const sidebar = document.getElementById('sidebarContainer');
@@ -68,6 +57,7 @@ function renderSidebar() {
 
 // ==================== 导航 ====================
 function navigate(view) {
+  if (!canNavigateTo(view)) return;
   EMIE.state.currentView = view;
   if (view !== 'tasks') EMIE.state.taskBucket = 'all';
   // 保存当前浏览页面（刷新后恢复）
@@ -125,6 +115,7 @@ EMIE.registerActions({
   navigateTaskBucket,
   toggleMobileSidebar,
   closeMobileSidebar,
+  canNavigateTo,
 });
 
 EMIE.registerModule('coreShell', {

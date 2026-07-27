@@ -21,30 +21,63 @@ class ProjectReviewWorkflowTest {
 
     private ProjectRepository projects;
     private ScoringRepository scoring;
+    private SubTaskDeliveryVersionRepository deliveryVersions;
     private SystemConfigRepository configs;
     private ProjectAccessService access;
+    private NotificationWorkflowService notifications;
+    private UserService users;
     private ProjectService service;
 
     @BeforeEach
     void setUp() {
         projects = mock(ProjectRepository.class);
         scoring = mock(ScoringRepository.class);
+        deliveryVersions = mock(SubTaskDeliveryVersionRepository.class);
         configs = mock(SystemConfigRepository.class);
         access = mock(ProjectAccessService.class);
+        notifications = mock(NotificationWorkflowService.class);
+        users = mock(UserService.class);
         when(configs.findByConfigKey(anyString())).thenReturn(Optional.empty());
         service = new ProjectService(
                 projects,
                 mock(SubTaskRepository.class),
                 scoring,
-                mock(UserService.class),
+                deliveryVersions,
+                users,
                 mock(ProductCategoryRepository.class),
                 mock(IpOptionRepository.class),
                 configs,
                 mock(SyncQueueService.class),
                 mock(FileArchiveService.class),
                 access,
-                mock(NotificationWorkflowService.class)
+                notifications
         );
+    }
+
+    @Test
+    void publishingAssignedSubTaskSchedulesNotificationForExactAssignee() {
+        Project project = projectWithTask("regular", "completed");
+        project.getTasks().clear();
+        when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(users.getUserByUserId("designer-2")).thenReturn(com.emie.designpm.entity.User.builder()
+                .userId("designer-2").name("设计师乙").role("designer").status("active").build());
+        when(users.getUserName("designer-2")).thenReturn("设计师乙");
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> {
+            Project saved = invocation.getArgument(0);
+            saved.getTasks().getFirst().setId(22L);
+            return saved;
+        });
+
+        service.addSubTask(1L, Map.of(
+                "name", "包装延展", "plannedDate", "2026-08-10",
+                "designerId", "designer-2", "assigneeRole", "designer",
+                "workflowStage", "design", "currentRole", "planner",
+                "currentUserId", "planner-1", "currentUser", "企划甲",
+                "referenceImagesJson", "[]", "attachmentsJson", "[]"));
+
+        verify(notifications).notifyUserAfterCommit(
+                eq("TASK_ASSIGNED"), eq("designer-2"), eq("sub_task"), eq(22L),
+                eq("planner-1"), anyMap());
     }
 
     @Test
@@ -74,6 +107,33 @@ class ProjectReviewWorkflowTest {
         List<ScoringRecord> records = savedScoringRecords();
         assertReview(records.get(0), "planner", "first", "pending", null);
         assertReview(records.get(1), "admin", "second", "waiting", null);
+    }
+
+    @Test
+    void activeDeliveryCorrectionCreatesVersionAndInvalidatesPreviousApproval() {
+        Project project = projectWithTask("channel_custom", "planner_approved");
+        ScoringRecord planner = review(project.getTasks().get(0), "planner", "first");
+        planner.setReviewStatus("approved");
+        planner.setScore(90);
+        when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scoring.findBySubTaskIdAndRole(11L, "planner")).thenReturn(Optional.of(planner));
+        when(scoring.findBySubTaskIdAndRole(11L, "sales")).thenReturn(Optional.empty());
+        when(deliveryVersions.countBySubTaskId(11L)).thenReturn(1L);
+
+        Map<String, Object> body = new java.util.HashMap<>(deliveryBody());
+        body.put("changeSummary", "补充源文件并移除错误附件");
+        body.put("deliverables", "V2 完整交付");
+        service.taskCorrectDelivery(1L, 11L, body);
+
+        assertEquals("delivered", project.getTasks().get(0).getStatus());
+        assertReview(planner, "planner", "first", "pending", null);
+        ArgumentCaptor<com.emie.designpm.entity.SubTaskDeliveryVersion> version =
+                ArgumentCaptor.forClass(com.emie.designpm.entity.SubTaskDeliveryVersion.class);
+        verify(deliveryVersions).save(version.capture());
+        assertEquals(2, version.getValue().getVersionNo());
+        assertEquals("correction", version.getValue().getSubmissionType());
+        assertEquals("补充源文件并移除错误附件", version.getValue().getChangeSummary());
     }
 
     @Test
@@ -131,6 +191,8 @@ class ProjectReviewWorkflowTest {
         assertEquals(11L, project.getLogs().get(0).getEntityId());
         assertTrue(project.getLogs().get(0).getBeforeData().contains("\"deliverables\""));
         assertTrue(project.getLogs().get(0).getAfterData().contains("二审需修改"));
+        assertTrue(project.getLogs().get(0).getAfterData().contains("rejectionReferenceImagesJson"));
+        assertTrue(project.getLogs().get(0).getAfterData().contains("rejectionAttachmentsJson"));
     }
 
     @Test

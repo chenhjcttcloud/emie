@@ -13,6 +13,7 @@ import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.ProjectService;
 import com.emie.designpm.service.ProjectAccessService;
 import com.emie.designpm.service.ProjectWorkflowService;
+import com.emie.designpm.service.PermissionService;
 import com.emie.designpm.util.ProjectAccessPolicy;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,6 +22,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.format.DateTimeFormatter;
 import java.time.LocalDate;
@@ -37,22 +39,37 @@ public class ProjectController {
     private final SubTaskRepository subTaskRepository;
     private final ProjectAccessService projectAccessService;
     private final ProjectWorkflowService projectWorkflowService;
+    private final PermissionService permissionService;
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
+    @Autowired
     public ProjectController(ProjectService projectService,
                              ScoringRepository scoringRepository,
                              ActivityLogRepository activityLogRepository,
                              SubTaskRepository subTaskRepository,
                              ProjectAccessService projectAccessService,
-                             ProjectWorkflowService projectWorkflowService) {
+                             ProjectWorkflowService projectWorkflowService,
+                             PermissionService permissionService) {
         this.projectService = projectService;
         this.scoringRepository = scoringRepository;
         this.activityLogRepository = activityLogRepository;
         this.subTaskRepository = subTaskRepository;
         this.projectAccessService = projectAccessService;
         this.projectWorkflowService = projectWorkflowService;
+        this.permissionService = permissionService;
+    }
+
+    /** 保留给轻量 Controller 单元测试；生产运行始终使用完整依赖构造器。 */
+    ProjectController(ProjectService projectService,
+                      ScoringRepository scoringRepository,
+                      ActivityLogRepository activityLogRepository,
+                      SubTaskRepository subTaskRepository,
+                      ProjectAccessService projectAccessService,
+                      ProjectWorkflowService projectWorkflowService) {
+        this(projectService, scoringRepository, activityLogRepository, subTaskRepository,
+                projectAccessService, projectWorkflowService, null);
     }
 
     /** 获取所有项目列表（轻量版：计数查询代替 JOIN FETCH） */
@@ -220,6 +237,8 @@ public class ProjectController {
             item.put("assigneeRole", task.getAssigneeRole());
             item.put("details", task.getDetails());
             item.put("deliverables", task.getDeliverables());
+            item.put("referenceImagesJson", task.getReferenceImagesJson());
+            item.put("attachmentsJson", task.getAttachmentsJson());
             item.put("reviewComments", task.getReviewComments());
             item.put("selfScore", task.getSelfScore());
             item.put("selfAesthetics", task.getSelfAesthetics());
@@ -228,6 +247,8 @@ public class ProjectController {
             item.put("projectType", project.getType());
             item.put("projectName", projectDisplayName(project));
             item.put("scoringRecords", scoringByTask.getOrDefault(task.getId(), List.of()));
+            item.put("rejectionRecords", rejectionRecords(project, task));
+            item.put("deliveryVersions", projectService.getDeliveryVersions(task.getId()));
             item.put("relation", session.userId().equals(task.getDesignerId()) ? "assignee" : "publisher");
             return item;
         }).toList();
@@ -252,9 +273,14 @@ public class ProjectController {
             item.put("designerId", task.getDesignerId()); item.put("designerName", task.getDesignerName());
             item.put("publisherId", task.getPublisherId()); item.put("publisherName", task.getPublisherName());
             item.put("publisherRole", task.getPublisherRole()); item.put("assigneeRole", task.getAssigneeRole());
-            item.put("details", task.getDetails()); item.put("reviewComments", task.getReviewComments());
+            item.put("details", task.getDetails()); item.put("deliverables", task.getDeliverables());
+            item.put("referenceImagesJson", task.getReferenceImagesJson());
+            item.put("attachmentsJson", task.getAttachmentsJson());
+            item.put("reviewComments", task.getReviewComments());
             item.put("projectId", project.getId()); item.put("projectType", project.getType());
             item.put("projectName", projectDisplayName(project)); item.put("readOnly", true);
+            item.put("rejectionRecords", rejectionRecords(project, task));
+            item.put("deliveryVersions", projectService.getDeliveryVersions(task.getId()));
             String uid = session.userId();
             item.put("relation", uid.equals(task.getPublisherId()) ? "publisher" : "department_member");
             item.put("relationLabel", uid.equals(task.getPublisherId()) ? "我发布的任务" : "部门成员关联任务");
@@ -283,8 +309,25 @@ public class ProjectController {
     @PostMapping
     public ResponseEntity<?> createProject(@RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
+            AuthController.AuthSession session = getSession(request);
+            String type = Objects.toString(body.get("type"), "");
+            String permission = switch (type) {
+                case "channel_custom" -> "project.channel.create";
+                case "regular" -> "project.regular.create";
+                default -> null;
+            };
+            if (permission == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "不支持的项目类型"));
+            }
+            if (permissionService != null && !permissionService.has(session.role(), permission)) {
+                return ResponseEntity.status(403).body(Map.of(
+                        "error", "当前账号没有新建此类项目的权限",
+                        "permission", permission));
+            }
             Project p = projectService.createProject(withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(Map.of("error", e.getMessage()));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -299,6 +342,19 @@ public class ProjectController {
         try {
             AuthController.AuthSession session = getSession(request);
             Project project = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
+            String permission = switch (project.getType()) {
+                case "channel_custom" -> "project.channel.edit";
+                case "regular" -> "project.regular.edit";
+                default -> null;
+            };
+            if (permission == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "不支持的项目类型"));
+            }
+            if (permissionService != null && !permissionService.has(session.role(), permission)) {
+                return ResponseEntity.status(403).body(Map.of(
+                        "error", "当前账号没有编辑此类项目的权限",
+                        "permission", permission));
+            }
             if (!ProjectAccessPolicy.canEditProjectInformation(project, session)) {
                 return ResponseEntity.status(403).body(Map.of("error", "仅该项目的"
                         + ("channel_custom".equals(project.getType()) ? "销售" : "产品企划") + "可编辑项目信息"));
@@ -314,10 +370,12 @@ public class ProjectController {
 
     /** 企划接单 */
     @PostMapping("/{id}/accept")
-    public ResponseEntity<ProjectDetailDTO> plannerAccept(
+    public ResponseEntity<?> plannerAccept(
             @PathVariable Long id,
             @RequestBody Map<String, String> body,
             HttpServletRequest request) {
+        ResponseEntity<?> denied = denyUnless(request, "project.accept");
+        if (denied != null) return denied;
         Map<String, Object> safeBody = withSessionContext(new LinkedHashMap<>(body), request);
         Project p = projectService.plannerAccept(id,
                 (String) safeBody.getOrDefault("currentUser", ""),
@@ -333,6 +391,12 @@ public class ProjectController {
             @RequestBody Map<String, Object> body,
             HttpServletRequest request) {
         try {
+            AuthController.AuthSession session = getSession(request);
+            if (permissionService != null && !permissionService.has(session.role(), "subtask.create")) {
+                return ResponseEntity.status(403).body(Map.of(
+                        "error", "当前账号没有新建子任务的权限",
+                        "permission", "subtask.create"));
+            }
             Project p = projectService.addSubTask(id, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
@@ -342,6 +406,8 @@ public class ProjectController {
 
     @PostMapping("/{id}/workflow/complete-execution")
     public ResponseEntity<?> completeWorkflowExecution(@PathVariable Long id, HttpServletRequest request) {
+        ResponseEntity<?> denied = denyUnless(request, "project.workflow.advance");
+        if (denied != null) return denied;
         AuthController.AuthSession session = getSession(request);
         try {
             Project project = projectWorkflowService.completeExecution(
@@ -354,6 +420,8 @@ public class ProjectController {
 
     @PostMapping("/{id}/workflow/submit-review")
     public ResponseEntity<?> submitWorkflowReview(@PathVariable Long id, HttpServletRequest request) {
+        ResponseEntity<?> denied = denyUnless(request, "project.workflow.advance");
+        if (denied != null) return denied;
         AuthController.AuthSession session = getSession(request);
         try {
             return ResponseEntity.ok(projectWorkflowService.submitReview(
@@ -367,6 +435,8 @@ public class ProjectController {
     public ResponseEntity<?> reviewWorkflow(@PathVariable Long id,
                                              @RequestBody Map<String, String> body,
                                              HttpServletRequest request) {
+        ResponseEntity<?> denied = denyUnless(request, "project.workflow.review");
+        if (denied != null) return denied;
         AuthController.AuthSession session = getSession(request);
         try {
             return ResponseEntity.ok(projectWorkflowService.review(
@@ -385,6 +455,8 @@ public class ProjectController {
             @RequestBody Map<String, Object> body,
             HttpServletRequest request) {
         try {
+            ResponseEntity<?> denied = denyUnless(request, "subtask.edit");
+            if (denied != null) return denied;
             Project p = projectService.updateSubTask(projectId, taskId, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
@@ -400,6 +472,8 @@ public class ProjectController {
             @RequestBody Map<String, Object> body,
             HttpServletRequest request) {
         try {
+            ResponseEntity<?> denied = denyUnless(request, "subtask.accept");
+            if (denied != null) return denied;
             Project p = projectService.taskAccept(projectId, taskId, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
@@ -415,6 +489,8 @@ public class ProjectController {
             @RequestBody Map<String, Object> body,
             HttpServletRequest request) {
         try {
+            ResponseEntity<?> denied = denyUnless(request, "subtask.deliver");
+            if (denied != null) return denied;
             Project p = projectService.taskDeliver(projectId, taskId, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
@@ -430,7 +506,26 @@ public class ProjectController {
             @RequestBody Map<String, Object> body,
             HttpServletRequest request) {
         try {
+            ResponseEntity<?> denied = denyUnless(request, "subtask.redeliver");
+            if (denied != null) return denied;
             Project p = projectService.taskRedeliver(projectId, taskId, withSessionContext(body, request));
+            return ResponseEntity.ok(toDetail(p));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** 审核完成前，负责人主动修正漏交或错交文件；生成新版本并使旧审核失效。 */
+    @PostMapping("/{projectId}/tasks/{taskId}/correct-delivery")
+    public ResponseEntity<?> taskCorrectDelivery(
+            @PathVariable Long projectId,
+            @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        try {
+            ResponseEntity<?> denied = denyUnless(request, "subtask.redeliver");
+            if (denied != null) return denied;
+            Project p = projectService.taskCorrectDelivery(projectId, taskId, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -445,6 +540,9 @@ public class ProjectController {
             @RequestBody Map<String, Object> body,
             HttpServletRequest request) {
         try {
+            String permission = reviewPermission(getSession(request), true);
+            ResponseEntity<?> denied = denyUnless(request, permission);
+            if (denied != null) return denied;
             Project p = projectService.taskApprove(projectId, taskId, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
@@ -460,6 +558,9 @@ public class ProjectController {
             @RequestBody Map<String, Object> body,
             HttpServletRequest request) {
         try {
+            String permission = reviewPermission(getSession(request), false);
+            ResponseEntity<?> denied = denyUnless(request, permission);
+            if (denied != null) return denied;
             Project p = projectService.taskReject(projectId, taskId, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
@@ -475,6 +576,8 @@ public class ProjectController {
             @RequestBody Map<String, Object> body,
             HttpServletRequest request) {
         try {
+            ResponseEntity<?> denied = denyUnless(request, "scoring.submit");
+            if (denied != null) return denied;
             Project p = projectService.submitScoring(projectId, taskId, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
@@ -516,6 +619,8 @@ public class ProjectController {
     @PostMapping("/{id}/terminate")
     public ResponseEntity<?> terminateProject(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
+            ResponseEntity<?> denied = denyUnless(request, "project.terminate");
+            if (denied != null) return denied;
             AuthController.AuthSession session = getSession(request);
             Project project = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
             if (!ProjectAccessPolicy.canManage(project, session)) return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
@@ -530,6 +635,8 @@ public class ProjectController {
     @PostMapping("/{id}/pause")
     public ResponseEntity<?> pauseProject(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
+            ResponseEntity<?> denied = denyUnless(request, "project.pause");
+            if (denied != null) return denied;
             AuthController.AuthSession session = getSession(request);
             Project project = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
             if (!ProjectAccessPolicy.canManage(project, session)) return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
@@ -544,6 +651,8 @@ public class ProjectController {
     @PostMapping("/{id}/cancel-terminate")
     public ResponseEntity<?> cancelTerminate(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
+            ResponseEntity<?> denied = denyUnless(request, "project.resume");
+            if (denied != null) return denied;
             AuthController.AuthSession session = getSession(request);
             Project project = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
             if (!ProjectAccessPolicy.canManage(project, session)) return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
@@ -558,6 +667,8 @@ public class ProjectController {
     @PostMapping("/{id}/resume")
     public ResponseEntity<?> resumeProject(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
+            ResponseEntity<?> denied = denyUnless(request, "project.resume");
+            if (denied != null) return denied;
             AuthController.AuthSession session = getSession(request);
             Project project = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
             if (!ProjectAccessPolicy.canManage(project, session)) return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
@@ -575,6 +686,8 @@ public class ProjectController {
             @PathVariable Long taskId,
             HttpServletRequest request) {
         try {
+            ResponseEntity<?> denied = denyUnless(request, "subtask.delete");
+            if (denied != null) return denied;
             AuthController.AuthSession session = getSession(request);
             Project project = projectService.getProjectById(projectId).orElseThrow(() -> new RuntimeException("项目不存在"));
             if (session == null || !("admin".equals(session.role()) ||
@@ -592,12 +705,33 @@ public class ProjectController {
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteProject(@PathVariable Long id, HttpServletRequest request) {
         try {
-            if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可删除项目"));
+            ResponseEntity<?> denied = denyUnless(request, "project.delete");
+            if (denied != null) return denied;
             projectService.deleteProject(id);
             return ResponseEntity.ok(Map.of("message", "项目已删除"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    private ResponseEntity<?> denyUnless(HttpServletRequest request, String permission) {
+        AuthController.AuthSession session = getSession(request);
+        if (permission != null && (permissionService == null || permissionService.has(session.role(), permission))) {
+            return null;
+        }
+        return ResponseEntity.status(403).body(Map.of(
+                "error", "当前账号没有执行此操作的权限",
+                "permission", permission == null ? "unsupported.action" : permission));
+    }
+
+    private String reviewPermission(AuthController.AuthSession session, boolean approve) {
+        String action = approve ? "approve" : "reject";
+        return switch (session.role()) {
+            case "planner" -> "subtask.review.first." + action;
+            case "sales" -> "subtask.review.channel." + action;
+            case "admin" -> "subtask.review.regular." + action;
+            default -> null;
+        };
     }
 
     // ==================== DTO Mappers ====================
@@ -718,6 +852,7 @@ public class ProjectController {
             TaskDetailDTO tDto = toTaskDetail(t);
             tDto.setScoringRecords(scoringMap.getOrDefault(t.getId(), List.of()));
             tDto.setRejectionRecords(rejectionRecords(p, t));
+            tDto.setDeliveryVersions(projectService.getDeliveryVersions(t.getId()));
             return tDto;
         }).collect(Collectors.toList()));
         dto.setSubTaskWorkflow(projectWorkflowService.build(p));
@@ -745,6 +880,7 @@ public class ProjectController {
         for (int index = 0; index < logs.size(); index++) {
             ActivityLog log = logs.get(index);
             Map<String, Object> snapshot = parseJsonMap(log.getBeforeData());
+            Map<String, Object> rejection = parseJsonMap(log.getAfterData());
             String action = log.getAction();
             int reasonStart = action.indexOf("（意见：");
             String reason = reasonStart >= 0
@@ -757,6 +893,8 @@ public class ProjectController {
             record.put("reviewerRole", log.getRole());
             record.put("reviewedAt", log.getTime().format(DTF));
             record.put("reason", reason);
+            record.put("rejectionReferenceImagesJson", rejection.getOrDefault("rejectionReferenceImagesJson", "[]"));
+            record.put("rejectionAttachmentsJson", rejection.getOrDefault("rejectionAttachmentsJson", "[]"));
             record.put("deliverables", snapshot.getOrDefault("deliverables", task.getDeliverables()));
             record.put("referenceImagesJson", snapshot.getOrDefault("referenceImagesJson", task.getReferenceImagesJson()));
             record.put("attachmentsJson", snapshot.getOrDefault("attachmentsJson", task.getAttachmentsJson()));

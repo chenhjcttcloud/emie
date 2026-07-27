@@ -170,6 +170,12 @@ async function switchToUser(targetUserId) {
     EMIE.state.authUser = { userId: result.userId, name: result.name, role: result.role, title: result.title };
     EMIE.state.currentRole = normalizeIdentityRole(result.role);
     EMIE.state.currentUserId = result.userId;
+    const capabilities = await apiGet('/auth/permissions').catch(() => null);
+    EMIE.state.permissions = Array.isArray(capabilities?.permissions) ? capabilities.permissions : null;
+    EMIE.state.permissionScopes = capabilities?.scopes && typeof capabilities.scopes === 'object'
+      ? capabilities.scopes : {};
+    EMIE.state.permissionVersion = capabilities?.permissionVersion ?? null;
+    EMIE.state.permissionMode = capabilities?.mode || 'unavailable';
     document.getElementById('userDisplay').textContent = `${EMIE.state.authUser.name}（${identityRoleLabel(EMIE.state.authUser.role)}）`;
     await renderRoleSwitcher();
     // 角色切换后保留当前业务页面，避免先渲染旧角色再被重置到工作台。

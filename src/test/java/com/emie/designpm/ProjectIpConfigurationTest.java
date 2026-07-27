@@ -52,6 +52,7 @@ class ProjectIpConfigurationTest {
                 projects,
                 mock(SubTaskRepository.class),
                 mock(ScoringRepository.class),
+                mock(SubTaskDeliveryVersionRepository.class),
                 users,
                 mock(ProductCategoryRepository.class),
                 ipOptions,

@@ -1,5 +1,80 @@
 # EMIE 开发交接状态
 
+## 2026-07-27 子任务版本化交付
+
+- 新增不可变的 `sub_task_delivery_versions` 交付版本表；首次交付、负责人主动修正和驳回后重交分别生成 `initial`、`correction`、`redelivery` 版本，现有 `sub_tasks` 交付字段继续作为当前版本以兼容旧页面和飞书同步。
+- 审核完成前，子任务负责人可使用“修正交付”保留正确文件、移除误传文件、补充漏交文件，并必须填写修正说明；新版本提交后任务回到 `delivered`，全部旧审核结果失效并从企划一审重新开始。已完成任务禁止直接修正。
+- 项目详情和“我的子任务”详情均展示完整交付版本历史，包含版本类型、修正说明、提交人、自评、文字成果、参考图和附件。
+- 迁移 [`2026-07-27-add-sub-task-delivery-versions.sql`](../db/migrations/2026-07-27-add-sub-task-delivery-versions.sql) 可重复执行，并会把历史已有交付初始化为 V1；已在 `192.168.200.51/designpmtest` 备份后执行，初始化 3 条历史版本。
+- 105 项测试和三个相关前端模块语法检查通过；当前仅本地开发和测试库变更，未推送仓库，未部署本地服务器应用或云端生产。
+
+## 2026-07-24 子任务驳回资料与工作流通知修复
+
+- 子任务驳回弹窗新增参考图、附件上传；后端分别以 `rejectionReferenceImagesJson`、`rejectionAttachmentsJson` 保存到该次 `ActivityLog.afterData`，文件继续绑定子任务，驳回记录详情会展示该次驳回方补充的资料。
+- 新增 `DESIGN_REQUIREMENT_ASSIGNED` 通知模板；设计/送审需求保存并初始化评分后，向指定产品企划创建站内通知并按系统配置投递飞书。
+- 子任务发布通知改为使用刚创建的任务实体及其真实 ID，不再按“名称 + 负责人”反查可能命中的历史同名任务。
+- 设计需求和子任务指派均通过 `notifyUserAfterCommit` 在业务事务成功提交后发出，避免业务回滚后产生无效通知，或通知先于业务数据可见。
+- 已补充设计需求通知收件人、子任务精确负责人及驳回资料快照自动化测试；Java 21 `clean package` 共 104 项测试、全部前端 JavaScript 语法及 `git diff --check` 通过。
+- 本地服务已重启为 PID `30470`，首页 HTTP 200，加载 `bootstrap.js?v=223`，启动日志无应用错误。未提交、未推送、未部署。
+
+## 2026-07-24 权限系统：高级治理与发布准备
+
+- 角色管理现可为 `project.view`、`project.detail.view`、`subtask.view` 配置 `own`、`participated`、`department`、`role_team`、`all` 数据范围；保存时权限与范围进入同一版本快照和审计记录。
+- 新增权限治理接口和页面：用户能力预览、用户 + 权限 + 项目的模拟判定、原因链、最近 100 条权限变更以及空角色、自定义角色权限过大、读取权限缺少范围等异常检测。
+- 历史版本可按审计 ID 回滚；服务端校验历史目标角色和快照完整性，回滚要求填写原因，并生成更高版本的 `role.rollback` 审计，不覆盖或删除原记录。
+- 新增 [`permission-release-checklist.md`](permission-release-checklist.md)，固化生产备份、幂等迁移、六角色验收、发布观察和应用/权限配置回滚流程。
+- Java 21 `clean package` 共 102 项测试通过，全部前端 JavaScript 语法和 `git diff --check` 通过。权限迁移在共享测试库再次连续执行两次，结果稳定为 71 项权限定义、162 条允许授权、18 条范围、6 个角色版本。
+- 本地服务已重启为 PID `29371`，首页 HTTP 200，加载 `bootstrap.js?v=222`，启动日志无应用错误；未认证访问权限治理接口返回预期的 401。未提交、未推送、未部署。
+
+## 2026-07-24 权限系统：其余写操作与系统管理授权
+
+- `ProjectController` 的项目接单、流程推进/送审、流程审核、暂停、恢复、取消终止、终止、删除和分享，以及子任务编辑、接单、交付、重新交付、两级通过/驳回、评分和删除均已在业务服务执行前校验稳定权限编码。
+- 子任务审核权限按当前审核角色解析为企划首审、渠道销售二审、常规品管理员二审；权限校验之后仍由 `ProjectService` 校验具体项目归属、指定审核人、任务状态和审核轮次。
+- 设计/送审需求的交付、自评和复评分别接入 `design_requirement.deliver`、`design_requirement.score.self`、`design_requirement.score.review`；后端仍校验指定设计师和本轮评分记录。
+- 管理员身份切换改为校验 `admin.identity.switch`。系统管理过滤器按接口映射到配置、资源上传、用户、用户角色、角色、通知、评分权重、数据清除、工作量、文件归档、飞书同步、目录、组织、监控、项目导入和分享管理权限，不再仅判断角色字符串。
+- 对已有 `AuthController.isAdmin` 业务守卫，过滤器仅在当前请求通过对应管理权限后写入可信授权标记，因此自定义管理角色可以使用被授予的单项功能，未授权请求在到达 Controller 前返回带权限编码的 403。
+- 为保持迁移前行为，幂等迁移补齐项目暂停/恢复/终止/分享、设计需求复评、项目审核和评分等默认授权。共享测试库现有允许授权共 162 条：管理员 50、设计师 19、产品企划 32、产品推广 17、销售 27、供应链 17；数据范围仍为 18 条。未更新生产。
+- Java 21 `clean package` 共 100 项测试通过，全部前端 JavaScript 语法检查及 `git diff --check` 通过；本地服务已重启为 PID `27946`，首页 HTTP 200，启动日志无应用错误。
+
+## 2026-07-24 权限系统：项目与子任务数据范围
+
+- `PermissionService` 现在解析并返回权限对应的数据范围，规范化 `role_permission_scopes` 有配置时优先于兼容模板；首批支持 `all`、`own`、`participated`、`department`、`role_team`。
+- `ProjectAccessService` 已用数据范围统一约束项目全量列表、服务端分页、数量统计、可见 ID、带子任务项目查询和项目详情。禁用 `project.view` / `project.detail.view` 时不会因默认范围继续返回数据。
+- 项目分页的 Criteria 查询继续在数据库层拼接范围条件；执行类自定义角色会按子任务负责人角色和用户关系过滤，不再默认返回空列表。产品推广的参与项目范围也已纳入统一执行角色逻辑。
+- 部门子任务查询读取 `subtask.view` 的 `all`、`department` 或 `role_team` 范围；“我的子任务”仍严格限制为本人负责或本人发布。
+- 能力接口的 `scopes` 已被前端状态接收，提供 `hasDataScope(permission, scope)` 供后续界面解释和范围配置使用。
+- 幂等迁移为六类现有角色的三个读取权限写入 18 条默认范围：管理员 `all`，产品企划 `role_team`，销售/设计师/供应链 `department`，产品推广 `participated`。共享本地测试库已执行并逐角色核验，未更新生产。
+- Java 21 `clean package` 共 97 项测试通过，全部前端 JavaScript 语法检查及 `git diff --check` 通过；本地服务已重启为 PID `26763`，首页 HTTP 200，并加载 `bootstrap.js?v=220`。
+
+## 2026-07-24 权限系统：项目编辑与子任务创建
+
+- `PUT /api/projects/{id}` 已按项目类型校验 `project.channel.edit` / `project.regular.edit`，之后继续执行所属销售或所属产品企划的归属校验。
+- `POST /api/projects/{id}/tasks` 已校验 `subtask.create`，之后继续执行原有产品企划、管理员、项目负责人和项目状态规则。
+- 项目详情的“编辑项目信息”“添加子任务”入口以及弹窗二次入口均接入相同权限编码，后端仍是最终安全边界。
+- 修正权限基线遗漏：销售默认获得 `project.channel.edit`；共享本地测试库已重新执行幂等迁移并验证该授权为 `allow`。未更新生产。
+- Java 21 `clean package` 共 94 项测试通过，全部前端 JavaScript 语法检查及 `git diff --check` 通过；本地服务已重启为 Java PID `25469`，首页 HTTP 200，并加载 `bootstrap.js?v=219`。
+
+## 2026-07-24 权限系统方案
+
+- 已将权限系统正式方案固化到 `docs/permission-system-plan.md`，采用 RBAC 角色权限、数据范围、条件策略和特殊授权的组合模型。
+- 文档包含权限分类、编码规范、优先级、数据模型、前后端架构、配置后台、权限模拟器、审计、实时生效、迁移安全及四期实施计划。
+- 已完成现有权限盘点并写入 `docs/permission-inventory.md`：确认 `roles.permissions` 和 `/api/auth/permissions` 已存在但未成为实际安全边界，页面和接口仍大量依赖角色字符串及归属硬编码。
+- 已冻结首批页面及新建入口权限编码、现有角色验收矩阵和旧冒号权限兼容映射。第一批只接管页面显示和新建入口，后端写接口在并行比对通过后再接管。
+- 已新增 `PermissionCatalog` 与 `PermissionService`：统一角色别名、翻译旧冒号权限，并以当前角色行为模板补齐历史权限数据；`GET /api/auth/permissions` 现返回标准角色、兼容模式、权限版本、权限列表和预留数据范围。
+- 登录及管理员身份切换都会刷新能力清单；侧边栏、路由进入和三类项目/需求新建入口已改为读取权限编码。能力接口临时失败时保持旧页面可用，后端原有角色、人员归属和业务状态校验仍完整保留。
+- 前端缓存版本更新至 `bootstrap.js?v=217`，相关核心和列表模块同步递增；全量前端 JavaScript 语法、差异检查及 Java 21 `clean package` 通过，87 项测试全部通过。本地 `dev` 已重启为 PID `21763`，首页 HTTP 200 并实际加载新模块版本，未登录能力接口按预期返回 401。
+- 已新增 `permissions`、`role_permissions`、`role_permission_scopes`、`permission_versions`、`permission_audit_logs` 对应实体与 Repository；能力服务会合并规范化允许、旧权限和兼容模板，并让规范化 `deny` 最终覆盖允许。
+- 新增迁移 `2026-07-24-add-permission-foundation.sql`：只创建权限底座表、写入 71 个权限定义、按现有六类角色补默认授权和初始版本，不删除或覆盖 `roles.permissions`。迁移使用 `CREATE TABLE IF NOT EXISTS`、唯一键、`INSERT IGNORE` 及幂等更新。
+- 已在一次性 MySQL 8.4.10 容器中连续执行迁移两次，结果稳定为 71 个权限、145 条角色授权、6 个角色版本；临时容器验证后已删除。Java 21 `clean package` 及 88 项测试通过。
+- 本地 `dev` 已用新实体重启为 PID `22453`，Hibernate 创建测试环境权限表后应用正常启动；首页 HTTP 200、加载 `bootstrap.js?v=217`，启动日志无应用错误。
+- 当前尚未提交、推送或部署；生产发布必须先备份并执行、登记上述迁移，再部署使用新实体的应用。下一步让角色管理后台读取规范化权限、保存授权时递增版本并写入审计。
+- 角色管理 API 已切换到 `PermissionManagementService`：权限定义和角色列表读取规范化表；新建、修改、删除角色均要求审计原因，保存全部 71 项显式 `allow/deny`，递增角色版本并记录操作者、来源 IP 及前后 JSON 快照。系统角色不可删除、存在关联用户的角色不可删除。
+- 角色管理前端展示规范化权限及高风险标识，保存前要求填写原因；修改当前角色后立即刷新能力清单和侧边栏。缓存更新至 `bootstrap.js?v=218`、`admin-roles.js?v=149`。
+- 首次向测试库执行迁移前备份 `/tmp/designpm-permission-before-20260724_171643.sql.gz`（27970 字节，`gzip -t` 通过）。测试库历史键为 `Promotion`、`supply`，据此补充别名感知解析和迁移条件；更新后的迁移在一次性 MySQL 中连续执行两次，并在测试库幂等补齐后均为 71 个权限、145 条授权、6 个版本。
+- 全量前端 JavaScript 语法、差异检查和 Java 21 `clean package` 通过，89 项测试全部通过；本地 `dev` 已重启为 PID `23554`，首页 HTTP 200。测试库不存在代码内置的 `admin_liu` 账号，因此未用该账号执行登录态页面验收，权限管理核心保存、deny、版本和审计路径已有自动化测试覆盖。
+- `POST /api/projects` 已按项目类型分别要求 `project.channel.create` 或 `project.regular.create`；`POST /api/design-requirements` 要求 `design_requirement.create`。缺少权限时返回 403 及具体权限编码，且不会进入业务保存逻辑；通过权限后仍执行原角色白名单、本人归属、负责人有效性和字段校验。
+- 新增项目创建和设计需求创建越权测试，完整构建现为 92 项测试通过；本地 `dev` 已重启为 PID `24351`，首页 HTTP 200、启动日志无应用错误。当前仍仅本地修改，未提交、未推送、未部署。
+
 ## 2026-07-24 设计/送审需求交付与评分
 
 - 修复产品推广角色别名未统一造成右上角显示 `promotion`、设计需求列表不显示创建按钮的问题，并递增启动入口和相关模块缓存版本。

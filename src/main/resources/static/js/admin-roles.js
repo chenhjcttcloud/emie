@@ -9,14 +9,27 @@ const apiDelete = (...args) => EMIE.actions.apiDelete(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
 const renderRoleSwitcher = (...args) => EMIE.actions.renderRoleSwitcher(...args);
+const renderSidebar = (...args) => EMIE.actions.renderSidebar(...args);
+
+async function refreshCurrentCapabilities() {
+  const capabilities = await apiGet('/auth/permissions');
+  EMIE.state.permissions = Array.isArray(capabilities?.permissions) ? capabilities.permissions : null;
+  EMIE.state.permissionScopes = capabilities?.scopes || {};
+  EMIE.state.permissionVersion = capabilities?.permissionVersion ?? null;
+  EMIE.state.permissionMode = capabilities?.mode || 'unavailable';
+  renderSidebar();
+}
 
 // ===== Admin: 角色管理 =====
 async function renderAdminRoles(container) {
   container.innerHTML = `<div class="loading">加载中</div>`;
-  let [roles, permDefs] = await Promise.all([
+  let [roles, permDefs, anomalies, history] = await Promise.all([
     apiGet('/admin/roles').catch(() => []),
     apiGet('/admin/permission-defs').catch(() => []),
+    apiGet('/admin/permissions/anomalies').catch(() => []),
+    apiGet('/admin/permissions/history').catch(() => []),
   ]);
+  EMIE.adminState.permissionRoles = roles;
 
   // 按组归类权限
   const groups = {};
@@ -26,6 +39,23 @@ async function renderAdminRoles(container) {
   });
 
   container.innerHTML = `
+    <div class="config-card" style="margin-bottom:16px;">
+      <div class="config-card-header"><h3>🛡️ 权限治理</h3></div>
+      <div class="config-card-body">
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">用户 ID</label><input id="permissionSimUser" class="form-input" placeholder="例如 sales_001"></div>
+          <div class="form-group"><label class="form-label">权限编码</label><input id="permissionSimCode" class="form-input" placeholder="例如 project.channel.edit"></div>
+          <div class="form-group"><label class="form-label">项目 ID（可选）</label><input id="permissionSimProject" class="form-input" placeholder="具体项目 ID"></div>
+        </div>
+        <button class="btn btn-primary btn-sm" data-emie-onclick="runPermissionSimulation()">运行权限模拟</button>
+        <div id="permissionSimulationResult" style="margin-top:12px;"></div>
+        <div style="margin-top:18px;font-weight:600;">风险检测 <span class="badge ${anomalies.length ? 'badge-danger' : 'badge-success'}">${anomalies.length}</span></div>
+        <div style="margin-top:8px;">${anomalies.length ? anomalies.map(a => `<div style="padding:8px 10px;margin-bottom:6px;border-radius:6px;background:${a.severity === 'high' ? '#FEF2F2' : '#FFFBEB'};font-size:12px;">${escHtml(a.displayName)}：${escHtml(a.message)}</div>`).join('') : '<span style="font-size:12px;color:var(--success);">未发现权限配置异常</span>'}</div>
+        <details style="margin-top:14px;"><summary style="cursor:pointer;font-weight:600;">最近权限变更（${history.length}）</summary>
+          <div style="margin-top:8px;">${history.slice(0, 20).map(h => `<div style="padding:8px 0;border-bottom:1px solid var(--gray-100);font-size:12px;"><strong>${escHtml(h.targetKey)}</strong> · ${escHtml(h.action)} · ${escHtml(h.actorName)} · ${escHtml(h.reason)} ${h.afterData ? `<button class="btn btn-outline btn-sm" style="float:right;" data-emie-onclick="rollbackPermissionVersion('${escHtml(h.targetKey)}', ${h.id})">回滚到此版本</button>` : ''}</div>`).join('') || '暂无记录'}</div>
+        </details>
+      </div>
+    </div>
     <div class="config-card">
       <div class="config-card-header">
         <h3>🔐 角色管理 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">共 ${roles.length} 个角色</span></h3>
@@ -56,7 +86,7 @@ async function renderAdminRoles(container) {
                   <td>${r.isSystem ? '<span class="admin-user-role-badge role-admin">系统</span>' : '<span class="admin-user-role-badge role-sales">自定义</span>'}</td>
                   <td>
                     <div class="admin-user-actions">
-                      <button class="btn-edit-user" data-emie-onclick="openEditRoleModal(${r.id}, '${escHtml(r.name)}', '${escHtml(r.displayName)}', '${escHtml(r.description || '')}', ${JSON.stringify(r.permissions).replace(/"/g, "'")})">✏️ 编辑</button>
+                      <button class="btn-edit-user" data-emie-onclick="openEditRoleById(${r.id})">✏️ 编辑</button>
                       ${!r.isSystem ? `<button class="btn-delete" data-emie-onclick="confirmDeleteRole(${r.id}, '${escHtml(r.displayName)}')">🗑️ 删除</button>` : ''}
                     </div>
                   </td>
@@ -76,7 +106,12 @@ function openCreateRoleModal() {
 }
 
 function openEditRoleModal(id, name, displayName, description, permissions) {
-  loadPermDefsAndOpenModal({ id, name, displayName, description, permissions });
+  loadPermDefsAndOpenModal({ id, name, displayName, description, permissions, scopes: {} });
+}
+
+function openEditRoleById(id) {
+  const role = (EMIE.adminState.permissionRoles || []).find(item => item.id === id);
+  if (role) loadPermDefsAndOpenModal(role);
 }
 
 async function loadPermDefsAndOpenModal(editData) {
@@ -90,6 +125,11 @@ async function loadPermDefsAndOpenModal(editData) {
 
   const isEdit = editData !== null && editData.id != null;
   const selectedPerms = isEdit ? (editData.permissions || []) : [];
+  const selectedScopes = isEdit ? (editData.scopes || {}) : {};
+  const scopeOptions = [
+    ['own', '仅本人'], ['participated', '本人参与'], ['department', '本部门'],
+    ['role_team', '同角色团队'], ['all', '全部数据']
+  ];
 
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
@@ -121,6 +161,7 @@ async function loadPermDefsAndOpenModal(editData) {
         </div>
         <div class="form-group">
           <label class="form-label">权限分配</label>
+          <div class="form-hint">权限变更会立即生成新版本；高风险操作仍受人员归属和业务状态限制。</div>
         </div>
         ${Object.entries(groups).map(([group, perms]) => `
           <div style="margin-bottom:16px;">
@@ -129,12 +170,26 @@ async function loadPermDefsAndOpenModal(editData) {
               ${perms.map(p => `
                 <label class="checkbox-item ${selectedPerms.includes(p.key) ? 'checked' : ''}">
                   <input type="checkbox" name="perm" value="${p.key}" ${selectedPerms.includes(p.key) ? 'checked' : ''} data-emie-onchange="this.closest('.checkbox-item').classList.toggle('checked')">
-                  <span>${p.label}</span>
+                  <span>${p.label}${['high','critical'].includes(p.riskLevel) ? ` <small style="color:var(--danger);">高风险</small>` : ''}</span>
                 </label>
               `).join('')}
             </div>
           </div>
         `).join('')}
+        <div class="form-group">
+          <label class="form-label">数据范围</label>
+          <div class="form-hint">范围与功能权限同时生效；没有范围时默认使用最小的“仅本人”。</div>
+          ${[
+            ['project.view', '项目列表'],
+            ['project.detail.view', '项目详情'],
+            ['subtask.view', '子任务']
+          ].map(([code, label]) => `<div style="display:flex;align-items:center;gap:12px;margin-top:8px;"><span style="width:100px;font-size:13px;">${label}</span><select class="form-select permission-scope-select" data-permission="${code}">${scopeOptions.map(([value, text]) => `<option value="${value}" ${(selectedScopes[code] || []).includes(value) ? 'selected' : ''}>${text}</option>`).join('')}</select></div>`).join('')}
+        </div>
+        <div class="form-group">
+          <label class="form-label"><span class="required">*</span> 变更原因</label>
+          <textarea class="form-input" id="roleChangeReasonInput" rows="3" maxlength="500" placeholder="请说明为什么创建或修改该角色权限，审计记录将永久保留"></textarea>
+          <div class="form-hint">最多 500 字，不会展示给普通用户。</div>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" data-emie-onclick="closeM('roleFormModal')">取消</button>
@@ -151,19 +206,23 @@ async function submitCreateRole() {
   const name = document.getElementById('roleNameInput').value.trim();
   const displayName = document.getElementById('roleDisplayNameInput').value.trim();
   const description = document.getElementById('roleDescInput').value.trim();
+  const reason = document.getElementById('roleChangeReasonInput').value.trim();
 
   if (!name || !/^[a-zA-Z0-9_]+$/.test(name)) {
     errEl.textContent = '角色标识仅支持英文/数字/下划线'; errEl.style.display = ''; return;
   }
   if (!displayName) { errEl.textContent = '显示名称不能为空'; errEl.style.display = ''; return; }
+  if (!reason) { errEl.textContent = '请填写权限变更原因'; errEl.style.display = ''; return; }
 
   const perms = Array.from(document.querySelectorAll('input[name="perm"]:checked')).map(el => el.value);
+  const scopes = collectPermissionScopes();
 
   try {
-    await apiPost('/admin/roles', { name, displayName, description, permissions: perms });
+    await apiPost('/admin/roles', { name, displayName, description, permissions: perms, scopes, reason });
     showAdminToast('✅ 角色已创建', 'success');
     closeM('roleFormModal');
     await renderRoleSwitcher();
+    await refreshCurrentCapabilities();
     await renderAdminContent();
   } catch (e) {
     errEl.textContent = e.message; errEl.style.display = '';
@@ -176,31 +235,78 @@ async function submitEditRole(roleId) {
 
   const displayName = document.getElementById('roleDisplayNameInput').value.trim();
   const description = document.getElementById('roleDescInput').value.trim();
+  const reason = document.getElementById('roleChangeReasonInput').value.trim();
   if (!displayName) { errEl.textContent = '显示名称不能为空'; errEl.style.display = ''; return; }
+  if (!reason) { errEl.textContent = '请填写权限变更原因'; errEl.style.display = ''; return; }
 
   const perms = Array.from(document.querySelectorAll('input[name="perm"]:checked')).map(el => el.value);
+  const scopes = collectPermissionScopes();
 
   try {
-    await apiPut(`/admin/roles/${roleId}`, { displayName, description, permissions: perms });
+    await apiPut(`/admin/roles/${roleId}`, { displayName, description, permissions: perms, scopes, reason });
     showAdminToast('✅ 角色已更新', 'success');
     closeM('roleFormModal');
     await renderRoleSwitcher();
+    await refreshCurrentCapabilities();
     await renderAdminContent();
   } catch (e) {
     errEl.textContent = e.message; errEl.style.display = '';
   }
 }
 
-function confirmDeleteRole(roleId, displayName) {
-  if (!confirm(`⚠️ 确定要删除角色「${displayName}」吗？\n删除后该角色下所有用户将失去对应权限。`)) return;
-  submitDeleteRole(roleId);
+function collectPermissionScopes() {
+  const result = {};
+  document.querySelectorAll('.permission-scope-select').forEach(select => {
+    result[select.dataset.permission] = [select.value];
+  });
+  return result;
 }
 
-async function submitDeleteRole(roleId) {
+async function runPermissionSimulation() {
+  const userId = document.getElementById('permissionSimUser')?.value.trim();
+  const permission = document.getElementById('permissionSimCode')?.value.trim();
+  const projectId = document.getElementById('permissionSimProject')?.value.trim();
+  const resultEl = document.getElementById('permissionSimulationResult');
+  if (!userId || !permission) {
+    resultEl.innerHTML = '<span style="color:var(--danger);">请填写用户 ID 和权限编码</span>'; return;
+  }
   try {
-    await apiDelete(`/admin/roles/${roleId}`);
+    const result = await apiPost('/admin/permissions/simulate', { userId, permission, projectId: projectId || null });
+    resultEl.innerHTML = `<div style="padding:12px;border-radius:8px;background:${result.allowed ? '#ECFDF5' : '#FEF2F2'};color:${result.allowed ? '#065F46' : '#991B1B'};"><strong>${result.allowed ? '允许' : '拒绝'}</strong><div style="margin-top:6px;font-size:12px;">${result.reasonChain.map(escHtml).join(' → ')}</div><div style="margin-top:4px;font-size:12px;">范围：${(result.scopes || []).map(escHtml).join('、') || '无'}</div></div>`;
+  } catch (e) {
+    resultEl.innerHTML = `<span style="color:var(--danger);">${escHtml(e.message)}</span>`;
+  }
+}
+
+async function rollbackPermissionVersion(roleName, auditId) {
+  const role = (EMIE.adminState.permissionRoles || []).find(item => item.name === roleName);
+  if (!role) return showAdminToast('找不到对应角色', 'error');
+  const reason = prompt('请输入回滚原因（该操作也会生成新的审计版本）：');
+  if (!reason?.trim()) return;
+  if (!confirm(`确定将「${role.displayName}」回滚到所选版本吗？`)) return;
+  try {
+    await apiPost(`/admin/roles/${role.id}/rollback`, { auditId, reason: reason.trim() });
+    showAdminToast('✅ 权限版本已回滚', 'success');
+    await refreshCurrentCapabilities();
+    await renderAdminContent();
+  } catch (e) {
+    showAdminToast('❌ 回滚失败：' + e.message, 'error');
+  }
+}
+
+function confirmDeleteRole(roleId, displayName) {
+  if (!confirm(`⚠️ 确定要删除角色「${displayName}」吗？\n删除后该角色下所有用户将失去对应权限。`)) return;
+  const reason = prompt('请输入删除角色的原因（将写入权限审计日志）：');
+  if (!reason?.trim()) return;
+  submitDeleteRole(roleId, reason.trim());
+}
+
+async function submitDeleteRole(roleId, reason) {
+  try {
+    await apiDelete(`/admin/roles/${roleId}?reason=${encodeURIComponent(reason)}`);
     showAdminToast('✅ 角色已删除', 'success');
     await renderRoleSwitcher();
+    await refreshCurrentCapabilities();
     await renderAdminContent();
   } catch (e) {
     showAdminToast('❌ 删除失败: ' + e.message, 'error');
@@ -212,11 +318,14 @@ EMIE.registerActions({
   renderAdminRoles,
   openCreateRoleModal,
   openEditRoleModal,
+  openEditRoleById,
   loadPermDefsAndOpenModal,
   submitCreateRole,
   submitEditRole,
   confirmDeleteRole,
   submitDeleteRole,
+  runPermissionSimulation,
+  rollbackPermissionVersion,
 });
 
 EMIE.registerModule('adminRoles', {

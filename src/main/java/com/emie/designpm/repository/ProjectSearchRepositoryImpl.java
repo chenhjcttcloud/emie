@@ -113,8 +113,7 @@ public class ProjectSearchRepositoryImpl implements ProjectSearchRepository {
                     cb.and(cb.equal(project.get("type"), "channel_custom"),
                             cb.equal(project.get("status"), "pending_planner"),
                             cb.or(cb.isNull(project.get("plannerId")), cb.equal(project.get("plannerId"), "")))));
-            case "designer", "supplychain" -> addAssigneePredicate(cb, project, predicates, query, viewerRole, userIds);
-            default -> predicates.add(cb.disjunction());
+            default -> addAssigneePredicate(cb, project, predicates, query, viewerRole, userIds);
         }
     }
 

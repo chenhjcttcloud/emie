@@ -6,6 +6,8 @@ import com.emie.designpm.repository.DesignRequirementRepository;
 import com.emie.designpm.repository.DesignRequirementScoreRepository;
 import com.emie.designpm.service.DesignRequirementScoringService;
 import com.emie.designpm.service.UserService;
+import com.emie.designpm.service.PermissionService;
+import com.emie.designpm.service.NotificationWorkflowService;
 import com.emie.designpm.entity.User;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.PageRequest;
@@ -23,22 +25,43 @@ public class DesignRequirementController {
     private final DesignRequirementScoreRepository scoreRepository;
     private final DesignRequirementScoringService scoringService;
     private final UserService userService;
+    private final PermissionService permissionService;
+    private final NotificationWorkflowService notificationWorkflowService;
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     @Autowired
     public DesignRequirementController(DesignRequirementRepository repository,
                                        DesignRequirementScoreRepository scoreRepository,
                                        DesignRequirementScoringService scoringService,
-                                       UserService userService) {
+                                       UserService userService,
+                                       PermissionService permissionService,
+                                       NotificationWorkflowService notificationWorkflowService) {
         this.repository = repository;
         this.scoreRepository = scoreRepository;
         this.scoringService = scoringService;
         this.userService = userService;
+        this.permissionService = permissionService;
+        this.notificationWorkflowService = notificationWorkflowService;
     }
 
     /** 保留给轻量单元测试；生产运行始终使用完整依赖构造器。 */
     DesignRequirementController(DesignRequirementRepository repository) {
-        this(repository, null, null, null);
+        this(repository, null, null, null, null, null);
+    }
+
+    DesignRequirementController(DesignRequirementRepository repository,
+                                DesignRequirementScoreRepository scoreRepository,
+                                DesignRequirementScoringService scoringService,
+                                UserService userService) {
+        this(repository, scoreRepository, scoringService, userService, null, null);
+    }
+
+    DesignRequirementController(DesignRequirementRepository repository,
+                                DesignRequirementScoreRepository scoreRepository,
+                                DesignRequirementScoringService scoringService,
+                                UserService userService,
+                                PermissionService permissionService) {
+        this(repository, scoreRepository, scoringService, userService, permissionService, null);
     }
 
     @GetMapping("/page")
@@ -78,6 +101,11 @@ public class DesignRequirementController {
         AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
         if (session == null) return ResponseEntity.status(401).build();
         String creatorRole = normalizeRole(session.role());
+        if (permissionService != null && !permissionService.has(creatorRole, "design_requirement.create")) {
+            return ResponseEntity.status(403).body(java.util.Map.of(
+                    "error", "当前账号没有新建设计/送审需求的权限",
+                    "permission", "design_requirement.create"));
+        }
         if (!java.util.Set.of("planner", "sales", "promotion").contains(creatorRole)) {
             return ResponseEntity.status(403).body(java.util.Map.of("error", "当前角色无权创建设计/送审需求"));
         }
@@ -116,7 +144,24 @@ public class DesignRequirementController {
         d.setRequirementCode("DR" + java.time.LocalDate.now().toString().replace("-", "") + System.currentTimeMillis() % 10000);
         DesignRequirement saved = repository.save(d);
         if (scoringService != null) scoringService.initialize(saved);
+        notifyPlanner(saved, session);
         return ResponseEntity.ok(java.util.Map.of("id", saved.getId(), "requirementCode", saved.getRequirementCode()));
+    }
+
+    private void notifyPlanner(DesignRequirement requirement, AuthController.AuthSession actor) {
+        if (notificationWorkflowService == null) return;
+        try {
+            java.util.Map<String, String> context = new java.util.LinkedHashMap<>();
+            context.put("projectName", requirement.getName());
+            context.put("deadline", requirement.getDeadline());
+            context.put("actorName", actor.name());
+            context.put("projectLink", "/?view=design-needs&requirementId=" + requirement.getId());
+            notificationWorkflowService.notifyUserAfterCommit(
+                    "DESIGN_REQUIREMENT_ASSIGNED", requirement.getPlannerId(),
+                    "design_requirement", requirement.getId(), actor.userId(), context);
+        } catch (Exception ignored) {
+            // 通知失败不回滚业务数据，失败投递由通知中心记录和重试。
+        }
     }
 
     @PostMapping("/{id}/deliver")
@@ -125,6 +170,9 @@ public class DesignRequirementController {
                                      HttpServletRequest request) {
         AuthController.AuthSession session = session(request);
         if (session == null) return ResponseEntity.status(401).build();
+        if (permissionService != null && !permissionService.has(session.role(), "design_requirement.deliver")) {
+            return forbidden("design_requirement.deliver");
+        }
         DesignRequirement d = repository.findById(id).orElse(null);
         if (d == null) return ResponseEntity.notFound().build();
         if (!"designer".equals(normalizeRole(session.role())) || !session.userId().equals(d.getDesignerId())) {
@@ -161,6 +209,10 @@ public class DesignRequirementController {
                                     boolean self) {
         AuthController.AuthSession session = session(request);
         if (session == null) return ResponseEntity.status(401).build();
+        String permission = self ? "design_requirement.score.self" : "design_requirement.score.review";
+        if (permissionService != null && !permissionService.has(session.role(), permission)) {
+            return forbidden(permission);
+        }
         DesignRequirement d = repository.findById(id).orElse(null);
         if (d == null) return ResponseEntity.notFound().build();
         try {
@@ -174,6 +226,12 @@ public class DesignRequirementController {
         } catch (IllegalArgumentException | IllegalStateException e) {
             return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
         }
+    }
+
+    private ResponseEntity<?> forbidden(String permission) {
+        return ResponseEntity.status(403).body(java.util.Map.of(
+                "error", "当前账号没有执行此操作的权限",
+                "permission", permission));
     }
 
     private String text(Object value) {

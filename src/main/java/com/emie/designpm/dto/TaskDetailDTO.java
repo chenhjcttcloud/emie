@@ -29,5 +29,6 @@ public class TaskDetailDTO {
     private Double selfInnovation;
     private List<Map<String, Object>> scoringRecords;
     private List<Map<String, Object>> rejectionRecords;
+    private List<Map<String, Object>> deliveryVersions;
     private String createdAt;
 }

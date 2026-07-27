@@ -89,32 +89,32 @@ class FrontendModuleLayoutTest {
             if (module.equals("bootstrap.js")) continue;
             int currentIndex = bootstrap.indexOf("./" + module + "?v=147");
             if (module.equals("dashboard-designer.js")) {
-                currentIndex = bootstrap.indexOf("./" + module + "?v=174");
+                currentIndex = bootstrap.indexOf("./" + module + "?v=176");
             }
-            if (module.equals("dashboard-lists.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=182");
-            if (module.equals("core-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=172");
-            if (module.equals("core-runtime.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=152");
-            if (module.equals("core-auth.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=149");
-            if (module.equals("core-identity.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=149");
+            if (module.equals("dashboard-lists.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=184");
+            if (module.equals("core-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=173");
+            if (module.equals("core-runtime.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=155");
+            if (module.equals("core-auth.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=151");
+            if (module.equals("core-identity.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=151");
             if (module.equals("dashboard-projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=159");
             if (module.equals("dashboard-home.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=160");
             if (module.equals("admin-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=150");
             if (module.equals("dashboard-scoring.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=161");
             if (module.equals("admin-users.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=166");
-            if (module.equals("admin-roles.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
+            if (module.equals("admin-roles.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=151");
             if (module.equals("admin-workload.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             if (module.equals("admin-org.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=165");
-            if (module.equals("project-uploads.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
-            if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=182");
-            if (module.equals("project-form.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=181");
-            if (module.equals("project-tasks.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=180");
+            if (module.equals("project-uploads.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=150");
+            if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=187");
+            if (module.equals("project-form.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=183");
+            if (module.equals("project-tasks.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=184");
             if (module.equals("projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             assertTrue(currentIndex > previousIndex, module + " 的 ES Module 加载顺序不正确");
             previousIndex = currentIndex;
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=216\"></script>"),
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=227\"></script>"),
                 "页面应只通过当前版本 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
@@ -132,6 +132,19 @@ class FrontendModuleLayoutTest {
                 "全员飞书通知发送前必须二次确认");
         assertTrue(readResource("/static/js/admin-shell.js").contains("waitForTemporaryBroadcast(job.jobId)"),
                 "全员飞书通知应提交后台任务并轮询最终结果");
+        String coreAuth = readResource("/static/js/core-auth.js");
+        String coreShell = readResource("/static/js/core-shell.js");
+        String dashboardLists = readResource("/static/js/dashboard-lists.js");
+        assertTrue(coreAuth.contains("apiGet('/auth/permissions')"),
+                "登录后应加载后端统一能力清单");
+        assertTrue(readResource("/static/js/core-identity.js").contains("apiGet('/auth/permissions')"),
+                "管理员切换身份后应立即刷新目标角色能力清单");
+        assertTrue(coreShell.contains("page.design_requirements.view")
+                        && coreShell.contains("canNavigateTo(view)"),
+                "导航显示和页面进入应统一读取页面权限");
+        assertTrue(dashboardLists.contains("hasPermission('project.channel.create')")
+                        && dashboardLists.contains("hasPermission('design_requirement.create')"),
+                "新建入口应使用能力清单而不是角色名称硬编码");
     }
 
     @Test
@@ -177,6 +190,9 @@ class FrontendModuleLayoutTest {
                 "产品推广在身份切换器中应显示独立角色徽章");
         assertTrue(adminRoles.contains("await renderRoleSwitcher()"),
                 "新增、编辑或删除角色后应立即刷新身份切换器");
+        assertTrue(adminRoles.contains("roleChangeReasonInput")
+                        && adminRoles.contains("refreshCurrentCapabilities()"),
+                "角色权限变更应要求审计原因并刷新当前能力版本");
     }
 
     @Test
@@ -250,6 +266,16 @@ class FrontendModuleLayoutTest {
                         && detail.contains("openTaskRejectionRecord")
                         && detail.contains("本次提交内容"),
                 "子任务卡片应逐行展示驳回记录，并可查看当轮提交快照");
+        assertTrue(detail.contains("openProjectSubTaskDetail(event,${task.id})")
+                        && detail.contains("projectSubTaskDetailModal")
+                        && detail.contains("修改要求次数"),
+                "项目详情中的整张子任务卡片应可打开对应子任务详情");
+        String designerTasks = readResource("/static/js/dashboard-designer.js");
+        assertTrue(designerTasks.contains("openPublishedSubTaskDetail")
+                        && designerTasks.contains("修改要求记录")
+                        && designerTasks.contains("当轮提交内容")
+                        && designerTasks.contains("record.rejectionAttachmentsJson"),
+                "已发布子任务应可从独立详情查看每一轮修改要求、提交快照和附件");
         String projects = readResource("/static/js/dashboard-projects.js");
         String lists = readResource("/static/js/dashboard-lists.js");
         assertTrue(projects.contains("data-emie-onclick=\"${rowOpen}\"")

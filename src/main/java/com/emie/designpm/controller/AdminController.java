@@ -6,6 +6,8 @@ import com.emie.designpm.service.AdminService;
 import com.emie.designpm.service.NotificationBroadcastJobService;
 import com.emie.designpm.service.NotificationTestService;
 import com.emie.designpm.service.NotificationRetryService;
+import com.emie.designpm.service.PermissionManagementService;
+import com.emie.designpm.service.PermissionGovernanceService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -14,6 +16,7 @@ import org.springframework.data.domain.Pageable;
 import com.emie.designpm.dto.PageResponse;
 
 import java.util.*;
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -23,14 +26,20 @@ public class AdminController {
     private final NotificationTestService notificationTestService;
     private final NotificationBroadcastJobService notificationBroadcastJobService;
     private final NotificationRetryService notificationRetryService;
+    private final PermissionManagementService permissionManagementService;
+    private final PermissionGovernanceService permissionGovernanceService;
 
     public AdminController(AdminService adminService, NotificationTestService notificationTestService,
                            NotificationBroadcastJobService notificationBroadcastJobService,
-                           NotificationRetryService notificationRetryService) {
+                           NotificationRetryService notificationRetryService,
+                           PermissionManagementService permissionManagementService,
+                           PermissionGovernanceService permissionGovernanceService) {
         this.adminService = adminService;
         this.notificationTestService = notificationTestService;
         this.notificationBroadcastJobService = notificationBroadcastJobService;
         this.notificationRetryService = notificationRetryService;
+        this.permissionManagementService = permissionManagementService;
+        this.permissionGovernanceService = permissionGovernanceService;
     }
 
     // ==================== 公开配置 ====================
@@ -66,9 +75,7 @@ public class AdminController {
     public ResponseEntity<Map<String, Object>> sendNotificationTest(
             @RequestHeader("X-Auth-Token") String token) {
         AuthController.AuthSession session = AuthController.validateToken(token);
-        if (session == null || !"admin".equals(session.role())) {
-            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可发送通知测试"));
-        }
+        if (session == null) return ResponseEntity.status(401).build();
         try {
             return ResponseEntity.ok(notificationTestService.sendTest(session.userId()));
         } catch (IllegalArgumentException e) {
@@ -80,7 +87,7 @@ public class AdminController {
     public ResponseEntity<?> sendTemporaryBroadcast(@RequestBody Map<String, String> body,
                                                      @RequestHeader("X-Auth-Token") String token) {
         AuthController.AuthSession session = AuthController.validateToken(token);
-        if (session == null || !"admin".equals(session.role())) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可发送临时通知"));
+        if (session == null) return ResponseEntity.status(401).build();
         try {
             return ResponseEntity.accepted().body(notificationBroadcastJobService.start(
                     body.get("title"), body.get("content"), session.userId()));
@@ -93,9 +100,7 @@ public class AdminController {
     public ResponseEntity<?> getTemporaryBroadcastStatus(@PathVariable String jobId,
                                                           @RequestHeader("X-Auth-Token") String token) {
         AuthController.AuthSession session = AuthController.validateToken(token);
-        if (session == null || !"admin".equals(session.role())) {
-            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可查看全员通知进度"));
-        }
+        if (session == null) return ResponseEntity.status(401).build();
         try {
             return ResponseEntity.ok(notificationBroadcastJobService.status(jobId));
         } catch (IllegalArgumentException e) {
@@ -106,14 +111,14 @@ public class AdminController {
     @GetMapping("/notifications/failures")
     public ResponseEntity<?> getNotificationFailures(@RequestHeader("X-Auth-Token") String token) {
         AuthController.AuthSession session = AuthController.validateToken(token);
-        if (session == null || !"admin".equals(session.role())) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可查看通知失败记录"));
+        if (session == null) return ResponseEntity.status(401).build();
         return ResponseEntity.ok(notificationRetryService.recentFailures());
     }
 
     @PostMapping("/notifications/deliveries/{id}/retry")
     public ResponseEntity<?> retryNotification(@PathVariable Long id, @RequestHeader("X-Auth-Token") String token) {
         AuthController.AuthSession session = AuthController.validateToken(token);
-        if (session == null || !"admin".equals(session.role())) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可重试通知"));
+        if (session == null) return ResponseEntity.status(401).build();
         try {
             notificationRetryService.retryNow(id, session.userId());
             return ResponseEntity.ok(Map.of("message", "通知已重新排队"));
@@ -239,25 +244,31 @@ public class AdminController {
     /** 获取权限定义列表 */
     @GetMapping("/permission-defs")
     public ResponseEntity<List<Map<String, Object>>> getPermissionDefs() {
-        return ResponseEntity.ok(AdminService.getPermissionDefs());
+        return ResponseEntity.ok(permissionManagementService.definitions());
     }
 
     /** 获取所有角色 */
     @GetMapping("/roles")
     public ResponseEntity<List<Map<String, Object>>> getAllRoles() {
-        return ResponseEntity.ok(adminService.getAllRoles());
+        return ResponseEntity.ok(permissionManagementService.roles());
     }
 
     /** 创建角色 */
     @PostMapping("/roles")
-    public ResponseEntity<Map<String, Object>> createRole(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<Map<String, Object>> createRole(
+            @RequestBody Map<String, Object> body,
+            @RequestHeader("X-Auth-Token") String token,
+            HttpServletRequest request) {
         try {
             String name = (String) body.get("name");
             String displayName = (String) body.get("displayName");
             String description = (String) body.get("description");
             @SuppressWarnings("unchecked")
             List<String> permissions = (List<String>) body.get("permissions");
-            return ResponseEntity.ok(adminService.createRole(name, displayName, description, permissions));
+            Map<String, List<String>> scopes = parseScopes(body.get("scopes"));
+            return ResponseEntity.ok(permissionManagementService.createRole(
+                    name, displayName, description, permissions, scopes,
+                    permissionActor(token, (String) body.get("reason"), request)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -267,13 +278,18 @@ public class AdminController {
     @PutMapping("/roles/{id}")
     public ResponseEntity<Map<String, Object>> updateRole(
             @PathVariable Long id,
-            @RequestBody Map<String, Object> body) {
+            @RequestBody Map<String, Object> body,
+            @RequestHeader("X-Auth-Token") String token,
+            HttpServletRequest request) {
         try {
             String displayName = (String) body.get("displayName");
             String description = (String) body.get("description");
             @SuppressWarnings("unchecked")
             List<String> permissions = (List<String>) body.get("permissions");
-            return ResponseEntity.ok(adminService.updateRole(id, displayName, description, permissions));
+            Map<String, List<String>> scopes = parseScopes(body.get("scopes"));
+            return ResponseEntity.ok(permissionManagementService.updateRole(
+                    id, displayName, description, permissions, scopes,
+                    permissionActor(token, (String) body.get("reason"), request)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -281,10 +297,61 @@ public class AdminController {
 
     /** 删除角色 */
     @DeleteMapping("/roles/{id}")
-    public ResponseEntity<Map<String, String>> deleteRole(@PathVariable Long id) {
+    public ResponseEntity<Map<String, String>> deleteRole(
+            @PathVariable Long id,
+            @RequestParam String reason,
+            @RequestHeader("X-Auth-Token") String token,
+            HttpServletRequest request) {
         try {
-            adminService.deleteRole(id);
+            permissionManagementService.deleteRole(id, permissionActor(token, reason, request));
             return ResponseEntity.ok(Map.of("message", "角色已删除"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/permissions/history")
+    public ResponseEntity<List<Map<String, Object>>> permissionHistory(
+            @RequestParam(required = false) String role) {
+        return ResponseEntity.ok(permissionGovernanceService.history(role));
+    }
+
+    @GetMapping("/permissions/preview")
+    public ResponseEntity<?> permissionPreview(@RequestParam String userId) {
+        try {
+            return ResponseEntity.ok(permissionGovernanceService.previewUser(userId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/permissions/simulate")
+    public ResponseEntity<?> simulatePermission(@RequestBody Map<String, Object> body) {
+        try {
+            String userId = Objects.toString(body.get("userId"), "");
+            String permission = Objects.toString(body.get("permission"), "");
+            Long projectId = body.get("projectId") == null || body.get("projectId").toString().isBlank()
+                    ? null : Long.valueOf(body.get("projectId").toString());
+            return ResponseEntity.ok(permissionGovernanceService.simulate(userId, permission, projectId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/permissions/anomalies")
+    public ResponseEntity<List<Map<String, Object>>> permissionAnomalies() {
+        return ResponseEntity.ok(permissionGovernanceService.anomalies());
+    }
+
+    @PostMapping("/roles/{id}/rollback")
+    public ResponseEntity<?> rollbackRole(@PathVariable Long id,
+                                          @RequestBody Map<String, Object> body,
+                                          @RequestHeader("X-Auth-Token") String token,
+                                          HttpServletRequest request) {
+        try {
+            Long auditId = Long.valueOf(Objects.toString(body.get("auditId"), ""));
+            return ResponseEntity.ok(permissionGovernanceService.rollback(id, auditId,
+                    permissionActor(token, Objects.toString(body.get("reason"), ""), request)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -316,11 +383,8 @@ public class AdminController {
     @DeleteMapping("/clear-data")
     public ResponseEntity<Map<String, Object>> clearAllProjectData(
             @RequestHeader("X-Auth-Token") String token) {
-        // 仅 admin 可用
         AuthController.AuthSession session = AuthController.validateToken(token);
-        if (session == null || !"admin".equals(session.role())) {
-            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可执行此操作"));
-        }
+        if (session == null) return ResponseEntity.status(401).build();
         Map<String, Object> result = adminService.clearAllProjectData();
         if (Boolean.TRUE.equals(result.get("success"))) {
             return ResponseEntity.ok(result);
@@ -335,9 +399,7 @@ public class AdminController {
     public ResponseEntity<Map<String, Object>> getWorkload(
             @RequestHeader("X-Auth-Token") String token) {
         AuthController.AuthSession session = AuthController.validateToken(token);
-        if (session == null || !"admin".equals(session.role())) {
-            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可查看工作量"));
-        }
+        if (session == null) return ResponseEntity.status(401).build();
         return ResponseEntity.ok(adminService.getWorkloadStats());
     }
 
@@ -346,9 +408,7 @@ public class AdminController {
             @RequestParam(value = "range", defaultValue = "month") String range,
             @RequestHeader("X-Auth-Token") String token) {
         AuthController.AuthSession session = AuthController.validateToken(token);
-        if (session == null || !"admin".equals(session.role())) {
-            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可查看工作量"));
-        }
+        if (session == null) return ResponseEntity.status(401).build();
         return ResponseEntity.ok(adminService.getWorkloadTimeline(range));
     }
 
@@ -357,5 +417,25 @@ public class AdminController {
     private String getUserFromToken(String token) {
         AuthController.AuthSession session = AuthController.validateToken(token);
         return session != null ? session.name() : "未知";
+    }
+
+    private PermissionManagementService.Actor permissionActor(
+            String token, String reason, HttpServletRequest request) {
+        AuthController.AuthSession session = AuthController.validateToken(token);
+        if (session == null) throw new IllegalArgumentException("登录状态已失效");
+        return new PermissionManagementService.Actor(
+                session.userId(), session.name(), reason,
+                request != null ? request.getRemoteAddr() : null);
+    }
+
+    private Map<String, List<String>> parseScopes(Object raw) {
+        if (!(raw instanceof Map<?, ?> map)) return Map.of();
+        Map<String, List<String>> result = new LinkedHashMap<>();
+        map.forEach((key, value) -> {
+            if (value instanceof Collection<?> values) {
+                result.put(String.valueOf(key), values.stream().map(String::valueOf).toList());
+            }
+        });
+        return result;
     }
 }

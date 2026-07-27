@@ -180,14 +180,16 @@ function renderFileList(list, typeLabel) {
   // 为图片 URL 追加 token（<img> 标签无法发送 X-Auth-Token 头）
   const token = localStorage.getItem('design_pm_token');
   const authUrl = u => u + (u.includes('?') ? '&' : '?') + 'token=' + token;
+  const canRenderAsImage = file => /\.(png|jpe?g|gif|webp|bmp)$/i.test(file?.name || file?.url || '');
 
   if (isImage) {
-    c.innerHTML = `<div class="image-preview">${list.map((img, i) =>
-      `<div style="position:relative;display:inline-block;">
+    c.innerHTML = `<div class="image-preview">${list.map((img, i) => canRenderAsImage(img)
+      ? `<div style="position:relative;display:inline-block;">
         <img src="${escHtml(authUrl(img.url))}" alt="${escHtml(img.name)}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
         <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(img.url)}','${escJsString(img.name)}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:20px;height:20px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
         <button style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button>
-      </div>`).join('')}</div>`;
+      </div>`
+      : `<div class="file-item" style="width:100%;"><span class="file-item-name">📐 ${escHtml(img.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(img.size)}</span>${renderAttachmentActions(img, true)}<button class="remove-file" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button></div>`).join('')}</div>`;
   } else {
     c.innerHTML = list.map((f, i) =>
       `<div class="file-item"><span class="file-item-name">📎 ${escHtml(f.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(f.size)}</span>${renderAttachmentActions(f, true)}<button class="remove-file" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button></div>`
@@ -206,6 +208,8 @@ function resolveFileListContext(list, isImage) {
   if (list === EMIE.projectState.editTaskAttachments) return { listKey: 'editTaskAttachment', containerId: 'createAttachmentList' };
   if (list === EMIE.projectState.editProjectRefImages) return { listKey: 'editProjectRef', containerId: 'editProjectRefImageList' };
   if (list === EMIE.projectState.editProjectAttachments) return { listKey: 'editProjectAttachment', containerId: 'editProjectAttachmentList' };
+  if (list === EMIE.projectState.rejectionImages) return { listKey: 'rejectionImage', containerId: 'rejectImageList' };
+  if (list === EMIE.projectState.rejectionAttachments) return { listKey: 'rejectionAttachment', containerId: 'rejectAttachmentList' };
   return {
     listKey: isImage ? 'createRef' : 'createAttachment',
     containerId: isImage ? 'createRefImageList' : 'createAttachmentList'
@@ -223,7 +227,9 @@ function removeFileItem(listKey, idx) {
     editTaskRef: [EMIE.projectState.editTaskRefImages, '编辑参考图片'],
     editTaskAttachment: [EMIE.projectState.editTaskAttachments, '编辑附件'],
     editProjectRef: [EMIE.projectState.editProjectRefImages, '编辑项目参考图片'],
-    editProjectAttachment: [EMIE.projectState.editProjectAttachments, '编辑项目附件']
+    editProjectAttachment: [EMIE.projectState.editProjectAttachments, '编辑项目附件'],
+    rejectionImage: [EMIE.projectState.rejectionImages, '驳回参考图'],
+    rejectionAttachment: [EMIE.projectState.rejectionAttachments, '驳回附件']
   };
   const context = contexts[listKey];
   if (!context) return;

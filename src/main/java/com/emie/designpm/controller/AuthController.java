@@ -4,7 +4,7 @@ import com.emie.designpm.entity.User;
 import com.emie.designpm.entity.ActivityLog;
 import com.emie.designpm.repository.UserRepository;
 import com.emie.designpm.repository.ActivityLogRepository;
-import com.emie.designpm.service.AdminService;
+import com.emie.designpm.service.PermissionService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,15 +25,15 @@ public class AuthController {
     private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
 
     private final UserRepository userRepository;
-    private final AdminService adminService;
+    private final PermissionService permissionService;
     private final ActivityLogRepository activityLogRepository;
 
     // 简单内存 Token 管理（生产环境应使用 Redis/DB）
     private static final Map<String, AuthSession> TOKENS = new ConcurrentHashMap<>();
 
-    public AuthController(UserRepository userRepository, AdminService adminService, ActivityLogRepository activityLogRepository) {
+    public AuthController(UserRepository userRepository, PermissionService permissionService, ActivityLogRepository activityLogRepository) {
         this.userRepository = userRepository;
-        this.adminService = adminService;
+        this.permissionService = permissionService;
         this.activityLogRepository = activityLogRepository;
     }
 
@@ -179,8 +179,10 @@ public class AuthController {
 
         // 用原始角色进行鉴权（即使已经在模拟其他用户，也允许继续切换）
         String effectiveRole = session.originalRole();
-        if (!"admin".equals(effectiveRole)) {
-            return ResponseEntity.status(403).body(Map.of("error", "无权切换用户视角"));
+        if (!permissionService.has(effectiveRole, "admin.identity.switch")) {
+            return ResponseEntity.status(403).body(Map.of(
+                    "error", "无权切换用户视角",
+                    "permission", "admin.identity.switch"));
         }
 
         String targetUserId = body.get("userId");
@@ -223,11 +225,7 @@ public class AuthController {
         if (session == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未登录或会话已过期"));
         }
-        List<String> perms = adminService.getPermissionsByRoleName(session.role());
-        return ResponseEntity.ok(Map.of(
-            "role", session.role(),
-            "permissions", perms
-        ));
+        return ResponseEntity.ok(permissionService.capabilities(session.role()));
     }
 
     // 校验 token 并返回 session（供过滤器使用）
@@ -246,7 +244,8 @@ public class AuthController {
     public static boolean isAdmin(HttpServletRequest request) {
         AuthSession session = request != null
                 ? (AuthSession) request.getAttribute("authSession") : null;
-        return session != null && "admin".equals(session.role());
+        return session != null && ("admin".equals(session.role())
+                || Boolean.TRUE.equals(request.getAttribute("permissionGranted")));
     }
 
     // 清除用户的所有 token（切换账号时）

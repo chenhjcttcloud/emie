@@ -1,4 +1,5 @@
 const EMIE = window.EMIE;
+const hasPermission = (...args) => EMIE.actions.hasPermission(...args);
 const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const apiPost = (...args) => EMIE.actions.apiPost(...args);
 const roleLabel = (...args) => EMIE.actions.roleLabel(...args);
@@ -92,7 +93,7 @@ function openDesignRequirementDelivery(id) {
         <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
         <div class="upload-area" data-emie-onclick="document.getElementById('designRequirementDeliverImageInput').click()">
           <div>📁 拖拽图片到此处，或点击选择图片</div>
-          <input type="file" id="designRequirementDeliverImageInput" multiple accept="image/*,.ai" style="display:none" data-emie-onchange="handleDeliverImages(this)">
+          <input type="file" id="designRequirementDeliverImageInput" multiple accept="image/*,.ai,.step" style="display:none" data-emie-onchange="handleDeliverImages(this)">
         </div>
         <div class="file-list" id="deliverImageList"></div>
       </div>
@@ -100,7 +101,7 @@ function openDesignRequirementDelivery(id) {
         <div class="form-label" style="margin-bottom:8px;">📎 交付附件</div>
         <div class="upload-area" data-emie-onclick="document.getElementById('designRequirementDeliverAttachmentInput').click()">
           <div>📁 拖拽文件到此处，或点击选择文件</div>
-          <input type="file" id="designRequirementDeliverAttachmentInput" multiple accept=".ai,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
+          <input type="file" id="designRequirementDeliverAttachmentInput" multiple accept=".ai,.step,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
         </div>
         <div class="file-list" id="deliverAttachmentList"></div>
       </div>
@@ -165,9 +166,9 @@ async function renderOrderList(main, type, role, uid, titleOverride = '', endpoi
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <h2 style="font-size:20px;">${title} <span id="projectListCount" style="font-size:13px;color:var(--gray-400);font-weight:400;">（${result.total} 个）</span></h2>
       <div style="display:flex;gap:8px;">
-        ${EMIE.state.currentRole === 'sales' && type === 'channel_custom' ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('channel_custom')">➕ 新建渠道定制项目</button>` : ''}
-        ${EMIE.state.currentRole === 'planner' && type === 'regular' ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('regular')">➕ 新建常规品设计项目</button>` : ''}
-        ${type === 'design_requirement' && ['planner','sales','promotion','product_promotion','product-promotion'].includes(String(EMIE.state.currentRole || '').toLowerCase()) ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('design_requirement')">➕ 新建设计/送审需求</button>` : ''}
+        ${type === 'channel_custom' && hasPermission('project.channel.create') ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('channel_custom')">➕ 新建渠道定制项目</button>` : ''}
+        ${type === 'regular' && hasPermission('project.regular.create') ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('regular')">➕ 新建常规品设计项目</button>` : ''}
+        ${type === 'design_requirement' && hasPermission('design_requirement.create') ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('design_requirement')">➕ 新建设计/送审需求</button>` : ''}
       </div>
     </div>
     <div class="filter-bar" style="margin-bottom:16px;">

@@ -5,6 +5,8 @@ import com.emie.designpm.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -45,6 +47,29 @@ public class NotificationWorkflowService {
         audit(event, n, inApp, "in_app_delivered", actorUserId, "工作流站内通知已创建");
         if (!enabled("notification.feishuEnabled")) return;
         users.findByUserId(recipientUserId).ifPresent(user -> sendFeishu(event, n, user, t, actorUserId));
+    }
+
+    /** 业务数据提交成功后再创建通知，避免通知先于项目/任务事务提交或业务回滚后仍被发出。 */
+    public void notifyUserAfterCommit(String eventType, String recipientUserId, String aggregateType, Long aggregateId,
+                                      String actorUserId, Map<String, String> context) {
+        Runnable action = () -> {
+            try {
+                notifyUser(eventType, recipientUserId, aggregateType, aggregateId, actorUserId, context);
+            } catch (Exception ignored) {
+                // 通知失败由投递记录承接，不能反向影响已经提交的业务事务。
+            }
+        };
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+        } else {
+            action.run();
+        }
     }
 
     /** 向指定角色的全部有效用户发送同一业务通知，并为每位收件人保留独立审计记录。 */

@@ -72,11 +72,14 @@ function renderProjectDetailContent(detail) {
   EMIE.projectState.currentProjectDetail = detail;
   const isChannel = detail.type === 'channel_custom';
   const canManageSubTasks = EMIE.state.currentRole === 'planner'
-    && detail.plannerId === getCurrentUserId();
+    && detail.plannerId === getCurrentUserId()
+    && EMIE.actions.hasPermission('subtask.create');
   const canEditInformation = (isChannel
-      && EMIE.state.currentRole === 'sales' && detail.salesId === getCurrentUserId())
+      && EMIE.state.currentRole === 'sales' && detail.salesId === getCurrentUserId()
+      && EMIE.actions.hasPermission('project.channel.edit'))
     || (!isChannel
-      && EMIE.state.currentRole === 'planner' && detail.plannerId === getCurrentUserId());
+      && EMIE.state.currentRole === 'planner' && detail.plannerId === getCurrentUserId()
+      && EMIE.actions.hasPermission('project.regular.edit'));
   // 子任务只有完成验收后才计为完成，已交付仍属于待验收。
   const totalTasks = detail.tasks.length;
   const doneStatuses = ['planner_approved', 'sales_approved', 'admin_approved', 'completed'];
@@ -187,7 +190,10 @@ function renderSubTaskCard(detail, task, idx) {
   }[task.workflowStage] || '未设置阶段';
   const rejectionRecords = Array.isArray(task.rejectionRecords) ? task.rejectionRecords : [];
 
-  return `<div class="subtask-card${isDone ? ' completed' : ''}">
+  return `<div class="subtask-card${isDone ? ' completed' : ''}" role="button" tabindex="0"
+    data-emie-onclick="openProjectSubTaskDetail(event,${task.id})"
+    data-emie-onkeydown="if(event.key==='Enter'||event.key===' '){openProjectSubTaskDetail(event,${task.id})}"
+    style="cursor:pointer;">
     <div class="subtask-header">
       <div class="subtask-name"><span class="subtask-number">${idx + 1}</span> ${escHtml(task.name)}</div>
       <span class="badge ${tsi.cls}">${tsi.label}</span>
@@ -240,6 +246,7 @@ function renderSubTaskCard(detail, task, idx) {
       ${myTask && task.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskAccept(${detail.id},${task.id})">✅ 接单</button>` : ''}
       ${myTask && task.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskDeliver(${detail.id},${task.id})">📤 交付成果</button>` : ''}
       ${myTask && task.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-onclick="taskRedeliver(${detail.id},${task.id})">📤 重新交付</button>` : ''}
+      ${myTask && ['delivered', 'planner_approved', 'sales_approved', 'admin_approved'].includes(task.status) ? `<button class="btn btn-outline btn-sm" data-emie-onclick="taskCorrectDelivery(${detail.id},${task.id})">📝 修正交付</button>` : ''}
       ${isPlanner && detail.status !== 'paused' && (task.status === 'pending' || task.status === 'accepted') ? `
         <button class="btn btn-outline btn-sm" data-emie-onclick="editTask(${detail.id},${task.id})">✏️ 编辑</button>
         <button class="btn btn-outline btn-sm" data-emie-onclick="deleteTask(${detail.id},${task.id})" style="color:var(--danger);border-color:var(--danger);">🗑️ 删除</button>
@@ -247,6 +254,81 @@ function renderSubTaskCard(detail, task, idx) {
       ${needScore ? `<button class="btn btn-warning btn-sm" data-emie-onclick="openScoring(${detail.id},${task.id})">⭐ 评分</button>` : ''}
     </div>
   </div>`;
+}
+
+function openProjectSubTaskDetail(event, taskId) {
+  if (event?.target?.closest('button,a,input,textarea,select,details,summary,[data-emie-no-card-open]')) return;
+  if (event?.type === 'keydown') event.preventDefault();
+  if (document.getElementById('projectSubTaskDetailModal')) return;
+  const task = EMIE.projectState.currentProjectDetail?.tasks?.find(item => Number(item.id) === Number(taskId));
+  if (!task) return;
+  const tsi = getTaskStatusInfo(task.status);
+  const records = Array.isArray(task.rejectionRecords) ? task.rejectionRecords : [];
+  const deliveryVersions = Array.isArray(task.deliveryVersions) ? task.deliveryVersions : [];
+  const workflowStageLabel = {
+    design: '设计', design_review: '设计送审', three_d_review: '3D送审',
+    sample_review: '打样送审', promotion: '产品宣发', bulk: '大货',
+  }[task.workflowStage] || '未设置阶段';
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'projectSubTaskDetailModal';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:760px;">
+      <div class="modal-header">
+        <button class="modal-close" data-emie-onclick="closeM('projectSubTaskDetailModal')">✕</button>
+        <div class="modal-header-left">
+          <div class="modal-title">子任务详情 · ${escHtml(task.name || '-')}</div>
+          <div style="font-size:12px;color:var(--gray-400);margin-top:3px;">所属阶段：${escHtml(workflowStageLabel)} · #${task.id}</div>
+        </div>
+        <span class="badge ${tsi.cls}">${tsi.label}</span>
+      </div>
+      <div class="modal-body">
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
+          <div class="detail-item"><div class="detail-label">负责人</div><div class="detail-value">${escHtml(task.designerName || '待分配')}</div></div>
+          <div class="detail-item"><div class="detail-label">计划完成</div><div class="detail-value">${formatDate(task.plannedDate)}</div></div>
+          <div class="detail-item"><div class="detail-label">实际完成</div><div class="detail-value">${task.actualDate ? formatDate(task.actualDate) : '-'}</div></div>
+          <div class="detail-item"><div class="detail-label">修改要求次数</div><div class="detail-value">${records.length} 次</div></div>
+        </div>
+        <div class="detail-item" style="margin-top:12px;">
+          <div class="detail-label">任务要求</div>
+          <div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.details || '未填写')}</div>
+        </div>
+        ${task.referenceImagesJson ? renderSubTaskImages(task.referenceImagesJson) : ''}
+        ${task.attachmentsJson ? renderTaskAttachments(task.attachmentsJson) : ''}
+        ${task.deliverables ? `<div class="detail-item" style="margin-top:12px;"><div class="detail-label">当前交付成果</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.deliverables)}</div></div>` : ''}
+        <div style="margin-top:18px;">
+          <div style="font-size:14px;font-weight:700;margin-bottom:8px;">交付版本 <span style="color:var(--gray-400);font-weight:400;">(${deliveryVersions.length})</span></div>
+          ${deliveryVersions.length ? deliveryVersions.map(version => `
+            <details style="border:1px solid var(--gray-200);border-radius:9px;margin-bottom:8px;overflow:hidden;">
+              <summary style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--gray-50);cursor:pointer;list-style:none;">
+                <strong>V${version.versionNo}</strong>
+                <span class="badge ${version.submissionType === 'correction' ? 'badge-pending' : version.submissionType === 'redelivery' ? 'badge-rejected' : 'badge-completed'}">${version.submissionType === 'correction' ? '主动修正' : version.submissionType === 'redelivery' ? '驳回后重交' : '首次交付'}</span>
+                <span style="flex:1;color:var(--gray-600);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(version.changeSummary || '')}</span>
+                <span style="font-size:11px;color:var(--gray-400);">${fmtDT(version.submittedAt)}</span>
+              </summary>
+              <div style="padding:12px;">
+                <div class="detail-label">提交人：${escHtml(version.submittedByName || '-')} · 自评：${version.selfScore ?? '-'} 分</div>
+                <div class="detail-value" style="white-space:pre-wrap;margin-top:5px;">${escHtml(version.deliverables || '未填写文字交付内容')}</div>
+                ${version.referenceImagesJson ? renderSubTaskImages(version.referenceImagesJson) : ''}
+                ${version.attachmentsJson ? renderTaskAttachments(version.attachmentsJson) : ''}
+              </div>
+            </details>`).join('') : '<div style="font-size:12px;color:var(--gray-400);">暂无交付版本记录</div>'}
+        </div>
+        <div style="margin-top:18px;">
+          <div style="font-size:14px;font-weight:700;margin-bottom:8px;">修改要求记录 <span style="color:var(--gray-400);font-weight:400;">(${records.length})</span></div>
+          ${records.length ? records.map(record => `
+            <button type="button" data-emie-onclick="openTaskRejectionRecord(${task.id},${record.attemptNo})"
+              style="width:100%;display:flex;align-items:center;gap:8px;padding:10px 12px;margin-bottom:8px;border:1px solid #F3C1C1;border-radius:9px;background:#FFF8F8;cursor:pointer;text-align:left;">
+              <strong style="color:#A32D2D;white-space:nowrap;">第 ${record.attemptNo} 次修改要求</strong>
+              <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray-600);">${escHtml(record.reason || '未填写修改意见')}</span>
+              <span style="font-size:11px;color:var(--gray-400);white-space:nowrap;">${fmtDT(record.reviewedAt)}</span>
+              <span style="color:var(--primary);white-space:nowrap;">查看详情 ›</span>
+            </button>`).join('') : '<div class="empty" style="padding:24px;"><p>暂无修改要求记录</p></div>'}
+        </div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-primary" data-emie-onclick="closeM('projectSubTaskDetailModal')">关闭</button></div>
+    </div>`;
+  document.body.appendChild(modal);
 }
 
 function openTaskRejectionRecord(taskId, attemptNo) {
@@ -257,6 +339,8 @@ function openTaskRejectionRecord(taskId, attemptNo) {
   const roleNames = { planner: '产品企划', sales: '销售', admin: '管理员', designer: '设计师', supplychain: '供应链', promotion: '产品推广' };
   const submittedImages = record.referenceImagesJson ? renderSubTaskImages(record.referenceImagesJson) : '';
   const submittedAttachments = record.attachmentsJson ? renderTaskAttachments(record.attachmentsJson) : '';
+  const rejectionImages = record.rejectionReferenceImagesJson ? renderSubTaskImages(record.rejectionReferenceImagesJson) : '';
+  const rejectionAttachments = record.rejectionAttachmentsJson ? renderTaskAttachments(record.rejectionAttachmentsJson) : '';
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'taskRejectionRecordModal';
@@ -287,6 +371,8 @@ function openTaskRejectionRecord(taskId, attemptNo) {
             <span style="font-size:11px;color:var(--gray-500);">${escHtml(roleNames[record.reviewerRole] || record.reviewerRole || '')} · ${escHtml(record.reviewerName || '-')}</span>
           </div>
           <div style="font-size:13px;line-height:1.7;color:var(--gray-700);white-space:pre-wrap;">${escHtml(record.reason || '未填写驳回意见')}</div>
+          ${rejectionImages ? `<div style="margin-top:14px;"><div class="detail-label">驳回参考图</div>${rejectionImages}</div>` : ''}
+          ${rejectionAttachments ? `<div style="margin-top:14px;"><div class="detail-label">驳回附件</div>${rejectionAttachments}</div>` : ''}
         </div>
       </div>
       <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskRejectionRecordModal')">关闭</button></div>
@@ -429,6 +515,10 @@ function isPreviewableFile(fileName) {
   return /\.(pdf|ppt|pptx)$/i.test(fileName || '');
 }
 
+function isRasterImageFile(fileName) {
+  return /\.(png|jpe?g|gif|webp|bmp)$/i.test(fileName || '');
+}
+
 function renderAttachmentActions(fileOrUrl, compact = false) {
   const fileName = typeof fileOrUrl === 'object'
     ? (fileOrUrl?.name || storedNameFromFile(fileOrUrl))
@@ -451,10 +541,10 @@ function renderProjectReferenceImages(detail) {
   const thumbUrl = u => '/api/files/thumbnail/' + encodeURIComponent(storedNameFromFile(u)) + '?token=' + encodeURIComponent(token || '');
   return `<div style="margin-top:8px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
-      ${imgs.map(img => `<div style="position:relative;display:inline-block;">
+      ${imgs.map(img => isRasterImageFile(img.name || storedNameFromFile(img)) ? `<div style="position:relative;display:inline-block;">
           <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" title="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
           <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
-      </div>`).join('')}
+      </div>` : `<div class="attachment-item" style="width:100%;display:flex;align-items:center;gap:8px;"><span>📐</span><span class="attachment-name" style="flex:1;">${escHtml(img.name || storedNameFromFile(img))}</span>${renderAttachmentActions(img)}</div>`).join('')}
     </div></div>`;
 }
 
@@ -469,10 +559,10 @@ function renderSubTaskImages(jsonStr) {
   const thumbUrl = u => '/api/files/thumbnail/' + encodeURIComponent(storedNameFromFile(u)) + '?token=' + encodeURIComponent(token || '');
   return `<div style="margin-top:8px;padding-left:4px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
-      ${imgs.map(img => `<div style="position:relative;display:inline-block;">
+      ${imgs.map(img => isRasterImageFile(img.name || storedNameFromFile(img)) ? `<div style="position:relative;display:inline-block;">
           <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--gray-200);cursor:pointer;">
           <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
-      </div>`).join('')}
+      </div>` : `<div class="attachment-item" style="width:100%;display:flex;align-items:center;gap:8px;"><span>📐</span><span class="attachment-name" style="flex:1;">${escHtml(img.name || storedNameFromFile(img))}</span>${renderAttachmentActions(img)}</div>`).join('')}
     </div></div>`;
 }
 
@@ -839,6 +929,7 @@ EMIE.registerActions({
   cleanLogAction,
   renderLogLabel,
   renderSubTaskCard,
+  openProjectSubTaskDetail,
   openTaskRejectionRecord,
   renderProjectActions,
   showConfirmDialog,

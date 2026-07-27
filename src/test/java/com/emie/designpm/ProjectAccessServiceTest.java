@@ -9,6 +9,7 @@ import com.emie.designpm.repository.DepartmentRepository;
 import com.emie.designpm.repository.ProjectRepository;
 import com.emie.designpm.repository.UserRepository;
 import com.emie.designpm.service.ProjectAccessService;
+import com.emie.designpm.service.PermissionService;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -75,6 +76,41 @@ class ProjectAccessServiceTest {
         assertFalse(access.canView(otherProject,
                 new AuthController.AuthSession(member.getUserId(), "designer", "成员")));
         assertEquals(List.of(member), access.visibleUsers("designer", member.getUserId(), "designer"));
+    }
+
+    @Test
+    void configuredOwnScopePreventsDepartmentHeadFromReadingMemberProjectById() {
+        ProjectRepository projects = mock(ProjectRepository.class);
+        UserRepository users = mock(UserRepository.class);
+        DepartmentRepository departments = mock(DepartmentRepository.class);
+        PermissionService permissions = mock(PermissionService.class);
+        ProjectAccessService access = new ProjectAccessService(projects, users, departments, permissions);
+        User head = user("designer-head", "designer", 7L);
+        Project memberProject = new Project();
+        SubTask task = new SubTask();
+        task.setDesignerId("designer-member");
+        task.setAssigneeRole("designer");
+        memberProject.getTasks().add(task);
+
+        when(permissions.has("designer", "project.detail.view")).thenReturn(true);
+        when(permissions.scopes("designer", "project.detail.view")).thenReturn(List.of("own"));
+
+        assertFalse(access.canView(memberProject,
+                new AuthController.AuthSession(head.getUserId(), "designer", "负责人")));
+    }
+
+    @Test
+    void configuredAllScopeAllowsCustomRoleToReadAnyProject() {
+        ProjectRepository projects = mock(ProjectRepository.class);
+        UserRepository users = mock(UserRepository.class);
+        DepartmentRepository departments = mock(DepartmentRepository.class);
+        PermissionService permissions = mock(PermissionService.class);
+        ProjectAccessService access = new ProjectAccessService(projects, users, departments, permissions);
+        when(permissions.has("observer", "project.detail.view")).thenReturn(true);
+        when(permissions.scopes("observer", "project.detail.view")).thenReturn(List.of("all"));
+
+        assertTrue(access.canView(new Project(),
+                new AuthController.AuthSession("observer-1", "observer", "观察员")));
     }
 
     private User user(String userId, String role, Long departmentId) {

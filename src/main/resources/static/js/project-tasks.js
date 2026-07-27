@@ -35,6 +35,10 @@ function handleSubTaskAttachments(input) {
 
 function addSubTask(pid) {
   if (document.getElementById('addSubTaskModal')) return;
+  if (!EMIE.actions.hasPermission('subtask.create')) {
+    alert('当前账号没有新建子任务的权限');
+    return;
+  }
   // 清理可能残留的其他弹窗，避免遮挡
   document.querySelectorAll('.modal-overlay').forEach(el => {
     if (el.id !== 'projectDetailModal' && el.id !== 'addSubTaskModal') el.remove();
@@ -109,7 +113,7 @@ function addSubTask(pid) {
           <div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片（可选）</div>
           <div class="upload-area" data-emie-onclick="document.getElementById('subTaskRefImageInput').click()">
             <div>📁 拖拽图片到此处，或点击选择图片</div>
-            <input type="file" id="subTaskRefImageInput" multiple accept="image/*,.ai" style="display:none" data-emie-onchange="handleSubTaskRefImages(this)">
+            <input type="file" id="subTaskRefImageInput" multiple accept="image/*,.ai,.step" style="display:none" data-emie-onchange="handleSubTaskRefImages(this)">
           </div>
           <div class="file-list" id="createRefImageList"></div>
         </div>
@@ -117,7 +121,7 @@ function addSubTask(pid) {
           <div class="form-label" style="margin-bottom:8px;">📎 附件（可选）</div>
           <div class="upload-area" data-emie-onclick="document.getElementById('subTaskAttachmentInput').click()">
             <div>📁 拖拽文件到此处，或点击选择文件</div>
-            <input type="file" id="subTaskAttachmentInput" multiple accept=".ai,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleSubTaskAttachments(this)">
+            <input type="file" id="subTaskAttachmentInput" multiple accept=".ai,.step,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleSubTaskAttachments(this)">
           </div>
           <div class="file-list" id="createAttachmentList"></div>
         </div>
@@ -312,7 +316,7 @@ function editTask(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片（可选）</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('editRefImageInput').click()">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
-              <input type="file" id="editRefImageInput" multiple accept="image/*,.ai" style="display:none" data-emie-onchange="handleEditRefImages(this)">
+              <input type="file" id="editRefImageInput" multiple accept="image/*,.ai,.step" style="display:none" data-emie-onchange="handleEditRefImages(this)">
             </div>
             <div class="file-list" id="createRefImageList"></div>
           </div>
@@ -320,7 +324,7 @@ function editTask(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">📎 附件（可选）</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('editAttachmentInput').click()">
               <div>📁 拖拽文件到此处，或点击选择文件</div>
-            <input type="file" id="editAttachmentInput" multiple accept=".ai,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleEditAttachments(this)">
+            <input type="file" id="editAttachmentInput" multiple accept=".ai,.step,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleEditAttachments(this)">
             </div>
             <div class="file-list" id="createAttachmentList"></div>
           </div>
@@ -470,7 +474,7 @@ async function taskDeliver(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('deliverImageInput').click()">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
-              <input type="file" id="deliverImageInput" multiple accept="image/*,.ai" style="display:none" data-emie-onchange="handleDeliverImages(this)">
+              <input type="file" id="deliverImageInput" multiple accept="image/*,.ai,.step" style="display:none" data-emie-onchange="handleDeliverImages(this)">
             </div>
             <div class="file-list" id="deliverImageList"></div>
           </div>
@@ -478,7 +482,7 @@ async function taskDeliver(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">📎 交付附件</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('deliverAttachmentInput').click()">
               <div>📁 拖拽文件到此处，或点击选择文件</div>
-            <input type="file" id="deliverAttachmentInput" multiple accept=".ai,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
+            <input type="file" id="deliverAttachmentInput" multiple accept=".ai,.step,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
             </div>
             <div class="file-list" id="deliverAttachmentList"></div>
           </div>
@@ -565,7 +569,7 @@ async function taskRedeliver(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('deliverImageInput').click()">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
-              <input type="file" id="deliverImageInput" multiple accept="image/*,.ai" style="display:none" data-emie-onchange="handleDeliverImages(this)">
+              <input type="file" id="deliverImageInput" multiple accept="image/*,.ai,.step" style="display:none" data-emie-onchange="handleDeliverImages(this)">
             </div>
             <div class="file-list" id="deliverImageList"></div>
           </div>
@@ -573,7 +577,7 @@ async function taskRedeliver(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">📎 交付附件</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('deliverAttachmentInput').click()">
               <div>📁 拖拽文件到此处，或点击选择文件</div>
-            <input type="file" id="deliverAttachmentInput" multiple accept=".ai,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
+            <input type="file" id="deliverAttachmentInput" multiple accept=".ai,.step,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
             </div>
             <div class="file-list" id="deliverAttachmentList"></div>
           </div>
@@ -609,6 +613,76 @@ async function submitTaskRedeliver(pid, tid) {
     await refreshAfterMutation(pid);
   } catch (e) {
     alert('交付失败: ' + e.message);
+  }
+}
+
+async function taskCorrectDelivery(pid, tid) {
+  if (!tryOpenModal('taskCorrectDeliveryModal')) return;
+  try {
+    const detail = await apiGet(`/projects/${pid}`);
+    const task = detail.tasks.find(t => t.id === tid);
+    if (!task) return;
+    try { EMIE.projectState.deliverImages = JSON.parse(task.referenceImagesJson || '[]'); } catch (_) { EMIE.projectState.deliverImages = []; }
+    try { EMIE.projectState.deliverAttachments = JSON.parse(task.attachmentsJson || '[]'); } catch (_) { EMIE.projectState.deliverAttachments = []; }
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'taskCorrectDeliveryModal';
+    modal.innerHTML = `
+      <button class="modal-close-float" data-emie-onclick="closeM('taskCorrectDeliveryModal')">✕</button>
+      <div class="modal modal-lg">
+        <div class="modal-header"><div class="modal-header-left">
+          <div class="modal-title">📝 修正交付：${escHtml(task.name)}</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">将生成新的交付版本；已产生的审核结论会失效并重新进入审核。</div>
+        </div></div>
+        <div class="modal-body">
+          <form id="taskCorrectDeliveryForm">
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 本次修正说明</label><textarea class="form-textarea" name="changeSummary" required maxlength="500" placeholder="例如：补充渲染源文件，移除误传的旧版包装图"></textarea></div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required style="min-height:100px;">${escHtml(task.deliverables || '')}</textarea></div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 自评分数</label><input type="number" class="form-input" name="selfScore" required min="1" max="100" step="1" value="${task.selfScore || ''}" data-emie-oninput="validateScoreInput(this)" style="max-width:200px;"></div>
+          </form>
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
+            <div class="form-label">🖼️ 当前交付参考图（可删除错误文件或补充文件）</div>
+            <div class="upload-area" data-emie-onclick="document.getElementById('correctDeliverImageInput').click()"><div>📁 点击补充图片或模型文件</div><input type="file" id="correctDeliverImageInput" multiple accept="image/*,.ai,.step" style="display:none" data-emie-onchange="handleDeliverImages(this)"></div>
+            <div class="file-list" id="deliverImageList"></div>
+          </div>
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
+            <div class="form-label">📎 当前交付附件（可删除错误文件或补充文件）</div>
+            <div class="upload-area" data-emie-onclick="document.getElementById('correctDeliverAttachmentInput').click()"><div>📁 点击补充附件</div><input type="file" id="correctDeliverAttachmentInput" multiple accept=".ai,.step,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleDeliverAttachments(this)"></div>
+            <div class="file-list" id="deliverAttachmentList"></div>
+          </div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskCorrectDeliveryModal')">取消</button><button class="btn btn-warning" data-emie-onclick="submitGuard(this,()=>submitTaskCorrectDelivery(${pid},${tid}))">生成新版本并重新送审</button></div>
+      </div>`;
+    document.body.appendChild(modal);
+    renderFileList(EMIE.projectState.deliverImages, '交付参考图');
+    renderFileList(EMIE.projectState.deliverAttachments, '交付附件');
+    doneOpenModal('taskCorrectDeliveryModal');
+  } catch (e) {
+    doneOpenModal('taskCorrectDeliveryModal');
+    alert('加载失败: ' + e.message);
+  }
+}
+
+async function submitTaskCorrectDelivery(pid, tid) {
+  if (EMIE.projectState.uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
+  const form = document.getElementById('taskCorrectDeliveryForm');
+  if (!form?.reportValidity()) return;
+  const data = Object.fromEntries(new FormData(form).entries());
+  const selfScore = parseInt(data.selfScore);
+  if (isNaN(selfScore) || selfScore < 1 || selfScore > 100) { alert('请输入有效的自评分（1-100分）'); return; }
+  data.selfScore = selfScore;
+  data.actualDate = new Date().toISOString().split('T')[0];
+  data.currentUser = getCurrentUserName();
+  data.currentRole = EMIE.state.currentRole;
+  data.currentUserId = getCurrentUserId();
+  data.referenceImagesJson = JSON.stringify(EMIE.projectState.deliverImages);
+  data.attachmentsJson = JSON.stringify(EMIE.projectState.deliverAttachments);
+  try {
+    await apiPost(`/projects/${pid}/tasks/${tid}/correct-delivery`, data);
+    closeM('taskCorrectDeliveryModal');
+    await refreshAfterMutation(pid);
+  } catch (e) {
+    alert('修正交付失败: ' + e.message);
   }
 }
 
@@ -676,6 +750,8 @@ async function submitTaskApprove(pid, tid) {
 
 function taskReject(pid, tid) {
   if (document.getElementById('taskRejectModal')) return;
+  EMIE.projectState.rejectionImages = [];
+  EMIE.projectState.rejectionAttachments = [];
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'taskRejectModal';
@@ -684,10 +760,22 @@ function taskReject(pid, tid) {
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">↩️ 驳回修改</div></div></div>
       <div class="modal-body">
         <div class="form-group"><label class="form-label"><span class="required">*</span> 修改意见</label><textarea class="form-textarea" id="rejectComments" required placeholder="请详细说明修改意见..." style="min-height:100px;"></textarea></div>
+        <div class="form-group"><label class="form-label">参考图/模型（选填）</label><div class="upload-area" data-emie-onclick="document.getElementById('rejectImageInput').click()"><div>📁 点击上传驳回参考图或模型文件</div><input type="file" id="rejectImageInput" multiple accept="image/*,.ai,.step" style="display:none" data-emie-onchange="handleRejectImages(this)"></div><div class="file-list" id="rejectImageList"></div></div>
+        <div class="form-group"><label class="form-label">附件（选填）</label><div class="upload-area" data-emie-onclick="document.getElementById('rejectAttachmentInput').click()"><div>📎 点击上传驳回附件</div><input type="file" id="rejectAttachmentInput" multiple accept=".ai,.step,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*" style="display:none" data-emie-onchange="handleRejectAttachments(this)"></div><div class="file-list" id="rejectAttachmentList"></div></div>
       </div>
       <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskRejectModal')">取消</button><button class="btn btn-danger" data-emie-onclick="submitGuard(this,()=>submitTaskReject(${pid},${tid}))">确认驳回</button></div>
     </div>`;
   document.body.appendChild(modal);
+}
+
+function handleRejectImages(input) {
+  handleFileUpload(input, EMIE.projectState.rejectionImages, 9, '驳回参考图', true);
+  setTimeout(() => renderFileList(EMIE.projectState.rejectionImages, '驳回参考图'), 0);
+}
+
+function handleRejectAttachments(input) {
+  handleFileUpload(input, EMIE.projectState.rejectionAttachments, 9, '驳回附件', false);
+  setTimeout(() => renderFileList(EMIE.projectState.rejectionAttachments, '驳回附件'), 0);
 }
 
 async function submitTaskReject(pid, tid) {
@@ -696,6 +784,8 @@ async function submitTaskReject(pid, tid) {
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/reject`, {
       comments,
+      rejectionReferenceImagesJson: JSON.stringify(EMIE.projectState.rejectionImages),
+      rejectionAttachmentsJson: JSON.stringify(EMIE.projectState.rejectionAttachments),
       currentUser: getCurrentUserName(),
       currentRole: EMIE.state.currentRole,
     });
@@ -771,10 +861,14 @@ EMIE.registerActions({
   taskDeliver,
   submitTaskDeliver,
   taskRedeliver,
+  taskCorrectDelivery,
+  submitTaskCorrectDelivery,
   submitTaskRedeliver,
   taskApprove,
   submitTaskApprove,
   taskReject,
+  handleRejectImages,
+  handleRejectAttachments,
   submitTaskReject,
   openScoring,
   submitScoring,
@@ -797,10 +891,14 @@ EMIE.registerModule('projectTasks', {
   taskDeliver,
   submitTaskDeliver,
   taskRedeliver,
+  taskCorrectDelivery,
+  submitTaskCorrectDelivery,
   submitTaskRedeliver,
   taskApprove,
   submitTaskApprove,
   taskReject,
+  handleRejectImages,
+  handleRejectAttachments,
   submitTaskReject,
   openScoring,
   submitScoring,

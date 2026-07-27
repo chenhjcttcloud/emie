@@ -1,11 +1,13 @@
 package com.emie.designpm.config;
 
 import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.service.PermissionService;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.io.IOException;
 
@@ -16,6 +18,17 @@ import java.io.IOException;
 @Component
 @Order(1)
 public class AuthFilter implements Filter {
+    private final PermissionService permissionService;
+
+    @Autowired
+    public AuthFilter(PermissionService permissionService) {
+        this.permissionService = permissionService;
+    }
+
+    /** 保留给过滤器轻量单元测试。 */
+    public AuthFilter() {
+        this.permissionService = null;
+    }
 
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
@@ -72,12 +85,17 @@ public class AuthFilter implements Filter {
                 res.getWriter().write("{\"error\":\"账号等待管理员分配角色\"}");
                 return;
             }
-            if (path.startsWith("/api/admin/") && !path.equals("/api/admin/public-config")
-                    && !"admin".equals(session.role())) {
+            String adminPermission = requiredPermission(req.getMethod(), path);
+            if (adminPermission != null && !hasPermission(session, adminPermission)) {
                 res.setStatus(403);
                 res.setContentType("application/json;charset=UTF-8");
-                res.getWriter().write("{\"error\":\"仅管理员可访问\"}");
+                res.getWriter().write("{\"error\":\"当前账号没有访问此系统管理功能的权限\","
+                        + "\"permission\":\"" + adminPermission + "\"}");
                 return;
+            }
+            if (adminPermission != null) {
+                req.setAttribute("permissionGranted", true);
+                req.setAttribute("requiredPermission", adminPermission);
             }
         }
 
@@ -88,5 +106,45 @@ public class AuthFilter implements Filter {
         }
 
         chain.doFilter(request, response);
+    }
+
+    private boolean hasPermission(AuthController.AuthSession session, String permission) {
+        return permissionService == null
+                ? "admin".equals(session.role())
+                : permissionService.has(session.role(), permission);
+    }
+
+    private String requiredPermission(String method, String path) {
+        if (!"GET".equals(method) && path.startsWith("/api/departments")) return "admin.department.manage";
+        if (!"GET".equals(method) && (path.startsWith("/api/categories")
+                || path.startsWith("/api/compliance")
+                || path.startsWith("/api/price-ranges")
+                || path.startsWith("/api/ip-options"))) return "admin.catalog.manage";
+        if (!"GET".equals(method) && path.startsWith("/api/users/org/")) return "admin.department.manage";
+        if (path.startsWith("/api/system/")) return "admin.system_monitor.view";
+        if (path.startsWith("/api/project-import/")) return "admin.project_import.execute";
+        if (path.startsWith("/api/share/admin/")) return "admin.share.manage";
+        if (!path.startsWith("/api/admin/") || path.equals("/api/admin/public-config")) return null;
+        if (path.startsWith("/api/admin/configs")) {
+            return "GET".equals(method) ? "admin.config.view" : "admin.config.edit";
+        }
+        if (path.equals("/api/admin/upload-image")) return "admin.config.asset.upload";
+        if (path.equals("/api/admin/notifications/test")) return "admin.notification.test";
+        if (path.contains("/notifications/temporary-broadcast")) return "admin.notification.broadcast";
+        if (path.contains("/notifications/failures") || path.contains("/notifications/deliveries/")) {
+            return "admin.notification.failure.manage";
+        }
+        if (path.startsWith("/api/admin/users/") && path.endsWith("/role")) return "admin.user.role.assign";
+        if (path.startsWith("/api/admin/users")) return "admin.user.manage";
+        if (path.startsWith("/api/admin/permissions/")) return "admin.permission.manage";
+        if (path.startsWith("/api/admin/permission-defs") || path.startsWith("/api/admin/roles")) {
+            return "admin.role.manage";
+        }
+        if (path.startsWith("/api/admin/scoring-weights")) return "admin.scoring_weight.manage";
+        if (path.startsWith("/api/admin/clear-data")) return "admin.data.clear";
+        if (path.startsWith("/api/admin/workload")) return "admin.workload.view";
+        if (path.startsWith("/api/admin/files")) return "admin.file_archive.manage";
+        if (path.startsWith("/api/admin/sync")) return "admin.feishu_sync.execute";
+        return "page.admin.view";
     }
 }

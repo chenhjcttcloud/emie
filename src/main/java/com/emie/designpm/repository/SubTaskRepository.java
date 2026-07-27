@@ -29,7 +29,7 @@ public interface SubTaskRepository extends JpaRepository<SubTask, Long> {
     List<SubTask> findByStatusAndDesignerId(String status, String designerId);
 
     @Query("SELECT DISTINCT t FROM SubTask t JOIN FETCH t.project p " +
-            "WHERE t.designerId = :userId ORDER BY t.updatedAt DESC, t.id DESC")
+            "WHERE t.designerId = :userId OR t.publisherId = :userId ORDER BY t.updatedAt DESC, t.id DESC")
     List<SubTask> findMySubTasks(@Param("userId") String userId);
 
     @Query("SELECT DISTINCT t FROM SubTask t JOIN FETCH t.project p " +

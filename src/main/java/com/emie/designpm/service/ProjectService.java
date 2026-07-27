@@ -28,6 +28,7 @@ public class ProjectService {
     private final ProjectRepository projectRepository;
     private final SubTaskRepository subTaskRepository;
     private final ScoringRepository scoringRepository;
+    private final SubTaskDeliveryVersionRepository deliveryVersionRepository;
     private final UserService userService;
     private final ProductCategoryRepository productCategoryRepository;
     private final IpOptionRepository ipOptionRepository;
@@ -41,6 +42,7 @@ public class ProjectService {
     public ProjectService(ProjectRepository projectRepository,
                           SubTaskRepository subTaskRepository,
                           ScoringRepository scoringRepository,
+                          SubTaskDeliveryVersionRepository deliveryVersionRepository,
                           UserService userService,
                           ProductCategoryRepository productCategoryRepository,
                           IpOptionRepository ipOptionRepository,
@@ -51,6 +53,7 @@ public class ProjectService {
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
         this.scoringRepository = scoringRepository;
+        this.deliveryVersionRepository = deliveryVersionRepository;
         this.userService = userService;
         this.productCategoryRepository = productCategoryRepository;
         this.ipOptionRepository = ipOptionRepository;
@@ -486,12 +489,8 @@ public class ProjectService {
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
-        SubTask persistedTask = saved.getTasks().stream()
-                .filter(candidate -> Objects.equals(candidate.getName(), task.getName())
-                        && Objects.equals(candidate.getDesignerId(), task.getDesignerId()))
-                .reduce((first, second) -> second).orElse(task);
-        safeNotify("TASK_ASSIGNED", persistedTask.getDesignerId(), "sub_task", persistedTask.getId(),
-                (String) body.getOrDefault("currentUserId", ""), notificationContext(saved, persistedTask, currentUser, ""));
+        safeNotifyAfterCommit("TASK_ASSIGNED", task.getDesignerId(), "sub_task", task.getId(),
+                (String) body.getOrDefault("currentUserId", ""), notificationContext(saved, task, currentUser, ""));
         return saved;
     }
 
@@ -630,6 +629,17 @@ public class ProjectService {
         }
     }
 
+    private void safeNotifyAfterCommit(String eventType, String recipientUserId, String aggregateType, Long aggregateId,
+                                       String actorUserId, Map<String, String> context) {
+        try {
+            notificationWorkflowService.notifyUserAfterCommit(
+                    eventType, recipientUserId, aggregateType, aggregateId, actorUserId, context);
+        } catch (Exception e) {
+            log.error("提交后通知注册失败但业务操作继续: eventType={}, aggregate={}#{}",
+                    eventType, aggregateType, aggregateId, e);
+        }
+    }
+
     private String toJson(Object value) {
         try { return objectMapper.writeValueAsString(value); } catch (Exception e) { return "{}"; }
     }
@@ -755,6 +765,7 @@ public class ProjectService {
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
+        saveDeliveryVersion(task, "initial", "首次交付", currentUserId, currentUser, currentRole);
         String selfScoreStr = selfScore != null ? selfScore.toString() : "—";
         p.getLogs().add(new ActivityLog("子任务交付（自评" + selfScoreStr + "）：" + task.getName(), currentUser, currentRole, p));
 
@@ -801,6 +812,9 @@ public class ProjectService {
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
+        String changeSummary = SecurityUtil.sanitizeText(
+                (String) body.getOrDefault("changeSummary", "根据修改要求重新交付"), 500);
+        saveDeliveryVersion(task, "redelivery", changeSummary, currentUserId, currentUser, currentRole);
         p.getLogs().add(new ActivityLog("子任务重新交付：" + task.getName(), currentUser, currentRole, p));
 
         Project saved = projectRepository.save(p);
@@ -809,6 +823,91 @@ public class ProjectService {
         safeNotify("TASK_REDELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
                 notificationContext(p, task, currentUser, task.getReviewComments()));
         return saved;
+    }
+
+    public Project taskCorrectDelivery(Long projectId, Long taskId, Map<String, Object> body) {
+        Project p = projectRepository.findById(projectId)
+                .orElseThrow(() -> new RuntimeException("项目不存在"));
+        if (List.of("terminated", "paused", "pending_terminate").contains(p.getStatus())) {
+            throw new RuntimeException("当前项目状态不允许修正交付");
+        }
+        SubTask task = p.getTasks().stream()
+                .filter(t -> t.getId().equals(taskId))
+                .findFirst().orElseThrow(() -> new RuntimeException("子任务不存在"));
+        String currentUserId = (String) body.getOrDefault("currentUserId", "");
+        if (currentUserId.isBlank() || !currentUserId.equals(task.getDesignerId())) {
+            throw new RuntimeException("仅当前子任务负责人可修正交付");
+        }
+        if (!List.of("delivered", "planner_approved", "sales_approved", "admin_approved").contains(task.getStatus())) {
+            throw new RuntimeException("当前子任务状态不允许主动修正；已完成任务需由管理员重新开放");
+        }
+        String changeSummary = SecurityUtil.sanitizeText((String) body.get("changeSummary"), 500);
+        if (changeSummary == null || changeSummary.isBlank()) {
+            throw new RuntimeException("请填写本次修正说明");
+        }
+        task.setStatus("delivered");
+        task.setActualDate((String) body.get("actualDate"));
+        task.setDeliverables(SecurityUtil.sanitizeText((String) body.get("deliverables"), 5000));
+        task.setReferenceImagesJson(validateAndCleanFiles(
+                (String) body.getOrDefault("referenceImagesJson", "[]"), true));
+        task.setAttachmentsJson(validateAndCleanFiles(
+                (String) body.getOrDefault("attachmentsJson", "[]"), false));
+        Integer selfScore = body.containsKey("selfScore") ? ((Number) body.get("selfScore")).intValue() : null;
+        if (selfScore == null || selfScore < 1 || selfScore > 100) {
+            throw new RuntimeException("请输入有效的自评分（1-100分）");
+        }
+        task.setSelfScore(selfScore.doubleValue());
+        task.setReviewComments(null);
+        resetReviewWorkflow(task);
+        String currentUser = (String) body.getOrDefault("currentUser", "");
+        String currentRole = (String) body.getOrDefault("currentRole", "");
+        saveDeliveryVersion(task, "correction", changeSummary, currentUserId, currentUser, currentRole);
+        p.getLogs().add(new ActivityLog("子任务主动修正交付：" + task.getName()
+                + "（" + changeSummary + "）", currentUser, currentRole, p));
+        Project saved = projectRepository.saveAndFlush(p);
+        fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
+        fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
+        safeNotify("TASK_REDELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
+                notificationContext(p, task, currentUser, changeSummary));
+        return saved;
+    }
+
+    private void saveDeliveryVersion(SubTask task, String submissionType, String changeSummary,
+                                     String userId, String userName, String role) {
+        SubTaskDeliveryVersion version = new SubTaskDeliveryVersion();
+        version.setSubTask(task);
+        version.setVersionNo((int) deliveryVersionRepository.countBySubTaskId(task.getId()) + 1);
+        version.setSubmissionType(submissionType);
+        version.setChangeSummary(changeSummary);
+        version.setDeliverables(task.getDeliverables());
+        version.setReferenceImagesJson(task.getReferenceImagesJson());
+        version.setAttachmentsJson(task.getAttachmentsJson());
+        version.setActualDate(task.getActualDate());
+        version.setSelfScore(task.getSelfScore());
+        version.setSubmittedById(userId);
+        version.setSubmittedByName(userName);
+        version.setSubmittedByRole(role);
+        deliveryVersionRepository.save(version);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getDeliveryVersions(Long taskId) {
+        return deliveryVersionRepository.findBySubTaskIdOrderByVersionNoDesc(taskId).stream().map(version -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", version.getId());
+            item.put("versionNo", version.getVersionNo());
+            item.put("submissionType", version.getSubmissionType());
+            item.put("changeSummary", version.getChangeSummary());
+            item.put("deliverables", version.getDeliverables());
+            item.put("referenceImagesJson", version.getReferenceImagesJson());
+            item.put("attachmentsJson", version.getAttachmentsJson());
+            item.put("actualDate", version.getActualDate());
+            item.put("selfScore", version.getSelfScore());
+            item.put("submittedByName", version.getSubmittedByName());
+            item.put("submittedByRole", version.getSubmittedByRole());
+            item.put("submittedAt", version.getSubmittedAt().toString());
+            return item;
+        }).toList();
     }
 
     public Project taskApprove(Long projectId, Long taskId, Map<String, Object> body) {
@@ -1032,6 +1131,10 @@ public class ProjectService {
                 .findFirst().orElseThrow(() -> new RuntimeException("子任务不存在"));
 
         String comments = SecurityUtil.sanitizeText((String) body.get("comments"), 500);
+        String rejectionReferenceImagesJson = validateAndCleanFiles(
+                (String) body.getOrDefault("rejectionReferenceImagesJson", "[]"), true);
+        String rejectionAttachmentsJson = validateAndCleanFiles(
+                (String) body.getOrDefault("rejectionAttachmentsJson", "[]"), false);
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
@@ -1054,13 +1157,19 @@ public class ProjectService {
         submittedSnapshot.put("actualDate", task.getActualDate());
         submittedSnapshot.put("submittedById", task.getDesignerId());
         submittedSnapshot.put("submittedByName", task.getDesignerName());
+        Map<String, Object> rejectionSnapshot = new LinkedHashMap<>();
+        rejectionSnapshot.put("reason", comments == null ? "" : comments);
+        rejectionSnapshot.put("rejectionReferenceImagesJson", rejectionReferenceImagesJson);
+        rejectionSnapshot.put("rejectionAttachmentsJson", rejectionAttachmentsJson);
         p.getLogs().add(new ActivityLog(
                 "子任务驳回：" + task.getName() + "（意见：" + comments + "）",
                 currentUser, currentRole, p, "sub_task", task.getId(),
                 toJson(submittedSnapshot),
-                toJson(Map.of("reason", comments == null ? "" : comments)),
-                "status,reviewComments"));
-        Project saved = projectRepository.save(p);
+                toJson(rejectionSnapshot),
+                "status,reviewComments,rejectionReferenceImagesJson,rejectionAttachmentsJson"));
+        Project saved = projectRepository.saveAndFlush(p);
+        fileArchiveService.bindFilesFromJson(rejectionReferenceImagesJson, "sub_task", task.getId());
+        fileArchiveService.bindFilesFromJson(rejectionAttachmentsJson, "sub_task", task.getId());
         safeNotify("TASK_REJECTED", task.getDesignerId(), "sub_task", task.getId(), currentUserId,
                 notificationContext(p, task, currentUser, comments));
         return saved;

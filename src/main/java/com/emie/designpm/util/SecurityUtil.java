@@ -14,13 +14,13 @@ public class SecurityUtil {
 
     // 允许上传的图片扩展名
     // 设计源文件可放入参考图片区域，但不参与缩略图/在线预览。
-    private static final List<String> ALLOWED_IMAGE_EXTS = Arrays.asList("jpg", "jpeg", "png", "gif", "bmp", "webp", "ai");
+    private static final List<String> ALLOWED_IMAGE_EXTS = Arrays.asList("jpg", "jpeg", "png", "gif", "bmp", "webp", "ai", "step");
 
     // 允许上传的附件扩展名（办公文档 + 图片 + PDF）
     private static final List<String> ALLOWED_ATTACHMENT_EXTS = Arrays.asList(
         "jpg", "jpeg", "png", "gif", "bmp", "webp",
         "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
-        "txt", "csv", "zip", "rar", "7z", "ai"
+        "txt", "csv", "zip", "rar", "7z", "ai", "step"
     );
 
     // 禁止上传的扩展名（高危）

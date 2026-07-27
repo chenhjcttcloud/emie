@@ -28,6 +28,10 @@ EMIE.state = Object.assign({
   priceRanges: [],
   ipOptions: [],
   departments: [],
+  permissions: null,
+  permissionScopes: {},
+  permissionVersion: null,
+  permissionMode: 'unavailable',
   cache: { orders: [] },
   showAppInProgress: false,
   idleMonitorInited: false,
@@ -52,6 +56,8 @@ EMIE.projectState = Object.assign({
   editTaskAttachments: [],
   editProjectRefImages: [],
   editProjectAttachments: [],
+  rejectionImages: [],
+  rejectionAttachments: [],
   createProjectType: 'channel_custom',
 }, EMIE.projectState || {});
 EMIE.adminState = Object.assign({
@@ -68,6 +74,17 @@ const formModified = (...args) => EMIE.actions.formModified(...args);
 
 const API = '/api';
 const API_TIMEOUT_MS = 20000;
+
+function hasPermission(permission) {
+  // 兼容接入期间，能力接口临时失败时保持旧页面可用；后端仍执行原有角色与归属校验。
+  if (!Array.isArray(EMIE.state.permissions)) return true;
+  return EMIE.state.permissions.includes(permission);
+}
+
+function hasDataScope(permission, scope) {
+  const scopes = EMIE.state.permissionScopes?.[permission];
+  return Array.isArray(scopes) && scopes.includes(scope);
+}
 
 function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
@@ -310,6 +327,8 @@ function clearSWRCache(keys) {
 
 
 EMIE.registerActions({
+  hasPermission,
+  hasDataScope,
   fetchWithTimeout,
   authHeaders,
   apiGet,
