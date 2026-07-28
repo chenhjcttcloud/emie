@@ -35,7 +35,7 @@ class NotificationOutboxServiceTest {
     void publishesOnePendingEventAndAuditForNewBusinessState() {
         when(eventRepository.findByIdempotencyKey("TASK_DELIVERED:task:12:v3"))
                 .thenReturn(Optional.empty());
-        when(eventRepository.save(any(NotificationEvent.class))).thenAnswer(invocation -> {
+        when(eventRepository.saveAndFlush(any(NotificationEvent.class))).thenAnswer(invocation -> {
             NotificationEvent event = invocation.getArgument(0);
             event.setId(9L);
             return event;
@@ -47,7 +47,7 @@ class NotificationOutboxServiceTest {
 
         assertEquals(9L, event.getId());
         assertEquals("pending", event.getStatus());
-        verify(eventRepository).save(eventCaptor.capture());
+        verify(eventRepository).saveAndFlush(eventCaptor.capture());
         assertEquals(3, eventCaptor.getValue().getAggregateVersion());
         verify(auditLogRepository).save(any(NotificationAuditLog.class));
     }
@@ -63,7 +63,7 @@ class NotificationOutboxServiceTest {
                 "TASK_REDELIVERED:task:12:v4", "{\"deliveryCount\":2}");
 
         assertSame(existing, result);
-        verify(eventRepository, never()).save(any());
+        verify(eventRepository, never()).saveAndFlush(any());
         verifyNoInteractions(auditLogRepository);
     }
 }

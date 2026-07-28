@@ -38,7 +38,9 @@ public class NotificationOutboxService {
                                            Integer aggregateVersion, String actorUserId,
                                            String idempotencyKey, String payload) {
         try {
-            NotificationEvent event = eventRepository.save(NotificationEvent.builder()
+            // Notification 与审计都引用该事件；使用 saveAndFlush 保证 IDENTITY 主键已生成，
+            // 避免在同一通知事务中写入空 event_id。
+            NotificationEvent event = eventRepository.saveAndFlush(NotificationEvent.builder()
                     .eventType(eventType)
                     .aggregateType(aggregateType)
                     .aggregateId(aggregateId)
