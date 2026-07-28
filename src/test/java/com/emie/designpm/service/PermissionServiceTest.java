@@ -92,6 +92,25 @@ class PermissionServiceTest {
     }
 
     @Test
+    void mandatoryCapabilitiesCannotBeRemovedByHistoricalDenyAssignments() {
+        RoleRepository roles = mock(RoleRepository.class);
+        RolePermissionRepository assignments = mock(RolePermissionRepository.class);
+        PermissionVersionRepository versions = emptyVersions();
+        when(roles.findByNameIgnoreCase("admin")).thenReturn(Optional.empty());
+        when(assignments.findAllowedPermissionCodes("admin")).thenReturn(List.of());
+        when(assignments.findDeniedPermissionCodes("admin")).thenReturn(List.of(
+                "admin.identity.switch", "file.upload", "file.download", "file.preview"));
+
+        List<String> permissions = permissions(
+                new PermissionService(roles, assignments, versions).capabilities("管理员"));
+
+        assertTrue(permissions.contains("admin.identity.switch"));
+        assertTrue(permissions.contains("file.upload"));
+        assertTrue(permissions.contains("file.download"));
+        assertTrue(permissions.contains("file.preview"));
+    }
+
+    @Test
     void configuredDataScopeOverridesCompatibilityScopeAndIsReturnedToFrontend() {
         RoleRepository roles = mock(RoleRepository.class);
         RolePermissionRepository assignments = emptyAssignments();

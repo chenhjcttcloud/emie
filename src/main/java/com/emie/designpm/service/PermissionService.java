@@ -59,6 +59,9 @@ public class PermissionService {
             permissions.addAll(PermissionCatalog.translateConfiguredPermissions(role.getPermissions()));
         }
         permissions.removeAll(rolePermissionRepository.findDeniedPermissionCodes(assignmentRoleName));
+        // 防止旧版角色编辑在未展示新增能力时写入 deny，造成管理员无法恢复身份、
+        // 一线角色无法上传或读取自己刚上传的文件。
+        permissions.addAll(PermissionCatalog.mandatoryPermissions(roleName));
 
         List<String> sorted = new ArrayList<>(permissions);
         sorted.sort(String::compareTo);

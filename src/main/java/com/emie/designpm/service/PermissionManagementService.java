@@ -221,6 +221,8 @@ public class PermissionManagementService {
                 else if (code != null && !code.isBlank()) throw new IllegalArgumentException("未知权限编码：" + code);
             }
         }
+        // 基础恢复/文件能力不得因旧页面未展示新增权限而被保存为 deny。
+        selected.addAll(PermissionCatalog.mandatoryPermissions(role.getName()));
 
         rolePermissionRepository.deleteByRoleId(role.getId());
         rolePermissionRepository.flush();

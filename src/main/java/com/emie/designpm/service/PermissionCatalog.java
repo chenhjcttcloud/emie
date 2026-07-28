@@ -125,6 +125,27 @@ public final class PermissionCatalog {
         return Set.copyOf(permissions);
     }
 
+    /**
+     * 系统运行所必需的基础能力。
+     *
+     * <p>这些能力不能因为旧版角色编辑页面没有展示新增权限，而被保存成显式 deny：
+     * 管理员必须保留身份切换的恢复入口；标准业务角色必须可以上传、查看自己刚上传的
+     * 业务文件。更细的项目/子任务数据范围仍由业务归属校验负责。</p>
+     */
+    public static Set<String> mandatoryPermissions(String rawRole) {
+        String role = normalizeRole(rawRole);
+        LinkedHashSet<String> permissions = new LinkedHashSet<>();
+        if ("admin".equals(role)) {
+            permissions.add("admin.identity.switch");
+        }
+        if (Set.of("admin", "sales", "planner", "promotion", "designer", "supplychain").contains(role)) {
+            permissions.add("file.upload");
+            permissions.add("file.download");
+            permissions.add("file.preview");
+        }
+        return Set.copyOf(permissions);
+    }
+
     public static Set<String> translateConfiguredPermissions(String rawPermissions) {
         if (rawPermissions == null || rawPermissions.isBlank()) return Set.of();
         LinkedHashSet<String> translated = new LinkedHashSet<>();
