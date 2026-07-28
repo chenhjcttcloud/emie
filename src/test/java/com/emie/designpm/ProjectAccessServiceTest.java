@@ -113,6 +113,22 @@ class ProjectAccessServiceTest {
                 new AuthController.AuthSession("observer-1", "observer", "观察员")));
     }
 
+    @Test
+    void promotionAliasCanViewItsAssignedProject() {
+        ProjectRepository projects = mock(ProjectRepository.class);
+        UserRepository users = mock(UserRepository.class);
+        DepartmentRepository departments = mock(DepartmentRepository.class);
+        ProjectAccessService access = new ProjectAccessService(projects, users, departments);
+        Project project = new Project();
+        SubTask task = new SubTask();
+        task.setDesignerId("promotion-1");
+        task.setAssigneeRole("promotion");
+        project.getTasks().add(task);
+
+        assertTrue(access.canView(project,
+                new AuthController.AuthSession("promotion-1", "Promotion", "产品推广")));
+    }
+
     private User user(String userId, String role, Long departmentId) {
         return User.builder().userId(userId).name(userId).role(role).departmentId(departmentId).build();
     }

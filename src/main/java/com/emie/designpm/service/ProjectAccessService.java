@@ -47,24 +47,27 @@ public class ProjectAccessService {
     }
 
     public List<Project> findVisibleProjectsLight(String viewerRole, String viewerUserId) {
-        if (!hasPermission(viewerRole, "project.view")) return List.of();
-        if (hasScope(viewerRole, "project.view", "all")) return projectRepository.findAllLight();
-        return distinctProjects(scopeUserIds(viewerRole, viewerUserId, "project.view").stream()
-                .flatMap(userId -> findForUserLight(viewerRole, userId).stream())
+        String role = PermissionCatalog.normalizeRole(viewerRole);
+        if (!hasPermission(role, "project.view")) return List.of();
+        if (hasScope(role, "project.view", "all")) return projectRepository.findAllLight();
+        return distinctProjects(scopeUserIds(role, viewerUserId, "project.view").stream()
+                .flatMap(userId -> findForUserLight(role, userId).stream())
                 .toList());
     }
 
     public List<Project> findParticipatingProjectsLight(String viewerRole, String viewerUserId) {
-        if (!hasPermission(viewerRole, "project.view")) return List.of();
-        if (!List.of("designer", "supplychain", "promotion").contains(viewerRole)) return List.of();
-        return distinctProjects(scopeUserIds(viewerRole, viewerUserId, "project.view").stream()
-                .flatMap(userId -> projectRepository.findParticipatingByAssigneeLight(userId, viewerRole).stream())
+        String role = PermissionCatalog.normalizeRole(viewerRole);
+        if (!hasPermission(role, "project.view")) return List.of();
+        if (!List.of("designer", "supplychain", "promotion").contains(role)) return List.of();
+        return distinctProjects(scopeUserIds(role, viewerUserId, "project.view").stream()
+                .flatMap(userId -> projectRepository.findParticipatingByAssigneeLight(userId, role).stream())
                 .toList());
     }
 
     /** 项目列表分页：将角色可见范围和数据库分页合并，避免默认读取整张项目表。 */
     public Page<Project> findVisibleProjectsPage(String viewerRole, String viewerUserId, String type,
                                                   boolean participating, Pageable pageable) {
+        viewerRole = PermissionCatalog.normalizeRole(viewerRole);
         ProjectListQuery query = new ProjectListQuery(type, null, null, null, null, null, null, participating, pageable);
         if (!hasPermission(viewerRole, "project.view")) return Page.empty(pageable);
         String queryRole = hasScope(viewerRole, "project.view", "all") ? "admin" : viewerRole;
@@ -73,6 +76,7 @@ public class ProjectAccessService {
     }
 
     public Page<Project> findVisibleProjectsPage(String viewerRole, String viewerUserId, ProjectListQuery query) {
+        viewerRole = PermissionCatalog.normalizeRole(viewerRole);
         if (!hasPermission(viewerRole, "project.view")) return Page.empty(query.pageable());
         String queryRole = hasScope(viewerRole, "project.view", "all") ? "admin" : viewerRole;
         return projectRepository.findVisiblePage(query, queryRole,
@@ -80,6 +84,7 @@ public class ProjectAccessService {
     }
 
     public long countVisibleProjects(String viewerRole, String viewerUserId, String type, boolean participating) {
+        viewerRole = PermissionCatalog.normalizeRole(viewerRole);
         if (!hasPermission(viewerRole, "project.view")) return 0L;
         ProjectListQuery query = new ProjectListQuery(type, null, null, null, null, null, null, participating,
                 Pageable.unpaged());
@@ -90,6 +95,7 @@ public class ProjectAccessService {
     }
 
     public List<Long> findVisibleProjectIds(String viewerRole, String viewerUserId) {
+        viewerRole = PermissionCatalog.normalizeRole(viewerRole);
         if (!hasPermission(viewerRole, "project.view")) return List.of();
         ProjectListQuery query = new ProjectListQuery(null, null, null, null, null, null, null, false, Pageable.unpaged());
         String queryRole = hasScope(viewerRole, "project.view", "all") ? "admin" : viewerRole;
@@ -100,19 +106,21 @@ public class ProjectAccessService {
 
     public List<Project> findVisibleProjectsWithTasks(AuthController.AuthSession session) {
         if (session == null) return List.of();
-        if (!hasPermission(session.role(), "project.view")) return List.of();
-        if (hasScope(session.role(), "project.view", "all")) return projectRepository.findAllWithTasks();
-        return distinctProjects(scopeUserIds(session.role(), session.userId(), "project.view").stream()
-                .flatMap(userId -> findForUserWithTasks(session.role(), userId).stream())
+        String role = PermissionCatalog.normalizeRole(session.role());
+        if (!hasPermission(role, "project.view")) return List.of();
+        if (hasScope(role, "project.view", "all")) return projectRepository.findAllWithTasks();
+        return distinctProjects(scopeUserIds(role, session.userId(), "project.view").stream()
+                .flatMap(userId -> findForUserWithTasks(role, userId).stream())
                 .toList());
     }
 
     public boolean canView(Project project, AuthController.AuthSession session) {
         if (project == null || session == null) return false;
-        if (!hasPermission(session.role(), "project.detail.view")) return false;
-        if (hasScope(session.role(), "project.detail.view", "all")) return true;
-        return scopeUserIds(session.role(), session.userId(), "project.detail.view").stream()
-                .anyMatch(userId -> canViewAs(project, userId, session.role()));
+        String role = PermissionCatalog.normalizeRole(session.role());
+        if (!hasPermission(role, "project.detail.view")) return false;
+        if (hasScope(role, "project.detail.view", "all")) return true;
+        return scopeUserIds(role, session.userId(), "project.detail.view").stream()
+                .anyMatch(userId -> canViewAs(project, userId, role));
     }
 
     /** 返回状态看板允许展示的用户；普通成员只有自己，部门负责人包含本部门同角色成员。 */
@@ -189,6 +197,7 @@ public class ProjectAccessService {
     }
 
     private List<Project> findForUserLight(String role, String userId) {
+        role = PermissionCatalog.normalizeRole(role);
         return switch (role) {
             case "sales" -> projectRepository.findBySalesIdLight(userId);
             case "planner" -> projectRepository.findByPlannerViewLight(userId);
@@ -197,6 +206,7 @@ public class ProjectAccessService {
     }
 
     private List<Project> findForUserWithTasks(String role, String userId) {
+        role = PermissionCatalog.normalizeRole(role);
         return switch (role) {
             case "sales" -> projectRepository.findBySalesId(userId);
             case "planner" -> projectRepository.findByPlannerView(userId);
@@ -205,6 +215,7 @@ public class ProjectAccessService {
     }
 
     private List<String> scopeUserIds(String role, String userId, String permission) {
+        role = PermissionCatalog.normalizeRole(role);
         List<String> scopes = scopes(role, permission);
         if (scopes.contains("role_team")) {
             return userRepository.findByRole(role).stream()
