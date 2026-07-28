@@ -345,8 +345,8 @@ function changeProjectOwnerRole(role) {
 
 // ==================== 我的子任务（企划派发任务界面） ====================
 async function renderMyTasks(main, role, uid, bucket = 'all') {
-  if (role === 'designer' || role === 'supplychain' || role === 'planner') {
-    // 设计师/供应链/企划: 展示分配给自己的子任务卡片
+  if (role === 'designer' || role === 'supplychain' || role === 'planner' || role === 'promotion') {
+    // 所有可作为子任务负责人的执行角色，展示分配给自己的子任务卡片。
     await renderDesignerTasks(main, uid, bucket);
     return;
   }

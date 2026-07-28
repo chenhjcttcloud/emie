@@ -31,8 +31,9 @@ async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.
   });
 
   EMIE.dashboardState.designerTasksReadOnly = readOnly;
+  const taskEmoji = role === 'promotion' ? '📣' : role === 'supplychain' ? '🛒' : role === 'planner' ? '📋' : '🎨';
   main.innerHTML = `
-    <h2 style="font-size:22px;margin-bottom:20px;">🎨 ${bucket === 'pending' ? '待处理子任务' : bucket === 'completed' ? '已完成子任务' : '我的子任务'} <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${myTasks.length})</span></h2>
+    <h2 style="font-size:22px;margin-bottom:20px;">${taskEmoji} ${bucket === 'pending' ? '待处理子任务' : bucket === 'completed' ? '已完成子任务' : '我的子任务'} <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${myTasks.length})</span></h2>
     <div class="filter-bar">
       ${bucket !== 'completed' ? `<select class="form-select" data-emie-onchange="filterDesignerTasks()" style="min-width:120px;" id="designerTaskFilter" aria-label="任务归属">
         <option value="all">全部任务</option>
@@ -122,7 +123,7 @@ function renderDesignerTaskCards(tasks, readOnly = false) {
             <span class="badge ${t._unassigned ? 'badge-pending' : tsi.cls}">${t._unassigned ? '待接单' : tsi.label}</span>
           </div>
           <div class="subtask-meta">
-            <div class="subtask-meta-item">👤 负责人：<strong>${t.designerName || '<span style="color:var(--warning);">待认领</span>'}</strong>${t.assigneeRole ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;${t.assigneeRole === 'supplychain' ? 'background:#F0FDFA;color:#0D9488;' : t.assigneeRole === 'planner' ? 'background:#EFF6FF;color:#1D4ED8;' : 'background:#FEF2F2;color:#DC2626;'}">${t.assigneeRole === 'supplychain' ? '供应链' : t.assigneeRole === 'planner' ? '企划' : '设计师'}</span>` : ''}</div>
+            <div class="subtask-meta-item">👤 负责人：<strong>${t.designerName || '<span style="color:var(--warning);">待认领</span>'}</strong>${t.assigneeRole ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;${t.assigneeRole === 'supplychain' ? 'background:#F0FDFA;color:#0D9488;' : t.assigneeRole === 'planner' ? 'background:#EFF6FF;color:#1D4ED8;' : t.assigneeRole === 'promotion' ? 'background:#F5F3FF;color:#7C3AED;' : t.assigneeRole === 'sales' ? 'background:#FFF7ED;color:#C2410C;' : 'background:#FEF2F2;color:#DC2626;'}">${t.assigneeRole === 'supplychain' ? '供应链' : t.assigneeRole === 'planner' ? '企划' : t.assigneeRole === 'promotion' ? '产品推广' : t.assigneeRole === 'sales' ? '销售' : '设计师'}</span>` : ''}</div>
             ${t.relation ? `<div class="subtask-meta-item">🔗 我的关系：<strong>${t.relation === 'publisher' ? '我发布的任务' : '我负责的任务'}</strong></div>` : ''}
             <div class="subtask-meta-item">📅 计划完成：<strong>${formatDate(t.plannedDate)}</strong></div>
             ${t.actualDate ? `<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(t.actualDate)}</strong></div>` : ''}

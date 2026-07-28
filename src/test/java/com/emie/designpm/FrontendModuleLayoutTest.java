@@ -89,9 +89,9 @@ class FrontendModuleLayoutTest {
             if (module.equals("bootstrap.js")) continue;
             int currentIndex = bootstrap.indexOf("./" + module + "?v=147");
             if (module.equals("dashboard-designer.js")) {
-                currentIndex = bootstrap.indexOf("./" + module + "?v=176");
+                currentIndex = bootstrap.indexOf("./" + module + "?v=177");
             }
-            if (module.equals("dashboard-lists.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=184");
+            if (module.equals("dashboard-lists.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=185");
             if (module.equals("core-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=173");
             if (module.equals("core-runtime.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=155");
             if (module.equals("core-auth.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=151");
