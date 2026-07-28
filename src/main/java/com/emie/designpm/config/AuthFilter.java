@@ -8,6 +8,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
@@ -18,6 +20,7 @@ import java.io.IOException;
 @Component
 @Order(1)
 public class AuthFilter implements Filter {
+    private static final Logger log = LoggerFactory.getLogger(AuthFilter.class);
     private final PermissionService permissionService;
 
     @Autowired
@@ -80,6 +83,8 @@ public class AuthFilter implements Filter {
             }
             req.setAttribute("authSession", session);
             if ("pending".equals(session.role()) && !path.equals("/api/auth/me")) {
+                log.warn("认证过滤器拒绝请求 path={} userId={} role={} reason=pending-role",
+                        path, session.userId(), session.role());
                 res.setStatus(403);
                 res.setContentType("application/json;charset=UTF-8");
                 res.getWriter().write("{\"error\":\"账号等待管理员分配角色\"}");
@@ -87,6 +92,8 @@ public class AuthFilter implements Filter {
             }
             String adminPermission = requiredPermission(req.getMethod(), path);
             if (adminPermission != null && !hasPermission(session, adminPermission)) {
+                log.warn("认证过滤器拒绝请求 path={} userId={} role={} permission={}",
+                        path, session.userId(), session.role(), adminPermission);
                 res.setStatus(403);
                 res.setContentType("application/json;charset=UTF-8");
                 res.getWriter().write("{\"error\":\"当前账号没有访问此系统管理功能的权限\","

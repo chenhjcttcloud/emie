@@ -16,10 +16,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
     private static final long SESSION_TTL_MS = 8L * 60 * 60 * 1000;
     private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
@@ -180,6 +183,8 @@ public class AuthController {
         // 用原始角色进行鉴权（即使已经在模拟其他用户，也允许继续切换）
         String effectiveRole = session.originalRole();
         if (!permissionService.has(effectiveRole, "admin.identity.switch")) {
+            log.warn("身份切换被拒绝 userId={} role={} originalUserId={} originalRole={}",
+                    session.userId(), session.role(), session.originalUserId(), effectiveRole);
             return ResponseEntity.status(403).body(Map.of(
                     "error", "无权切换用户视角",
                     "permission", "admin.identity.switch"));
