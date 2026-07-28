@@ -107,6 +107,9 @@ public final class PermissionCatalog {
             case "promotion" -> {
                 permissions.add("design_requirement.create");
                 permissions.add("design_requirement.score.review");
+                permissions.add("subtask.accept");
+                permissions.add("subtask.deliver");
+                permissions.add("subtask.redeliver");
             }
             case "designer" -> {
                 permissions.add("subtask.accept");

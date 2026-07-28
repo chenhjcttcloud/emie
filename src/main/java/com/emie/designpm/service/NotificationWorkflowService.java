@@ -7,6 +7,8 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -16,6 +18,7 @@ import java.util.UUID;
 /** 业务事件的统一通知入口：先创建站内必达通知，再尝试飞书投递并保留审计。 */
 @Service
 public class NotificationWorkflowService {
+    private static final Logger log = LoggerFactory.getLogger(NotificationWorkflowService.class);
     private final NotificationOutboxService outbox;
     private final NotificationTemplateService templates;
     private final NotificationRepository notifications;
@@ -36,6 +39,9 @@ public class NotificationWorkflowService {
     public void notifyUser(String eventType, String recipientUserId, String aggregateType, Long aggregateId,
                            String actorUserId, Map<String, String> context) {
         if (recipientUserId == null || recipientUserId.isBlank() || recipientUserId.equals(actorUserId)) return;
+        if (aggregateId == null) {
+            throw new IllegalArgumentException("通知业务对象 ID 不能为空");
+        }
         NotificationTemplateService.Template t = templates.render(eventType, context);
         NotificationEvent event = outbox.publish(eventType, aggregateType, aggregateId, 1, actorUserId,
                 eventType + ":" + aggregateType + ":" + aggregateId + ":" + UUID.randomUUID(), t.content());
@@ -55,8 +61,10 @@ public class NotificationWorkflowService {
         Runnable action = () -> {
             try {
                 notifyUser(eventType, recipientUserId, aggregateType, aggregateId, actorUserId, context);
-            } catch (Exception ignored) {
+            } catch (Exception e) {
                 // 通知失败由投递记录承接，不能反向影响已经提交的业务事务。
+                log.error("提交后通知创建失败: eventType={}, aggregate={}#{}, recipient={}",
+                        eventType, aggregateType, aggregateId, recipientUserId, e);
             }
         };
         if (TransactionSynchronizationManager.isActualTransactionActive()

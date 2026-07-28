@@ -271,13 +271,21 @@ public class AdminService {
     /** 批量更新配置 */
     @Transactional
     public void updateConfigs(Map<String, String> configs, String updatedBy) {
+        if (configs == null) return;
         for (Map.Entry<String, String> entry : configs.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue() == null ? "" : entry.getValue().trim();
+            if ("notification.publicBaseUrl".equals(key)
+                    && !value.isBlank()
+                    && !value.matches("https?://[^\\s/]+(?::\\d+)?(?:/.*)?")) {
+                throw new IllegalArgumentException("飞书通知跳转地址必须是完整的 http:// 或 https:// 地址");
+            }
             configRepository.findByConfigKey(entry.getKey()).ifPresent(config -> {
                 if ("password".equalsIgnoreCase(config.getValueType())
                         && "******".equals(entry.getValue())) {
                     return;
                 }
-                config.setConfigValue(entry.getValue());
+                config.setConfigValue(value);
                 config.setUpdatedBy(updatedBy);
                 config.setUpdatedAt(LocalDateTime.now());
                 configRepository.save(config);

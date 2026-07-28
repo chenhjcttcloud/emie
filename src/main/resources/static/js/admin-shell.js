@@ -151,6 +151,20 @@ function groupLabel(group) {
   return { appearance: '🎨 外观设置', security: '🔒 安全设置', system: '💻 系统信息', feishu: '💬 飞书 SSO 登录', nas: '🗄️ NAS 归档', feishu_base: '📊 飞书多维表格', notification: '🔔 通知中心', notification_templates: '💬 飞书通知模板' }[group] || group;
 }
 
+function configLabel(key) {
+  const labels = {
+    'notification.publicBaseUrl': '飞书通知跳转地址',
+    'notification.enabled': '启用通知中心',
+    'notification.inAppEnabled': '启用站内通知',
+    'notification.feishuEnabled': '启用飞书通知',
+    'system.dbType': '数据库类型',
+    'system.dbUrl': '数据库连接地址',
+    'system.version': '系统版本号',
+    'system.fileUploadMaxSize': '文件上传最大限制（MB）',
+  };
+  return labels[key] || key.split('.').pop();
+}
+
 // ===== Admin: 系统配置 =====
 async function renderAdminConfig(container) {
   container.innerHTML = `<div class="loading">加载中</div>`;
@@ -170,7 +184,7 @@ async function renderAdminConfig(container) {
           <div class="config-grid">
             ${items.map(item => `
               <div class="config-item ${item.valueType === 'text' && (item.configValue || '').length > 60 ? 'full' : ''}">
-                <label>${item.configKey.split('.').pop()}</label>
+                <label>${configLabel(item.configKey)}</label>
                 <span class="config-desc">${escHtml(item.description || '')}</span>
                 ${item.valueType === 'password'
                   ? `<input type="password" class="config-input" data-key="${item.configKey}" value="${escHtml(item.configValue || '')}" placeholder="${item.description}" autocomplete="off">`

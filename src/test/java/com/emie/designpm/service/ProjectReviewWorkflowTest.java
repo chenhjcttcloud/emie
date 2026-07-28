@@ -20,6 +20,7 @@ import static org.mockito.Mockito.*;
 class ProjectReviewWorkflowTest {
 
     private ProjectRepository projects;
+    private SubTaskRepository subTasks;
     private ScoringRepository scoring;
     private SubTaskDeliveryVersionRepository deliveryVersions;
     private SystemConfigRepository configs;
@@ -31,6 +32,7 @@ class ProjectReviewWorkflowTest {
     @BeforeEach
     void setUp() {
         projects = mock(ProjectRepository.class);
+        subTasks = mock(SubTaskRepository.class);
         scoring = mock(ScoringRepository.class);
         deliveryVersions = mock(SubTaskDeliveryVersionRepository.class);
         configs = mock(SystemConfigRepository.class);
@@ -40,7 +42,7 @@ class ProjectReviewWorkflowTest {
         when(configs.findByConfigKey(anyString())).thenReturn(Optional.empty());
         service = new ProjectService(
                 projects,
-                mock(SubTaskRepository.class),
+                subTasks,
                 scoring,
                 deliveryVersions,
                 users,
@@ -62,10 +64,13 @@ class ProjectReviewWorkflowTest {
         when(users.getUserByUserId("designer-2")).thenReturn(com.emie.designpm.entity.User.builder()
                 .userId("designer-2").name("设计师乙").role("designer").status("active").build());
         when(users.getUserName("designer-2")).thenReturn("设计师乙");
-        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> {
-            Project saved = invocation.getArgument(0);
-            saved.getTasks().getFirst().setId(22L);
+        when(subTasks.saveAndFlush(any(SubTask.class))).thenAnswer(invocation -> {
+            SubTask saved = invocation.getArgument(0);
+            saved.setId(22L);
             return saved;
+        });
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> {
+            return invocation.getArgument(0);
         });
 
         service.addSubTask(1L, Map.of(
@@ -78,6 +83,7 @@ class ProjectReviewWorkflowTest {
         verify(notifications).notifyUserAfterCommit(
                 eq("TASK_ASSIGNED"), eq("designer-2"), eq("sub_task"), eq(22L),
                 eq("planner-1"), anyMap());
+        verify(subTasks).saveAndFlush(any(SubTask.class));
     }
 
     @Test

@@ -231,7 +231,10 @@ FROM roles r
 JOIN permissions p ON p.code IN (
     'design_requirement.create',
     'design_requirement.score.review',
-    'scoring.submit'
+    'scoring.submit',
+    'subtask.accept',
+    'subtask.deliver',
+    'subtask.redeliver'
 )
 WHERE LOWER(r.name) IN ('promotion', 'product_promotion', 'product-promotion');
 

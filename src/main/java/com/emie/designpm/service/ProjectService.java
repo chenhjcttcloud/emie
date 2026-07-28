@@ -470,6 +470,13 @@ public class ProjectService {
         task.setProject(p);
 
         boolean firstSubTask = p.getTasks().isEmpty();
+        // 先显式持久化子任务，确保后续文件绑定和提交后通知始终使用真实任务 ID。
+        // 仅依赖 Project.tasks 的级联保存时，新任务在提交后回调注册阶段仍可能没有 ID，
+        // 从而让 notification_events.aggregate_id 的非空约束反向影响创建接口。
+        subTaskRepository.saveAndFlush(task);
+        if (task.getId() == null) {
+            throw new IllegalStateException("子任务保存失败，请稍后重试");
+        }
         p.getTasks().add(task);
         if (firstSubTask) {
             p.setWorkflowStage(workflowStage);
