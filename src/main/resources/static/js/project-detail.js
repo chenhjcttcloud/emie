@@ -131,12 +131,7 @@ function renderProjectDetailContent(detail) {
         ${canManageSubTasks && (detail.status === 'planner_accepted' || detail.status === 'in_progress' || detail.status === 'completed' || detail.status === 'completed_pending_score') ? `<button class="btn btn-primary btn-sm" style="margin-left:auto;" data-emie-onclick="addSubTask(${detail.id})">➕ 添加子任务</button>` : ''}
       </div>
       ${detail.tasks.length === 0 ? `<div class="empty" style="padding:30px;"><div class="empty-icon">📭</div><p>暂无子任务，等待产品企划添加</p></div>` : ''}
-      ${detail.tasks.filter(t => {
-        // 设计师只看设计师的任务，供应链只看供应链的任务
-        if (EMIE.state.currentRole === 'designer') return !t.assigneeRole || t.assigneeRole === 'designer';
-        if (EMIE.state.currentRole === 'supplychain') return t.assigneeRole === 'supplychain';
-        return true;
-      }).map((t, i) => renderSubTaskCard(detail, t, i)).join('')}
+      ${detail.tasks.map((t, i) => renderSubTaskCard(detail, t, i)).join('')}
     </div>
 
     ${renderProjectScoringSummary(detail)}

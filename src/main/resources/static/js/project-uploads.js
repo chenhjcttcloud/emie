@@ -7,13 +7,49 @@ const escJsString = (...args) => EMIE.actions.escJsString(...args);
 const showDownloadOptions = (...args) => EMIE.actions.showDownloadOptions(...args);
 const renderAttachmentActions = (...args) => EMIE.actions.renderAttachmentActions(...args);
 
+let activePreviewImage = null;
+
+function createPresentationImageCanvas(image) {
+  const maxPayloadSide = 2400;
+  const payloadRatio = Math.min(1, maxPayloadSide / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * payloadRatio));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * payloadRatio));
+  canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+function canvasToPngBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('图片转换失败')), 'image/png');
+  });
+}
+
+function showImageCopyFeedback(image, text) {
+  const feedback = image.closest('.modal-overlay')?.querySelector('.ppt-copy-feedback');
+  if (!feedback) return;
+  feedback.textContent = text;
+  window.setTimeout(() => {
+    if (feedback.isConnected && feedback.textContent === text) feedback.textContent = '100%';
+  }, 1200);
+}
+
+function selectPreviewImage(image) {
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  range.selectNode(image);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
 // EMIE 项目域：上传、项目详情、子任务工作流、评分与分享
 // ==================== 图片预览（Lightbox + 滚轮缩放 + 拖拽平移）====================
 function previewImage(src, name) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.style.cssText = 'z-index:300;background:rgba(0,0,0,.85);overflow:hidden;';
-  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  overlay.onclick = (e) => { if (e.target === overlay) { cleanup(); overlay.remove(); } };
 
   let scale = 1;
   const minScale = 0.25;
@@ -40,10 +76,12 @@ function previewImage(src, name) {
   img.alt = name || '预览';
   img.draggable = true;
   img.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,.5);transition:transform .15s ease;transform:scale(1);pointer-events:auto;user-select:auto;';
+  activePreviewImage = img;
 
   imgWrap.appendChild(img);
 
   const zoomLabel = document.createElement('div');
+  zoomLabel.className = 'ppt-copy-feedback';
   zoomLabel.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:#fff;padding:6px 16px;border-radius:20px;font-size:13px;z-index:310;pointer-events:none;user-select:none;';
   zoomLabel.textContent = '100%';
 
@@ -84,6 +122,7 @@ function previewImage(src, name) {
   function cleanup() {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    if (activePreviewImage === img) activePreviewImage = null;
   }
 
   overlay.appendChild(closeBtn);
@@ -99,6 +138,33 @@ document.addEventListener('click', function(e) {
     previewImage(img.dataset.fullSrc || img.src, img.alt || img.title || '');
   }
 });
+
+// 放大图激活时，⌘C / Ctrl+C 直接写入 PNG 位图，与浏览器右键“复制图像”保持同类数据格式。
+// HTTPS 下使用原生图片剪贴板；HTTP 测试环境通过选中原图保留浏览器原生复制作为降级。
+document.addEventListener('keydown', async function(e) {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== 'c') return;
+  const image = activePreviewImage;
+  if (!image || !image.isConnected || !image.complete || !image.naturalWidth || !image.naturalHeight) return;
+
+  if (!window.isSecureContext || !window.ClipboardItem || !navigator.clipboard?.write) {
+    selectPreviewImage(image);
+    showImageCopyFeedback(image, '当前地址请右键复制图像');
+    return;
+  }
+
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  try {
+    const canvas = createPresentationImageCanvas(image);
+    const pngBlob = await canvasToPngBlob(canvas);
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+    showImageCopyFeedback(image, '已复制高清原图');
+  } catch (_) {
+    selectPreviewImage(image);
+    document.execCommand('copy');
+    showImageCopyFeedback(image, '已复制原图');
+  }
+}, true);
 
 // 统一控制所有页面图片拖入外部应用时的尺寸，避免使用原图天然像素导致插入过大。
 document.addEventListener('dragstart', function(e) {

@@ -104,8 +104,8 @@ class FrontendModuleLayoutTest {
             if (module.equals("admin-roles.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=151");
             if (module.equals("admin-workload.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             if (module.equals("admin-org.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=165");
-            if (module.equals("project-uploads.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=151");
-            if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=187");
+            if (module.equals("project-uploads.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=155");
+            if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=188");
             if (module.equals("project-form.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=183");
             if (module.equals("project-tasks.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=185");
             if (module.equals("projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
@@ -114,7 +114,7 @@ class FrontendModuleLayoutTest {
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=228\"></script>"),
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=233\"></script>"),
                 "页面应只通过当前版本 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
@@ -270,6 +270,11 @@ class FrontendModuleLayoutTest {
                         && detail.contains("projectSubTaskDetailModal")
                         && detail.contains("修改要求次数"),
                 "项目详情中的整张子任务卡片应可打开对应子任务详情");
+        assertTrue(detail.contains("detail.tasks.map((t, i) => renderSubTaskCard(detail, t, i))"),
+                "项目参与者应在项目详情中看到该项目的完整子任务链");
+        assertFalse(detail.contains("EMIE.state.currentRole === 'designer') return !t.assigneeRole")
+                        || detail.contains("EMIE.state.currentRole === 'supplychain') return t.assigneeRole"),
+                "项目详情不得再按当前执行角色过滤其他角色的子任务");
         String designerTasks = readResource("/static/js/dashboard-designer.js");
         assertTrue(designerTasks.contains("openPublishedSubTaskDetail")
                         && designerTasks.contains("修改要求记录")
