@@ -112,7 +112,7 @@ public class AdminController {
     public ResponseEntity<?> getNotificationFailures(@RequestHeader("X-Auth-Token") String token) {
         AuthController.AuthSession session = AuthController.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
-        return ResponseEntity.ok(notificationRetryService.recentFailures());
+        return ResponseEntity.ok(notificationRetryService.recentFeishuDeliveries());
     }
 
     @PostMapping("/notifications/deliveries/{id}/retry")

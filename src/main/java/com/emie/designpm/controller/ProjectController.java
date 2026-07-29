@@ -591,8 +591,11 @@ public class ProjectController {
                                                           HttpServletRequest request) {
         AuthController.AuthSession session = getSession(request);
         if (session == null) return ResponseEntity.status(401).build();
-        if (!"admin".equals(session.role()) && !Objects.equals(session.role(), role)) {
-            return ResponseEntity.status(403).body(Map.of("error", "无权查看其他角色的状态看板"));
+        boolean allowed = "admin".equals(session.role())
+                || Objects.equals(session.role(), role)
+                || ("planner".equals(session.role()) && Set.of("planner", "designer", "supplychain").contains(role));
+        if (!allowed) {
+            return ResponseEntity.status(403).body(Map.of("error", "无权查看该角色的状态看板"));
         }
         return ResponseEntity.ok(projectService.getRoleStatus(role, session.role(), session.userId()));
     }

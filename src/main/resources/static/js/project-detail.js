@@ -601,7 +601,7 @@ function renderTaskAttachments(jsonStr) {
     html += `<div style="margin-top:8px;"><div class="detail-label">🖼️ 交付图片</div>
       <div class="image-preview" style="margin-top:4px;">
         ${images.map(img => `<div style="position:relative;display:inline-block;">
-            <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+            <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" draggable="true" loading="lazy" decoding="async" style="width:180px;height:180px;object-fit:contain;border-radius:6px;border:1px solid var(--gray-200);cursor:grab;background:#fff;">
             <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
         </div>`).join('')}
       </div></div>`;

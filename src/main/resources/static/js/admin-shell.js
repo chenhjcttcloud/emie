@@ -217,7 +217,7 @@ async function renderAdminConfig(container) {
         <textarea class="form-textarea" id="temporaryBroadcastContent" placeholder="请输入更新时间、影响范围和注意事项" maxlength="2000" rows="5"></textarea>
       </div></div>`);
     container.insertAdjacentHTML('beforeend', `<div class="config-card" data-group="notification-failures">
-      <div class="config-card-header"><h3>🛠️ 飞书失败通知</h3><button class="btn btn-sm btn-secondary" data-emie-onclick="loadNotificationFailures()">🔄 刷新</button></div>
+      <div class="config-card-header"><h3>🛠️ 飞书发送记录</h3><button class="btn btn-sm btn-secondary" data-emie-onclick="loadNotificationFailures()">🔄 刷新</button></div>
       <div class="config-card-body" id="notificationFailures"><div class="loading">加载中</div></div>
     </div>`);
     await loadNotificationFailures();
@@ -261,7 +261,7 @@ async function loadNotificationFailures() {
   if (!target) return;
   try {
     const rows = await apiGet('/admin/notifications/failures');
-    target.innerHTML = rows.length ? `<div class="table-responsive"><table class="data-table"><thead><tr><th>状态</th><th>收件人</th><th>通知</th><th>失败原因</th><th>重试次数</th><th>操作</th></tr></thead><tbody>${rows.map(r => `<tr><td>${r.status === 'dead_letter' ? '死信' : '等待重试'}</td><td>${escHtml(r.recipientUserId || '')}</td><td>${escHtml(r.title || '')}</td><td>${escHtml(r.errorMsg || '')}</td><td>${r.retryCount ?? 0}</td><td><button class="btn btn-sm btn-primary" data-emie-onclick="retryNotificationDelivery(${r.deliveryId})">重新发送</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无失败的飞书通知</div>';
+    target.innerHTML = rows.length ? `<div class="table-responsive"><table class="data-table"><thead><tr><th>状态</th><th>收件人</th><th>通知标题</th><th>发送内容</th><th>原因</th><th>重试</th><th>操作</th></tr></thead><tbody>${rows.map(r => `<tr><td>${escHtml(r.statusLabel || r.status || '')}</td><td>${escHtml(r.recipientUserId || '')}</td><td>${escHtml(r.title || '')}</td><td style="max-width:320px;white-space:pre-wrap;">${escHtml(r.content || '')}</td><td>${escHtml(r.errorMsg || '—')}</td><td>${r.retryCount ?? 0}</td><td>${['failed','dead_letter'].includes(r.status) ? `<button class="btn btn-sm btn-primary" data-emie-onclick="retryNotificationDelivery(${r.deliveryId})">重新发送</button>` : '—'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无飞书发送记录</div>';
   } catch (e) { target.innerHTML = `<div class="error-state">加载失败：${escHtml(e.message)}</div>`; }
 }
 

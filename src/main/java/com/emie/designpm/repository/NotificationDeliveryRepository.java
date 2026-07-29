@@ -17,4 +17,7 @@ public interface NotificationDeliveryRepository extends JpaRepository<Notificati
 
     @Query("SELECT d FROM NotificationDelivery d WHERE d.channel = 'feishu' AND d.status IN :statuses ORDER BY d.id DESC")
     List<NotificationDelivery> findRecentFeishuByStatuses(@Param("statuses") List<String> statuses);
+
+    @Query("SELECT d FROM NotificationDelivery d WHERE d.channel = 'feishu' ORDER BY d.id DESC")
+    List<NotificationDelivery> findRecentFeishu();
 }

@@ -36,8 +36,8 @@ function previewImage(src, name) {
   const img = document.createElement('img');
   img.src = src;
   img.alt = name || '预览';
-  img.draggable = false;
-  img.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,.5);transition:transform .15s ease;transform:scale(1);pointer-events:none;';
+  img.draggable = true;
+  img.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,.5);transition:transform .15s ease;transform:scale(1);pointer-events:auto;user-select:auto;';
 
   imgWrap.appendChild(img);
 
@@ -78,6 +78,7 @@ function previewImage(src, name) {
   closeBtn.onclick = function() { cleanup(); overlay.remove(); };
   closeBtn.style.cssText = 'position:fixed;top:20px;left:20px;width:40px;height:40px;border-radius:12px;border:none;background:rgba(255,255,255,.9);color:#333;font-size:20px;cursor:pointer;z-index:310;box-shadow:0 2px 12px rgba(0,0,0,.3);';
 
+
   function cleanup() {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
@@ -95,6 +96,23 @@ document.addEventListener('click', function(e) {
   if (img) {
     previewImage(img.dataset.fullSrc || img.src, img.alt || img.title || '');
   }
+});
+
+// 统一控制所有页面图片拖入外部应用时的尺寸，避免使用原图天然像素导致插入过大。
+document.addEventListener('dragstart', function(e) {
+  const image = e.target.closest?.('img.img-clickable');
+  if (!image || !e.dataTransfer || !image.complete) return;
+  try {
+    const maxSide = 1200;
+    const ratio = Math.min(1, maxSide / Math.max(image.naturalWidth || 1, image.naturalHeight || 1));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width) * ratio));
+    canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height) * ratio));
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+    e.dataTransfer.setDragImage(canvas, Math.min(40, canvas.width / 2), Math.min(40, canvas.height / 2));
+    const source = image.dataset.fullSrc || image.src;
+    e.dataTransfer.setData('text/html', `<img src="${source}" width="${canvas.width}" height="${canvas.height}" style="max-width:${canvas.width}px;height:auto;">`);
+  } catch (_) { /* 跨域时保留浏览器默认拖拽 */ }
 });
 
 // ==================== 文件上传工具（multipart 流式 + 进度条）====================
@@ -185,11 +203,32 @@ function renderFileList(list, typeLabel) {
   if (isImage) {
     c.innerHTML = `<div class="image-preview">${list.map((img, i) => canRenderAsImage(img)
       ? `<div style="position:relative;display:inline-block;">
-        <img src="${escHtml(authUrl(img.url))}" alt="${escHtml(img.name)}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+        <img src="${escHtml(authUrl(img.url))}" alt="${escHtml(img.name)}" class="img-clickable" draggable="true" loading="lazy" decoding="async" style="width:180px;height:180px;object-fit:contain;border-radius:6px;border:1px solid var(--gray-200);cursor:grab;background:#fff;">
         <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(img.url)}','${escJsString(img.name)}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:20px;height:20px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
         <button style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button>
       </div>`
       : `<div class="file-item" style="width:100%;"><span class="file-item-name">📐 ${escHtml(img.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(img.size)}</span>${renderAttachmentActions(img, true)}<button class="remove-file" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button></div>`).join('')}</div>`;
+    c.querySelectorAll('img.img-clickable').forEach((image, index) => {
+      image.addEventListener('dragstart', event => {
+        const source = list[index];
+        if (!source?.url || !event.dataTransfer) return;
+        const originalUrl = authUrl(source.url);
+        event.dataTransfer.effectAllowed = 'copy';
+        event.dataTransfer.setData('text/html', `<img src="${originalUrl}" alt="${escHtml(source.name || '')}">`);
+        // 使用原图像素作为拖拽预览，避免把页面缩略图（80×80）带入 PPT。
+        if (image.complete && image.naturalWidth && image.naturalHeight) {
+          try {
+            const canvas = document.createElement('canvas');
+            const maxDragSide = 1200;
+            const ratio = Math.min(1, maxDragSide / Math.max(image.naturalWidth, image.naturalHeight));
+            canvas.width = Math.round(image.naturalWidth * ratio);
+            canvas.height = Math.round(image.naturalHeight * ratio);
+            canvas.getContext('2d').drawImage(image, 0, 0);
+            event.dataTransfer.setDragImage(canvas, Math.min(40, canvas.width / 2), Math.min(40, canvas.height / 2));
+          } catch (_) { /* 跨域图片无法绘制时仍保留原图 URL */ }
+        }
+      });
+    });
   } else {
     c.innerHTML = list.map((f, i) =>
       `<div class="file-item"><span class="file-item-name">📎 ${escHtml(f.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(f.size)}</span>${renderAttachmentActions(f, true)}<button class="remove-file" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button></div>`

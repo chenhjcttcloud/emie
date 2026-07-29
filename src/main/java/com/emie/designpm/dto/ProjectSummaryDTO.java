@@ -24,6 +24,7 @@ public class ProjectSummaryDTO {
     private String ipSubOptions;
     private int taskCount;
     private int approvedTaskCount;
+    private int actionableTaskCount;
     private int progressPercent;
     private Double score;
     private String createdAt;

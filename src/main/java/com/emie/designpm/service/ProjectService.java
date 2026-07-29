@@ -144,11 +144,12 @@ public class ProjectService {
             Long pid = (Long) row[0];
             int total = ((Number) row[1]).intValue();
             int done = ((Number) row[2]).intValue();
-            map.put(pid, new int[]{total, done});
+            int actionable = row.length > 3 ? ((Number) row[3]).intValue() : 0;
+            map.put(pid, new int[]{total, done, actionable});
         }
         // 没有子任务的项目也补 0
         for (Project p : projects) {
-            map.putIfAbsent(p.getId(), new int[]{0, 0});
+            map.putIfAbsent(p.getId(), new int[]{0, 0, 0});
         }
         return map;
     }

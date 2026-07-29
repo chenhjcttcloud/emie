@@ -760,8 +760,8 @@ function taskReject(pid, tid) {
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">↩️ 驳回修改</div></div></div>
       <div class="modal-body">
         <div class="form-group"><label class="form-label"><span class="required">*</span> 修改意见</label><textarea class="form-textarea" id="rejectComments" required placeholder="请详细说明修改意见..." style="min-height:100px;"></textarea></div>
-        <div class="form-group"><label class="form-label">参考图/模型（选填）</label><div class="upload-area" data-emie-onclick="document.getElementById('rejectImageInput').click()"><div>📁 点击上传驳回参考图或模型文件</div><input type="file" id="rejectImageInput" multiple accept="${EMIE.fileAccept.reference}" style="display:none" data-emie-onchange="handleRejectImages(this)"></div><div class="file-list" id="rejectImageList"></div></div>
-        <div class="form-group"><label class="form-label">附件（选填）</label><div class="upload-area" data-emie-onclick="document.getElementById('rejectAttachmentInput').click()"><div>📎 点击上传驳回附件</div><input type="file" id="rejectAttachmentInput" multiple accept="${EMIE.fileAccept.attachment}" style="display:none" data-emie-onchange="handleRejectAttachments(this)"></div><div class="file-list" id="rejectAttachmentList"></div></div>
+        <div class="form-group"><label class="form-label">参考图片（选填）</label><div class="upload-area" data-emie-onclick="document.getElementById('rejectImageInput').click()"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="rejectImageInput" multiple accept="${EMIE.fileAccept.reference}" style="display:none" data-emie-onchange="handleRejectImages(this)"></div><div class="file-list" id="rejectImageList"></div></div>
+        <div class="form-group"><label class="form-label">附件（选填）</label><div class="upload-area" data-emie-onclick="document.getElementById('rejectAttachmentInput').click()"><div>📁 拖拽文件到此处，或点击选择文件</div><input type="file" id="rejectAttachmentInput" multiple accept="${EMIE.fileAccept.attachment}" style="display:none" data-emie-onchange="handleRejectAttachments(this)"></div><div class="file-list" id="rejectAttachmentList"></div></div>
       </div>
       <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskRejectModal')">取消</button><button class="btn btn-danger" data-emie-onclick="submitGuard(this,()=>submitTaskReject(${pid},${tid}))">确认驳回</button></div>
     </div>`;
@@ -774,7 +774,7 @@ function handleRejectImages(input) {
 }
 
 function handleRejectAttachments(input) {
-  handleFileUpload(input, EMIE.projectState.rejectionAttachments, 9, '驳回附件', false);
+  handleFileUpload(input, EMIE.projectState.rejectionAttachments, 5, '驳回附件', false);
   setTimeout(() => renderFileList(EMIE.projectState.rejectionAttachments, '驳回附件'), 0);
 }
 

@@ -201,8 +201,10 @@ public class DashboardController {
         int[] counts = taskCountMap != null ? taskCountMap.get(p.getId()) : null;
         int taskCount = counts != null ? counts[0] : 0;
         int doneCount = counts != null ? counts[1] : 0;
+        int actionableCount = counts != null && counts.length > 2 ? counts[2] : 0;
         dto.setTaskCount(taskCount);
         dto.setApprovedTaskCount(doneCount);
+        dto.setActionableTaskCount(actionableCount);
         dto.setProgressPercent(taskCount > 0 ? (int) (doneCount * 100 / taskCount) : 0);
         dto.setScore(scoreMap != null ? scoreMap.get(p.getId()) : null);
         dto.setCreatedAt(p.getCreatedAt() != null ? p.getCreatedAt().format(DTF) : null);

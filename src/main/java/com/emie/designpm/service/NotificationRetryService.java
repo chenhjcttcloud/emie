@@ -53,8 +53,13 @@ public class NotificationRetryService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> recentFailures() {
+        return recentFeishuDeliveries();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> recentFeishuDeliveries() {
         List<Map<String, Object>> result = new java.util.ArrayList<>();
-        List<NotificationDelivery> recent = deliveries.findRecentFeishuByStatuses(List.of("failed", "dead_letter"));
+        List<NotificationDelivery> recent = deliveries.findRecentFeishu();
         Map<Long, Notification> byId = notifications.findByIdIn(recent.stream()
                 .map(NotificationDelivery::getNotificationId).filter(java.util.Objects::nonNull).distinct().toList())
                 .stream().collect(java.util.stream.Collectors.toMap(Notification::getId, n -> n));
@@ -66,7 +71,9 @@ public class NotificationRetryService {
                 row.put("notificationId", n.getId());
                 row.put("recipientUserId", n.getRecipientUserId());
                 row.put("title", n.getTitle());
+                row.put("content", n.getContent());
                 row.put("status", d.getStatus());
+                row.put("statusLabel", statusLabel(d.getStatus()));
                 row.put("retryCount", d.getRetryCount());
                 row.put("errorMsg", d.getErrorMsg());
                 row.put("nextRetryAt", d.getNextRetryAt());
@@ -75,6 +82,17 @@ public class NotificationRetryService {
             }
         }
         return result.stream().limit(100).toList();
+    }
+
+    private String statusLabel(String status) {
+        return switch (status) {
+            case "delivered" -> "发送成功";
+            case "pending" -> "等待发送";
+            case "failed" -> "发送失败/等待重试";
+            case "dead_letter" -> "失败（已停止重试）";
+            case "blocked" -> "未发送（未绑定飞书）";
+            default -> status == null ? "未知" : status;
+        };
     }
 
     @Transactional

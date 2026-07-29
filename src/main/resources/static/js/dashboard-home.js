@@ -35,8 +35,10 @@ async function renderDashboard(main, role, uid) {
   // 更新全局缓存
   EMIE.state.cache.orders = orders;
 
-  const channel = orders.filter(o => o.type === 'channel_custom');
-  const regular = orders.filter(o => o.type === 'regular');
+  // 工作台只展示可继续推进的项目；终止/待终止/已完成项目进入项目历史，不占用行动视图。
+  const activeOrders = orders.filter(o => !['terminated', 'pending_terminate', 'completed'].includes(String(o.status || '').toLowerCase()) && (o.actionableTaskCount || 0) > 0);
+  const channel = activeOrders.filter(o => o.type === 'channel_custom');
+  const regular = activeOrders.filter(o => o.type === 'regular');
 
   const myDept = EMIE.state.departments.find(d => d.headUserId === uid);
   const rolePanelsHtml = `<div id="dashboardRoleStatus" class="dashboard-role-status-loading">正在加载状态面板…</div>`;
