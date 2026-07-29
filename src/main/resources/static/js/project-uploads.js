@@ -35,6 +35,8 @@ function previewImage(src, name) {
 
   const img = document.createElement('img');
   img.src = src;
+  img.className = 'ppt-drag-image';
+  img.dataset.fullSrc = src;
   img.alt = name || '预览';
   img.draggable = true;
   img.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,.5);transition:transform .15s ease;transform:scale(1);pointer-events:auto;user-select:auto;';
@@ -100,7 +102,7 @@ document.addEventListener('click', function(e) {
 
 // 统一控制所有页面图片拖入外部应用时的尺寸，避免使用原图天然像素导致插入过大。
 document.addEventListener('dragstart', function(e) {
-  const image = e.target.closest?.('img.img-clickable');
+  const image = e.target.closest?.('img.img-clickable, img.ppt-drag-image');
   if (!image || !e.dataTransfer || !image.complete) return;
   try {
     const maxSide = 1200;
@@ -208,27 +210,6 @@ function renderFileList(list, typeLabel) {
         <button style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button>
       </div>`
       : `<div class="file-item" style="width:100%;"><span class="file-item-name">📐 ${escHtml(img.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(img.size)}</span>${renderAttachmentActions(img, true)}<button class="remove-file" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button></div>`).join('')}</div>`;
-    c.querySelectorAll('img.img-clickable').forEach((image, index) => {
-      image.addEventListener('dragstart', event => {
-        const source = list[index];
-        if (!source?.url || !event.dataTransfer) return;
-        const originalUrl = authUrl(source.url);
-        event.dataTransfer.effectAllowed = 'copy';
-        event.dataTransfer.setData('text/html', `<img src="${originalUrl}" alt="${escHtml(source.name || '')}">`);
-        // 使用原图像素作为拖拽预览，避免把页面缩略图（80×80）带入 PPT。
-        if (image.complete && image.naturalWidth && image.naturalHeight) {
-          try {
-            const canvas = document.createElement('canvas');
-            const maxDragSide = 1200;
-            const ratio = Math.min(1, maxDragSide / Math.max(image.naturalWidth, image.naturalHeight));
-            canvas.width = Math.round(image.naturalWidth * ratio);
-            canvas.height = Math.round(image.naturalHeight * ratio);
-            canvas.getContext('2d').drawImage(image, 0, 0);
-            event.dataTransfer.setDragImage(canvas, Math.min(40, canvas.width / 2), Math.min(40, canvas.height / 2));
-          } catch (_) { /* 跨域图片无法绘制时仍保留原图 URL */ }
-        }
-      });
-    });
   } else {
     c.innerHTML = list.map((f, i) =>
       `<div class="file-item"><span class="file-item-name">📎 ${escHtml(f.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(f.size)}</span>${renderAttachmentActions(f, true)}<button class="remove-file" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button></div>`

@@ -760,6 +760,7 @@ function taskReject(pid, tid) {
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">↩️ 驳回修改</div></div></div>
       <div class="modal-body">
         <div class="form-group"><label class="form-label"><span class="required">*</span> 修改意见</label><textarea class="form-textarea" id="rejectComments" required placeholder="请详细说明修改意见..." style="min-height:100px;"></textarea></div>
+        <div class="form-group"><label class="form-label"><span class="required">*</span> 要求完成时间</label><input type="date" class="form-input" id="rejectDeadline" required min="${new Date().toISOString().slice(0, 10)}"><div class="form-hint">设计师重新交付需在此日期前完成</div></div>
         <div class="form-group"><label class="form-label">参考图片（选填）</label><div class="upload-area" data-emie-onclick="document.getElementById('rejectImageInput').click()"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="rejectImageInput" multiple accept="${EMIE.fileAccept.reference}" style="display:none" data-emie-onchange="handleRejectImages(this)"></div><div class="file-list" id="rejectImageList"></div></div>
         <div class="form-group"><label class="form-label">附件（选填）</label><div class="upload-area" data-emie-onclick="document.getElementById('rejectAttachmentInput').click()"><div>📁 拖拽文件到此处，或点击选择文件</div><input type="file" id="rejectAttachmentInput" multiple accept="${EMIE.fileAccept.attachment}" style="display:none" data-emie-onchange="handleRejectAttachments(this)"></div><div class="file-list" id="rejectAttachmentList"></div></div>
       </div>
@@ -780,10 +781,13 @@ function handleRejectAttachments(input) {
 
 async function submitTaskReject(pid, tid) {
   const comments = document.getElementById('rejectComments')?.value || '';
+  const requiredCompletionDate = document.getElementById('rejectDeadline')?.value || '';
   if (!comments) { alert('请填写修改意见'); return; }
+  if (!requiredCompletionDate) { alert('请选择要求完成时间'); return; }
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/reject`, {
       comments,
+      requiredCompletionDate,
       rejectionReferenceImagesJson: JSON.stringify(EMIE.projectState.rejectionImages),
       rejectionAttachmentsJson: JSON.stringify(EMIE.projectState.rejectionAttachments),
       currentUser: getCurrentUserName(),

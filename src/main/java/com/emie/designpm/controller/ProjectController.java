@@ -245,6 +245,7 @@ public class ProjectController {
             item.put("selfInnovation", task.getSelfInnovation());
             item.put("projectId", project.getId());
             item.put("projectType", project.getType());
+            item.put("projectStatus", project.getStatus());
             item.put("projectName", projectDisplayName(project));
             item.put("scoringRecords", scoringByTask.getOrDefault(task.getId(), List.of()));
             item.put("rejectionRecords", rejectionRecords(project, task));

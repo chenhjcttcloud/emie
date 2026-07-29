@@ -1139,6 +1139,10 @@ public class ProjectService {
                 .findFirst().orElseThrow(() -> new RuntimeException("子任务不存在"));
 
         String comments = SecurityUtil.sanitizeText((String) body.get("comments"), 500);
+        String requiredCompletionDate = SecurityUtil.sanitizeText((String) body.get("requiredCompletionDate"), 20);
+        if (requiredCompletionDate == null || !requiredCompletionDate.matches("\\d{4}-\\d{2}-\\d{2}")) {
+            throw new RuntimeException("请选择有效的要求完成时间");
+        }
         String rejectionReferenceImagesJson = validateAndCleanFiles(
                 (String) body.getOrDefault("rejectionReferenceImagesJson", "[]"), true);
         String rejectionAttachmentsJson = validateAndCleanFiles(
@@ -1158,6 +1162,7 @@ public class ProjectService {
         rejectReviewRecord(task, currentRole, currentUserId, currentUser, comments);
         task.setStatus("rejected");
         task.setReviewComments(comments);
+        task.setPlannedDate(requiredCompletionDate);
         Map<String, Object> submittedSnapshot = new LinkedHashMap<>();
         submittedSnapshot.put("deliverables", task.getDeliverables());
         submittedSnapshot.put("referenceImagesJson", task.getReferenceImagesJson());
@@ -1167,6 +1172,7 @@ public class ProjectService {
         submittedSnapshot.put("submittedByName", task.getDesignerName());
         Map<String, Object> rejectionSnapshot = new LinkedHashMap<>();
         rejectionSnapshot.put("reason", comments == null ? "" : comments);
+        rejectionSnapshot.put("requiredCompletionDate", requiredCompletionDate);
         rejectionSnapshot.put("rejectionReferenceImagesJson", rejectionReferenceImagesJson);
         rejectionSnapshot.put("rejectionAttachmentsJson", rejectionAttachmentsJson);
         p.getLogs().add(new ActivityLog(
@@ -1174,7 +1180,7 @@ public class ProjectService {
                 currentUser, currentRole, p, "sub_task", task.getId(),
                 toJson(submittedSnapshot),
                 toJson(rejectionSnapshot),
-                "status,reviewComments,rejectionReferenceImagesJson,rejectionAttachmentsJson"));
+                "status,reviewComments,plannedDate,rejectionReferenceImagesJson,rejectionAttachmentsJson"));
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(rejectionReferenceImagesJson, "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(rejectionAttachmentsJson, "sub_task", task.getId());

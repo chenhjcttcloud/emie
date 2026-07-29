@@ -7,6 +7,7 @@ const swrFetch = (...args) => EMIE.actions.swrFetch(...args);
 const navigate = (...args) => EMIE.actions.navigate(...args);
 const navigateTaskBucket = (...args) => EMIE.actions.navigateTaskBucket(...args);
 const getProjectStatusInfo = (...args) => EMIE.actions.getProjectStatusInfo(...args);
+const getTaskStatusInfo = (...args) => EMIE.actions.getTaskStatusInfo(...args);
 const formatDate = (...args) => EMIE.actions.formatDate(...args);
 const renderScore = (...args) => EMIE.actions.renderScore(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
@@ -41,6 +42,7 @@ async function renderDashboard(main, role, uid) {
   const regular = activeOrders.filter(o => o.type === 'regular');
 
   const myDept = EMIE.state.departments.find(d => d.headUserId === uid);
+  const executionRole = ['designer', 'supplychain', 'promotion'].includes(EMIE.state.currentRole);
   const rolePanelsHtml = `<div id="dashboardRoleStatus" class="dashboard-role-status-loading">正在加载状态面板…</div>`;
 
   main.innerHTML = `
@@ -58,9 +60,8 @@ async function renderDashboard(main, role, uid) {
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigate('scoring')"><div class="stat-icon yellow">⭐</div><div><div class="stat-value">${stats.pendingScore}</div><div class="stat-label">待评分</div></div></div>
     </div>
     ${rolePanelsHtml}
-    ${orders.length === 0 ? `<div class="empty"><div class="empty-icon">📭</div><p>暂无您负责的项目</p></div>` : ''}
-    ${renderProjectSummary(channel, '📦 渠道定制单')}
-    ${renderProjectSummary(regular, '🏭 公司常规品')}
+    ${!executionRole && orders.length === 0 ? `<div class="empty"><div class="empty-icon">📭</div><p>暂无您负责的项目</p></div>` : ''}
+    ${executionRole ? '<div id="dashboardExecutionTasks"><div class="empty" style="padding:24px;"><p>正在加载关联子任务…</p></div></div>' : renderProjectSummary(channel, '📦 渠道定制单') + renderProjectSummary(regular, '🏭 公司常规品')}
     <div id="dashboardWorkloadSection"></div>
   `;
   // 仅 admin 可见工作量概览
@@ -68,6 +69,73 @@ async function renderDashboard(main, role, uid) {
     loadDashboardWorkloadSection();
   }
   loadDashboardRoleStatus(role, uid, myDept);
+  if (executionRole) loadDashboardExecutionTasks(uid, EMIE.state.currentRole);
+}
+
+async function loadDashboardExecutionTasks(uid, role) {
+  const container = document.getElementById('dashboardExecutionTasks');
+  if (!container) return;
+  try {
+    const rows = await apiGet('/projects/my-subtasks');
+    const tasks = (rows || []).filter(t => {
+      const roleMatches = role === 'designer'
+        ? (!t.assigneeRole || t.assigneeRole === 'designer')
+        : t.assigneeRole === role;
+      const projectIsActive = !['completed', 'pending_terminate', 'terminated']
+        .includes(String(t.projectStatus || '').toLowerCase());
+      return roleMatches && (t.designerId === uid || t.relation === 'assignee')
+        && projectIsActive
+        && ['pending', 'accepted', 'rejected'].includes(t.status);
+    });
+    const statusOrder = { rejected: 0, pending: 1, accepted: 2 };
+    tasks.sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9)
+      || String(a.plannedDate || '9999-12-31').localeCompare(String(b.plannedDate || '9999-12-31')));
+    EMIE.dashboardState.designerTaskCache = tasks;
+    if (!tasks.length) {
+      container.innerHTML = '<div class="empty"><div class="empty-icon">🎉</div><p>当前没有需要处理的关联子任务</p></div>';
+      return;
+    }
+    const renderGroup = (groupTasks, title) => {
+      if (!groupTasks.length) return '';
+      const display = groupTasks.slice(0, 5);
+      return `
+        <div class="type-section">
+          <div class="card" style="padding:0;">
+            <div style="padding:20px 20px 0;">
+              <div class="type-section-title">${title} <span class="count">共 ${groupTasks.length} 个</span></div>
+            </div>
+            <div style="padding:0 20px 20px;">
+              <div class="table-wrap"><table>
+                <thead><tr><th>子任务</th><th>所属项目</th><th>发布人</th><th>要求完成</th><th>状态</th><th>驳回意见</th><th>操作</th></tr></thead>
+                <tbody>${display.map(t => {
+                  const statusInfo = getTaskStatusInfo(t.status);
+                  return `
+                    <tr style="cursor:pointer;" data-emie-onclick="openPublishedSubTaskDetail(${t.id})">
+                      <td><strong>${escHtml(t.name || '-')}</strong><div style="font-size:11px;color:var(--gray-400);margin-top:2px;">#${t.id}</div></td>
+                      <td>${escHtml(t.projectName || '未命名项目')}</td>
+                      <td>${escHtml(t.publisherName || '-')}</td>
+                      <td>${formatDate(t.plannedDate)}</td>
+                      <td><span class="badge ${statusInfo.cls}">${statusInfo.icon} ${statusInfo.label}</span></td>
+                      <td style="max-width:260px;white-space:normal;">${t.status === 'rejected' ? escHtml(t.reviewComments || '待查看详情') : '—'}</td>
+                      <td><button class="btn btn-outline btn-sm" data-emie-onclick="event.stopPropagation();openPublishedSubTaskDetail(${t.id})">查看</button></td>
+                    </tr>`;
+                }).join('')}
+                </tbody>
+              </table></div>
+              ${groupTasks.length > 5 ? '<div style="text-align:center;margin-top:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="navigate(\'tasks\')">查看全部关联子任务 →</button></div>' : ''}
+            </div>
+          </div>
+        </div>`;
+    };
+    const channelTasks = tasks.filter(t => t.projectType === 'channel_custom');
+    const regularTasks = tasks.filter(t => t.projectType === 'regular');
+    const otherTasks = tasks.filter(t => !['channel_custom', 'regular'].includes(t.projectType));
+    container.innerHTML = renderGroup(channelTasks, '📦 渠道定制单子任务')
+      + renderGroup(regularTasks, '🏭 公司常规品子任务')
+      + renderGroup(otherTasks, '📌 其他关联子任务');
+  } catch (error) {
+    container.innerHTML = `<div class="empty"><p>关联子任务加载失败：${escHtml(error.message)}</p></div>`;
+  }
 }
 
 async function loadDashboardRoleStatus(role, uid, myDept) {

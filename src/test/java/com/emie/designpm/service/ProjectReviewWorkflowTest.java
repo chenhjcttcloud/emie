@@ -184,7 +184,8 @@ class ProjectReviewWorkflowTest {
                 "currentRole", "sales",
                 "currentUserId", "sales-1",
                 "currentUser", "销售甲",
-                "comments", "二审需修改"
+                "comments", "二审需修改",
+                "requiredCompletionDate", "2026-08-15"
         ));
 
         assertReview(secondReview, "sales", "second", "rejected", null);
