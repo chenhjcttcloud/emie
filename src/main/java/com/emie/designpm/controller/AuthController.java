@@ -5,6 +5,7 @@ import com.emie.designpm.entity.ActivityLog;
 import com.emie.designpm.repository.UserRepository;
 import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.service.PermissionService;
+import com.emie.designpm.service.RedisSessionStore;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,14 +31,22 @@ public class AuthController {
     private final UserRepository userRepository;
     private final PermissionService permissionService;
     private final ActivityLogRepository activityLogRepository;
+    private static RedisSessionStore redisSessionStore;
 
     // 简单内存 Token 管理（生产环境应使用 Redis/DB）
     private static final Map<String, AuthSession> TOKENS = new ConcurrentHashMap<>();
 
     public AuthController(UserRepository userRepository, PermissionService permissionService, ActivityLogRepository activityLogRepository) {
+        this(userRepository, permissionService, activityLogRepository, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AuthController(UserRepository userRepository, PermissionService permissionService,
+                          ActivityLogRepository activityLogRepository, RedisSessionStore redisSessionStore) {
         this.userRepository = userRepository;
         this.permissionService = permissionService;
         this.activityLogRepository = activityLogRepository;
+        AuthController.redisSessionStore = redisSessionStore;
     }
 
     @PostMapping("/login")
@@ -89,7 +98,7 @@ public class AuthController {
 
         // 生成 token
         String token = generateToken();
-        TOKENS.put(token, new AuthSession(user.getUserId(), user.getRole(), user.getName()));
+        putSession(token, new AuthSession(user.getUserId(), user.getRole(), user.getName()));
 
         // 记录登录日志
         String roleLabel = switch (user.getRole()) {
@@ -132,7 +141,7 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<Map<String, String>> logout(@RequestHeader("X-Auth-Token") String token) {
-        AuthSession session = TOKENS.get(token);
+        AuthSession session = getSession(token);
         if (session != null) {
             // 在删除 token 之前记录日志（需要用户信息）
             String roleLabel = switch (session.role()) {
@@ -150,6 +159,7 @@ public class AuthController {
             } catch (Exception ignored) {}
         }
         TOKENS.remove(token);
+        removeSession(token);
         return ResponseEntity.ok(Map.of("message", "已退出登录"));
     }
 
@@ -202,7 +212,7 @@ public class AuthController {
         }
 
         // 替换当前会话为目标用户信息，保留原始登录用户信息
-        TOKENS.put(token, new AuthSession(
+        putSession(token, new AuthSession(
             target.getUserId(), target.getRole(), target.getName(),
             session.originalUserId(), session.originalRole(), session.expiresAt()));
 
@@ -236,7 +246,7 @@ public class AuthController {
     // 校验 token 并返回 session（供过滤器使用）
     public static AuthSession validateToken(String token) {
         if (token == null) return null;
-        AuthSession session = TOKENS.get(token);
+        AuthSession session = getSession(token);
         if (session == null) return null;
         if (System.currentTimeMillis() >= session.expiresAt()) {
             TOKENS.remove(token, session);
@@ -286,8 +296,24 @@ public class AuthController {
     /** 供 Feishu SSO 使用：生成 token 并存入会话 */
     public static String generateToken(String userId, String role, String name) {
         String token = generateToken();
-        TOKENS.put(token, new AuthSession(userId, role, name));
+        putSession(token, new AuthSession(userId, role, name));
         return token;
+    }
+
+    private static AuthSession getSession(String token) {
+        AuthSession local = TOKENS.get(token);
+        if (redisSessionStore == null) return local;
+        AuthSession remote = redisSessionStore.get(token);
+        return remote != null ? remote : local;
+    }
+
+    private static void putSession(String token, AuthSession session) {
+        TOKENS.put(token, session);
+        if (redisSessionStore != null) redisSessionStore.put(token, session);
+    }
+
+    private static void removeSession(String token) {
+        if (redisSessionStore != null) redisSessionStore.remove(token);
     }
 
     public static String sha256(String input) {

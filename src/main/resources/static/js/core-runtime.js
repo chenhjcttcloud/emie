@@ -1,5 +1,10 @@
 // EMIE 前端核心：API、认证、全局状态、导航与通用 UI 工具
 const EMIE = window.EMIE = window.EMIE || {};
+// 所有上传入口共用的前端白名单；后端 SecurityUtil 是最终安全校验。
+EMIE.fileAccept = Object.freeze({
+  reference: 'image/*,.ai,.step,.stp',
+  attachment: '.ai,.step,.stp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*'
+});
 EMIE.modules = EMIE.modules || {};
 EMIE.actions = EMIE.actions || Object.create(null);
 EMIE.registerActions = EMIE.registerActions || function registerActions(actions) {
