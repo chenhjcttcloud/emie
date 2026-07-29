@@ -521,6 +521,7 @@ select.form-select:disabled::-ms-expand { display: none; }
 
 /* Upload */
 .upload-area { border:2px dashed var(--gray-300); border-radius:8px; padding:24px; text-align:center; cursor:pointer; color:var(--gray-400); transition:all .15s; }
+.upload-hint { margin-top:6px; font-size:12px; color:var(--gray-400); line-height:1.5; }
 .upload-area:hover { border-color:var(--primary); color:var(--primary); background:var(--primary-light); }
 .upload-area.drag-over { border-color:var(--primary); color:var(--primary); background:var(--primary-light); box-shadow:0 0 0 4px rgba(79,70,229,.12); transform:translateY(-1px); }
 .file-list { margin-top:12px; }

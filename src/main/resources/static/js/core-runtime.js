@@ -2,9 +2,26 @@
 const EMIE = window.EMIE = window.EMIE || {};
 // 所有上传入口共用的前端白名单；后端 SecurityUtil 是最终安全校验。
 EMIE.fileAccept = Object.freeze({
-  reference: 'image/*,.ai,.step,.stp',
+  reference: 'image/*',
   attachment: '.ai,.step,.stp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*'
 });
+EMIE.installUploadHints = EMIE.installUploadHints || function installUploadHints(root = document) {
+  root.querySelectorAll?.('.upload-area').forEach(area => {
+    if (area.querySelector('.upload-hint')) return;
+    const input = area.querySelector('input[type="file"]');
+    if (!input) return;
+    const hint = document.createElement('div');
+    hint.className = 'upload-hint';
+    hint.textContent = input.accept === EMIE.fileAccept.reference
+      ? '支持 JPG、PNG、GIF、BMP、WebP；最多 6 张，单个文件不超过 200MB'
+      : '支持 AI、STEP、STP、PDF、Office、TXT、CSV、ZIP、RAR、7Z 及图片；单个文件不超过 200MB';
+    area.appendChild(hint);
+  });
+};
+if (!EMIE._uploadHintObserver) {
+  EMIE._uploadHintObserver = new MutationObserver(() => EMIE.installUploadHints());
+  EMIE._uploadHintObserver.observe(document.documentElement, { childList: true, subtree: true });
+}
 EMIE.modules = EMIE.modules || {};
 EMIE.actions = EMIE.actions || Object.create(null);
 EMIE.registerActions = EMIE.registerActions || function registerActions(actions) {

@@ -137,7 +137,7 @@ async function handleFileUpload(input, list, maxCount, typeLabel, isImage) {
     if (input?.value !== undefined) input.value = '';
     return;
   }
-  const maxBytes = isImage ? 200 * 1024 * 1024 : 2 * 1024 * 1024 * 1024;
+  const maxBytes = 200 * 1024 * 1024;
   const blocked = ['.sql', '.sh', '.bat', '.cmd', '.exe', '.dll', '.so', '.jar', '.war', '.php', '.asp', '.jsp', '.py', '.vbs', '.ps1', '.msi', '.reg', '.scr'];
 
   for (const f of files) {
@@ -240,24 +240,24 @@ function removeFileItem(listKey, idx) {
   renderFileList(list, typeLabel);
 }
 
-function handleCreateRefImages(input) { handleFileUpload(input, EMIE.projectState.createRefImages, 9, '参考图片', true); }
+function handleCreateRefImages(input) { handleFileUpload(input, EMIE.projectState.createRefImages, 6, '参考图片', true); }
 function handleCreateAttachments(input) { handleFileUpload(input, EMIE.projectState.createAttachments, 5, '附件', false); }
-function handleDeliverImages(input) { handleFileUpload(input, EMIE.projectState.deliverImages, 9, '交付参考图片', true); }
+function handleDeliverImages(input) { handleFileUpload(input, EMIE.projectState.deliverImages, 6, '交付参考图片', true); }
 function handleDeliverAttachments(input) { handleFileUpload(input, EMIE.projectState.deliverAttachments, 5, '交付附件', false); }
 
 // 全局拖拽上传：所有 .upload-area 根据其隐藏 input 自动复用现有上传逻辑。
 function handleUploadDrop(input, files) {
   const id = input?.id || '';
   const config = {
-    createRefImageInput: [EMIE.projectState.createRefImages, 9, '参考图片', true],
+    createRefImageInput: [EMIE.projectState.createRefImages, 6, '参考图片', true],
     createAttachmentInput: [EMIE.projectState.createAttachments, 5, '附件', false],
-    subTaskRefImageInput: [EMIE.projectState.subTaskRefImages, 9, '参考图片', true],
+    subTaskRefImageInput: [EMIE.projectState.subTaskRefImages, 6, '参考图片', true],
     subTaskAttachmentInput: [EMIE.projectState.subTaskAttachments, 9, '附件', false],
-    editRefImageInput: [EMIE.projectState.editTaskRefImages, 9, '编辑参考图片', true],
+    editRefImageInput: [EMIE.projectState.editTaskRefImages, 6, '编辑参考图片', true],
     editAttachmentInput: [EMIE.projectState.editTaskAttachments, 9, '编辑附件', false],
-    editProjectRefImageInput: [EMIE.projectState.editProjectRefImages, 9, '编辑项目参考图片', true],
+    editProjectRefImageInput: [EMIE.projectState.editProjectRefImages, 6, '编辑项目参考图片', true],
     editProjectAttachmentInput: [EMIE.projectState.editProjectAttachments, 5, '编辑项目附件', false],
-    deliverImageInput: [EMIE.projectState.deliverImages, 9, '交付参考图片', true],
+    deliverImageInput: [EMIE.projectState.deliverImages, 6, '交付参考图片', true],
     deliverAttachmentInput: [EMIE.projectState.deliverAttachments, 5, '交付附件', false],
   }[id];
   if (config) handleFileUpload(files, ...config);

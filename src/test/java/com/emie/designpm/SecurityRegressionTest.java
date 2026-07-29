@@ -39,8 +39,9 @@ class SecurityRegressionTest {
         assertTrue(SecurityUtil.isValidAttachmentFile("reference.pdf"));
         assertTrue(SecurityUtil.isValidAttachmentFile("model.step"));
         assertTrue(SecurityUtil.isValidAttachmentFile("model.STP"));
-        assertTrue(SecurityUtil.isValidImageFile("reference-model.STEP"));
-        assertTrue(SecurityUtil.isValidImageFile("reference-model.stp"));
+        assertFalse(SecurityUtil.isValidImageFile("reference-model.STEP"));
+        assertFalse(SecurityUtil.isValidImageFile("reference-model.stp"));
+        assertFalse(SecurityUtil.isValidImageFile("design.ai"));
     }
 
     @Test

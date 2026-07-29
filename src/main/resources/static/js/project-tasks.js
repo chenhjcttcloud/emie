@@ -27,7 +27,7 @@ const handleDeliverAttachments = (...args) => EMIE.actions.handleDeliverAttachme
 // ==================== 添加 / 编辑子任务 ====================
 
 function handleSubTaskRefImages(input) {
-  handleFileUpload(input, EMIE.projectState.subTaskRefImages, 9, '参考图片', true);
+  handleFileUpload(input, EMIE.projectState.subTaskRefImages, 6, '参考图片', true);
 }
 function handleSubTaskAttachments(input) {
   handleFileUpload(input, EMIE.projectState.subTaskAttachments, 9, '附件', false);
@@ -339,7 +339,7 @@ function editTask(pid, tid) {
   }).catch(() => doneOpenModal('editTaskModal'));
 }
 
-function handleEditRefImages(input) { handleFileUpload(input, EMIE.projectState.editTaskRefImages, 9, '编辑参考图片', true); }
+function handleEditRefImages(input) { handleFileUpload(input, EMIE.projectState.editTaskRefImages, 6, '编辑参考图片', true); }
 function handleEditAttachments(input) { handleFileUpload(input, EMIE.projectState.editTaskAttachments, 9, '编辑附件', false); }
 
 async function submitEditTask(pid, tid) {
@@ -769,7 +769,7 @@ function taskReject(pid, tid) {
 }
 
 function handleRejectImages(input) {
-  handleFileUpload(input, EMIE.projectState.rejectionImages, 9, '驳回参考图', true);
+  handleFileUpload(input, EMIE.projectState.rejectionImages, 6, '驳回参考图', true);
   setTimeout(() => renderFileList(EMIE.projectState.rejectionImages, '驳回参考图'), 0);
 }
 

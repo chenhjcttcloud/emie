@@ -575,7 +575,7 @@ function openEditProject(pid) {
   });
 }
 
-function handleEditProjectRefImages(input) { handleFileUpload(input, EMIE.projectState.editProjectRefImages, 9, '编辑项目参考图片', true); }
+function handleEditProjectRefImages(input) { handleFileUpload(input, EMIE.projectState.editProjectRefImages, 6, '编辑项目参考图片', true); }
 function handleEditProjectAttachments(input) { handleFileUpload(input, EMIE.projectState.editProjectAttachments, 5, '编辑项目附件', false); }
 
 async function submitEditProject(pid) {
