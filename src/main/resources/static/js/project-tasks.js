@@ -1,4 +1,7 @@
 const EMIE = window.EMIE;
+const REFERENCE_FILE_ACCEPT = EMIE.fileAccept?.reference || 'image/*';
+const ATTACHMENT_FILE_ACCEPT = EMIE.fileAccept?.attachment
+  || '.ai,.step,.stp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*';
 const roleLabel = (...args) => EMIE.actions.roleLabel(...args);
 const getCurrentUserName = (...args) => EMIE.actions.getCurrentUserName(...args);
 const getCurrentUserId = (...args) => EMIE.actions.getCurrentUserId(...args);
@@ -113,7 +116,7 @@ function addSubTask(pid) {
           <div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片（可选）</div>
           <div class="upload-area" data-emie-onclick="document.getElementById('subTaskRefImageInput').click()">
             <div>📁 拖拽图片到此处，或点击选择图片</div>
-            <input type="file" id="subTaskRefImageInput" multiple accept="${EMIE.fileAccept.reference}" style="display:none" data-emie-onchange="handleSubTaskRefImages(this)">
+            <input type="file" id="subTaskRefImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleSubTaskRefImages(this)">
           </div>
           <div class="file-list" id="createRefImageList"></div>
         </div>
@@ -121,7 +124,7 @@ function addSubTask(pid) {
           <div class="form-label" style="margin-bottom:8px;">📎 附件（可选）</div>
           <div class="upload-area" data-emie-onclick="document.getElementById('subTaskAttachmentInput').click()">
             <div>📁 拖拽文件到此处，或点击选择文件</div>
-            <input type="file" id="subTaskAttachmentInput" multiple accept="${EMIE.fileAccept.attachment}" style="display:none" data-emie-onchange="handleSubTaskAttachments(this)">
+            <input type="file" id="subTaskAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleSubTaskAttachments(this)">
           </div>
           <div class="file-list" id="createAttachmentList"></div>
         </div>
@@ -316,7 +319,7 @@ function editTask(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片（可选）</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('editRefImageInput').click()">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
-              <input type="file" id="editRefImageInput" multiple accept="${EMIE.fileAccept.reference}" style="display:none" data-emie-onchange="handleEditRefImages(this)">
+              <input type="file" id="editRefImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleEditRefImages(this)">
             </div>
             <div class="file-list" id="createRefImageList"></div>
           </div>
@@ -324,7 +327,7 @@ function editTask(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">📎 附件（可选）</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('editAttachmentInput').click()">
               <div>📁 拖拽文件到此处，或点击选择文件</div>
-            <input type="file" id="editAttachmentInput" multiple accept="${EMIE.fileAccept.attachment}" style="display:none" data-emie-onchange="handleEditAttachments(this)">
+            <input type="file" id="editAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleEditAttachments(this)">
             </div>
             <div class="file-list" id="createAttachmentList"></div>
           </div>
@@ -474,7 +477,7 @@ async function taskDeliver(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('deliverImageInput').click()">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
-              <input type="file" id="deliverImageInput" multiple accept="${EMIE.fileAccept.reference}" style="display:none" data-emie-onchange="handleDeliverImages(this)">
+              <input type="file" id="deliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleDeliverImages(this)">
             </div>
             <div class="file-list" id="deliverImageList"></div>
           </div>
@@ -482,7 +485,7 @@ async function taskDeliver(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">📎 交付附件</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('deliverAttachmentInput').click()">
               <div>📁 拖拽文件到此处，或点击选择文件</div>
-            <input type="file" id="deliverAttachmentInput" multiple accept="${EMIE.fileAccept.attachment}" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
+            <input type="file" id="deliverAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
             </div>
             <div class="file-list" id="deliverAttachmentList"></div>
           </div>
@@ -569,7 +572,7 @@ async function taskRedeliver(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('deliverImageInput').click()">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
-              <input type="file" id="deliverImageInput" multiple accept="${EMIE.fileAccept.reference}" style="display:none" data-emie-onchange="handleDeliverImages(this)">
+              <input type="file" id="deliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleDeliverImages(this)">
             </div>
             <div class="file-list" id="deliverImageList"></div>
           </div>
@@ -577,7 +580,7 @@ async function taskRedeliver(pid, tid) {
             <div class="form-label" style="margin-bottom:8px;">📎 交付附件</div>
             <div class="upload-area" data-emie-onclick="document.getElementById('deliverAttachmentInput').click()">
               <div>📁 拖拽文件到此处，或点击选择文件</div>
-            <input type="file" id="deliverAttachmentInput" multiple accept="${EMIE.fileAccept.attachment}" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
+            <input type="file" id="deliverAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
             </div>
             <div class="file-list" id="deliverAttachmentList"></div>
           </div>
@@ -642,12 +645,12 @@ async function taskCorrectDelivery(pid, tid) {
           </form>
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label">🖼️ 当前交付参考图（可删除错误文件或补充文件）</div>
-            <div class="upload-area" data-emie-onclick="document.getElementById('correctDeliverImageInput').click()"><div>📁 点击补充图片或模型文件</div><input type="file" id="correctDeliverImageInput" multiple accept="${EMIE.fileAccept.reference}" style="display:none" data-emie-onchange="handleDeliverImages(this)"></div>
+            <div class="upload-area" data-emie-onclick="document.getElementById('correctDeliverImageInput').click()"><div>📁 点击补充图片或模型文件</div><input type="file" id="correctDeliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleDeliverImages(this)"></div>
             <div class="file-list" id="deliverImageList"></div>
           </div>
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label">📎 当前交付附件（可删除错误文件或补充文件）</div>
-            <div class="upload-area" data-emie-onclick="document.getElementById('correctDeliverAttachmentInput').click()"><div>📁 点击补充附件</div><input type="file" id="correctDeliverAttachmentInput" multiple accept="${EMIE.fileAccept.attachment}" style="display:none" data-emie-onchange="handleDeliverAttachments(this)"></div>
+            <div class="upload-area" data-emie-onclick="document.getElementById('correctDeliverAttachmentInput').click()"><div>📁 点击补充附件</div><input type="file" id="correctDeliverAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleDeliverAttachments(this)"></div>
             <div class="file-list" id="deliverAttachmentList"></div>
           </div>
         </div>
@@ -761,8 +764,8 @@ function taskReject(pid, tid) {
       <div class="modal-body">
         <div class="form-group"><label class="form-label"><span class="required">*</span> 修改意见</label><textarea class="form-textarea" id="rejectComments" required placeholder="请详细说明修改意见..." style="min-height:100px;"></textarea></div>
         <div class="form-group"><label class="form-label"><span class="required">*</span> 要求完成时间</label><input type="date" class="form-input" id="rejectDeadline" required min="${new Date().toISOString().slice(0, 10)}"><div class="form-hint">设计师重新交付需在此日期前完成</div></div>
-        <div class="form-group"><label class="form-label">参考图片（选填）</label><div class="upload-area" data-emie-onclick="document.getElementById('rejectImageInput').click()"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="rejectImageInput" multiple accept="${EMIE.fileAccept.reference}" style="display:none" data-emie-onchange="handleRejectImages(this)"></div><div class="file-list" id="rejectImageList"></div></div>
-        <div class="form-group"><label class="form-label">附件（选填）</label><div class="upload-area" data-emie-onclick="document.getElementById('rejectAttachmentInput').click()"><div>📁 拖拽文件到此处，或点击选择文件</div><input type="file" id="rejectAttachmentInput" multiple accept="${EMIE.fileAccept.attachment}" style="display:none" data-emie-onchange="handleRejectAttachments(this)"></div><div class="file-list" id="rejectAttachmentList"></div></div>
+        <div class="form-group"><label class="form-label">参考图片（选填）</label><div class="upload-area" data-emie-onclick="document.getElementById('rejectImageInput').click()"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="rejectImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleRejectImages(this)"></div><div class="file-list" id="rejectImageList"></div></div>
+        <div class="form-group"><label class="form-label">附件（选填）</label><div class="upload-area" data-emie-onclick="document.getElementById('rejectAttachmentInput').click()"><div>📁 拖拽文件到此处，或点击选择文件</div><input type="file" id="rejectAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleRejectAttachments(this)"></div><div class="file-list" id="rejectAttachmentList"></div></div>
       </div>
       <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskRejectModal')">取消</button><button class="btn btn-danger" data-emie-onclick="submitGuard(this,()=>submitTaskReject(${pid},${tid}))">确认驳回</button></div>
     </div>`;

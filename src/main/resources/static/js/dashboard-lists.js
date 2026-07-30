@@ -1,4 +1,7 @@
 const EMIE = window.EMIE;
+const REFERENCE_FILE_ACCEPT = EMIE.fileAccept?.reference || 'image/*';
+const ATTACHMENT_FILE_ACCEPT = EMIE.fileAccept?.attachment
+  || '.ai,.step,.stp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*';
 const hasPermission = (...args) => EMIE.actions.hasPermission(...args);
 const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const apiPost = (...args) => EMIE.actions.apiPost(...args);
@@ -93,7 +96,7 @@ function openDesignRequirementDelivery(id) {
         <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
         <div class="upload-area" data-emie-onclick="document.getElementById('designRequirementDeliverImageInput').click()">
           <div>📁 拖拽图片到此处，或点击选择图片</div>
-          <input type="file" id="designRequirementDeliverImageInput" multiple accept="${EMIE.fileAccept.reference}" style="display:none" data-emie-onchange="handleDeliverImages(this)">
+          <input type="file" id="designRequirementDeliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleDeliverImages(this)">
         </div>
         <div class="file-list" id="deliverImageList"></div>
       </div>
@@ -101,7 +104,7 @@ function openDesignRequirementDelivery(id) {
         <div class="form-label" style="margin-bottom:8px;">📎 交付附件</div>
         <div class="upload-area" data-emie-onclick="document.getElementById('designRequirementDeliverAttachmentInput').click()">
           <div>📁 拖拽文件到此处，或点击选择文件</div>
-          <input type="file" id="designRequirementDeliverAttachmentInput" multiple accept="${EMIE.fileAccept.attachment}" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
+          <input type="file" id="designRequirementDeliverAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
         </div>
         <div class="file-list" id="deliverAttachmentList"></div>
       </div>

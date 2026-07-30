@@ -91,9 +91,9 @@ class FrontendModuleLayoutTest {
             if (module.equals("dashboard-designer.js")) {
                 currentIndex = bootstrap.indexOf("./" + module + "?v=177");
             }
-            if (module.equals("dashboard-lists.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=185");
+            if (module.equals("dashboard-lists.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=186");
             if (module.equals("core-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=173");
-            if (module.equals("core-runtime.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=155");
+            if (module.equals("core-runtime.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=156");
             if (module.equals("core-auth.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=151");
             if (module.equals("core-identity.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=151");
             if (module.equals("dashboard-projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=159");
@@ -106,15 +106,15 @@ class FrontendModuleLayoutTest {
             if (module.equals("admin-org.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=165");
             if (module.equals("project-uploads.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=157");
             if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=188");
-            if (module.equals("project-form.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=183");
-            if (module.equals("project-tasks.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=185");
+            if (module.equals("project-form.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=184");
+            if (module.equals("project-tasks.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=186");
             if (module.equals("projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             assertTrue(currentIndex > previousIndex, module + " 的 ES Module 加载顺序不正确");
             previousIndex = currentIndex;
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=235\"></script>"),
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=236\"></script>"),
                 "页面应只通过当前版本 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
@@ -145,6 +145,14 @@ class FrontendModuleLayoutTest {
         assertTrue(dashboardLists.contains("hasPermission('project.channel.create')")
                         && dashboardLists.contains("hasPermission('design_requirement.create')"),
                 "新建入口应使用能力清单而不是角色名称硬编码");
+        String projectForm = readResource("/static/js/project-form.js");
+        String projectTasks = readResource("/static/js/project-tasks.js");
+        for (String uploadModule : List.of(dashboardLists, projectForm, projectTasks)) {
+            assertTrue(uploadModule.contains("EMIE.fileAccept?.reference || 'image/*'"),
+                    "上传弹窗必须兼容仍缓存旧 core-runtime 的浏览器");
+            assertFalse(uploadModule.contains("EMIE.fileAccept.reference"),
+                    "上传弹窗不得直接读取可能尚未初始化的文件类型配置");
+        }
         String projectUploads = readResource("/static/js/project-uploads.js");
         assertTrue(projectUploads.contains("const originalBlob = payload.blob")
                         && projectUploads.contains("return { type: originalType, blob: originalBlob }"),
