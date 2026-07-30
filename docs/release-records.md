@@ -13,6 +13,21 @@
 
 ---
 
+## 2026-07-30 原图复制与跨应用拖拽发布
+
+| 项目 | 记录 |
+|---|---|
+| 状态 | 发布成功 |
+| 旧生产提交 / 生产提交 | `2835d08ab4749cc8f07a2ffb5d339a961dc23cdc` / `d14e494efc17d7b44dbfaa1a83f484fe80ebadec` |
+| Gitee 推送 | `project_manager_system` 已推送，本地与远端功能提交完整 SHA 一致 |
+| 变更范围 | 快捷键复制直接写入原始图片 Blob，保留 PNG 像素、DPI 和宽高比；跨应用拖拽优先输出原始图片 `File`，并提供 `DownloadURL`、URL、纯文本和 HTML 兼容载荷；兼容已归档记录仍存在本地同步文件的图片读取与缩略图。 |
+| 本地验证 | Java 21 `clean package` 成功，110 项测试通过；全部相关前端 JavaScript 语法检查通过。 |
+| 数据库 | 无结构或数据迁移；发布前备份 `/home/emie/emie-deploy-backups/20260730_104041/designpm.sql.gz`，219843 字节且 `gzip -t` 通过。 |
+| 应用产物 | 本地、上传产物、镜像与生产容器 JAR SHA-256 均为 `f53266633b8e62c136fcda080344f5564a1a00478d0024f8ca21c44042156883`。 |
+| 回滚 | 旧 JAR 位于 `/home/emie/emie-deploy-backups/20260730_104041/app.jar`，旧镜像标签为 `emie-app:backup-20260730_104041`，停止的旧容器为 `emie-app-old-20260730_104041`；未执行回滚。 |
+| 生产验证 | `release-sha.txt` 与功能提交一致；`emie-app:d14e494` running、重启次数 0；内网首页、公开配置和 `emie.emie.cn:9001` 均 HTTP 200且 TLS 校验通过；生产加载 `bootstrap.js?v=235`、`project-uploads.js?v=157`，四类拖拽兼容载荷均存在；未登录受保护项目接口返回预期 401；MySQL、Redis、OpenResty 均正常运行，启动日志无应用严重错误。 |
+| 验收边界 | 快捷键和右键复制已由用户验收；浏览器向桌面版 PowerPoint/WPS 输出拖拽文件受浏览器、操作系统和目标应用组合影响，生产真实拖拽仍需用户最终验收。 |
+
 ## 2026-07-29 WPS 快捷键复制与项目协作可见性发布
 
 | 项目 | 记录 |

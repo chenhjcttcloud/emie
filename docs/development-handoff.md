@@ -1,19 +1,19 @@
 # EMIE 开发交接状态
 
-## 2026-07-30 原图文件跨应用拖拽（本地）
+## 2026-07-30 原图文件跨应用拖拽（已发布）
 
 - 在快捷键复制已改为保留原图 Blob 的基础上，跨应用拖拽复用同一原图缓存；图片放大或鼠标进入缩略图时提前异步读取原图，避免在 `dragstart` 后才读取而错过浏览器唯一可写拖拽数据的同步窗口。
 - `dragstart` 会构造带原始 Blob、MIME 和文件名的 `File` 并加入 `DataTransfer.items`，使 PowerPoint/WPS 优先按真实图片文件导入并保留像素、DPI 和宽高比；同时提供 Chrome `DownloadURL`、`text/uri-list`、`text/plain` 和 `text/html` 兼容降级。
 - 删除原先最长边 1200px 的 Canvas 拖拽载荷；Canvas 只决定拖动浮层的旧方案不能控制外部应用实际收到的文件，也会造成尺寸语义不一致。
 - 原图尚未准备完成时会取消本次拖动并提示稍后重试，避免悄悄把缩略图或错误格式送入 PowerPoint。浏览器向外部应用输出文件仍受浏览器和操作系统支持差异影响，需以用户实际 Firefox/Chrome → PowerPoint/WPS 链路验收。
-- 前端缓存更新至 `project-uploads.js?v=157`、`bootstrap.js?v=235`；前端语法与 Java 21 `clean package` 共 110 项测试全部通过，本地测试服务已重启。当前仅本地，尚未提交、推送或部署生产。
+- 前端缓存更新至 `project-uploads.js?v=157`、`bootstrap.js?v=235`；前端语法与 Java 21 `clean package` 共 110 项测试全部通过。功能提交 `d14e494efc17d7b44dbfaa1a83f484fe80ebadec` 已推送 Gitee 并部署到 `192.168.200.51`，内外网入口、资源版本、JAR 校验值和依赖容器均验证通过；生产真实 PowerPoint/WPS 拖拽仍需用户最终验收。
 
-## 2026-07-30 生产 HTTPS 快捷键复制比例修复（本地）
+## 2026-07-30 生产 HTTPS 快捷键复制比例修复（已发布）
 
 - 用户实测生产 HTTPS 中第一次右键复制正常，但 `Command/Ctrl + C` 粘贴尺寸异常，随后再次右键复制也可能异常。抽查同步原图为 4000×2400、300 DPI；原快捷键实现先缩至最长边 2400px 并经 Canvas 重新编码，导致 DPI 元数据丢失，PowerPoint/WPS 会按默认 72/96 DPI 解释位图尺寸。
 - 快捷键复制现优先 `fetch` 当前原图并把服务器返回的原始 PNG Blob 直接写入剪贴板，不缩放、不经 Canvas，因此保留像素、DPI 和原始 PNG 元数据；浏览器支持原格式时其他图片格式也直接写入，不支持时才等尺寸转为 PNG。
 - 删除失败时选中页面图片并执行 `execCommand('copy')` 的降级路径；失败只提示使用浏览器右键复制，不再留下 DOM 选区或污染下一次原生复制。
-- 快捷键复制修复最初验证版本为 `project-uploads.js?v=156`、`bootstrap.js?v=234`，后续与原图文件拖拽一起更新至更高版本；前端语法及 Java 21 `clean package` 共 110 项测试全部通过。当前仅在本地测试项目修改，尚未提交、推送或部署生产。
+- 快捷键复制修复最初验证版本为 `project-uploads.js?v=156`、`bootstrap.js?v=234`，后续与原图文件拖拽一起更新至更高版本；前端语法及 Java 21 `clean package` 共 110 项测试全部通过。已随功能提交 `d14e494efc17d7b44dbfaa1a83f484fe80ebadec` 推送并部署生产，用户已确认生产 HTTPS 下快捷键和右键连续复制正常。
 
 ## 2026-07-30 测试环境图片复制与跨应用拖拽诊断
 
