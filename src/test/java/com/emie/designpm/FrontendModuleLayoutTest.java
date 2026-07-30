@@ -91,7 +91,7 @@ class FrontendModuleLayoutTest {
             if (module.equals("dashboard-designer.js")) {
                 currentIndex = bootstrap.indexOf("./" + module + "?v=177");
             }
-            if (module.equals("dashboard-lists.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=186");
+            if (module.equals("dashboard-lists.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=187");
             if (module.equals("core-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=173");
             if (module.equals("core-runtime.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=156");
             if (module.equals("core-auth.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=151");
@@ -114,7 +114,7 @@ class FrontendModuleLayoutTest {
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=236\"></script>"),
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=237\"></script>"),
                 "页面应只通过当前版本 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
@@ -322,6 +322,13 @@ class FrontendModuleLayoutTest {
                         && lists.contains("handleDeliverImages")
                         && lists.contains("handleDeliverAttachments"),
                 "设计/送审需求交付应支持参考图和附件");
+        assertTrue(lists.contains("renderDesignRequirementMaterials")
+                        && lists.contains("detail.referenceImagesJson, detail.attachmentsJson")
+                        && lists.contains("detail.deliveryReferenceImagesJson, detail.deliveryAttachmentsJson")
+                        && lists.contains("EMIE.actions.renderProjectReferenceImages")
+                        && lists.contains("EMIE.actions.renderTaskAttachments")
+                        && lists.contains("🗂️ 需求资料"),
+                "设计/送审需求详情必须展示需求资料和设计师交付资料");
         assertTrue(detail.contains("🔵 项目总进度"),
                 "项目生命周期进度应明确命名为项目总进度");
         assertTrue(detail.indexOf("renderSubTaskProgress(detail)")

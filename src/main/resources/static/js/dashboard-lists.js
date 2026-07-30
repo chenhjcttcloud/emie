@@ -15,6 +15,26 @@ const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const openCreateProject = (...args) => EMIE.actions.openCreateProject(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
 
+function renderDesignRequirementMaterials(referenceImagesJson, attachmentsJson, delivery = false) {
+  const imageRenderer = delivery
+    ? EMIE.actions.renderSubTaskImages
+    : EMIE.actions.renderProjectReferenceImages;
+  const attachmentRenderer = delivery
+    ? EMIE.actions.renderTaskAttachments
+    : EMIE.actions.renderProjectAttachments;
+  const images = typeof imageRenderer === 'function'
+    ? (delivery
+      ? imageRenderer(referenceImagesJson)
+      : imageRenderer({ referenceImagesJson }))
+    : '';
+  const attachments = typeof attachmentRenderer === 'function'
+    ? (delivery
+      ? attachmentRenderer(attachmentsJson)
+      : attachmentRenderer({ attachmentsJson }))
+    : '';
+  return images + attachments;
+}
+
 function openListItemDetail(type, id) {
   if (type === 'design_requirement') {
     openDesignRequirementDetail(id);
@@ -31,6 +51,10 @@ async function openDesignRequirementDetail(id) {
     const myScore = (detail.scoringRecords || []).find(s =>
       s.reviewerId === EMIE.state.currentUserId || (!s.reviewerId && s.role === myRole));
     const canDeliver = myRole === 'designer' && detail.designerId === EMIE.state.currentUserId;
+    const requirementMaterials = renderDesignRequirementMaterials(
+      detail.referenceImagesJson, detail.attachmentsJson);
+    const deliveryMaterials = renderDesignRequirementMaterials(
+      detail.deliveryReferenceImagesJson, detail.deliveryAttachmentsJson, true);
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
     modal.id = 'designRequirementDetailModal';
@@ -59,11 +83,17 @@ async function openDesignRequirementDetail(id) {
             <div style="margin-top:12px;"><div class="detail-label">产品要求</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(detail.productRequirements || '-')}</div></div>
             ${detail.description ? `<div style="margin-top:12px;"><div class="detail-label">细节描述</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(detail.description)}</div></div>` : ''}
           </div>
+          ${requirementMaterials ? `
+          <div class="detail-section">
+            <div class="detail-section-title">🗂️ 需求资料</div>
+            ${requirementMaterials}
+          </div>` : ''}
           <div class="detail-section">
             <div class="detail-section-title">📦 交付与评分</div>
             ${detail.deliveryContent
               ? `<div class="detail-label">设计师交付成果</div><div class="detail-value" style="white-space:pre-wrap;margin-bottom:12px;">${escHtml(detail.deliveryContent)}</div>`
               : '<div style="color:var(--gray-400);font-size:13px;margin-bottom:12px;">设计师尚未提交交付成果</div>'}
+            ${deliveryMaterials ? `<div style="margin-bottom:14px;">${deliveryMaterials}</div>` : ''}
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               ${(detail.scoringRecords || []).map(s => `<span class="badge ${s.status === 'completed' ? 'badge-completed' : 'badge-pending'}">${escHtml(s.stage === 'self' ? '设计师自评' : roleLabel(s.role) + '评分')}：${s.status === 'completed' ? `${s.score}分` : s.status === 'pending' ? '待评分' : '等待中'}</span>`).join('')}
             </div>
