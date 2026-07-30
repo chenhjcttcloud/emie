@@ -5,6 +5,7 @@ import com.emie.designpm.controller.FileController;
 import com.emie.designpm.entity.FileRecord;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.repository.FileRecordRepository;
+import com.emie.designpm.repository.DesignRequirementRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.FileArchiveService;
 import com.emie.designpm.service.FilePreviewService;
@@ -129,6 +130,36 @@ class FileAccessRegressionTest {
         AuthController.AuthSession session = new AuthController.AuthSession("designer-1", "designer", "设计师");
         when(access.findVisibleProjectsWithTasks(session)).thenReturn(List.of(visibleProject));
         when(tasks.countFileReferencesByProjectIds(List.of(2L), storedName)).thenReturn(1L);
+
+        Boolean allowed = ReflectionTestUtils.invokeMethod(controller, "canAccessFile",
+                session, storedName, storedName);
+
+        assertTrue(allowed);
+    }
+
+    @Test
+    void plannerCanOpenDesignRequirementDeliveryImageUploadedByDesigner() {
+        String storedName = "design-requirement-delivery.png";
+        FileRecordRepository records = mock(FileRecordRepository.class);
+        ProjectAccessService access = mock(ProjectAccessService.class);
+        SubTaskRepository tasks = mock(SubTaskRepository.class);
+        DesignRequirementRepository requirements = mock(DesignRequirementRepository.class);
+        FileController controller = new FileController(mock(FileArchiveService.class), records, access, tasks,
+                mock(FilePreviewService.class), mock(com.emie.designpm.service.FileThumbnailService.class),
+                requirements);
+
+        FileRecord deliveryImage = FileRecord.builder()
+                .storedName(storedName)
+                .originalName("蓝v联动海报.png")
+                .fileSize(1_430_008L)
+                .ownerUserId("designer-1")
+                .storageTier("local")
+                .build();
+
+        when(records.findByStoredName(storedName)).thenReturn(Optional.of(deliveryImage));
+        AuthController.AuthSession session = new AuthController.AuthSession("planner-1", "planner", "产品企划");
+        when(access.findVisibleProjectsWithTasks(session)).thenReturn(List.of());
+        when(requirements.countVisibleFileReferences("planner-1", storedName)).thenReturn(1L);
 
         Boolean allowed = ReflectionTestUtils.invokeMethod(controller, "canAccessFile",
                 session, storedName, storedName);

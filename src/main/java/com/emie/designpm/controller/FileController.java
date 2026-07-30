@@ -2,6 +2,7 @@ package com.emie.designpm.controller;
 
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.SubTask;
+import com.emie.designpm.repository.DesignRequirementRepository;
 import com.emie.designpm.repository.FileRecordRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.FileArchiveService;
@@ -45,6 +46,7 @@ public class FileController {
     private final FileRecordRepository fileRecordRepository;
     private final ProjectAccessService projectAccessService;
     private final SubTaskRepository subTaskRepository;
+    private final DesignRequirementRepository designRequirementRepository;
     private final FilePreviewService filePreviewService;
     private final FileThumbnailService fileThumbnailService;
 
@@ -54,13 +56,26 @@ public class FileController {
                           ProjectAccessService projectAccessService,
                           SubTaskRepository subTaskRepository,
                           FilePreviewService filePreviewService,
-                          FileThumbnailService fileThumbnailService) {
+                          FileThumbnailService fileThumbnailService,
+                          DesignRequirementRepository designRequirementRepository) {
         this.fileArchiveService = fileArchiveService;
         this.fileRecordRepository = fileRecordRepository;
         this.projectAccessService = projectAccessService;
         this.subTaskRepository = subTaskRepository;
         this.filePreviewService = filePreviewService;
         this.fileThumbnailService = fileThumbnailService;
+        this.designRequirementRepository = designRequirementRepository;
+    }
+
+    /** 保留旧测试/嵌入式调用方的构造器兼容性。 */
+    public FileController(FileArchiveService fileArchiveService,
+                          FileRecordRepository fileRecordRepository,
+                          ProjectAccessService projectAccessService,
+                          SubTaskRepository subTaskRepository,
+                          FilePreviewService filePreviewService,
+                          FileThumbnailService fileThumbnailService) {
+        this(fileArchiveService, fileRecordRepository, projectAccessService, subTaskRepository,
+                filePreviewService, fileThumbnailService, null);
     }
 
     /** 保留旧测试/嵌入式调用方的构造器兼容性。 */
@@ -317,16 +332,19 @@ public class FileController {
     private boolean canAccessFile(AuthController.AuthSession session, String storedName, String relativePath) {
         return fileRecordRepository.findByStoredName(storedName)
                 .map(record -> {
-                    // 历史文件可能没有 owner/target 绑定，但仍被项目或子任务 JSON 引用。
-                    // 先按当前用户可见项目判断，避免这类历史文件被误判为无权访问。
+                    // 历史文件可能没有 owner/target 绑定，但仍被业务数据 JSON 引用。
+                    // 按当前用户可见的项目、子任务及设计需求判断，避免历史文件被误判为无权访问。
                     if (record.getTargetType() == null && record.getTargetId() == null) {
                         return (record.getOwnerUserId() != null && session.userId().equals(record.getOwnerUserId()))
-                                || isFileVisibleInAccessibleProjects(session, storedName, relativePath);
+                                || isFileVisibleInAccessibleProjects(session, storedName, relativePath)
+                                || isFileVisibleInAccessibleDesignRequirements(session, storedName);
                     }
                     return canAccessBoundTarget(session, record.getTargetType(), record.getTargetId())
-                            || isFileVisibleInAccessibleProjects(session, storedName, relativePath);
+                            || isFileVisibleInAccessibleProjects(session, storedName, relativePath)
+                            || isFileVisibleInAccessibleDesignRequirements(session, storedName);
                 })
-                .orElseGet(() -> isFileVisibleInAccessibleProjects(session, storedName, relativePath));
+                .orElseGet(() -> isFileVisibleInAccessibleProjects(session, storedName, relativePath)
+                        || isFileVisibleInAccessibleDesignRequirements(session, storedName));
     }
 
     private boolean canAccessBoundTarget(AuthController.AuthSession session, String targetType, Long targetId) {
@@ -363,6 +381,12 @@ public class FileController {
 
     private List<Project> getAccessibleProjectsWithTasks(AuthController.AuthSession session) {
         return projectAccessService.findVisibleProjectsWithTasks(session);
+    }
+
+    private boolean isFileVisibleInAccessibleDesignRequirements(AuthController.AuthSession session,
+                                                                 String storedName) {
+        return designRequirementRepository != null
+                && designRequirementRepository.countVisibleFileReferences(session.userId(), storedName) > 0;
     }
 
     private boolean jsonContainsFile(String json, String storedName, String relativePath) {
