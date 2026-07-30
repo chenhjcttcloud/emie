@@ -17,11 +17,16 @@
 
 | 项目 | 记录 |
 |---|---|
-| 状态 | 待发布 |
+| 状态 | 发布成功 |
+| 操作时间 | 2026-07-30 11:50–12:01 CST |
+| 旧生产提交 / 生产提交 | `d14e494efc17d7b44dbfaa1a83f484fe80ebadec` / `1c2143db1c5f616aad14e6577cbbf65c06c92245` |
+| Gitee 推送 | `project_manager_system` 已推送，本地与远端功能提交完整 SHA 一致 |
 | 变更范围 | 修复旧 `core-runtime.js?v=155` 被浏览器长期缓存后，与新交付模块混用导致读取 `EMIE.fileAccept.reference` 报错；上传弹窗增加安全默认值，并递增核心运行时、消费模块和启动入口缓存版本。 |
-| 本地验证 | Java 21 `clean package` 成功，110 项测试通过；全部前端 JavaScript 语法检查及缓存兼容结构回归测试通过。发布后将继续核对静态资源版本、容器、接口、日志及生产公网入口。 |
-| 数据库 | 无结构或数据迁移；部署前仍按标准流程生成并验证生产备份。 |
-| 回滚 | 发布前记录旧生产提交并保留旧 JAR、镜像和容器；验证失败时恢复上一稳定应用版本，数据库无需回滚。 |
+| 本地验证 | Java 21 `clean package` 成功，110 项测试通过；全部前端 JavaScript 语法检查及缓存兼容结构回归测试通过。 |
+| 数据库 | 无结构或数据迁移；发布前备份 `/home/emie/emie-deploy-backups/20260730_115730/designpm.sql.gz`，222912 字节且 `gzip -t` 通过。第一次备份凭据传递方式未被 MySQL 接受，应用尚未切换且数据库未改动；改用生产应用配置的容器内变量后重新生成上述有效备份。 |
+| 应用产物 | 本地、上传产物、镜像与生产容器 JAR SHA-256 均为 `1f818b0e4480070c93489145b5e53ab31614563727917de838d389028cb9ac5d`。 |
+| 回滚 | 旧 JAR 位于 `/home/emie/emie-deploy-backups/20260730_115730/app.jar`，旧镜像标签为 `emie-app:backup-20260730_115730`，停止的旧容器为 `emie-app-old-20260730_115730`；未执行回滚，数据库无需迁移回滚。 |
+| 生产验证 | `release-sha.txt` 与功能提交一致；`emie-app:1c2143d` running、重启次数 0；内网首页、公开配置和 `emie.emie.cn:9001` 均 HTTP 200且 TLS 校验通过；生产加载 `bootstrap.js?v=236`、`core-runtime.js?v=156`、`dashboard-lists.js?v=186`、`project-form.js?v=184`、`project-tasks.js?v=186`，三个上传模块均包含旧缓存兜底且不存在不安全直接读取；未登录受保护项目接口返回预期 401；MySQL、Redis、OpenResty 正常运行，启动日志无应用严重错误。 |
 
 ## 2026-07-30 原图复制与跨应用拖拽发布
 

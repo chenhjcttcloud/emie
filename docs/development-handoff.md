@@ -1,10 +1,11 @@
 # EMIE 开发交接状态
 
-## 2026-07-30 交付成果弹窗缓存兼容热修（待发布）
+## 2026-07-30 交付成果弹窗缓存兼容热修（已发布）
 
 - 根因已确认：`core-runtime.js?v=155` 在 7 月 27 日已被长期缓存，7 月 29 日加入 `EMIE.fileAccept` 时未递增该资源版本；生产静态资源设置了 30 天 `immutable`，导致部分设计师浏览器同时运行旧核心模块和新交付模块，打开交付弹窗时读取 `EMIE.fileAccept.reference` 报错。
 - `dashboard-lists.js`、`project-form.js`、`project-tasks.js` 的上传类型读取均增加安全默认值，即使旧核心缓存混入也不会让弹窗崩溃；核心运行时、三个消费模块和启动入口同步递增缓存版本。
-- 增加前端结构回归断言，确保上传弹窗不再直接读取可能缺失的 `EMIE.fileAccept.reference`；全部前端 JavaScript 语法检查及 Java 21 `clean package` 已通过，共 110 项测试。当前尚未提交、推送或部署。
+- 增加前端结构回归断言，确保上传弹窗不再直接读取可能缺失的 `EMIE.fileAccept.reference`；全部前端 JavaScript 语法检查及 Java 21 `clean package` 已通过，共 110 项测试。
+- 功能提交 `1c2143db1c5f616aad14e6577cbbf65c06c92245` 已推送 Gitee 并部署到 `192.168.200.51`；生产容器、内外网入口、JAR 校验值、资源版本、旧缓存兜底及依赖容器均验证通过。数据库与旧应用回滚点位于 `/home/emie/emie-deploy-backups/20260730_115730/`。
 
 ## 2026-07-30 原图文件跨应用拖拽（已发布）
 
