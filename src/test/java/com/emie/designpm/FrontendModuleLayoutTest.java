@@ -104,7 +104,7 @@ class FrontendModuleLayoutTest {
             if (module.equals("admin-roles.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=151");
             if (module.equals("admin-workload.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             if (module.equals("admin-org.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=165");
-            if (module.equals("project-uploads.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=155");
+            if (module.equals("project-uploads.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=157");
             if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=188");
             if (module.equals("project-form.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=183");
             if (module.equals("project-tasks.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=185");
@@ -114,7 +114,7 @@ class FrontendModuleLayoutTest {
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=233\"></script>"),
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=235\"></script>"),
                 "页面应只通过当前版本 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");
@@ -145,6 +145,23 @@ class FrontendModuleLayoutTest {
         assertTrue(dashboardLists.contains("hasPermission('project.channel.create')")
                         && dashboardLists.contains("hasPermission('design_requirement.create')"),
                 "新建入口应使用能力清单而不是角色名称硬编码");
+        String projectUploads = readResource("/static/js/project-uploads.js");
+        assertTrue(projectUploads.contains("const originalBlob = payload.blob")
+                        && projectUploads.contains("return { type: originalType, blob: originalBlob }"),
+                "快捷键复制 PNG 时应直接写入原图字节，保留原图 DPI");
+        assertFalse(projectUploads.contains("const maxPayloadSide = 2400"),
+                "快捷键复制不得再缩小并重编码原图");
+        assertFalse(projectUploads.contains("document.execCommand('copy')"),
+                "快捷键复制失败不得污染随后浏览器右键复制的剪贴板格式");
+        assertTrue(projectUploads.contains("new File([payload.blob], payload.fileName")
+                        && projectUploads.contains("e.dataTransfer.items?.add(file)")
+                        && projectUploads.contains("e.dataTransfer.setData('DownloadURL'"),
+                "拖入 PowerPoint/WPS 时应优先提供原始图片文件并保留浏览器降级格式");
+        assertTrue(projectUploads.contains("document.addEventListener('pointerover'")
+                        && projectUploads.contains("preparePresentationImageDrag(image)"),
+                "原图必须在 dragstart 前预取，避免异步操作错过可写拖拽数据窗口");
+        assertFalse(projectUploads.contains("const maxSide = 1200"),
+                "跨应用拖拽不得再用缩放后的 Canvas 载荷替代原图文件");
     }
 
     @Test

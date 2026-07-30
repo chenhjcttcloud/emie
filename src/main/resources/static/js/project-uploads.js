@@ -8,13 +8,13 @@ const showDownloadOptions = (...args) => EMIE.actions.showDownloadOptions(...arg
 const renderAttachmentActions = (...args) => EMIE.actions.renderAttachmentActions(...args);
 
 let activePreviewImage = null;
+const presentationImagePayloadCache = new Map();
+const presentationImagePayloadCacheLimit = 4;
 
 function createPresentationImageCanvas(image) {
-  const maxPayloadSide = 2400;
-  const payloadRatio = Math.min(1, maxPayloadSide / Math.max(image.naturalWidth, image.naturalHeight));
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(image.naturalWidth * payloadRatio));
-  canvas.height = Math.max(1, Math.round(image.naturalHeight * payloadRatio));
+  canvas.width = Math.max(1, image.naturalWidth);
+  canvas.height = Math.max(1, image.naturalHeight);
   canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
   return canvas;
 }
@@ -25,6 +25,83 @@ function canvasToPngBlob(canvas) {
   });
 }
 
+async function getPresentationClipboardImage(image) {
+  const payload = await getPresentationImagePayload(image);
+  const originalBlob = payload.blob;
+  const originalType = (originalBlob.type || '').toLowerCase();
+  const canWriteOriginal = originalType === 'image/png'
+    || (originalType && typeof ClipboardItem.supports === 'function' && ClipboardItem.supports(originalType));
+  if (canWriteOriginal) {
+    return { type: originalType, blob: originalBlob };
+  }
+
+  // 浏览器通常只保证支持 PNG；非 PNG 图片才进行等尺寸转换。
+  // 不再缩放图片，避免改变像素尺寸；PNG 原图会走上面的直写路径以保留 DPI 等元数据。
+  return { type: 'image/png', blob: await canvasToPngBlob(createPresentationImageCanvas(image)) };
+}
+
+function presentationImageSource(image) {
+  return image.dataset.fullSrc || image.currentSrc || image.src;
+}
+
+function presentationImageFileName(image, mimeType) {
+  const extensionByType = {
+    'image/png': '.png',
+    'image/jpeg': '.jpg',
+    'image/gif': '.gif',
+    'image/webp': '.webp',
+    'image/bmp': '.bmp'
+  };
+  const extension = extensionByType[mimeType] || '.png';
+  let name = (image.alt || image.title || 'EMIE原图').trim()
+    .replace(/[\\/:*?"<>|]+/g, '_');
+  if (!name) name = 'EMIE原图';
+  if (!/\.(png|jpe?g|gif|webp|bmp)$/i.test(name)) name += extension;
+  return name;
+}
+
+function getPresentationImagePayload(image) {
+  const source = presentationImageSource(image);
+  let pending = presentationImagePayloadCache.get(source);
+  if (pending) return pending;
+
+  while (presentationImagePayloadCache.size >= presentationImagePayloadCacheLimit) {
+    presentationImagePayloadCache.delete(presentationImagePayloadCache.keys().next().value);
+  }
+  pending = fetch(source, {
+    credentials: 'same-origin',
+    cache: 'force-cache'
+  }).then(async response => {
+    if (!response.ok) throw new Error('原图读取失败');
+    const blob = await response.blob();
+    const type = (blob.type || 'image/png').toLowerCase();
+    return {
+      source,
+      blob,
+      type,
+      fileName: presentationImageFileName(image, type)
+    };
+  }).catch(error => {
+    presentationImagePayloadCache.delete(source);
+    throw error;
+  });
+  presentationImagePayloadCache.set(source, pending);
+  return pending;
+}
+
+function preparePresentationImageDrag(image) {
+  if (image._emiePresentationDragPayload) return;
+  getPresentationImagePayload(image).then(payload => {
+    if (!image.isConnected || presentationImageSource(image) !== payload.source) return;
+    image._emiePresentationDragPayload = payload;
+    image.draggable = true;
+    image.style.cursor = 'grab';
+  }).catch(() => {
+    image.draggable = true;
+    image.style.cursor = 'grab';
+  });
+}
+
 function showImageCopyFeedback(image, text) {
   const feedback = image.closest('.modal-overlay')?.querySelector('.ppt-copy-feedback');
   if (!feedback) return;
@@ -32,15 +109,6 @@ function showImageCopyFeedback(image, text) {
   window.setTimeout(() => {
     if (feedback.isConnected && feedback.textContent === text) feedback.textContent = '100%';
   }, 1200);
-}
-
-function selectPreviewImage(image) {
-  const selection = window.getSelection();
-  if (!selection) return;
-  const range = document.createRange();
-  range.selectNode(image);
-  selection.removeAllRanges();
-  selection.addRange(range);
 }
 
 // EMIE 项目域：上传、项目详情、子任务工作流、评分与分享
@@ -129,6 +197,7 @@ function previewImage(src, name) {
   overlay.appendChild(imgWrap);
   overlay.appendChild(zoomLabel);
   document.body.appendChild(overlay);
+  preparePresentationImageDrag(img);
 }
 
 // 全局点击图片预览委托
@@ -139,15 +208,14 @@ document.addEventListener('click', function(e) {
   }
 });
 
-// 放大图激活时，⌘C / Ctrl+C 直接写入 PNG 位图，与浏览器右键“复制图像”保持同类数据格式。
-// HTTPS 下使用原生图片剪贴板；HTTP 测试环境通过选中原图保留浏览器原生复制作为降级。
+// 放大图激活时，⌘C / Ctrl+C 直接写入原始图片字节。
+// PNG 不再经过 Canvas 重编码，从而保留原图 DPI，避免 PowerPoint/WPS 按错误 DPI 放大。
 document.addEventListener('keydown', async function(e) {
   if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== 'c') return;
   const image = activePreviewImage;
   if (!image || !image.isConnected || !image.complete || !image.naturalWidth || !image.naturalHeight) return;
 
   if (!window.isSecureContext || !window.ClipboardItem || !navigator.clipboard?.write) {
-    selectPreviewImage(image);
     showImageCopyFeedback(image, '当前地址请右键复制图像');
     return;
   }
@@ -155,32 +223,56 @@ document.addEventListener('keydown', async function(e) {
   e.preventDefault();
   e.stopImmediatePropagation();
   try {
-    const canvas = createPresentationImageCanvas(image);
-    const pngBlob = await canvasToPngBlob(canvas);
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
-    showImageCopyFeedback(image, '已复制高清原图');
+    const clipboardImage = await getPresentationClipboardImage(image);
+    await navigator.clipboard.write([
+      new ClipboardItem({ [clipboardImage.type]: clipboardImage.blob })
+    ]);
+    showImageCopyFeedback(image, '已复制原始图片');
   } catch (_) {
-    selectPreviewImage(image);
-    document.execCommand('copy');
-    showImageCopyFeedback(image, '已复制原图');
+    // 不再选中页面中的图片或调用 execCommand，避免污染随后浏览器右键复制的剪贴板格式。
+    showImageCopyFeedback(image, '快捷键复制失败，请右键复制图像');
   }
 }, true);
 
-// 统一控制所有页面图片拖入外部应用时的尺寸，避免使用原图天然像素导致插入过大。
+// 鼠标停留时提前读取原图；dragstart 必须同步写入 DataTransfer，不能在拖动开始后再异步 fetch。
+document.addEventListener('pointerover', function(e) {
+  const image = e.target.closest?.('img.img-clickable, img.ppt-drag-image');
+  if (image) preparePresentationImageDrag(image);
+});
+
+// 向外部应用同时提供真实 File、Chrome DownloadURL 和标准 URL/HTML 降级格式。
+// PowerPoint/WPS 优先接收原始文件 Blob，可保留原图像素、DPI 和宽高比。
 document.addEventListener('dragstart', function(e) {
   const image = e.target.closest?.('img.img-clickable, img.ppt-drag-image');
   if (!image || !e.dataTransfer || !image.complete) return;
+  const payload = image._emiePresentationDragPayload;
+  if (!payload) {
+    e.preventDefault();
+    preparePresentationImageDrag(image);
+    showImageCopyFeedback(image, '原图准备中，请稍后拖拽');
+    return;
+  }
+
   try {
-    const maxSide = 1200;
-    const ratio = Math.min(1, maxSide / Math.max(image.naturalWidth || 1, image.naturalHeight || 1));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width) * ratio));
-    canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height) * ratio));
-    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-    e.dataTransfer.setDragImage(canvas, Math.min(40, canvas.width / 2), Math.min(40, canvas.height / 2));
-    const source = image.dataset.fullSrc || image.src;
-    e.dataTransfer.setData('text/html', `<img src="${source}" width="${canvas.width}" height="${canvas.height}" style="max-width:${canvas.width}px;height:auto;">`);
-  } catch (_) { /* 跨域时保留浏览器默认拖拽 */ }
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.clearData();
+    const file = new File([payload.blob], payload.fileName, {
+      type: payload.type,
+      lastModified: Date.now()
+    });
+    e.dataTransfer.items?.add(file);
+    e.dataTransfer.setData('DownloadURL', `${payload.type}:${payload.fileName}:${payload.source}`);
+    e.dataTransfer.setData('text/uri-list', payload.source);
+    e.dataTransfer.setData('text/plain', payload.source);
+    e.dataTransfer.setData('text/html', `<img src="${payload.source}" alt="${escHtml(payload.fileName)}">`);
+    e.dataTransfer.setDragImage(
+      image,
+      Math.min(40, Math.max(1, image.clientWidth / 2)),
+      Math.min(40, Math.max(1, image.clientHeight / 2))
+    );
+  } catch (_) {
+    showImageCopyFeedback(image, '当前浏览器无法拖出原图，请使用复制');
+  }
 });
 
 // ==================== 文件上传工具（multipart 流式 + 进度条）====================

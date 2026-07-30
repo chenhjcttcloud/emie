@@ -202,18 +202,21 @@ public class FileArchiveService {
     public Path resolveFile(String storedName) throws Exception {
         Optional<FileRecord> opt = fileRecordRepository.findByStoredName(storedName);
 
+        // 数据库从其他环境同步后，storageTier 可能仍是 archived，但文件已经随上传目录
+        // 一起落到本机。只要本地文件真实存在，就应优先使用，避免无意义地依赖 NAS。
+        Path existingLocalFile = findExistingLocalFile(storedName);
+        if (existingLocalFile != null) {
+            return touchIfRestored(existingLocalFile);
+        }
+
         if (opt.isEmpty()) {
             // 无记录则直接从磁盘返回（兼容旧数据）
-            Path localPath = findExistingLocalFile(storedName);
-            if (localPath != null) return touchIfRestored(localPath);
             throw new FileNotFoundException("文件不存在: " + storedName);
         }
 
         FileRecord record = opt.get();
 
         if ("local".equals(record.getStorageTier())) {
-            Path localPath = findExistingLocalFile(storedName);
-            if (localPath != null) return touchIfRestored(localPath);
             // 本地文件丢失但标记为 local → 尝试从 NAS 恢复
             log.warn("本地文件丢失但标记为 local，尝试从归档恢复: {}", storedName);
         }
