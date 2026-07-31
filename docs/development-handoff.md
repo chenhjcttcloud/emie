@@ -7,6 +7,7 @@
 - 缓存版本由 `scripts/update-static-versions.sh` 按受影响的模块递增，并同步更新 `bootstrap.js` 入口版本；生产脚本继续负责候选容器、数据库备份、健康检查和回滚。
 - 本次仅新增流程脚本和文档，尚未推送或部署生产。
 - 首次生产预检因 `https://emie.emie.cn` 当前使用自签名证书而安全中止；发布脚本已增加显式 `SERVER_INSECURE_TLS=true` 开关，默认仍严格校验证书。
+- 飞书内置浏览器继续缓存旧入口 `bootstrap.js?v=237`，导致未加载已更新的 `project-tasks.js?v=188`；入口版本已递增至 `bootstrap.js?v=238`，后续前端模块更新必须同步递增入口版本。
 
 ## 2026-07-31 驳回子任务日期选择修复（本地）
 
