@@ -148,7 +148,7 @@ if run_ssh "command -v rsync >/dev/null 2>&1"; then
     "$SERVER_USER@$SERVER_HOST:$REMOTE_HELPER"
 else
   printf "生产机未安装 rsync，服务器脚本改用 scp 上传。\n"
-  SSHPASS="$SERVER_PASSWORD" scp -P "$SERVER_PORT" \
+  SSHPASS="$SERVER_PASSWORD" sshpass -e scp -P "$SERVER_PORT" \
     -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 \
     "$REMOTE_HELPER_LOCAL" "$SERVER_USER@$SERVER_HOST:$REMOTE_HELPER"
 fi
@@ -166,7 +166,7 @@ if run_ssh "command -v rsync >/dev/null 2>&1"; then
     -e "$rsync_rsh" "$JAR_PATH" \
     "$SERVER_USER@$SERVER_HOST:$remote_incoming"
 else
-  SSHPASS="$SERVER_PASSWORD" scp -P "$SERVER_PORT" \
+  SSHPASS="$SERVER_PASSWORD" sshpass -e scp -P "$SERVER_PORT" \
     -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 \
     "$JAR_PATH" "$SERVER_USER@$SERVER_HOST:$remote_incoming"
 fi
