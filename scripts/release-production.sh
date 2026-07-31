@@ -142,9 +142,16 @@ remote_incoming="$REMOTE_INCOMING_DIR/app-$target_sha.jar"
 printf "阶段 4/5：增量上传发布产物...\n"
 run_ssh "mkdir -p '$REMOTE_INCOMING_DIR' '$DEPLOY_DIR/.release-tools'"
 rsync_rsh="sshpass -e ssh -p $SERVER_PORT -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8"
-SSHPASS="$SERVER_PASSWORD" rsync -a --partial \
-  -e "$rsync_rsh" "$REMOTE_HELPER_LOCAL" \
-  "$SERVER_USER@$SERVER_HOST:$REMOTE_HELPER"
+if run_ssh "command -v rsync >/dev/null 2>&1"; then
+  SSHPASS="$SERVER_PASSWORD" rsync -a --partial \
+    -e "$rsync_rsh" "$REMOTE_HELPER_LOCAL" \
+    "$SERVER_USER@$SERVER_HOST:$REMOTE_HELPER"
+else
+  printf "生产机未安装 rsync，服务器脚本改用 scp 上传。\n"
+  SSHPASS="$SERVER_PASSWORD" scp -P "$SERVER_PORT" \
+    -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 \
+    "$REMOTE_HELPER_LOCAL" "$SERVER_USER@$SERVER_HOST:$REMOTE_HELPER"
+fi
 
 # 若服务器已有当前版本化 JAR，先在服务器本地复制作为 rsync 基础，减少后续版本传输量。
 run_ssh "
@@ -154,9 +161,15 @@ run_ssh "
     cp --reflink=auto \"\$current_jar\" '$remote_incoming'
   fi
 "
-SSHPASS="$SERVER_PASSWORD" rsync -a --checksum --partial --inplace \
-  -e "$rsync_rsh" "$JAR_PATH" \
-  "$SERVER_USER@$SERVER_HOST:$remote_incoming"
+if run_ssh "command -v rsync >/dev/null 2>&1"; then
+  SSHPASS="$SERVER_PASSWORD" rsync -a --checksum --partial --inplace \
+    -e "$rsync_rsh" "$JAR_PATH" \
+    "$SERVER_USER@$SERVER_HOST:$remote_incoming"
+else
+  SSHPASS="$SERVER_PASSWORD" scp -P "$SERVER_PORT" \
+    -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 \
+    "$JAR_PATH" "$SERVER_USER@$SERVER_HOST:$remote_incoming"
+fi
 uploaded_sha="$(run_ssh "sha256sum '$remote_incoming' | sed 's/ .*//'")"
 [[ "$uploaded_sha" == "$jar_sha" ]] ||
   { echo "上传产物校验不一致。" >&2; exit 1; }
