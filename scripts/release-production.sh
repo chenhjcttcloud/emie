@@ -96,7 +96,7 @@ export SSHPASS="$SERVER_PASSWORD"
 trap 'unset SSHPASS SERVER_PASSWORD SERVER_SUDO_PASSWORD' EXIT
 
 run_ssh() {
-  sshpass -e ssh "${ssh_args[@]}" "$SERVER_USER@$SERVER_HOST" "$@"
+  SSHPASS="$SERVER_PASSWORD" sshpass -e ssh "${ssh_args[@]}" "$SERVER_USER@$SERVER_HOST" "$@"
 }
 
 printf "阶段 1/5：核对生产目标与当前服务...\n"
