@@ -56,6 +56,7 @@ fi
 : "${SERVER_PORT:?缺少 SERVER_PORT}"
 : "${SERVER_PASSWORD:?缺少 SERVER_PASSWORD}"
 : "${SERVER_PUBLIC_URL:?缺少 SERVER_PUBLIC_URL}"
+SERVER_INSECURE_TLS="${SERVER_INSECURE_TLS:-false}"
 [[ "$SERVER_ROLE" == "production-local" ]] ||
   { echo "SERVER_ROLE 必须明确为 production-local，已停止以避免连错服务器。" >&2; exit 1; }
 [[ "$SERVER_HOST" =~ ^[A-Za-z0-9.-]+$ ]] ||
@@ -66,6 +67,11 @@ fi
   { echo "SERVER_PORT 格式不正确。" >&2; exit 1; }
 [[ "$SERVER_PUBLIC_URL" =~ ^https://[^[:space:]]+$ ]] ||
   { echo "SERVER_PUBLIC_URL 必须是 HTTPS 地址。" >&2; exit 1; }
+[[ "$SERVER_INSECURE_TLS" == "true" || "$SERVER_INSECURE_TLS" == "false" ]] ||
+  { echo "SERVER_INSECURE_TLS 必须是 true 或 false。" >&2; exit 1; }
+
+public_curl_args=(--fail --silent --show-error)
+[[ "$SERVER_INSECURE_TLS" == "true" ]] && public_curl_args+=(--insecure)
 
 SERVER_SUDO_PASSWORD="${SERVER_SUDO_PASSWORD:-$SERVER_PASSWORD}"
 DEPLOY_DIR="${SERVER_DEPLOY_DIR:-/home/emie/emie-deploy}"
@@ -103,7 +109,7 @@ printf "%s\n" "$SERVER_SUDO_PASSWORD" |
   sshpass -e ssh "${ssh_args[@]}" "$SERVER_USER@$SERVER_HOST" \
     "sudo -S -p '' docker inspect emie-app --format 'sudo_container={{.State.Status}}' >/dev/null"
 printf "public_http="
-curl --fail --silent --show-error -o /dev/null -w "%{http_code}\n" \
+curl "${public_curl_args[@]}" -o /dev/null -w "%{http_code}\n" \
   "${SERVER_PUBLIC_URL%/}/"
 
 if [[ "$PREFLIGHT_ONLY" == "true" ]]; then
@@ -163,6 +169,6 @@ printf "%s\n" "$SERVER_SUDO_PASSWORD" |
 printf "release_sha="
 run_ssh "cat '$DEPLOY_DIR/release-sha.txt'"
 printf "public_http="
-curl --fail --silent --show-error -o /dev/null -w "%{http_code}\n" \
+curl "${public_curl_args[@]}" -o /dev/null -w "%{http_code}\n" \
   "${SERVER_PUBLIC_URL%/}/"
 printf "生产发布完成：%s\n" "$target_short"

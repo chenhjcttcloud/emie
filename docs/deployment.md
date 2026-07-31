@@ -11,6 +11,7 @@
 - 生产 Java 运行时为 Java 21，应用容器为 `emie-app`，使用 host 网络并监听 8080。
 - 生产部署目录为 `/home/emie/emie-deploy`，持久化上传和日志目录位于 `/home/emie/emie-app-data/`；该目录是运行产物目录，不是 Git 工作区。
 - 业务代码必须先推送到 `project_manager_system`，再由本地 [`scripts/release-production.sh`](../scripts/release-production.sh) 对精确提交执行 Java 21 完整构建、增量上传和生产切换。
+- 生产域名必须默认严格校验证书；只有当前环境明确使用自签名证书时，才可在发布命令中临时设置 `SERVER_INSECURE_TLS=true`，发布完成后恢复默认值。
 - 新发布使用稳定 Java 21 运行时镜像和只读版本化 JAR 挂载：`releases/<完整提交>/app.jar → /app/app.jar`。不再为每次更新复制约 107MB JAR 并生成新镜像；首次使用新脚本会自动从当前镜像平滑迁移。
 - 候选容器会在旧容器仍在线时完成环境变量、持久化目录和 JAR 挂载校验；只有候选容器创建成功后才停止旧容器。正常不可用窗口主要是 Spring Boot 自身约 22 秒的启动时间。
 - 每次发布仍必须创建并校验数据库压缩备份。旧容器、旧版本化 JAR 和运行时镜像标签共同构成回滚点；失败时脚本恢复旧容器并立即退出，不会继续执行后续发布步骤。
