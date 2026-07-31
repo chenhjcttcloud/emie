@@ -8,13 +8,37 @@
 
 ## 当前生产部署结构
 
-> 当前生产切换前仍运行 Java 17；Java 21 升级完成本地和容器验证后，才允许按发布手册执行生产切换。
+- 生产 Java 运行时为 Java 21，应用容器为 `emie-app`，使用 host 网络并监听 8080。
+- 生产部署目录为 `/home/emie/emie-deploy`，持久化上传和日志目录位于 `/home/emie/emie-app-data/`；该目录是运行产物目录，不是 Git 工作区。
+- 业务代码必须先推送到 `project_manager_system`，再由本地 [`scripts/release-production.sh`](../scripts/release-production.sh) 对精确提交执行 Java 21 完整构建、增量上传和生产切换。
+- 新发布使用稳定 Java 21 运行时镜像和只读版本化 JAR 挂载：`releases/<完整提交>/app.jar → /app/app.jar`。不再为每次更新复制约 107MB JAR 并生成新镜像；首次使用新脚本会自动从当前镜像平滑迁移。
+- 候选容器会在旧容器仍在线时完成环境变量、持久化目录和 JAR 挂载校验；只有候选容器创建成功后才停止旧容器。正常不可用窗口主要是 Spring Boot 自身约 22 秒的启动时间。
+- 每次发布仍必须创建并校验数据库压缩备份。旧容器、旧版本化 JAR 和运行时镜像标签共同构成回滚点；失败时脚本恢复旧容器并立即退出，不会继续执行后续发布步骤。
+- 生产运行提交以 `/home/emie/emie-deploy/release-sha.txt` 记录；脚本只在新容器健康检查、JAR 校验和重启次数检查全部通过后更新该文件。
 
-- 生产部署目录为 `/root/emie`，这是运行产物目录，不是 Git 工作区。
-- 应用以已经推送的 `project_manager_system` 精确提交在本地干净工作树构建，再上传 `app.jar`；上传前后必须核对 SHA-256。
-- 发布前将现有 `app.jar` 复制为带时间戳的备份，并额外生成、校验数据库压缩备份。
-- 服务器保留现有 `docker-compose.yml`、`Dockerfile`、`uploads/`、`logs/` 和 `/root/.lark-cli`，发布时只替换已核验的应用产物并重建 `app` 服务。
-- 生产运行提交以同目录的 `release-sha.txt` 记录；应用回滚使用发布前保存的 JAR，不依赖生产目录中的 Git 历史。
+## 本地生产发布配置
+
+生产连接信息只保存在被 Git 忽略的 `.server.production.local.env`，不要复用历史云服务器的 `.server.local.env`。脚本要求显式的环境标识，避免连错服务器：
+
+```dotenv
+SERVER_ROLE=production-local
+SERVER_HOST=<生产服务器地址>
+SERVER_USER=<SSH用户>
+SERVER_PORT=22
+SERVER_PASSWORD=<SSH密码>
+SERVER_SUDO_PASSWORD=<sudo密码；相同时可省略>
+SERVER_PUBLIC_URL=https://example.com
+SERVER_DEPLOY_DIR=/home/emie/emie-deploy
+```
+
+只读预检和正式发布：
+
+```bash
+./scripts/release-production.sh --preflight-only
+./scripts/release-production.sh
+```
+
+正式发布入口会拒绝脏工作区、错误分支、本地与远端提交不一致、非生产标识、当前生产不健康、JAR 校验不一致及生产配置缺失等情况。目标提交已经在生产运行时会直接退出，不重复构建或重启。
 
 ## 阿里云生产服务器
 

@@ -73,6 +73,14 @@ scripts/mvnw-java21.sh clean package
 ./dev.sh restart
 ```
 
+日常本地修改完成后，优先使用标准更新入口：
+
+```bash
+./scripts/dev-update.sh
+```
+
+该入口只做本地工作：按受影响的前端模块递增缓存版本、重新构建 Java 21 JAR、重启测试服务，并检查服务实际返回的静态资源版本。它不会提交、推送仓库或触碰生产。只重启而不重新构建时仍使用 `./dev.sh restart`。
+
 ## 4. 代码结构
 
 后端包位于 `src/main/java/com/emie/designpm/`：
@@ -109,6 +117,8 @@ scripts/mvnw-java21.sh clean package
 - 启动入口：`static/js/bootstrap.js`
 
 页面只加载 `bootstrap.js` 这一个 `type="module"` 入口，由它按依赖顺序导入所有业务模块。修改任一前端模块后，同步递增 `bootstrap.js` 内部 import 和 `index.html` 启动入口的 `?v=` 参数。
+
+缓存版本可由 `./scripts/update-static-versions.sh` 自动维护；默认根据当前工作区相对 `HEAD` 的前端改动更新，也可显式传入模块路径。该脚本只更新版本号，不会重启服务。
 
 跨模块共享的可变状态统一保存在 `window.EMIE` 下：通用状态使用 `EMIE.state`，各业务模块分别使用 `dashboardState`、`projectState`、`adminState` 和 `fileState`。模块通过 `EMIE.registerModule()` 声明公共接口，跨模块调用通过 `EMIE.actions` 解析，不向 `window` 暴露业务函数。页面交互使用 `data-emie-on*` 声明式事件，不再使用 HTML 内联 `on*` 属性。
 

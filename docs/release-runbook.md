@@ -81,6 +81,16 @@ git diff
 
 ## 5. 提交与推送
 
+本地测试确认后，发布流程才进入仓库/生产阶段。统一入口如下：
+
+```bash
+./scripts/publish.sh --repository   # 仅推送已提交的业务分支
+./scripts/publish.sh --production   # 仅发布已与远端一致的提交
+./scripts/publish.sh --all          # 先推送仓库，再执行生产原子发布
+```
+
+发布脚本会拒绝非 `project_manager_system` 分支和脏工作区，不会自动提交未经确认的改动。生产发布仍由 `release-production.sh` 完成候选容器预检、数据库备份、原子切换、健康检查和失败回滚；本地测试脚本与发布脚本互不调用。
+
 只暂存明确属于本次发布的文件：
 
 ```bash
@@ -147,37 +157,37 @@ free -h
 
 生产部署必须基于已经推送并记录的精确提交：
 
-当前生产 `/root/emie` 是产物目录而不是 Git 工作区，因此使用以下流程：
-
-1. 从已经推送的精确提交创建干净本地工作树并执行 `./mvnw clean package`；
-2. 记录本地 JAR 的 SHA-256，上传为服务器临时文件并再次核对；
-3. 备份服务器现有 `app.jar`，再原子替换为新 JAR；
-4. 将目标提交写入服务器 `release-sha.txt`；
-5. 在 `/root/emie` 执行 `docker compose build app` 和 `docker compose up -d app`；
-6. 不覆盖服务器现有 Compose、环境配置、上传、日志和预览服务。
-
-若生产环境未来改造成 Git 工作区，才使用以下仓库拉取流程：
+当前生产 `/home/emie/emie-deploy` 是产物目录而不是 Git 工作区。标准发布必须使用仓库脚本：
 
 ```bash
-git fetch emie
-git switch project_manager_system
-git pull --ff-only emie project_manager_system
-git rev-parse HEAD
-docker compose build app
-docker compose up -d
+./scripts/release-production.sh --preflight-only
+./scripts/release-production.sh
 ```
 
-部署过程中保留 `preview-converter`、`uploads/`、`logs/` 和 `/root/.lark-cli` 挂载，不清理未确认的持久化数据。
+脚本执行顺序：
+
+1. 读取被 Git 忽略的 `.server.production.local.env`，要求 `SERVER_ROLE=production-local`，验证 SSH、sudo、当前容器、本机健康接口和外网 HTTPS；
+2. 要求当前分支为 `project_manager_system`、工作区干净，且本地完整 SHA 与 Gitee 业务分支一致；
+3. 执行 `./mvnw clean package`，记录本地 JAR SHA-256；
+4. 优先以服务器当前版本化 JAR 作为 rsync 基础，增量上传新 JAR 并再次校验 SHA-256；
+5. 服务器生成并校验数据库备份；首次迁移到版本化 JAR 时额外备份旧容器内 JAR；
+6. 在旧容器在线期间创建候选容器，并完整复用环境变量、网络、重启策略和持久化挂载；
+7. 候选容器创建及挂载校验成功后，才停止并保留旧容器，启动新容器；
+8. 健康检查、容器 JAR 校验及重启次数均通过后，原子更新 `release-sha.txt`；任一步失败则恢复旧容器并立即以失败状态退出。
+
+业务版本由 `releases/<完整提交>/app.jar` 只读挂载，不再每次执行 `docker commit` 或构建新应用镜像。首次发布仍需导出一次旧容器 JAR；后续发布直接复用版本化 JAR 作为回滚点，减少约 107MB 的服务器内部复制。
+
+部署过程中保留上传、日志、Redis、MySQL、OpenResty及其他未纳入范围的服务，不清理未确认的持久化数据。
 
 禁止使用会删除卷或用户数据的命令，例如未经确认的 `docker compose down -v`。
 
 ## 9. 发布后验证
 
-至少完成以下检查：
+至少完成以下检查（标准脚本已自动完成基础检查，仍需结合本次业务人工验收）：
 
 ```bash
-docker compose ps
-docker compose logs --tail=200 app
+docker ps --filter name=emie-app
+docker logs --tail=200 emie-app
 curl --fail --silent --show-error http://127.0.0.1:8080/api/admin/public-config
 ```
 
@@ -194,13 +204,7 @@ curl --fail --silent --show-error http://127.0.0.1:8080/api/admin/public-config
 
 ## 10. 回滚
 
-发布前必须记录 `OLD_SHA`。应用回滚使用上一稳定提交，禁止临时猜测版本：
-
-```bash
-git switch --detach <OLD_SHA>
-docker compose build app
-docker compose up -d app
-```
+发布前必须记录 `OLD_SHA`。标准脚本会把旧容器重命名为带时间戳的 `emie-app-old-*` 并保持停止状态；新容器失败时自动恢复该容器。自动回滚也失败时，停止继续操作，按本次脚本输出的 `old_container`、`backup_dir` 和旧版本化 JAR 路径人工恢复，不临时猜测版本。
 
 回滚后重新执行容器、日志、接口和核心业务检查，并记录回滚原因与结果。
 

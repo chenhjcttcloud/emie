@@ -107,7 +107,7 @@ class FrontendModuleLayoutTest {
             if (module.equals("project-uploads.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=157");
             if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=188");
             if (module.equals("project-form.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=184");
-            if (module.equals("project-tasks.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=186");
+            if (module.equals("project-tasks.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=188");
             if (module.equals("projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             assertTrue(currentIndex > previousIndex, module + " 的 ES Module 加载顺序不正确");
             previousIndex = currentIndex;

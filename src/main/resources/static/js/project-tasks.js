@@ -763,7 +763,7 @@ function taskReject(pid, tid) {
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">↩️ 驳回修改</div></div></div>
       <div class="modal-body">
         <div class="form-group"><label class="form-label"><span class="required">*</span> 修改意见</label><textarea class="form-textarea" id="rejectComments" required placeholder="请详细说明修改意见..." style="min-height:100px;"></textarea></div>
-        <div class="form-group"><label class="form-label"><span class="required">*</span> 要求完成时间</label><input type="date" class="form-input" id="rejectDeadline" required min="${new Date().toISOString().slice(0, 10)}"><div class="form-hint">设计师重新交付需在此日期前完成</div></div>
+        <div class="form-group"><label class="form-label"><span class="required">*</span> 要求完成时间</label><div class="date-picker" style="position:relative;max-width:280px;"><input type="date" class="form-input" id="rejectDeadline" required min="${new Date().toISOString().slice(0, 10)}" data-emie-onclick="try{if(typeof this.showPicker==='function')this.showPicker()}catch(e){}" data-emie-onchange="updateRejectDeadlineLabel(this)" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:1;"><button type="button" class="btn btn-outline" id="rejectDeadlineButton" data-emie-onclick="triggerDatePicker(this)" aria-label="选择要求完成时间" style="width:100%;text-align:left;min-height:38px;position:relative;z-index:0;">📅 <span>请选择日期</span></button></div><div class="form-hint">设计师重新交付需在此日期前完成</div></div>
         <div class="form-group"><label class="form-label">参考图片（选填）</label><div class="upload-area" data-emie-onclick="document.getElementById('rejectImageInput').click()"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="rejectImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleRejectImages(this)"></div><div class="file-list" id="rejectImageList"></div></div>
         <div class="form-group"><label class="form-label">附件（选填）</label><div class="upload-area" data-emie-onclick="document.getElementById('rejectAttachmentInput').click()"><div>📁 拖拽文件到此处，或点击选择文件</div><input type="file" id="rejectAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleRejectAttachments(this)"></div><div class="file-list" id="rejectAttachmentList"></div></div>
       </div>
@@ -780,6 +780,11 @@ function handleRejectImages(input) {
 function handleRejectAttachments(input) {
   handleFileUpload(input, EMIE.projectState.rejectionAttachments, 5, '驳回附件', false);
   setTimeout(() => renderFileList(EMIE.projectState.rejectionAttachments, '驳回附件'), 0);
+}
+
+function updateRejectDeadlineLabel(input) {
+  const label = document.querySelector('#rejectDeadlineButton span');
+  if (label) label.textContent = input.value || '请选择日期';
 }
 
 async function submitTaskReject(pid, tid) {
