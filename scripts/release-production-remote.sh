@@ -215,7 +215,7 @@ docker rename "$candidate_container" "$APP_CONTAINER"
 docker start "$APP_CONTAINER" >/dev/null
 
 healthy="false"
-for _ in $(seq 1 60); do
+for _ in $(seq 1 45); do
   if curl --fail --silent "$HEALTH_URL" >/dev/null 2>&1; then
     healthy="true"
     break

@@ -91,6 +91,9 @@ ssh_args=(
   -o ConnectTimeout=8
   -o ServerAliveInterval=10
   -o ServerAliveCountMax=3
+  -o ControlMaster=auto
+  -o ControlPersist=60
+  -o "ControlPath=/tmp/emie-release-%r@%h:%p"
 )
 export SSHPASS="$SERVER_PASSWORD"
 trap 'unset SSHPASS SERVER_PASSWORD SERVER_SUDO_PASSWORD' EXIT
@@ -133,7 +136,7 @@ if [[ "$target_sha" == "$remote_current_sha" ]]; then
 fi
 
 printf "阶段 3/5：Java 21 完整构建与测试...\n"
-scripts/mvnw-java21.sh clean package
+scripts/mvnw-java21.sh package
 [[ -f "$JAR_PATH" ]] || { echo "构建产物不存在：$JAR_PATH" >&2; exit 1; }
 jar_sha="$(sha256sum "$JAR_PATH" | sed "s/ .*//")"
 target_short="${target_sha:0:7}"
@@ -141,7 +144,7 @@ remote_incoming="$REMOTE_INCOMING_DIR/app-$target_sha.jar"
 
 printf "阶段 4/5：增量上传发布产物...\n"
 run_ssh "mkdir -p '$REMOTE_INCOMING_DIR' '$DEPLOY_DIR/.release-tools'"
-rsync_rsh="sshpass -e ssh -p $SERVER_PORT -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8"
+rsync_rsh="sshpass -e ssh -p $SERVER_PORT -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 -o ControlMaster=auto -o ControlPersist=60 -o ControlPath=/tmp/emie-release-%r@%h:%p"
 if run_ssh "command -v rsync >/dev/null 2>&1"; then
   SSHPASS="$SERVER_PASSWORD" rsync -a --partial \
     -e "$rsync_rsh" "$REMOTE_HELPER_LOCAL" \
