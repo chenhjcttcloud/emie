@@ -106,7 +106,7 @@ remote_current_sha="$(
 )"
 printf "remote_release=%s\n" "$remote_current_sha"
 printf "%s\n" "$SERVER_SUDO_PASSWORD" |
-  sshpass -e ssh "${ssh_args[@]}" "$SERVER_USER@$SERVER_HOST" \
+  SSHPASS="$SERVER_SUDO_PASSWORD" sshpass -e ssh "${ssh_args[@]}" "$SERVER_USER@$SERVER_HOST" \
     "sudo -S -p '' docker inspect emie-app --format 'sudo_container={{.State.Status}}' >/dev/null"
 printf "public_http="
 curl "${public_curl_args[@]}" -o /dev/null -w "%{http_code}\n" \
@@ -176,7 +176,7 @@ uploaded_sha="$(run_ssh "sha256sum '$remote_incoming' | sed 's/ .*//'")"
 
 printf "阶段 5/5：备份数据库并原子切换候选容器...\n"
 printf "%s\n" "$SERVER_SUDO_PASSWORD" |
-  sshpass -e ssh "${ssh_args[@]}" "$SERVER_USER@$SERVER_HOST" \
+  SSHPASS="$SERVER_SUDO_PASSWORD" sshpass -e ssh "${ssh_args[@]}" "$SERVER_USER@$SERVER_HOST" \
     "sudo -S -p '' env DEPLOY_DIR='$DEPLOY_DIR' bash '$REMOTE_HELPER' '$target_sha' '$remote_incoming' '$jar_sha'"
 
 printf "release_sha="
