@@ -26,9 +26,12 @@ public class RedisSessionStore {
     public void put(String token, AuthController.AuthSession session) {
         try {
             long ttlMillis = session.expiresAt() - System.currentTimeMillis();
-            if (ttlMillis <= 0) return;
-            redis.opsForValue().set(key(token), objectMapper.writeValueAsString(session),
-                    Duration.ofMillis(ttlMillis));
+            if (session.expiresAt() <= 0 || session.expiresAt() >= Long.MAX_VALUE / 2) {
+                redis.opsForValue().set(key(token), objectMapper.writeValueAsString(session));
+            } else if (ttlMillis > 0) {
+                redis.opsForValue().set(key(token), objectMapper.writeValueAsString(session),
+                        Duration.ofMillis(ttlMillis));
+            }
         } catch (Exception e) {
             log.warn("Redis 会话写入失败，将使用本地会话缓存 reason={}", e.getClass().getSimpleName());
         }

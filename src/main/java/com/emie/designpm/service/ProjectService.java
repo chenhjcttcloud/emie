@@ -971,8 +971,12 @@ public class ProjectService {
 
         // 检查是否所有评分已完成
         checkTaskCompletion(task, p);
-
-        return projectRepository.save(p);
+        Project saved = projectRepository.save(p);
+        Map<String, String> notifyContext = notificationContext(saved, task, currentUser, comments);
+        notifyContext.put("reviewRole", "planner".equals(currentRole) ? "产品企划" : ("admin".equals(currentRole) ? "管理员" : "销售"));
+        safeNotifyAfterCommit("REVIEW_APPROVED", task.getDesignerId(), "sub_task", task.getId(),
+                currentUserId, notifyContext);
+        return saved;
     }
 
     /** 子任务交付或重新交付时，建立两级待审核记录。 */

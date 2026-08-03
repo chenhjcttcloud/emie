@@ -25,7 +25,8 @@ import org.slf4j.LoggerFactory;
 public class AuthController {
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
-    private static final long SESSION_TTL_MS = 8L * 60 * 60 * 1000;
+    /** 会话不因闲置自动退出；仅在用户主动退出、管理员撤销或令牌失效时结束。 */
+    private static final long SESSION_TTL_MS = Long.MAX_VALUE;
     private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
 
     private final UserRepository userRepository;
@@ -248,7 +249,7 @@ public class AuthController {
         if (token == null) return null;
         AuthSession session = getSession(token);
         if (session == null) return null;
-        if (System.currentTimeMillis() >= session.expiresAt()) {
+        if (session.expiresAt() > 0 && System.currentTimeMillis() >= session.expiresAt()) {
             TOKENS.remove(token, session);
             return null;
         }
