@@ -1,6 +1,6 @@
 import './core-runtime.js?v=156';
 import './event-runtime.js?v=147';
-import './core-auth.js?v=151';
+import './core-auth.js?v=152';
 import './core-identity.js?v=151';
 import './core-shell.js?v=173';
 import './core-ui.js?v=147';

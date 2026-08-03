@@ -4,6 +4,26 @@ const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const renderSidebar = (...args) => EMIE.actions.renderSidebar(...args);
 const render = (...args) => EMIE.actions.render(...args);
 
+function notifySystemVersion(version) {
+  if (!version) return;
+  const key = 'emie_system_version';
+  const previous = localStorage.getItem(key);
+  localStorage.setItem(key, version);
+  if (!previous || previous === version || document.getElementById('systemVersionNotice')) return;
+  const notice = document.createElement('div');
+  notice.id = 'systemVersionNotice';
+  notice.style.cssText = 'position:fixed;right:24px;bottom:24px;z-index:10000;background:#fff;border:1px solid var(--primary);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.16);padding:16px 18px;max-width:340px;';
+  notice.innerHTML = `<div style="font-weight:700;margin-bottom:6px;">系统已更新</div><div style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">检测到新版本，当前页面数据不会自动丢失。请在合适时刷新页面。</div><div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="this.closest('#systemVersionNotice').remove()">稍后再说</button><button class="btn btn-primary btn-sm" data-emie-onclick="location.reload()">立即刷新</button></div>`;
+  document.body.appendChild(notice);
+}
+
+async function checkSystemVersion() {
+  try {
+    const r = await fetch('/api/admin/public-config?versionCheck=' + Date.now(), { cache: 'no-store' });
+    if (r.ok) notifySystemVersion((await r.json())['system.version']);
+  } catch (e) { /* 版本检查失败不影响当前操作 */ }
+}
+
 async function initApp() {
   // 检查飞书 SSO 回调
   checkFeishuCallback();
@@ -140,6 +160,7 @@ async function showApp() {
       if (r.ok) {
         const cfg = await r.json();
         if (cfg['app.title']) document.title = cfg['app.title'] + ' - EMIE';
+        notifySystemVersion(cfg['system.version']);
         const logoEl = document.querySelector('.logo');
         if (logoEl) {
           if (cfg['app.logo']) {
@@ -152,6 +173,8 @@ async function showApp() {
         }
       }
     } catch(e) { /* ignore */ }
+    checkSystemVersion();
+    if (!EMIE.state.versionCheckTimer) EMIE.state.versionCheckTimer = setInterval(checkSystemVersion, 300000);
 
     document.getElementById('userDisplay').textContent = `${EMIE.state.authUser.name}（${roleLabel(EMIE.state.authUser.role)}）`;
     EMIE.state.currentRole = ['promotion', 'product_promotion', 'product-promotion'].includes(String(EMIE.state.authUser.role || '').toLowerCase())

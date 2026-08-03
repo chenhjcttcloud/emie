@@ -94,7 +94,7 @@ class FrontendModuleLayoutTest {
             if (module.equals("dashboard-lists.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=187");
             if (module.equals("core-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=173");
             if (module.equals("core-runtime.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=156");
-            if (module.equals("core-auth.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=151");
+            if (module.equals("core-auth.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=152");
             if (module.equals("core-identity.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=151");
             if (module.equals("dashboard-projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=159");
             if (module.equals("dashboard-home.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=161");
