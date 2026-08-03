@@ -184,6 +184,9 @@ function renderSubTaskCard(detail, task, idx) {
     bulk: '大货',
   }[task.workflowStage] || '未设置阶段';
   const rejectionRecords = Array.isArray(task.rejectionRecords) ? task.rejectionRecords : [];
+  const latestRejection = rejectionRecords.length ? rejectionRecords[rejectionRecords.length - 1] : null;
+  const visibleDeadline = task.status === 'rejected' && latestRejection?.requiredCompletionDate
+    ? latestRejection.requiredCompletionDate : task.plannedDate;
 
   return `<div class="subtask-card${isDone ? ' completed' : ''}" role="button" tabindex="0"
     data-emie-onclick="openProjectSubTaskDetail(event,${task.id})"
@@ -196,7 +199,7 @@ function renderSubTaskCard(detail, task, idx) {
     <div class="subtask-meta">
       <div class="subtask-meta-item">📍 所属阶段：<strong>${escHtml(workflowStageLabel)}</strong></div>
       <div class="subtask-meta-item">👤 负责人：<strong>${escHtml(task.designerName || '待分配')}</strong>${task.assigneeRole ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;${task.assigneeRole === 'supplychain' ? 'background:#F0FDFA;color:#0D9488;' : task.assigneeRole === 'planner' ? 'background:#EFF6FF;color:#1D4ED8;' : task.assigneeRole === 'promotion' ? 'background:#F5F3FF;color:#7C3AED;' : 'background:#FEF2F2;color:#DC2626;'}">${task.assigneeRole === 'supplychain' ? '供应链' : task.assigneeRole === 'planner' ? '企划' : task.assigneeRole === 'promotion' ? '产品推广' : task.assigneeRole === 'sales' ? '销售' : '设计师'}</span>` : ''}</div>
-      <div class="subtask-meta-item">📅 计划完成：<strong>${formatDate(task.plannedDate)}</strong></div>
+      <div class="subtask-meta-item">📅 ${task.status === 'rejected' && latestRejection?.requiredCompletionDate ? '驳回后要求完成' : '计划完成'}：<strong>${formatDate(visibleDeadline)}</strong></div>
       ${task.actualDate ? `<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(task.actualDate)}</strong></div>` : ''}
     </div>
     ${task.details ? `<div style="font-size:13px;color:var(--gray-600);margin-top:6px;white-space:pre-wrap;">📝 ${escHtml(task.details)}</div>` : ''}

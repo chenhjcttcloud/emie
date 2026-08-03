@@ -89,7 +89,7 @@ class FrontendModuleLayoutTest {
             if (module.equals("bootstrap.js")) continue;
             int currentIndex = bootstrap.indexOf("./" + module + "?v=147");
             if (module.equals("dashboard-designer.js")) {
-                currentIndex = bootstrap.indexOf("./" + module + "?v=177");
+                currentIndex = bootstrap.indexOf("./" + module + "?v=178");
             }
             if (module.equals("dashboard-lists.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=187");
             if (module.equals("core-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=173");
@@ -105,7 +105,7 @@ class FrontendModuleLayoutTest {
             if (module.equals("admin-workload.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             if (module.equals("admin-org.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=165");
             if (module.equals("project-uploads.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=158");
-            if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=189");
+            if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=190");
             if (module.equals("project-form.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=184");
             if (module.equals("project-tasks.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=188");
             if (module.equals("projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
