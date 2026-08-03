@@ -97,8 +97,17 @@ public class NotificationWorkflowService {
             d.setExternalMessageId(feishu.sendInteractiveMessage(user.getFeishuOpenId(), t.feishuCardJson())); d.setStatus("delivered"); d.setDeliveredAt(LocalDateTime.now());
             deliveries.save(d); audit(event, n, d, "feishu_delivered", actor, "工作流飞书通知已投递");
         } catch (Exception e) {
-            d.setStatus("failed"); d.setErrorMsg(limit(e.getMessage())); deliveries.save(d);
-            audit(event, n, d, "feishu_failed", actor, "工作流飞书通知失败：" + limit(e.getMessage()));
+            String cardError = limit(e.getMessage());
+            try {
+                d.setExternalMessageId(feishu.sendTextMessage(user.getFeishuOpenId(), t.content()));
+                d.setStatus("delivered"); d.setDeliveredAt(LocalDateTime.now());
+                d.setErrorMsg("卡片发送失败，已降级为文本：" + cardError);
+                deliveries.save(d);
+                audit(event, n, d, "feishu_text_fallback_delivered", actor, "卡片解析失败，已降级为文本通知：" + cardError);
+            } catch (Exception fallbackError) {
+                d.setStatus("failed"); d.setErrorMsg(limit(cardError + "；文本降级也失败：" + fallbackError.getMessage())); deliveries.save(d);
+                audit(event, n, d, "feishu_failed", actor, "卡片和文本通知均失败：" + limit(d.getErrorMsg()));
+            }
         }
     }
     private boolean enabled(String key) { return configs.findByConfigKey(key).map(SystemConfig::getConfigValue).map("true"::equalsIgnoreCase).orElse(false); }

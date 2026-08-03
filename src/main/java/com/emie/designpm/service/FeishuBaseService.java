@@ -195,6 +195,23 @@ public class FeishuBaseService {
         return messageId;
     }
 
+    /** 卡片解析失败时的纯文本降级通道，确保通知不会因展示格式异常丢失。 */
+    public String sendTextMessage(String openId, String textContent) throws Exception {
+        if (openId == null || openId.isBlank()) throw new IllegalArgumentException("收件人的飞书 Open ID 未绑定");
+        ObjectNode body = json.createObjectNode();
+        body.put("receive_id", openId);
+        body.put("msg_type", "text");
+        ObjectNode content = json.createObjectNode();
+        content.put("text", textContent == null || textContent.isBlank() ? "系统通知" : textContent);
+        body.put("content", content.toString());
+        JsonNode root = json.readTree(bearerPost(
+                API + "/im/v1/messages?receive_id_type=open_id", getToken(), body.toString()));
+        checkResponse(root, "发送飞书文本通知");
+        String messageId = root.path("data").path("message_id").asText();
+        if (messageId.isBlank()) throw new Exception("发送飞书文本通知失败：响应中缺少 message_id");
+        return messageId;
+    }
+
     // ==================== 初始化（机器人自动创建 Base + 表）====================
 
     /**

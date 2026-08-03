@@ -105,7 +105,7 @@ class FrontendModuleLayoutTest {
             if (module.equals("admin-workload.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             if (module.equals("admin-org.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=165");
             if (module.equals("project-uploads.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=158");
-            if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=190");
+            if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=192");
             if (module.equals("project-form.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=184");
             if (module.equals("project-tasks.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=188");
             if (module.equals("projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
