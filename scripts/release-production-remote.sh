@@ -73,6 +73,14 @@ mapfile -t runtime_env < <(
     sed "/^$/d"
 )
 [[ "${#runtime_env[@]}" -ge 12 ]] || die "运行环境变量数量异常"
+# 生产应用的元空间上限固定为 256MB，避免长期运行和动态代理/类加载增长后触发 OOM。
+for env_index in "${!runtime_env[@]}"; do
+  if [[ "${runtime_env[$env_index]}" == JAVA_TOOL_OPTIONS=* ]]; then
+    java_options="${runtime_env[$env_index]#JAVA_TOOL_OPTIONS=}"
+    java_options="$(printf '%s' "$java_options" | sed -E 's/(^| )-XX:MaxMetaspaceSize=[^ ]+//g' | sed -E 's/  +/ /g; s/^ //; s/ $//')"
+    runtime_env[$env_index]="JAVA_TOOL_OPTIONS=${java_options} -XX:MaxMetaspaceSize=256m"
+  fi
+done
 for required_env in \
   SPRING_PROFILES_ACTIVE DESIGNPM_DB_HOST DESIGNPM_DB_NAME DESIGNPM_DB_USER \
   DESIGNPM_DB_PASSWORD SPRING_DATA_REDIS_HOST SPRING_DATA_REDIS_PORT; do
