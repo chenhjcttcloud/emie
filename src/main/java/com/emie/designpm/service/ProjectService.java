@@ -758,8 +758,9 @@ public class ProjectService {
             throw new RuntimeException("仅当前子任务负责人可交付");
         }
 
+        String submittedActualDate = (String) body.get("actualDate");
         task.setStatus("delivered");
-        task.setActualDate((String) body.get("actualDate"));
+        task.setActualDate(null);
         task.setDeliverables(SecurityUtil.sanitizeText((String) body.get("deliverables"), 5000));
         task.setReferenceImagesJson(validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true));
         task.setAttachmentsJson(validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
@@ -773,7 +774,7 @@ public class ProjectService {
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
-        saveDeliveryVersion(task, "initial", "首次交付", currentUserId, currentUser, currentRole);
+        saveDeliveryVersion(task, "initial", "首次交付", submittedActualDate, currentUserId, currentUser, currentRole);
         String selfScoreStr = selfScore != null ? selfScore.toString() : "—";
         p.getLogs().add(new ActivityLog("子任务交付（自评" + selfScoreStr + "）：" + task.getName(), currentUser, currentRole, p));
 
@@ -802,8 +803,9 @@ public class ProjectService {
             throw new RuntimeException("仅当前子任务负责人可重新交付");
         }
 
+        String submittedActualDate = (String) body.get("actualDate");
         task.setStatus("delivered");
-        task.setActualDate((String) body.get("actualDate"));
+        task.setActualDate(null);
         task.setDeliverables(SecurityUtil.sanitizeText((String) body.get("deliverables"), 5000));
         task.setReferenceImagesJson(validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true));
         task.setAttachmentsJson(validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
@@ -822,7 +824,7 @@ public class ProjectService {
         String currentRole = (String) body.getOrDefault("currentRole", "");
         String changeSummary = SecurityUtil.sanitizeText(
                 (String) body.getOrDefault("changeSummary", "根据修改要求重新交付"), 500);
-        saveDeliveryVersion(task, "redelivery", changeSummary, currentUserId, currentUser, currentRole);
+        saveDeliveryVersion(task, "redelivery", changeSummary, submittedActualDate, currentUserId, currentUser, currentRole);
         p.getLogs().add(new ActivityLog("子任务重新交付：" + task.getName(), currentUser, currentRole, p));
 
         Project saved = projectRepository.save(p);
@@ -853,8 +855,9 @@ public class ProjectService {
         if (changeSummary == null || changeSummary.isBlank()) {
             throw new RuntimeException("请填写本次修正说明");
         }
+        String submittedActualDate = (String) body.get("actualDate");
         task.setStatus("delivered");
-        task.setActualDate((String) body.get("actualDate"));
+        task.setActualDate(null);
         task.setDeliverables(SecurityUtil.sanitizeText((String) body.get("deliverables"), 5000));
         task.setReferenceImagesJson(validateAndCleanFiles(
                 (String) body.getOrDefault("referenceImagesJson", "[]"), true));
@@ -869,7 +872,7 @@ public class ProjectService {
         resetReviewWorkflow(task);
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
-        saveDeliveryVersion(task, "correction", changeSummary, currentUserId, currentUser, currentRole);
+        saveDeliveryVersion(task, "correction", changeSummary, submittedActualDate, currentUserId, currentUser, currentRole);
         p.getLogs().add(new ActivityLog("子任务主动修正交付：" + task.getName()
                 + "（" + changeSummary + "）", currentUser, currentRole, p));
         Project saved = projectRepository.saveAndFlush(p);
@@ -881,7 +884,7 @@ public class ProjectService {
     }
 
     private void saveDeliveryVersion(SubTask task, String submissionType, String changeSummary,
-                                     String userId, String userName, String role) {
+                                     String submittedActualDate, String userId, String userName, String role) {
         SubTaskDeliveryVersion version = new SubTaskDeliveryVersion();
         version.setSubTask(task);
         version.setVersionNo((int) deliveryVersionRepository.countBySubTaskId(task.getId()) + 1);
@@ -890,7 +893,7 @@ public class ProjectService {
         version.setDeliverables(task.getDeliverables());
         version.setReferenceImagesJson(task.getReferenceImagesJson());
         version.setAttachmentsJson(task.getAttachmentsJson());
-        version.setActualDate(task.getActualDate());
+        version.setActualDate(submittedActualDate);
         version.setSelfScore(task.getSelfScore());
         version.setSubmittedById(userId);
         version.setSubmittedByName(userName);
@@ -1103,11 +1106,13 @@ public class ProjectService {
             // 渠道：企划评分 + 销售评分 → completed
             if ("sales_approved".equals(task.getStatus())) {
                 task.setStatus("completed");
+                task.setActualDate(java.time.LocalDate.now().toString());
             }
         } else {
             // 常规品：企划评分 + 管理评分 → completed
             if ("admin_approved".equals(task.getStatus())) {
                 task.setStatus("completed");
+                task.setActualDate(java.time.LocalDate.now().toString());
             }
         }
         // 检查项目是否所有子任务都已完成

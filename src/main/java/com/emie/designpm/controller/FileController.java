@@ -24,6 +24,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.util.UriUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.FileNotFoundException;
@@ -36,6 +38,7 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/files")
 public class FileController {
+    private static final Logger log = LoggerFactory.getLogger(FileController.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Value("${app.upload.dir:./uploads}")
@@ -105,6 +108,7 @@ public class FileController {
         } catch (FileNotFoundException e) {
             return ResponseEntity.notFound().build();
         } catch (IOException e) {
+            log.warn("缩略图生成失败 storedName={}: {}", fileName, e.getMessage());
             return ResponseEntity.status(422).body(Map.of("error", "缩略图生成失败"));
         }
     }

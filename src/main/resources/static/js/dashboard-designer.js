@@ -213,6 +213,7 @@ function openPublishedSubTaskDetail(taskId) {
                 </div>
                 <div style="margin-top:10px;padding:12px;background:#FFF8F8;border-radius:8px;">
                   <div class="detail-label" style="color:#A32D2D;">修改意见 · ${escHtml(roleNames[record.reviewerRole] || record.reviewerRole || '')} ${escHtml(record.reviewerName || '-')}</div>
+                  <div class="detail-label" style="color:#A32D2D;margin-top:6px;">要求完成时间：${record.requiredCompletionDate ? formatDate(record.requiredCompletionDate) : '-'}</div>
                   <div class="detail-value" style="white-space:pre-wrap;margin-top:5px;">${escHtml(record.reason || '未填写修改意见')}</div>
                   ${taskDetailFiles(record.rejectionReferenceImagesJson, true)}
                   ${taskDetailFiles(record.rejectionAttachmentsJson, false)}

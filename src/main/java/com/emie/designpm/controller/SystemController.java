@@ -22,13 +22,23 @@ public class SystemController {
     private final ActivityLogRepository activityLogRepository;
     private final LogArchiveService logArchiveService;
     private final SyncQueueRepository syncQueueRepository;
+    private final com.emie.designpm.service.DataIntegrityService dataIntegrityService;
 
     public SystemController(ActivityLogRepository activityLogRepository,
                             LogArchiveService logArchiveService,
-                            SyncQueueRepository syncQueueRepository) {
+                            SyncQueueRepository syncQueueRepository,
+                            com.emie.designpm.service.DataIntegrityService dataIntegrityService) {
         this.activityLogRepository = activityLogRepository;
         this.logArchiveService = logArchiveService;
         this.syncQueueRepository = syncQueueRepository;
+        this.dataIntegrityService = dataIntegrityService;
+    }
+
+    /** 只读数据完整性报告，管理员手动执行。 */
+    @GetMapping("/data-integrity")
+    public ResponseEntity<Map<String, Object>> dataIntegrity(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        return ResponseEntity.ok(dataIntegrityService.scan());
     }
 
     /** 管理员运行指标：用于快速判断 JVM、队列和同步是否有压力。 */

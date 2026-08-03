@@ -106,9 +106,10 @@ async function renderAdminContent() {
 async function renderAdminDashboard(container) {
   container.innerHTML = `<div class="loading">加载中</div>`;
   // 获取所有配置统计
-  const [configs, users] = await Promise.all([
+  const [configs, users, sync] = await Promise.all([
     apiGet('/admin/configs'),
     apiGet('/admin/users'),
+    apiGet('/admin/sync/stats'),
   ]);
 
   const totalConfigs = Object.values(configs).reduce((sum, arr) => sum + arr.length, 0);
@@ -133,6 +134,25 @@ async function renderAdminDashboard(container) {
         </div>
       `).join('')}
     </div>
+    <div style="background:#fff;border-radius:12px;box-shadow:var(--shadow);padding:20px;margin-top:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:10px;"><h3 style="font-size:15px;font-weight:600;margin:0;">📊 飞书同步状态</h3><button class="btn btn-outline btn-sm" data-emie-onclick="triggerFeishuSync(this)">立即同步</button></div>
+        <span style="font-size:12px;color:${sync.fail > 0 ? 'var(--danger)' : 'var(--success)'};">${sync.fail > 0 ? '存在失败任务' : '运行正常'}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;">
+        ${[['待处理', sync.pending], ['处理中', sync.processing], ['失败', sync.fail], ['已完成', sync.done]].map(([label, value]) => `<div style="padding:12px;background:var(--gray-50);border-radius:8px;"><div style="font-size:22px;font-weight:700;">${value ?? 0}</div><div style="font-size:12px;color:var(--gray-500);">${label}</div></div>`).join('')}
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:var(--gray-500);">最近成功：${sync.lastSuccessAt || '暂无'}　最近失败：${sync.lastFailureAt || '暂无'}</div>
+      ${sync.lastFailure ? `<div style="margin-top:8px;padding:10px;background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;font-size:12px;color:#9f1239;">最近失败：${escHtml(sync.lastFailure.entityType || '')} #${sync.lastFailure.entityId || '-'} · ${escHtml(sync.lastFailure.error || '未知错误')}</div>` : ''}
+      <div id="feishuSyncResult" style="margin-top:8px;font-size:12px;color:var(--gray-500);"></div>
+    </div>
+    <div style="background:#fff;border-radius:12px;box-shadow:var(--shadow);padding:20px;margin-top:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+        <div><h3 style="font-size:15px;font-weight:600;">🧪 数据完整性检查</h3><div style="font-size:12px;color:var(--gray-500);margin-top:5px;">只读扫描文件引用，不会修改或删除数据。</div></div>
+        <button class="btn btn-outline btn-sm" data-emie-onclick="runDataIntegrityScan(this)">开始扫描</button>
+      </div>
+      <div id="dataIntegrityResult" style="margin-top:12px;"></div>
+    </div>
     <div style="background:#fff;border-radius:12px;box-shadow:var(--shadow);padding:20px;">
       <h3 style="font-size:15px;font-weight:600;margin-bottom:16px;">📋 配置分组概览</h3>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;">
@@ -145,6 +165,55 @@ async function renderAdminDashboard(container) {
         `).join('')}
       </div>
     </div>`;
+}
+
+async function triggerFeishuSync(button) {
+  const result = document.getElementById('feishuSyncResult');
+  button.disabled = true;
+  button.textContent = '同步中…';
+  if (result) result.textContent = '正在处理待同步队列，请稍候…';
+  try {
+    const response = await fetch('/api/admin/sync/process', { method: 'POST', headers: authHeaders() });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.message || `请求失败（${response.status}）`);
+    if (result) result.textContent = `${payload.message || '同步处理完成'}，剩余待处理 ${payload.pending ?? 0} 条，失败 ${payload.fail ?? 0} 条。`;
+  } catch (e) {
+    if (result) result.textContent = `同步失败：${e.message || '未知错误'}`;
+  } finally {
+    button.disabled = false;
+    button.textContent = '立即同步';
+  }
+}
+
+async function runDataIntegrityScan(button) {
+  const result = document.getElementById('dataIntegrityResult');
+  if (!result) return;
+  button.disabled = true;
+  button.textContent = '扫描中…';
+  const startedAt = Date.now();
+  let progress = 8;
+  result.innerHTML = '<div style="font-size:12px;color:var(--gray-600);">正在检查项目、子任务和设计需求文件引用… <span id="dataIntegrityElapsed">0 秒</span></div><div style="height:8px;background:var(--gray-100);border-radius:999px;overflow:hidden;margin-top:8px;"><div id="dataIntegrityProgress" style="height:100%;width:8%;background:var(--primary);border-radius:999px;transition:width .4s ease;"></div></div><div style="font-size:11px;color:var(--gray-400);margin-top:5px;">扫描过程中页面仍可正常使用，请耐心等待。</div>';
+  const ticker = setInterval(() => {
+    progress = Math.min(92, progress + (progress < 60 ? 7 : 2));
+    const bar = document.getElementById('dataIntegrityProgress');
+    const elapsed = document.getElementById('dataIntegrityElapsed');
+    if (bar) bar.style.width = `${progress}%`;
+    if (elapsed) elapsed.textContent = `${Math.max(1, Math.round((Date.now() - startedAt) / 1000))} 秒`;
+  }, 500);
+  try {
+    const report = await apiGet('/system/data-integrity');
+    const missing = report.missingFiles || [];
+    const invalid = report.invalidJson || [];
+    const duplicates = report.duplicateReferences || [];
+    const issues = [...missing.map(item => `缺失文件：${item}`), ...invalid.map(item => `JSON异常：${item}`), ...duplicates.map(item => `重复引用：${item}`)];
+    result.innerHTML = `<div style="font-size:13px;color:${report.healthy ? 'var(--success)' : 'var(--danger)'};font-weight:600;">${report.healthy ? '检查通过，未发现缺失文件或 JSON 异常。' : `发现 ${issues.length} 项问题。`}</div><div style="font-size:11px;color:var(--gray-400);margin-top:4px;">已扫描 ${report.scannedFiles ?? 0} 个文件，耗时 ${Math.max(1, Math.round((Date.now() - startedAt) / 1000))} 秒</div>${issues.length ? `<div style="margin-top:8px;max-height:180px;overflow:auto;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px;font-size:12px;color:#9a3412;">${issues.slice(0, 100).map(item => `<div style="margin:3px 0;">${escHtml(item)}</div>`).join('')}</div>` : ''}`;
+  } catch (e) {
+    result.innerHTML = `<div style="font-size:12px;color:var(--danger);">扫描失败：${escHtml(e.message || '未知错误')}</div>`;
+  } finally {
+    clearInterval(ticker);
+    button.disabled = false;
+    button.textContent = '重新扫描';
+  }
 }
 
 function groupLabel(group) {

@@ -98,14 +98,14 @@ class FrontendModuleLayoutTest {
             if (module.equals("core-identity.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=151");
             if (module.equals("dashboard-projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=159");
             if (module.equals("dashboard-home.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=161");
-            if (module.equals("admin-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=151");
+            if (module.equals("admin-shell.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=155");
             if (module.equals("dashboard-scoring.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=161");
             if (module.equals("admin-users.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=166");
             if (module.equals("admin-roles.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=151");
             if (module.equals("admin-workload.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             if (module.equals("admin-org.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=165");
-            if (module.equals("project-uploads.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=157");
-            if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=188");
+            if (module.equals("project-uploads.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=158");
+            if (module.equals("project-detail.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=189");
             if (module.equals("project-form.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=184");
             if (module.equals("project-tasks.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=188");
             if (module.equals("projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
@@ -114,7 +114,7 @@ class FrontendModuleLayoutTest {
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
-        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=238\"></script>"),
+        assertTrue(html.contains("<script type=\"module\" src=\"/js/bootstrap.js?v=239\"></script>"),
                 "页面应只通过当前版本 ES Module 启动入口加载前端");
         assertFalse(html.matches("(?s).*<script(?![^>]*type=\"module\")[^>]+src=\"/js/.*"),
                 "页面不应继续加载经典业务脚本");

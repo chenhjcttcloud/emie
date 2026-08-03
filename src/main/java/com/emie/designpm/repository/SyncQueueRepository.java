@@ -19,4 +19,8 @@ public interface SyncQueueRepository extends JpaRepository<SyncQueue, Long> {
     long countByStatus(String status);
 
     long countByStatusAndRetryCountGreaterThanEqual(String status, int retryCount);
+
+    Optional<SyncQueue> findTopByStatusOrderByUpdatedAtDesc(String status);
+
+    Optional<SyncQueue> findTopByStatusOrderByCreatedAtDesc(String status);
 }

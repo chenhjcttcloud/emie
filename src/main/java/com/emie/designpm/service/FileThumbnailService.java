@@ -18,7 +18,7 @@ import java.util.concurrent.Semaphore;
 @Service
 public class FileThumbnailService {
     private static final int MAX_SIDE = 480;
-    private static final Semaphore THUMBNAIL_SLOTS = new Semaphore(2);
+    private static final Semaphore THUMBNAIL_SLOTS = new Semaphore(4);
     private final FileArchiveService fileArchiveService;
 
     public FileThumbnailService(FileArchiveService fileArchiveService) {

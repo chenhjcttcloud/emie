@@ -6,6 +6,11 @@ server:
     min-response-size: 512
 
 spring:
+  flyway:
+    enabled: ${SPRING_FLYWAY_ENABLED:true}
+    baseline-on-migrate: ${SPRING_FLYWAY_BASELINE_ON_MIGRATE:true}
+    baseline-version: 0
+    locations: classpath:db/migration
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:127.0.0.1}

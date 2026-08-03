@@ -144,11 +144,23 @@ public class SyncQueueService {
         long done = syncQueueRepository.countByStatus("done");
         long fail = syncQueueRepository.countByStatus("fail");
         long failRetry = syncQueueRepository.countByStatusAndRetryCountGreaterThanEqual("fail", 3);
-        return Map.of(
-                "pending", pending,
-                "done", done,
-                "fail", fail,
-                "failRetryExceeded", failRetry
-        );
+        Optional<SyncQueue> latestDone = syncQueueRepository.findTopByStatusOrderByUpdatedAtDesc("done");
+        Optional<SyncQueue> latestFail = syncQueueRepository.findTopByStatusOrderByUpdatedAtDesc("fail");
+        Map<String, Object> stats = new java.util.LinkedHashMap<>();
+        stats.put("pending", pending);
+        stats.put("processing", syncQueueRepository.countByStatus("processing"));
+        stats.put("done", done);
+        stats.put("fail", fail);
+        stats.put("failRetryExceeded", failRetry);
+        stats.put("lastSuccessAt", latestDone.map(SyncQueue::getUpdatedAt).orElse(null));
+        stats.put("lastFailureAt", latestFail.map(SyncQueue::getUpdatedAt).orElse(null));
+        stats.put("lastFailure", latestFail.map(item -> Map.of(
+                "id", item.getId(),
+                "entityType", item.getEntityType(),
+                "entityId", item.getEntityId(),
+                "retryCount", item.getRetryCount() == null ? 0 : item.getRetryCount(),
+                "error", item.getErrorMsg() == null ? "未知错误" : item.getErrorMsg()
+        )).orElse(null));
+        return stats;
     }
 }

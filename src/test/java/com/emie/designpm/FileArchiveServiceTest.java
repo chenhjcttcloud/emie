@@ -71,4 +71,28 @@ class FileArchiveServiceTest {
         assertEquals(240, thumbnailImage.getHeight());
         thumbnailImage.flush();
     }
+
+    @Test
+    void existingFreshThumbnailIsReusedWithoutDecodingSourceAgain() throws Exception {
+        FileRecordRepository records = mock(FileRecordRepository.class);
+        SystemConfigRepository configs = mock(SystemConfigRepository.class);
+        FileArchiveService archiveService = new FileArchiveService(records, configs);
+        ReflectionTestUtils.setField(archiveService, "uploadDir", uploadDir.toString());
+        archiveService.init();
+
+        String storedName = "cached-image.png";
+        Path source = uploadDir.resolve(storedName);
+        Files.writeString(source, "not a decodable image");
+        Path cache = uploadDir.resolve("thumbnail-cache");
+        Files.createDirectories(cache);
+        Path thumbnail = cache.resolve(storedName + ".jpg");
+        Files.writeString(thumbnail, "cached thumbnail");
+        Files.setLastModifiedTime(thumbnail, java.nio.file.attribute.FileTime.fromMillis(
+                Files.getLastModifiedTime(source).toMillis() + 5000));
+        when(records.findByStoredName(storedName)).thenReturn(Optional.of(FileRecord.builder()
+                .storedName(storedName).storageTier("local").build()));
+
+        assertEquals(thumbnail, new FileThumbnailService(archiveService).getOrCreate(storedName, cache));
+        assertEquals("cached thumbnail", Files.readString(thumbnail));
+    }
 }

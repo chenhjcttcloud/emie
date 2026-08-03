@@ -6,14 +6,17 @@ import com.emie.designpm.repository.ScoringRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.FeishuBaseService;
 import com.emie.designpm.service.SyncQueueService;
+import com.emie.designpm.service.SyncWorker;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 飞书同步管理接口
@@ -30,19 +33,34 @@ public class FeishuSyncController {
     private final SubTaskRepository subTaskRepository;
     private final ScoringRepository scoringRepository;
     private final ActivityLogRepository activityLogRepository;
+    private final SyncWorker syncWorker;
 
+    @Autowired
     public FeishuSyncController(SyncQueueService syncQueueService,
                                 FeishuBaseService feishuBaseService,
                                 ProjectRepository projectRepository,
                                 SubTaskRepository subTaskRepository,
                                 ScoringRepository scoringRepository,
-                                ActivityLogRepository activityLogRepository) {
+                                ActivityLogRepository activityLogRepository,
+                                Optional<SyncWorker> syncWorker) {
         this.syncQueueService = syncQueueService;
         this.feishuBaseService = feishuBaseService;
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
         this.scoringRepository = scoringRepository;
         this.activityLogRepository = activityLogRepository;
+        this.syncWorker = syncWorker.orElse(null);
+    }
+
+    /** 保留无 worker 的单元测试构造方式。 */
+    public FeishuSyncController(SyncQueueService syncQueueService,
+                                FeishuBaseService feishuBaseService,
+                                ProjectRepository projectRepository,
+                                SubTaskRepository subTaskRepository,
+                                ScoringRepository scoringRepository,
+                                ActivityLogRepository activityLogRepository) {
+        this(syncQueueService, feishuBaseService, projectRepository, subTaskRepository,
+                scoringRepository, activityLogRepository, Optional.empty());
     }
 
     /** 同步状态统计 */
@@ -55,6 +73,16 @@ public class FeishuSyncController {
     @GetMapping("/config")
     public ResponseEntity<Map<String, String>> getConfig() {
         return ResponseEntity.ok(feishuBaseService.getConfig());
+    }
+
+    /** 管理员手动消费一轮同步队列；复用定时任务的并发锁和失败重试逻辑。 */
+    @PostMapping("/process")
+    public ResponseEntity<Map<String, Object>> processOnce() {
+        if (syncWorker == null) return ResponseEntity.status(503).body(Map.of("message", "同步服务暂不可用"));
+        syncWorker.processQueue();
+        Map<String, Object> result = new LinkedHashMap<>(syncQueueService.getStats());
+        result.put("message", "已触发一轮同步处理");
+        return ResponseEntity.ok(result);
     }
 
     /**

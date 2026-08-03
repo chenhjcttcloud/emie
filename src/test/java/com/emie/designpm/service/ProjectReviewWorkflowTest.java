@@ -143,6 +143,35 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
+    void rejectedTaskRedeliveryResetsReviewsAndPreservesNewDeliveryVersion() {
+        Project project = projectWithTask("channel_custom", "rejected");
+        ScoringRecord planner = review(project.getTasks().get(0), "planner", "first");
+        planner.setReviewStatus("rejected");
+        planner.setComment("请补充源文件");
+        ScoringRecord sales = review(project.getTasks().get(0), "sales", "second");
+        sales.setReviewStatus("waiting");
+        when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scoring.findBySubTaskIdAndRole(11L, "planner")).thenReturn(Optional.of(planner));
+        when(scoring.findBySubTaskIdAndRole(11L, "sales")).thenReturn(Optional.of(sales));
+        when(deliveryVersions.countBySubTaskId(11L)).thenReturn(1L);
+
+        Map<String, Object> body = new java.util.HashMap<>(deliveryBody());
+        body.put("changeSummary", "补交源文件");
+        service.taskRedeliver(1L, 11L, body);
+
+        assertEquals("delivered", project.getTasks().get(0).getStatus());
+        assertReview(planner, "planner", "first", "pending", null);
+        assertReview(sales, "sales", "second", "waiting", null);
+        ArgumentCaptor<com.emie.designpm.entity.SubTaskDeliveryVersion> version =
+                ArgumentCaptor.forClass(com.emie.designpm.entity.SubTaskDeliveryVersion.class);
+        verify(deliveryVersions).save(version.capture());
+        assertEquals(2, version.getValue().getVersionNo());
+        assertEquals("redelivery", version.getValue().getSubmissionType());
+        assertEquals("补交源文件", version.getValue().getChangeSummary());
+    }
+
+    @Test
     void plannerApprovalCompletesFirstReviewWithAuditContext() {
         Project project = projectWithTask("channel_custom", "delivered");
         ScoringRecord firstReview = review(project.getTasks().get(0), "planner", "first");

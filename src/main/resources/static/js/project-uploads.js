@@ -208,6 +208,14 @@ document.addEventListener('click', function(e) {
   }
 });
 
+// 缩略图生成失败时自动回退到已授权原图，避免详情卡片出现空白；只回退一次防止错误循环。
+document.addEventListener('error', function(e) {
+  const img = e.target.closest?.('img.img-clickable');
+  if (!img || img.dataset.fullFallback === 'true' || !img.dataset.fullSrc) return;
+  img.dataset.fullFallback = 'true';
+  img.src = img.dataset.fullSrc;
+}, true);
+
 // 放大图激活时，⌘C / Ctrl+C 直接写入原始图片字节。
 // PNG 不再经过 Canvas 重编码，从而保留原图 DPI，避免 PowerPoint/WPS 按错误 DPI 放大。
 document.addEventListener('keydown', async function(e) {

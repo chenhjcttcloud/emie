@@ -897,6 +897,7 @@ public class ProjectController {
             record.put("reviewerRole", log.getRole());
             record.put("reviewedAt", log.getTime().format(DTF));
             record.put("reason", reason);
+            record.put("requiredCompletionDate", rejection.getOrDefault("requiredCompletionDate", snapshot.getOrDefault("plannedDate", "")));
             record.put("rejectionReferenceImagesJson", rejection.getOrDefault("rejectionReferenceImagesJson", "[]"));
             record.put("rejectionAttachmentsJson", rejection.getOrDefault("rejectionAttachmentsJson", "[]"));
             record.put("deliverables", snapshot.getOrDefault("deliverables", task.getDeliverables()));

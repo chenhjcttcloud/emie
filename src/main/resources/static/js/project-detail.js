@@ -365,6 +365,7 @@ function openTaskRejectionRecord(taskId, attemptNo) {
             <span style="font-size:12px;font-weight:600;color:#A32D2D;">驳回意见</span>
             <span style="font-size:11px;color:var(--gray-500);">${escHtml(roleNames[record.reviewerRole] || record.reviewerRole || '')} · ${escHtml(record.reviewerName || '-')}</span>
           </div>
+          <div class="detail-label" style="color:#A32D2D;margin-bottom:4px;">要求完成时间：${record.requiredCompletionDate ? formatDate(record.requiredCompletionDate) : '-'}</div>
           <div style="font-size:13px;line-height:1.7;color:var(--gray-700);white-space:pre-wrap;">${escHtml(record.reason || '未填写驳回意见')}</div>
           ${rejectionImages ? `<div style="margin-top:14px;"><div class="detail-label">驳回参考图</div>${rejectionImages}</div>` : ''}
           ${rejectionAttachments ? `<div style="margin-top:14px;"><div class="detail-label">驳回附件</div>${rejectionAttachments}</div>` : ''}
@@ -537,7 +538,7 @@ function renderProjectReferenceImages(detail) {
   return `<div style="margin-top:8px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => isRasterImageFile(img.name || storedNameFromFile(img)) ? `<div style="position:relative;display:inline-block;">
-          <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" title="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+          <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" title="${escHtml(img.name || '')}" class="img-clickable" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
           <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>` : `<div class="attachment-item" style="width:100%;display:flex;align-items:center;gap:8px;"><span>📐</span><span class="attachment-name" style="flex:1;">${escHtml(img.name || storedNameFromFile(img))}</span>${renderAttachmentActions(img)}</div>`).join('')}
     </div></div>`;
@@ -555,7 +556,7 @@ function renderSubTaskImages(jsonStr) {
   return `<div style="margin-top:8px;padding-left:4px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => isRasterImageFile(img.name || storedNameFromFile(img)) ? `<div style="position:relative;display:inline-block;">
-          <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--gray-200);cursor:pointer;">
+          <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" decoding="async" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--gray-200);cursor:pointer;">
           <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>` : `<div class="attachment-item" style="width:100%;display:flex;align-items:center;gap:8px;"><span>📐</span><span class="attachment-name" style="flex:1;">${escHtml(img.name || storedNameFromFile(img))}</span>${renderAttachmentActions(img)}</div>`).join('')}
     </div></div>`;
@@ -596,7 +597,7 @@ function renderTaskAttachments(jsonStr) {
     html += `<div style="margin-top:8px;"><div class="detail-label">🖼️ 交付图片</div>
       <div class="image-preview" style="margin-top:4px;">
         ${images.map(img => `<div style="position:relative;display:inline-block;">
-            <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" draggable="true" loading="lazy" decoding="async" style="width:180px;height:180px;object-fit:contain;border-radius:6px;border:1px solid var(--gray-200);cursor:grab;background:#fff;">
+            <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" draggable="true" decoding="async" style="width:180px;height:180px;object-fit:contain;border-radius:6px;border:1px solid var(--gray-200);cursor:grab;background:#fff;">
             <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
         </div>`).join('')}
       </div></div>`;
