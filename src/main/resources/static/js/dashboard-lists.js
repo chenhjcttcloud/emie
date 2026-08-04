@@ -120,6 +120,7 @@ function openDesignRequirementReject(id) {
   const modal = document.createElement('div'); modal.className = 'modal-overlay'; modal.id = 'designRequirementRejectModal';
   modal.innerHTML = `<div class="modal"><div class="modal-header"><div class="modal-title">↩️ 驳回设计/送审需求</div></div><div class="modal-body"><div class="form-group"><label class="form-label">驳回意见</label><textarea class="form-textarea" id="designRequirementRejectComments" required></textarea></div><div class="form-group"><label class="form-label">要求完成时间</label><input type="date" class="form-input" id="designRequirementRejectDeadline" required min="${new Date().toISOString().slice(0,10)}"></div></div><div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('designRequirementRejectModal')">取消</button><button class="btn btn-danger" data-emie-onclick="submitDesignRequirementReject(${id})">确认驳回</button></div></div>`;
   document.body.appendChild(modal);
+  enhanceDateInputs(modal);
 }
 
 async function submitDesignRequirementReject(id) {

@@ -73,8 +73,30 @@ function renderDatePicker(name, opts = {}) {
   const ph = opts.placeholder || 'yyyy-mm-dd';
   const inputId = `date_${name}_${Math.random().toString(36).slice(2, 8)}`;
   return `<div class="date-picker" style="position:relative;">
-    <input id="${inputId}" type="date" class="form-input" name="${name}" value="${val}" ${req} min="${new Date().toISOString().split('T')[0]}" aria-label="${ph}" autocomplete="off" style="min-height:38px;" data-emie-onclick="try{if(typeof this.showPicker==='function')this.showPicker()}catch(e){}" data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">
+    <input id="${inputId}" type="date" class="form-input" name="${name}" value="${val}" ${req} min="${new Date().toISOString().split('T')[0]}" aria-label="${ph}" autocomplete="off" style="min-height:38px;cursor:pointer;" data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">
   </div>`;
+}
+
+// 动态弹窗中的日期输入需要直接绑定用户点击事件，部分内置浏览器不会
+// 将文档级代理事件视为有效的日期选择器手势。
+function enhanceDateInputs(root = document) {
+  root.querySelectorAll?.('input[type="date"]').forEach(input => {
+    if (input.dataset.datePickerReady === '1') return;
+    input.dataset.datePickerReady = '1';
+    input.addEventListener('click', () => {
+      try {
+        if (typeof input.showPicker === 'function') input.showPicker();
+      } catch (_) { /* 浏览器已自动打开或不支持 showPicker */ }
+    });
+  });
+}
+
+// 页面大部分表单由模块按需动态渲染，统一监听新增节点，避免遗漏任何日期控件。
+if (document.body) {
+  enhanceDateInputs(document);
+  new MutationObserver(mutations => mutations.forEach(mutation => mutation.addedNodes.forEach(node => {
+    if (node.nodeType === 1) enhanceDateInputs(node);
+  }))).observe(document.body, { childList: true, subtree: true });
 }
 
 function triggerDatePicker(btn) {
