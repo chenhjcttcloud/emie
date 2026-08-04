@@ -69,10 +69,7 @@ public class DashboardController {
         // 1. 项目列表
         boolean allPlanners = "planner".equals(role) && "all".equalsIgnoreCase(scope);
         List<Long> visibleProjectIds = visibleProjectIds(role, userId, allPlanners);
-        Page<Project> summaryPage = allPlanners
-                ? projectService.getProjectsPage("admin", userId, null, false, PageRequest.of(0, 15))
-                : projectService.getProjectsPage(role, userId, null, false, PageRequest.of(0, 15));
-        List<Project> projects = summaryPage.getContent();
+        List<Project> projects = dashboardProjects(role, userId, visibleProjectIds);
         Map<Long, int[]> taskCountMap = projectService.getTaskCountMap(projects);
         Map<Long, Double> scoreMap = projectService.computeProjectScoresBatch(projects);
         List<ProjectSummaryDTO> orders = projects.stream()
@@ -98,10 +95,23 @@ public class DashboardController {
     }
 
     private List<Long> visibleProjectIds(String role, String userId, boolean allPlanners) {
+        if ("planner".equals(role)) {
+            if (!allPlanners) return projectRepository.findByPlannerViewLight(userId).stream().map(Project::getId).toList();
+            return userRepository.findByRole("planner").stream()
+                    .flatMap(u -> projectRepository.findByPlannerViewLight(u.getUserId()).stream())
+                    .map(Project::getId).distinct().toList();
+        }
         if (!allPlanners) return projectService.findVisibleProjectIds(role, userId);
         return userRepository.findByRole("planner").stream()
                 .map(u -> projectService.findVisibleProjectIds("planner", u.getUserId()))
                 .flatMap(Collection::stream).distinct().toList();
+    }
+
+    private List<Project> dashboardProjects(String role, String userId, List<Long> ids) {
+        if (ids.isEmpty()) return List.of();
+        return projectRepository.findAllById(ids).stream()
+                .sorted(Comparator.comparing(Project::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(15).toList();
     }
 
     @GetMapping("/role-status")

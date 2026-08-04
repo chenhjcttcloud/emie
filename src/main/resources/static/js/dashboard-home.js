@@ -16,6 +16,7 @@ const closeM = (...args) => EMIE.actions.closeM(...args);
 const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const refreshNavigationBadges = (...args) => EMIE.actions.refreshNavigationBadges(...args);
 let plannerBoardScope = 'mine';
+let plannerScopeUserId = '';
 
 async function updateBadges(role, uid) {
   return refreshNavigationBadges();
@@ -23,6 +24,10 @@ async function updateBadges(role, uid) {
 
 // ==================== 工作台 ====================
 async function renderDashboard(main, role, uid) {
+  if (role === 'planner' && plannerScopeUserId !== uid) {
+    plannerScopeUserId = uid;
+    plannerBoardScope = 'mine';
+  }
   // 使用 SWR 缓存 + 聚合端点（1次API替代8次）
   const scopeParam = role === 'planner' ? plannerBoardScope : 'mine';
   const cacheKey = `dashboard_${role}_${uid}_${scopeParam}`;
@@ -48,7 +53,7 @@ async function renderDashboard(main, role, uid) {
   const rolePanelsHtml = `<div id="dashboardRoleStatus" class="dashboard-role-status-loading">正在加载状态面板…</div>`;
 
   main.innerHTML = `
-    <h2 style="font-size:22px;margin-bottom:20px;">📊 工作台 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">— ${EMIE.state.currentRole === 'planner' ? `<select class="form-input" style="display:inline-block;width:auto;min-width:130px;padding:4px 28px 4px 8px;font-size:13px;vertical-align:middle;" data-emie-onchange="changePlannerBoardScope(event.target.value)"><option value="mine" ${plannerBoardScope === 'mine' ? 'selected' : ''}>${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}</option><option value="all" ${plannerBoardScope === 'all' ? 'selected' : ''}>全部产品企划</option></select>` : `${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}（${roleLabel(EMIE.state.currentRole)}）`}</span></h2>
+    <h2 style="font-size:22px;margin-bottom:20px;">📊 工作台 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">— ${EMIE.state.currentRole === 'planner' ? `<select class="form-input" style="display:inline-block;width:auto;min-width:130px;padding:4px 28px 4px 8px;font-size:13px;vertical-align:middle;"><option value="mine" ${plannerBoardScope === 'mine' ? 'selected' : ''}>${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}</option><option value="all" ${plannerBoardScope === 'all' ? 'selected' : ''}>全部产品企划</option></select>` : `${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}（${roleLabel(EMIE.state.currentRole)}）`}</span></h2>
     ${!executionRole ? `<div class="stats-grid dashboard-stats-row">
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigate('orders')"><div class="stat-icon blue">📁</div><div><div class="stat-value">${stats.totalProjects}</div><div class="stat-label">${EMIE.state.currentRole === 'admin' ? '全部项目' : '我的项目'}</div></div></div>
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigate('channel')"><div class="stat-icon blue">📦</div><div><div class="stat-value">${stats.channelProjects}</div><div class="stat-label">渠道定制单</div></div></div>
@@ -168,7 +173,7 @@ async function loadDashboardRoleStatus(role, uid, myDept) {
     }
   container.innerHTML = html;
   container.querySelectorAll('[data-user-card-id]').forEach(card => {
-    card.addEventListener('click', () => showUserTasksPopup(card.dataset.userCardId, card.dataset.userCardName || ''));
+    card.addEventListener('click', () => showUserTasksPopup(card.dataset.userCardId, card.dataset.userCardName || '', card.dataset.userCardRole || ''));
   });
   } catch (error) {
     container.innerHTML = '<div class="empty" style="padding:20px;"><p>状态面板暂时无法加载</p></div>';
@@ -326,7 +331,7 @@ async function renderRolePanel(role, deptId, excludeUserId) {
                 🏢 ${escHtml(dept.name)}
                 ${dept.headUserId ? `<span style="font-weight:400;font-size:12px;color:var(--gray-400);">（负责人：${(() => { const h = users.find(u => u.id === dept.headUserId); return h ? h.name : '—'; })()})</span>` : ''}
               </div>
-              <div class="designer-grid">${deptUsers.map(u => renderUserCard(u)).join('')}</div>
+              <div class="designer-grid">${deptUsers.map(u => renderUserCard(u, role)).join('')}</div>
             </div>`;
         }
       }
@@ -335,12 +340,12 @@ async function renderRolePanel(role, deptId, excludeUserId) {
         bodyHtml += `
           <div style="margin-bottom:12px;">
             <div style="font-size:13px;font-weight:600;color:var(--gray-400);margin-bottom:8px;padding:0 4px;">📋 未分配部门</div>
-            <div class="designer-grid">${unknownUsers.map(u => renderUserCard(u)).join('')}</div>
+            <div class="designer-grid">${unknownUsers.map(u => renderUserCard(u, role)).join('')}</div>
           </div>`;
       }
     } else {
       // 无部门：平铺展示
-      bodyHtml = `<div class="designer-grid">${users.map(u => renderUserCard(u)).join('')}</div>`;
+      bodyHtml = `<div class="designer-grid">${users.map(u => renderUserCard(u, role)).join('')}</div>`;
     }
 
     return `<div class="designer-status-panel">
@@ -400,18 +405,18 @@ function renderRolePanelFromData(statusData, role, deptId, excludeUserId) {
             🏢 ${escHtml(dept.name)}
             ${dept.headUserId ? `<span style="font-weight:400;font-size:12px;color:var(--gray-400);">（负责人：${(() => { const h = users.find(u => u.id === dept.headUserId); return h ? h.name : '—'; })()})</span>` : ''}
           </div>
-          <div class="designer-grid">${deptUsers.map(u => renderUserCard(u)).join('')}</div>
+          <div class="designer-grid">${deptUsers.map(u => renderUserCard(u, role)).join('')}</div>
         </div>`;
       }
     }
     if (unknownUsers.length > 0) {
       bodyHtml += `<div style="margin-bottom:12px;">
         <div style="font-size:13px;font-weight:600;color:var(--gray-400);margin-bottom:8px;padding:0 4px;">📋 未分配部门</div>
-        <div class="designer-grid">${unknownUsers.map(u => renderUserCard(u)).join('')}</div>
+        <div class="designer-grid">${unknownUsers.map(u => renderUserCard(u, role)).join('')}</div>
       </div>`;
     }
   } else {
-    bodyHtml = `<div class="designer-grid">${users.map(u => renderUserCard(u)).join('')}</div>`;
+    bodyHtml = `<div class="designer-grid">${users.map(u => renderUserCard(u, role)).join('')}</div>`;
   }
 
   return `<div class="designer-status-panel">
@@ -427,9 +432,9 @@ function renderRolePanelFromData(statusData, role, deptId, excludeUserId) {
 }
 
 /** 渲染单个用户卡片 */
-function renderUserCard(u) {
+function renderUserCard(u, cardRole) {
   // 忙碌的用户整个卡片可点击，弹出任务列表
-  const clickAttr = u.busy ? `data-user-card-id="${escHtml(u.id)}" data-user-card-name="${escHtml(u.name || '')}" style="cursor:pointer;"` : '';
+  const clickAttr = u.busy ? `data-user-card-id="${escHtml(u.id)}" data-user-card-name="${escHtml(u.name || '')}" data-user-card-role="${escHtml(cardRole || '')}" style="cursor:pointer;"` : '';
   return `<div class="designer-card ${u.busy ? 'busy' : 'idle'}" ${clickAttr}>
     <div class="designer-avatar">${u.name.charAt(0)}</div>
     <div class="designer-info">
@@ -447,7 +452,7 @@ function renderUserCard(u) {
 }
 
 /** 弹出用户任务/项目列表 */
-function showUserTasksPopup(userId, userName) {
+function showUserTasksPopup(userId, userName, cardRole) {
   if (document.getElementById('userTasksPopup')) return;
   // 从页面上的角色状态数据中获取该用户的任务列表
   // 重新拉取角色状态数据
@@ -463,10 +468,10 @@ function showUserTasksPopup(userId, userName) {
       </div>
     </div>`;
   document.body.appendChild(modal);
-  loadUserTasksPopup(userId);
+  loadUserTasksPopup(userId, cardRole);
 }
 
-async function loadUserTasksPopup(userId) {
+async function loadUserTasksPopup(userId, cardRole) {
   try {
     // 从 EMIE.state.users 缓存中找到该用户的角色
     const allUsers = Object.values(EMIE.state.users).flat();
@@ -480,7 +485,7 @@ async function loadUserTasksPopup(userId) {
       return;
     }
     const tasks = userData.activeTasks || [];
-    const projects = userData.activeProjects || [];
+    const projects = cardRole === 'planner' ? [] : (userData.activeProjects || []);
     const body = document.getElementById('userTasksPopupBody');
     if (tasks.length === 0 && projects.length === 0) {
       body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--success);">🟢 当前空闲，无进行中的任务</div>';
