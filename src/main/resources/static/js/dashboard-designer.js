@@ -9,6 +9,7 @@ const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const taskAccept = (...args) => EMIE.actions.taskAccept(...args);
 const taskDeliver = (...args) => EMIE.actions.taskDeliver(...args);
 const taskRedeliver = (...args) => EMIE.actions.taskRedeliver(...args);
+const taskConfirmRevision = (...args) => EMIE.actions.taskConfirmRevision(...args);
 const openScoring = (...args) => EMIE.actions.openScoring(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const matchesSearchText = (...args) => EMIE.actions.matchesSearchText(...args);
@@ -139,7 +140,7 @@ function renderDesignerTaskCards(tasks, readOnly = false) {
             ${!readOnly && t.status === 'pending' && !t._unassigned ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskAccept(${t.projectId},${t.id})">✅ 接单</button>` : ''}
             ${!readOnly && t._unassigned ? `<button class="btn btn-success btn-sm" data-emie-onclick="taskAccept(${t.projectId},${t.id})">📋 认领并接单</button>` : ''}
             ${!readOnly && t.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskDeliver(${t.projectId},${t.id})">📤 交付成果</button>` : ''}
-            ${!readOnly && t.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-onclick="taskRedeliver(${t.projectId},${t.id})">📤 重新交付</button>` : ''}
+            ${!readOnly && t.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-onclick="taskConfirmRevision(${t.projectId},${t.id})">🛠️ 确认修改</button>` : ''}
             ${!readOnly && ['delivered', 'planner_approved', 'sales_approved', 'admin_approved'].includes(t.status) && t.designerId === getCurrentUserId() ? `<button class="btn btn-outline btn-sm" data-emie-onclick="taskCorrectDelivery(${t.projectId},${t.id})">📝 修正交付</button>` : ''}
             ${!readOnly && needScore ? `<button class="btn btn-warning btn-sm" data-emie-onclick="openScoring(${t.projectId},${t.id})">⭐ 评分</button>` : ''}
             <button class="btn btn-outline btn-sm" data-emie-onclick="openPublishedSubTaskDetail(${t.id})">查看子任务详情${modificationCount ? `（${modificationCount}）` : ''}</button>

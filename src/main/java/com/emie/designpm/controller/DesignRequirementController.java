@@ -178,7 +178,7 @@ public class DesignRequirementController {
         if (!"designer".equals(normalizeRole(session.role())) || !session.userId().equals(d.getDesignerId())) {
             return ResponseEntity.status(403).body(java.util.Map.of("error", "仅该需求的设计师可以提交交付成果"));
         }
-        if (!java.util.Set.of("draft", "rejected").contains(d.getStatus())) {
+        if (!java.util.Set.of("draft", "in_progress", "rejected").contains(d.getStatus())) {
             return ResponseEntity.badRequest().body(java.util.Map.of("error", "当前需求已提交，不能重复交付"));
         }
         String content = text(body.get("deliveryContent"));
@@ -190,6 +190,77 @@ public class DesignRequirementController {
         d.setStatus("pending_self_score");
         repository.save(d);
         scoringService.activateSelfScore(d);
+        // 设计/送审需求若由销售发起，设计师交付后同步通知对应销售。
+        String salesId = null;
+        if ("sales".equals(normalizeRole(d.getResponsibleRole()))) {
+            salesId = d.getResponsibleId();
+        }
+        if (salesId == null || salesId.isBlank()) {
+            User owner = userService.getUserByUserId(d.getOwnerId());
+            if (isActiveRole(owner, "sales")) salesId = owner.getUserId();
+        }
+        if (salesId != null && !salesId.isBlank() && notificationWorkflowService != null) {
+            try {
+                java.util.Map<String, String> context = new java.util.LinkedHashMap<>();
+                context.put("projectName", d.getName());
+                context.put("deadline", d.getDeadline());
+                context.put("actorName", session.name());
+                context.put("projectLink", "/?view=design-needs&requirementId=" + d.getId());
+                context.put("message", "设计师已提交交付成果");
+                notificationWorkflowService.notifyUserAfterCommit("DESIGN_REQUIREMENT_DELIVERED", salesId,
+                        "design_requirement", d.getId(), session.userId(), context);
+            } catch (Exception ignored) { }
+        }
+        return ResponseEntity.ok(toDetail(d));
+    }
+
+    /** 设计/送审需求被驳回后，设计师确认开始修改。 */
+    @PostMapping("/{id}/confirm-revision")
+    @Transactional
+    public ResponseEntity<?> confirmRevision(@PathVariable Long id, HttpServletRequest request) {
+        AuthController.AuthSession session = session(request);
+        if (session == null) return ResponseEntity.status(401).build();
+        if (permissionService != null && !permissionService.has(session.role(), "design_requirement.deliver")) {
+            return forbidden("design_requirement.deliver");
+        }
+        DesignRequirement d = repository.findById(id).orElse(null);
+        if (d == null) return ResponseEntity.notFound().build();
+        if (!"designer".equals(normalizeRole(session.role())) || !session.userId().equals(d.getDesignerId())) {
+            return ResponseEntity.status(403).body(java.util.Map.of("error", "仅该需求的设计师可以确认修改"));
+        }
+        if (!"rejected".equals(d.getStatus())) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", "当前需求不是已驳回状态"));
+        }
+        d.setStatus("in_progress");
+        repository.save(d);
+        return ResponseEntity.ok(toDetail(d));
+    }
+
+    @PostMapping("/{id}/reject")
+    @Transactional
+    public ResponseEntity<?> reject(@PathVariable Long id, @RequestBody java.util.Map<String, Object> body,
+                                    HttpServletRequest request) {
+        AuthController.AuthSession session = session(request);
+        if (session == null) return ResponseEntity.status(401).build();
+        if (permissionService != null && !permissionService.has(session.role(), "design_requirement.score.review")) {
+            return forbidden("design_requirement.score.review");
+        }
+        DesignRequirement d = repository.findById(id).orElse(null);
+        if (d == null) return ResponseEntity.notFound().build();
+        if (!"planner".equals(normalizeRole(session.role())) || !session.userId().equals(d.getPlannerId())) {
+            return ResponseEntity.status(403).body(java.util.Map.of("error", "仅该需求的产品企划可以驳回"));
+        }
+        String comments = text(body.get("comments"));
+        String deadline = text(body.get("requiredCompletionDate"));
+        if (comments == null || deadline == null) return ResponseEntity.badRequest().body(java.util.Map.of("error", "驳回意见和要求完成时间不能为空"));
+        d.setRejectionComments(comments); d.setRejectionDeadline(deadline); d.setStatus("rejected");
+        repository.save(d);
+        if (notificationWorkflowService != null) {
+            java.util.Map<String, String> context = new java.util.LinkedHashMap<>();
+            context.put("projectName", d.getName()); context.put("deadline", deadline); context.put("actorName", session.name());
+            context.put("reason", comments); context.put("projectLink", "/?view=design-needs&requirementId=" + id);
+            notificationWorkflowService.notifyUserAfterCommit("TASK_REJECTED", d.getDesignerId(), "design_requirement", id, session.userId(), context);
+        }
         return ResponseEntity.ok(toDetail(d));
     }
 
@@ -245,6 +316,7 @@ public class DesignRequirementController {
         row.put("type", "design_requirement"); row.put("status", d.getStatus());
         row.put("statusLabel", switch (d.getStatus()) {
             case "draft" -> "待设计交付";
+            case "in_progress" -> "设计中";
             case "pending_self_score" -> "待设计师自评";
             case "pending_review" -> "待复评";
             case "completed" -> "已完成";
@@ -271,6 +343,8 @@ public class DesignRequirementController {
         detail.put("responsibleRole", d.getResponsibleRole());
         detail.put("plannerId", d.getPlannerId());
         detail.put("plannerName", d.getPlannerName());
+        detail.put("rejectionComments", d.getRejectionComments());
+        detail.put("rejectionDeadline", d.getRejectionDeadline());
         detail.put("designerId", d.getDesignerId());
         detail.put("designerName", d.getDesignerName());
         detail.put("ownerId", d.getOwnerId());

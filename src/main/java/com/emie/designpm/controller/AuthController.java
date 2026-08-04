@@ -25,7 +25,7 @@ import org.slf4j.LoggerFactory;
 public class AuthController {
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
-    /** 会话不因闲置自动退出；仅在用户主动退出、管理员撤销或令牌失效时结束。 */
+    /** 按产品要求，会话不因时间自动失效；主动退出或管理员撤销时结束。 */
     private static final long SESSION_TTL_MS = Long.MAX_VALUE;
     private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
 
@@ -72,13 +72,13 @@ public class AuthController {
         if (user == null) user = userRepository.findByPhone(id).orElse(null);
         if (user == null) user = userRepository.findByEmail(id).orElse(null);
         if (user == null) {
-            return ResponseEntity.status(401).body(Map.of("error", "账号不存在"));
+            return ResponseEntity.status(401).body(Map.of("error", "账号或密码错误"));
         }
         if ("disabled".equalsIgnoreCase(user.getStatus())) {
-            return ResponseEntity.status(403).body(Map.of("error", "账号已停用，请联系管理员"));
+            return ResponseEntity.status(401).body(Map.of("error", "账号或密码错误"));
         }
         if ("pending".equalsIgnoreCase(user.getStatus()) || "pending".equals(user.getRole())) {
-            return ResponseEntity.status(403).body(Map.of("error", "账号等待管理员分配角色，请使用飞书登录查看状态"));
+            return ResponseEntity.status(401).body(Map.of("error", "账号或密码错误"));
         }
 
         // 验证密码
@@ -88,7 +88,7 @@ public class AuthController {
                 ? PASSWORD_ENCODER.matches(password, storedPassword)
                 : sha256(password).equals(storedPassword);
         if (!passwordMatches) {
-            return ResponseEntity.status(401).body(Map.of("error", "密码错误"));
+            return ResponseEntity.status(401).body(Map.of("error", "账号或密码错误"));
         }
 
         // 兼容旧 SHA-256 账号，并在成功登录时升级为 BCrypt。
@@ -129,6 +129,14 @@ public class AuthController {
 
     private boolean isRateLimited(String ip) {
         long now = System.currentTimeMillis();
+        if (RATE_LIMIT.size() > 10_000) {
+            RATE_LIMIT.entrySet().removeIf(entry -> {
+                synchronized (entry.getValue()) {
+                    return entry.getValue().isEmpty()
+                            || entry.getValue().getLast() < now - 300_000;
+                }
+            });
+        }
         java.util.LinkedList<Long> times = RATE_LIMIT.computeIfAbsent(ip, k -> new java.util.LinkedList<>());
         synchronized (times) {
             // 清理5分钟前的记录
@@ -267,6 +275,7 @@ public class AuthController {
     // 清除用户的所有 token（切换账号时）
     public static void clearUserTokens(String userId) {
         TOKENS.values().removeIf(s -> s.userId.equals(userId));
+        if (redisSessionStore != null) redisSessionStore.removeUserTokens(userId);
     }
 
     // ==================== 内部类 ====================

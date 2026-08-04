@@ -5,6 +5,7 @@ import com.emie.designpm.repository.UserRepository;
 import com.emie.designpm.controller.AuthController;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
+import org.springframework.core.env.Environment;
 
 import java.util.List;
 import java.util.Map;
@@ -14,13 +15,15 @@ import java.util.concurrent.ConcurrentHashMap;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final Environment environment;
     /** 用户信息缓存，频繁查询 userName 等操作 */
     private final Map<String, User> userCache = new ConcurrentHashMap<>();
     /** 角色用户列表缓存 */
     private final Map<String, List<User>> roleCache = new ConcurrentHashMap<>();
 
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, Environment environment) {
         this.userRepository = userRepository;
+        this.environment = environment;
     }
 
     @PostConstruct
@@ -29,6 +32,11 @@ public class UserService {
             // 启动时预加载所有用户到缓存
             refreshCache();
             return;
+        }
+
+        boolean seedAllowed = environment.matchesProfiles("dev", "local", "test");
+        if (!seedAllowed) {
+            throw new IllegalStateException("用户表为空，拒绝在非开发/测试环境创建默认账号");
         }
 
         // 测试阶段每个角色只保留一个账号

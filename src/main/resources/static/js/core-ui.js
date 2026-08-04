@@ -21,7 +21,8 @@ function getTaskStatusInfo(status) {
   return {
     pending: { label: '待接单', cls: 'badge-pending', icon: '⏳' },
     accepted: { label: '设计中', cls: 'badge-progress', icon: '🎨' },
-    delivered: { label: '待验收', cls: 'badge-pending', icon: '📤' },
+    delivered: { label: '待送审', cls: 'badge-pending', icon: '📤' },
+    submitted_for_review: { label: '送审中', cls: 'badge-progress', icon: '🔎' },
     planner_approved: { label: '待评分', cls: 'badge-pending', icon: '⏳' },
     sales_approved: { label: '待确认', cls: 'badge-pending', icon: '⏳' },
     admin_approved: { label: '待确认', cls: 'badge-pending', icon: '⏳' },

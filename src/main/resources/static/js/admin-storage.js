@@ -86,7 +86,7 @@ async function renderAdminFileStorage(container) {
         </div>
       </div>`;
   } catch(e) {
-    container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${e.message}</p></div>`;
+    container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${escHtml(e.message || '未知错误')}</p></div>`;
   }
 }
 

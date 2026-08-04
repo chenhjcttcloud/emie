@@ -101,6 +101,9 @@ public final class PermissionCatalog {
                 permissions.add("project.terminate");
                 permissions.add("project.share.create");
                 permissions.add("subtask.create");
+                permissions.add("subtask.review.first.submit");
+                permissions.add("subtask.review.first.approve");
+                permissions.add("subtask.review.first.reject");
                 permissions.add("design_requirement.create");
                 permissions.add("design_requirement.score.review");
             }
@@ -117,6 +120,11 @@ public final class PermissionCatalog {
                 permissions.add("subtask.redeliver");
                 permissions.add("design_requirement.deliver");
                 permissions.add("design_requirement.score.self");
+            }
+            case "supplychain" -> {
+                permissions.add("subtask.accept");
+                permissions.add("subtask.deliver");
+                permissions.add("subtask.redeliver");
             }
             default -> {
                 // 设计师、供应链及自定义已授权角色沿用公共页面行为。
@@ -142,6 +150,11 @@ public final class PermissionCatalog {
             permissions.add("file.upload");
             permissions.add("file.download");
             permissions.add("file.preview");
+        }
+        if ("planner".equals(role)) {
+            permissions.add("subtask.review.first.submit");
+            permissions.add("subtask.review.first.approve");
+            permissions.add("subtask.review.first.reject");
         }
         return Set.copyOf(permissions);
     }

@@ -14,6 +14,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,6 +24,7 @@ import org.slf4j.LoggerFactory;
 public class FeishuAuthController {
 
     private static final Logger log = LoggerFactory.getLogger(FeishuAuthController.class);
+    private static final ConcurrentMap<String, PendingLogin> PENDING_LOGINS = new ConcurrentHashMap<>();
 
     private final SystemConfigRepository configRepository;
     private final UserRepository userRepository;
@@ -65,14 +68,15 @@ public class FeishuAuthController {
                         .build();
             }
 
-            // 生成系统 token
+            // 通过一次性票据交付 token，避免 token 出现在浏览器地址栏、历史记录和 Referer 中。
             String token = AuthController.generateToken(user.getUserId(), user.getRole(), user.getName());
+            String ticket = UUID.randomUUID().toString();
+            long now = System.currentTimeMillis();
+            PENDING_LOGINS.entrySet().removeIf(entry -> entry.getValue().expiresAt < now);
+            PENDING_LOGINS.put(ticket, new PendingLogin(token, user.getUserId(), user.getName(), user.getRole(),
+                    now + 60_000));
 
-            // 重定向到前端，带上 token
-            String redirectUrl = "/?sso_token=" + token
-                    + "&userId=" + user.getUserId()
-                    + "&userName=" + java.net.URLEncoder.encode(user.getName(), "UTF-8")
-                    + "&role=" + user.getRole();
+            String redirectUrl = "/?sso_ticket=" + ticket;
 
             return ResponseEntity.status(HttpStatus.FOUND)
                     .location(URI.create(redirectUrl))
@@ -85,6 +89,19 @@ public class FeishuAuthController {
                     .build();
         }
     }
+
+    @PostMapping("/exchange")
+    public ResponseEntity<?> exchange(@RequestBody Map<String, String> body) {
+        String ticket = body.get("ticket");
+        PendingLogin pending = ticket == null ? null : PENDING_LOGINS.remove(ticket);
+        if (pending == null || pending.expiresAt < System.currentTimeMillis()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "登录票据已失效"));
+        }
+        Map<String, Object> user = Map.of("userId", pending.userId, "userName", pending.userName, "role", pending.role);
+        return ResponseEntity.ok(Map.of("token", pending.token, "user", user));
+    }
+
+    private record PendingLogin(String token, String userId, String userName, String role, long expiresAt) {}
 
     /** 飞书客户端内静默登录（JSAPI tt.login() 获取 code） */
     @PostMapping("/auto-login")

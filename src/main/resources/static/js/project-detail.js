@@ -27,8 +27,10 @@ const deleteTask = (...args) => EMIE.actions.deleteTask(...args);
 const taskAccept = (...args) => EMIE.actions.taskAccept(...args);
 const taskDeliver = (...args) => EMIE.actions.taskDeliver(...args);
 const taskRedeliver = (...args) => EMIE.actions.taskRedeliver(...args);
+const taskConfirmRevision = (...args) => EMIE.actions.taskConfirmRevision(...args);
 const taskApprove = (...args) => EMIE.actions.taskApprove(...args);
 const taskReject = (...args) => EMIE.actions.taskReject(...args);
+const submitTaskReview = (...args) => EMIE.actions.submitTaskReview(...args);
 const clearSWRCache = (...args) => EMIE.actions.clearSWRCache(...args);
 const openScoring = (...args) => EMIE.actions.openScoring(...args);
 
@@ -192,6 +194,10 @@ function renderSubTaskCard(detail, task, idx) {
   const isPlanner = EMIE.state.currentRole === 'planner';
   const myTask = ['designer', 'supplychain', 'planner', 'promotion'].includes(EMIE.state.currentRole) && task.designerId === getCurrentUserId();
   const needScore = task.scoringRecords && task.scoringRecords.some(sr => sr.score == null && sr.role === EMIE.state.currentRole);
+  // 产品企划对设计师/供应链交付的首轮验收会在“通过并评分”弹窗中一次完成，
+  // 不再同时展示一个独立的评分按钮，避免产生重复入口。
+  const plannerApproveAndScore = isPlanner && task.status === 'submitted_for_review';
+  const plannerSubmitReview = isPlanner && task.status === 'delivered' && ['designer', 'supplychain'].includes(task.assigneeRole);
   const doneStatuses = ['delivered', 'planner_approved', 'sales_approved', 'admin_approved', 'completed'];
   const isDone = doneStatuses.includes(task.status);
   const workflowStageLabel = {
@@ -226,7 +232,7 @@ function renderSubTaskCard(detail, task, idx) {
     ${task.referenceImagesJson ? renderSubTaskImages(task.referenceImagesJson) : ''}
     ${task.attachmentsJson ? renderTaskAttachments(task.attachmentsJson) : ''}
 
-    ${task.status === 'delivered' || task.status === 'planner_approved' || task.status === 'sales_approved' || task.status === 'admin_approved' || task.status === 'approved' || task.status === 'completed' || task.status === 'rejected' ? `
+    ${['delivered', 'submitted_for_review', 'planner_approved', 'sales_approved', 'admin_approved', 'approved', 'completed', 'rejected'].includes(task.status) ? `
     <div class="subtask-deliver">
       ${task.deliverables ? `<div class="detail-item"><div class="detail-label">交付成果</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.deliverables)}</div></div>` : ''}
     </div>` : ''}
@@ -239,10 +245,12 @@ function renderSubTaskCard(detail, task, idx) {
 
     <div class="subtask-actions">
       ${/* 企划验收（首轮）：常规品直接通过；渠道定制单进入企划确认状态 */''}
-      ${isPlanner && task.status === 'delivered' ? `
-        <button class="btn btn-success btn-sm" data-emie-onclick="taskApprove(${detail.id},${task.id},'${detail.type}')">✅ 验收通过</button>
+      ${plannerSubmitReview ? `<button class="btn btn-primary btn-sm" data-emie-onclick="submitTaskReview(${detail.id},${task.id})">🔎 送审</button>` : ''}
+      ${isPlanner && task.status === 'submitted_for_review' ? `
+        <button class="btn btn-success btn-sm" data-emie-onclick="taskApprove(${detail.id},${task.id},'${detail.type}')">✅ ${plannerApproveAndScore ? '通过并评分' : '验收通过'}</button>
         <button class="btn btn-danger btn-sm" data-emie-onclick="taskReject(${detail.id},${task.id})">↩️ 驳回</button>
       ` : ''}
+      ${isPlanner && task.status === 'delivered' ? `<button class="btn btn-danger btn-sm" data-emie-onclick="taskReject(${detail.id},${task.id})">↩️ 驳回</button>` : ''}
       ${/* 渠道定制单：销售第二轮确认 */''}
       ${EMIE.state.currentRole === 'sales' && detail.type === 'channel_custom' && task.status === 'planner_approved' ? `
         <button class="btn btn-success btn-sm" data-emie-onclick="taskApprove(${detail.id},${task.id},'channel_custom')">✅ 销售确认通过</button>
@@ -254,13 +262,13 @@ function renderSubTaskCard(detail, task, idx) {
       ` : ''}
       ${myTask && task.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskAccept(${detail.id},${task.id})">✅ 接单</button>` : ''}
       ${myTask && task.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskDeliver(${detail.id},${task.id})">📤 交付成果</button>` : ''}
-      ${myTask && task.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-onclick="taskRedeliver(${detail.id},${task.id})">📤 重新交付</button>` : ''}
+      ${myTask && task.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-onclick="taskConfirmRevision(${detail.id},${task.id})">🛠️ 确认修改</button>` : ''}
       ${myTask && ['delivered', 'planner_approved', 'sales_approved', 'admin_approved'].includes(task.status) ? `<button class="btn btn-outline btn-sm" data-emie-onclick="taskCorrectDelivery(${detail.id},${task.id})">📝 修正交付</button>` : ''}
       ${isPlanner && detail.status !== 'paused' && (task.status === 'pending' || task.status === 'accepted') ? `
         <button class="btn btn-outline btn-sm" data-emie-onclick="editTask(${detail.id},${task.id})">✏️ 编辑</button>
         <button class="btn btn-outline btn-sm" data-emie-onclick="deleteTask(${detail.id},${task.id})" style="color:var(--danger);border-color:var(--danger);">🗑️ 删除</button>
       ` : ''}
-      ${needScore ? `<button class="btn btn-warning btn-sm" data-emie-onclick="openScoring(${detail.id},${task.id})">⭐ 评分</button>` : ''}
+      ${needScore && !(isPlanner && ['delivered', 'submitted_for_review'].includes(task.status)) ? `<button class="btn btn-warning btn-sm" data-emie-onclick="openScoring(${detail.id},${task.id})">⭐ 评分</button>` : ''}
     </div>
   </div>`;
 }

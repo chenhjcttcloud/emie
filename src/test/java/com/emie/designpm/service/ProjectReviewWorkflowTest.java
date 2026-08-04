@@ -173,7 +173,7 @@ class ProjectReviewWorkflowTest {
 
     @Test
     void plannerApprovalCompletesFirstReviewWithAuditContext() {
-        Project project = projectWithTask("channel_custom", "delivered");
+        Project project = projectWithTask("channel_custom", "submitted_for_review");
         ScoringRecord firstReview = review(project.getTasks().get(0), "planner", "first");
         when(projects.findById(1L)).thenReturn(Optional.of(project));
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));

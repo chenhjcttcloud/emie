@@ -32,6 +32,7 @@ import java.util.*;
  */
 @Service
 public class ProjectExcelImportService {
+    private static final int MAX_IMPORT_ROWS = 10_000;
     private static final int HEADER_ROW = 4;
     private static final int DATA_ROW = 5;
     private static final DataFormatter FORMATTER = new DataFormatter(Locale.SIMPLIFIED_CHINESE);
@@ -126,6 +127,10 @@ public class ProjectExcelImportService {
         if (!errors.isEmpty()) return;
 
         for (int index = DATA_ROW; index <= sheet.getLastRowNum(); index++) {
+            if (rows.size() >= MAX_IMPORT_ROWS) {
+                errors.add("Excel 导入最多支持 " + MAX_IMPORT_ROWS + " 条数据");
+                break;
+            }
             Row excelRow = sheet.getRow(index);
             if (isBlank(excelRow)) continue;
             int line = index + 1;

@@ -783,6 +783,30 @@ public class ProjectService {
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
         safeNotify("TASK_DELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
                 notificationContext(p, task, currentUser, ""));
+        if ("channel_custom".equals(p.getType()) && p.getSalesId() != null && !p.getSalesId().isBlank()
+                && !p.getSalesId().equals(currentUserId)) {
+            safeNotify("TASK_DELIVERED", p.getSalesId(), "sub_task", task.getId(), currentUserId,
+                    notificationContext(p, task, currentUser, "销售关联项目已收到设计交付成果"));
+        }
+        return saved;
+    }
+
+    /** 负责人将已交付成果正式送审；仅设计师和供应链任务需要此一步。 */
+    public Project taskSubmitReview(Long projectId, Long taskId, Map<String, Object> body) {
+        Project p = projectRepository.findById(projectId).orElseThrow(() -> new RuntimeException("项目不存在"));
+        SubTask task = p.getTasks().stream().filter(t -> t.getId().equals(taskId)).findFirst()
+                .orElseThrow(() -> new RuntimeException("子任务不存在"));
+        String currentUserId = (String) body.getOrDefault("currentUserId", "");
+        String role = (String) body.getOrDefault("currentRole", "");
+        if (!"planner".equals(role)) throw new RuntimeException("仅产品企划可送审");
+        if (!List.of("designer", "supplychain").contains(task.getAssigneeRole())) throw new RuntimeException("仅设计师和供应链子任务需要送审");
+        if (!"delivered".equals(task.getStatus())) throw new RuntimeException("当前子任务不在待送审状态");
+        task.setStatus("submitted_for_review");
+        String user = (String) body.getOrDefault("currentUser", "");
+        p.getLogs().add(new ActivityLog("子任务送审：" + task.getName(), user, role, p));
+        Project saved = projectRepository.saveAndFlush(p);
+        safeNotify("TASK_SUBMITTED_FOR_REVIEW", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
+                notificationContext(p, task, user, ""));
         return saved;
     }
 
@@ -809,6 +833,7 @@ public class ProjectService {
         task.setDeliverables(SecurityUtil.sanitizeText((String) body.get("deliverables"), 5000));
         task.setReferenceImagesJson(validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true));
         task.setAttachmentsJson(validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
+        String previousReviewComments = task.getReviewComments();
         task.setReviewComments(null);
         // 设计师自评分（总分100分，整数）
         Integer reScore = body.containsKey("selfScore") ? ((Number) body.get("selfScore")).intValue() : null;
@@ -830,9 +855,28 @@ public class ProjectService {
         Project saved = projectRepository.save(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
-        safeNotify("TASK_REDELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
-                notificationContext(p, task, currentUser, task.getReviewComments()));
+        safeNotifyAfterCommit("TASK_REDELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
+                notificationContext(p, task, currentUser, previousReviewComments));
+        if ("channel_custom".equals(p.getType()) && p.getSalesId() != null && !p.getSalesId().isBlank()) {
+            safeNotifyAfterCommit("TASK_REDELIVERED", p.getSalesId(), "sub_task", task.getId(), currentUserId,
+                    notificationContext(p, task, currentUser, previousReviewComments));
+        }
         return saved;
+    }
+
+    /** 被驳回负责人确认开始修改，任务回到执行中。 */
+    public Project taskConfirmRevision(Long projectId, Long taskId, Map<String, Object> body) {
+        Project p = projectRepository.findById(projectId).orElseThrow(() -> new RuntimeException("项目不存在"));
+        SubTask task = p.getTasks().stream().filter(t -> t.getId().equals(taskId)).findFirst()
+                .orElseThrow(() -> new RuntimeException("子任务不存在"));
+        String userId = (String) body.getOrDefault("currentUserId", "");
+        if (!userId.equals(task.getDesignerId())) throw new RuntimeException("仅当前子任务负责人可确认修改");
+        if (!"rejected".equals(task.getStatus())) throw new RuntimeException("当前子任务不是已驳回状态");
+        task.setStatus("accepted");
+        String user = (String) body.getOrDefault("currentUser", "");
+        String role = (String) body.getOrDefault("currentRole", "");
+        p.getLogs().add(new ActivityLog("确认修改子任务：" + task.getName(), user, role, p));
+        return projectRepository.saveAndFlush(p);
     }
 
     public Project taskCorrectDelivery(Long projectId, Long taskId, Map<String, Object> body) {
@@ -878,7 +922,7 @@ public class ProjectService {
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
-        safeNotify("TASK_REDELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
+        safeNotifyAfterCommit("TASK_REDELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
                 notificationContext(p, task, currentUser, changeSummary));
         return saved;
     }
@@ -944,7 +988,7 @@ public class ProjectService {
             throw new RuntimeException("当前用户无权验收该子任务");
         }
 
-        if ("delivered".equals(task.getStatus()) && "planner".equals(currentRole)) {
+        if ("submitted_for_review".equals(task.getStatus()) && "planner".equals(currentRole)) {
             // Step 1: 企划验收 → 企划评分
             validateScoreRequired(score, "企划");
             task.setStatus("planner_approved");
@@ -1160,7 +1204,7 @@ public class ProjectService {
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
         String currentUserId = (String) body.getOrDefault("currentUserId", "");
-        boolean canReject = ("planner".equals(currentRole) && "delivered".equals(task.getStatus()))
+        boolean canReject = ("planner".equals(currentRole) && List.of("delivered", "submitted_for_review").contains(task.getStatus()))
                 || ("sales".equals(currentRole) && "channel_custom".equals(p.getType())
                     && "planner_approved".equals(task.getStatus()))
                 || ("admin".equals(currentRole) && !"channel_custom".equals(p.getType())
@@ -1244,7 +1288,7 @@ public class ProjectService {
         if (!canReviewTask(p, task, currentRole, currentUserId)) {
             throw new RuntimeException("当前用户无权提交该项目评分");
         }
-        boolean validStage = ("planner".equals(role) && "delivered".equals(task.getStatus()))
+        boolean validStage = ("planner".equals(role) && "submitted_for_review".equals(task.getStatus()))
                 || ("sales".equals(role) && "channel_custom".equals(p.getType())
                     && "planner_approved".equals(task.getStatus()))
                 || ("admin".equals(role) && !"channel_custom".equals(p.getType())
@@ -1402,7 +1446,14 @@ public class ProjectService {
 
     /** 获取指定角色的状态看板（销售/企划/供应链/设计师） */
     public Map<String, Object> getRoleStatus(String role, String viewerRole, String viewerUserId) {
+        return getRoleStatus(role, viewerRole, viewerUserId, "all");
+    }
+
+    public Map<String, Object> getRoleStatus(String role, String viewerRole, String viewerUserId, String scope) {
         List<User> users = projectAccessService.visibleUsers(viewerRole, viewerUserId, role);
+        if ("planner".equals(viewerRole) && "planner".equals(role) && "mine".equalsIgnoreCase(scope)) {
+            users = users.stream().filter(u -> Objects.equals(u.getUserId(), viewerUserId)).toList();
+        }
         Map<String, Object> result = new LinkedHashMap<>();
 
         if ("designer".equals(role) || "supplychain".equals(role)) {
@@ -1420,8 +1471,9 @@ public class ProjectService {
 
                 List<SubTask> userTasks = tasksByUser.getOrDefault(u.getUserId(), List.of());
                 // pending 代表尚未接单，不应把设计师标记为进行中/忙碌。
+                // 状态看板只展示负责人仍需执行的任务；已交付/送审中交由企划审核，不再算执行中。
                 List<SubTask> activeTasks = userTasks.stream()
-                        .filter(t -> List.of("accepted", "rejected", "delivered").contains(t.getStatus()))
+                        .filter(t -> List.of("accepted", "rejected").contains(t.getStatus()))
                         .collect(Collectors.toList());
                 List<SubTask> completedTasks = userTasks.stream()
                         .filter(t -> List.of("approved", "completed", "sales_approved", "admin_approved").contains(t.getStatus()))
@@ -1473,6 +1525,18 @@ public class ProjectService {
                     pm.put("type", p.getType());
                     return pm;
                 }).collect(Collectors.toList()));
+                if ("planner".equals(role)) {
+                    List<Map<String, Object>> activeTasks = activeProjects.stream()
+                            .flatMap(p -> p.getTasks().stream()
+                                    .filter(t -> List.of("pending", "accepted", "rejected").contains(t.getStatus()))
+                                    .map(t -> {
+                                        Map<String, Object> tm = new LinkedHashMap<>();
+                                        tm.put("id", t.getId()); tm.put("name", t.getName()); tm.put("status", t.getStatus());
+                                        tm.put("projectId", p.getId()); return tm;
+                                    }))
+                            .toList();
+                    info.put("activeTasks", activeTasks);
+                }
                 info.put("completedProjects", projects.stream().filter(p -> "completed".equals(p.getStatus())).count());
                 info.put("busy", !activeProjects.isEmpty());
                 info.put("label", "sales".equals(role) ? "销售" : "产品企划");

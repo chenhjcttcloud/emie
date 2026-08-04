@@ -100,13 +100,13 @@ async function renderAdminUsers(container, page = 0, filters = {}) {
                   <td>${escHtml(u.email || '-')}</td>
                   <td>
                     <div class="admin-user-actions">
-                      <button class="btn-edit-user" data-emie-onclick="openEditUserModal(${JSON.stringify(u).replace(/"/g, "'")})">✏️ 编辑</button>
-                      <button class="btn-edit-role" data-emie-onclick="openChangeRoleModal(${u.id}, '${u.role}', '${escHtml(u.name)}')">${u.status === 'pending' ? '✅ 分配角色' : '🔄 角色'}</button>
-                      ${u.status === 'pending' ? '' : `<button class="btn-reset-pwd" data-emie-onclick="openResetPwdModal(${u.id}, '${escHtml(u.name)}')">🔑 密码</button>`}
+                      <button class="btn-edit-user" data-emie-onclick="openEditUserModal(JSON.parse(decodeURIComponent('${encodeURIComponent(JSON.stringify(u))}'))) ">✏️ 编辑</button>
+                      <button class="btn-edit-role" data-emie-onclick="openChangeRoleModal(${u.id}, ${JSON.stringify(u.role || '').replace(/"/g, '&quot;')}, ${JSON.stringify(u.name || '').replace(/"/g, '&quot;')})">${u.status === 'pending' ? '✅ 分配角色' : '🔄 角色'}</button>
+                      ${u.status === 'pending' ? '' : `<button class="btn-reset-pwd" data-emie-onclick="openResetPwdModal(${u.id}, ${JSON.stringify(u.name || '').replace(/"/g, '&quot;')})">🔑 密码</button>`}
                       ${u.userId !== EMIE.state.authUser.userId
-                        ? `<button class="btn-status" data-emie-onclick="toggleUserStatus(${u.id}, '${escHtml(u.name)}', '${u.status || 'active'}')">${(u.status === 'disabled') ? '✅ 启用' : '⛔ 停用'}</button>`
+                        ? `<button class="btn-status" data-emie-onclick="toggleUserStatus(${u.id}, ${JSON.stringify(u.name || '').replace(/"/g, '&quot;')}, ${JSON.stringify(u.status || 'active').replace(/"/g, '&quot;')})">${(u.status === 'disabled') ? '✅ 启用' : '⛔ 停用'}</button>`
                         : ''}
-                      ${u.userId !== EMIE.state.authUser.userId ? `<button class="btn-delete" data-emie-onclick="confirmDeleteUser(${u.id}, '${escHtml(u.name)}')">🗑️ 删除</button>` : ''}
+                      ${u.userId !== EMIE.state.authUser.userId ? `<button class="btn-delete" data-emie-onclick="confirmDeleteUser(${u.id}, ${JSON.stringify(u.name || '').replace(/"/g, '&quot;')})">🗑️ 删除</button>` : ''}
                     </div>
                   </td>
                 </tr>

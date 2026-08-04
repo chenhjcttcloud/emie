@@ -215,6 +215,8 @@ public class AdminService {
             {"TASK_REASSIGNED", "子任务改派", "有新的子任务待处理", "子任务“{{taskName}}”已改派给你，所属项目：{{projectName}}；计划完成：{{deadline}}。"},
             {"TASK_ACCEPTED", "子任务接单", "子任务已接单", "{{actorName}}已接单子任务“{{taskName}}”。"},
             {"TASK_DELIVERED", "子任务首次交付", "子任务待审核", "{{actorName}}已交付子任务“{{taskName}}”，请查看成果并完成审核。"},
+            {"TASK_SUBMITTED_FOR_REVIEW", "子任务送审", "子任务已送审", "子任务“{{taskName}}”已送审，请进行通过并评分或驳回。"},
+            {"DESIGN_REQUIREMENT_DELIVERED", "设计需求交付", "设计需求已交付", "设计师已提交“{{projectName}}”的交付成果，请及时查看。"},
             {"TASK_REJECTED", "子任务驳回", "子任务已驳回", "子任务“{{taskName}}”被驳回，原因：{{reason}}。请修改后重新交付。"},
             {"TASK_REDELIVERED", "子任务再次交付", "子任务再次交付待审核", "{{actorName}}已第{{deliveryCount}}次交付“{{taskName}}”。上次驳回原因：{{reason}}。"},
             {"REVIEW_PENDING", "审核待办", "有审核待办", "项目“{{projectName}}”的子任务“{{taskName}}”等待{{reviewRole}}审核。"},
@@ -394,6 +396,12 @@ public class AdminService {
         if ("pending".equals(newRole)) {
             throw new IllegalArgumentException("无效的角色");
         }
+        if ("admin".equals(user.getRole()) && !"admin".equals(newRole)
+                && userRepository.findByRole("admin").stream()
+                        .filter(u -> u.getStatus() == null || !"disabled".equalsIgnoreCase(u.getStatus()))
+                        .count() <= 1) {
+            throw new IllegalArgumentException("系统至少需要保留一名启用中的管理员");
+        }
         boolean wasPending = "pending".equals(user.getRole()) || "pending".equalsIgnoreCase(user.getStatus());
 
         // 计算 roleLevel
@@ -435,6 +443,7 @@ public class AdminService {
         }
         user.setPassword(AuthController.hashPassword(newPassword));
         userRepository.save(user);
+        AuthController.clearUserTokens(user.getUserId());
     }
 
     /** 删除用户 */
@@ -443,6 +452,7 @@ public class AdminService {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
         userRepository.delete(user);
+        AuthController.clearUserTokens(user.getUserId());
         userService.refreshCache();
     }
 
@@ -834,6 +844,7 @@ public class AdminService {
             if (!(raw instanceof Map)) continue;
             @SuppressWarnings("unchecked")
             Map<String, Object> roleWeights = (Map<String, Object>) raw;
+            double total = 0;
             for (Map.Entry<String, Object> entry : roleWeights.entrySet()) {
                 String role = entry.getKey();
                 if (!SCORING_ROLE_LABELS.containsKey(role)) continue;
@@ -844,12 +855,16 @@ public class AdminService {
                     continue;
                 }
                 if (pct < 0 || pct > 100) throw new IllegalArgumentException(role + " 百分比超出范围(0-100)");
+                total += pct;
                 String key = "scoring." + pt + "." + role;
                 configRepository.findByConfigKey(key).ifPresent(config -> {
                     config.setConfigValue(String.valueOf(pct));
                     config.setUpdatedAt(LocalDateTime.now());
                     configRepository.save(config);
                 });
+            }
+            if (Math.abs(total - 100.0) > 0.001) {
+                throw new IllegalArgumentException(pt + " 的评分权重合计必须为100%");
             }
         }
     }

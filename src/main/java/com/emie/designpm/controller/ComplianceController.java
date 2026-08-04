@@ -25,7 +25,8 @@ public class ComplianceController {
     }
 
     @GetMapping("/all")
-    public ResponseEntity<List<ComplianceItem>> listAll() {
+    public ResponseEntity<List<ComplianceItem>> listAll(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
         return ResponseEntity.ok(repo.findAllByOrderBySortOrderAsc());
     }
 

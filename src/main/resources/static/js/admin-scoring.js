@@ -53,7 +53,7 @@ async function renderAdminScoring(container) {
       t.weights.forEach(w => { EMIE.adminState.scoringWeights[t.type][w.role] = Math.round(w.weight); });
     });
   } catch (e) {
-    container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger);">加载失败: ${e.message}</div>`;
+    container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger);">加载失败: ${escHtml(e.message || '未知错误')}</div>`;
   }
 }
 

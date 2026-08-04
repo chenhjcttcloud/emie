@@ -48,6 +48,17 @@ if docker compose -f docker-compose.test.yml logs --tail=120 test-app | grep -Eq
   exit 1
 fi
 echo '[7/7] 浏览器级入口冒烟检查'
+smoke_html="$(curl -fsS --max-time 10 http://127.0.0.1:8080/)" || {
+  echo '首页入口检查失败' >&2; exit 1;
+}
+grep -Eq '产品管理系统|/js/bootstrap\.js' <<<"$smoke_html" || {
+  echo '首页入口内容不完整' >&2; exit 1;
+}
+for asset in /js/bootstrap.js /js/core-runtime.js /css/app.css; do
+  curl -fsS --max-time 10 "http://127.0.0.1:8080${asset}" >/dev/null || {
+    echo "静态资源检查失败: ${asset}" >&2; exit 1;
+  }
+done
 CHROME_BIN="${CHROME_BIN:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
 if [[ -x "$CHROME_BIN" ]]; then
   smoke_dir="$(mktemp -d /tmp/emie-browser-smoke.XXXXXX)"

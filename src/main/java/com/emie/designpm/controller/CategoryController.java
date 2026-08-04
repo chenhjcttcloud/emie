@@ -27,7 +27,8 @@ public class CategoryController {
 
     /** 获取全部类目（管理后台用） */
     @GetMapping("/all")
-    public ResponseEntity<List<ProductCategory>> listAll() {
+    public ResponseEntity<List<ProductCategory>> listAll(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
         return ResponseEntity.ok(repo.findAllByOrderBySortOrderAsc());
     }
 

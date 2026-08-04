@@ -499,6 +499,17 @@ public class ProjectController {
         }
     }
 
+    /** 设计师/供应链提交已交付成果进入企划送审。 */
+    @PostMapping("/{projectId}/tasks/{taskId}/submit-review")
+    public ResponseEntity<?> taskSubmitReview(@PathVariable Long projectId, @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body, HttpServletRequest request) {
+        try {
+            ResponseEntity<?> denied = denyUnless(request, "subtask.review.first.submit");
+            if (denied != null) return denied;
+            return ResponseEntity.ok(toDetail(projectService.taskSubmitReview(projectId, taskId, withSessionContext(body, request))));
+        } catch (RuntimeException e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
+    }
+
     /** 设计师重新交付 */
     @PostMapping("/{projectId}/tasks/{taskId}/redeliver")
     public ResponseEntity<?> taskRedeliver(
@@ -514,6 +525,17 @@ public class ProjectController {
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    /** 被驳回负责人确认开始修改。 */
+    @PostMapping("/{projectId}/tasks/{taskId}/confirm-revision")
+    public ResponseEntity<?> taskConfirmRevision(@PathVariable Long projectId, @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body, HttpServletRequest request) {
+        try {
+            ResponseEntity<?> denied = denyUnless(request, "subtask.redeliver");
+            if (denied != null) return denied;
+            return ResponseEntity.ok(toDetail(projectService.taskConfirmRevision(projectId, taskId, withSessionContext(body, request))));
+        } catch (RuntimeException e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
     }
 
     /** 审核完成前，负责人主动修正漏交或错交文件；生成新版本并使旧审核失效。 */
@@ -589,6 +611,7 @@ public class ProjectController {
     /** 通用角色状态看板（sales/planner/supplychain/designer） */
     @GetMapping("/role-status")
     public ResponseEntity<Map<String, Object>> roleStatus(@RequestParam String role,
+                                                          @RequestParam(defaultValue = "all") String scope,
                                                           HttpServletRequest request) {
         AuthController.AuthSession session = getSession(request);
         if (session == null) return ResponseEntity.status(401).build();
@@ -598,7 +621,7 @@ public class ProjectController {
         if (!allowed) {
             return ResponseEntity.status(403).body(Map.of("error", "无权查看该角色的状态看板"));
         }
-        return ResponseEntity.ok(projectService.getRoleStatus(role, session.role(), session.userId()));
+        return ResponseEntity.ok(projectService.getRoleStatus(role, session.role(), session.userId(), scope));
     }
 
     /** 设计师状态看板（兼容旧版） */
@@ -711,6 +734,12 @@ public class ProjectController {
         try {
             ResponseEntity<?> denied = denyUnless(request, "project.delete");
             if (denied != null) return denied;
+            AuthController.AuthSession session = getSession(request);
+            Project project = projectService.getProjectById(id)
+                    .orElseThrow(() -> new RuntimeException("项目不存在"));
+            if (!ProjectAccessPolicy.canManage(project, session)) {
+                return ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
+            }
             projectService.deleteProject(id);
             return ResponseEntity.ok(Map.of("message", "项目已删除"));
         } catch (Exception e) {

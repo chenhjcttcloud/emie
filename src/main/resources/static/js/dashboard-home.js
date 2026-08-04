@@ -15,6 +15,7 @@ const displayText = (...args) => EMIE.actions.displayText(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
 const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const refreshNavigationBadges = (...args) => EMIE.actions.refreshNavigationBadges(...args);
+let plannerBoardScope = 'mine';
 
 async function updateBadges(role, uid) {
   return refreshNavigationBadges();
@@ -23,9 +24,10 @@ async function updateBadges(role, uid) {
 // ==================== 工作台 ====================
 async function renderDashboard(main, role, uid) {
   // 使用 SWR 缓存 + 聚合端点（1次API替代8次）
-  const cacheKey = `dashboard_${role}_${uid}`;
+  const scopeParam = role === 'planner' ? plannerBoardScope : 'mine';
+  const cacheKey = `dashboard_${role}_${uid}_${scopeParam}`;
   const data = await swrFetch(cacheKey,
-    () => apiGet(`/dashboard/full?role=${role}&userId=${uid}&includeRoleStatus=false`),
+    () => apiGet(`/dashboard/full?role=${role}&userId=${uid}&scope=${scopeParam}&includeRoleStatus=false`),
     30000
   );
 
@@ -46,7 +48,7 @@ async function renderDashboard(main, role, uid) {
   const rolePanelsHtml = `<div id="dashboardRoleStatus" class="dashboard-role-status-loading">正在加载状态面板…</div>`;
 
   main.innerHTML = `
-    <h2 style="font-size:22px;margin-bottom:20px;">📊 工作台 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">— ${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}（${roleLabel(EMIE.state.currentRole)}）</span></h2>
+    <h2 style="font-size:22px;margin-bottom:20px;">📊 工作台 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">— ${EMIE.state.currentRole === 'planner' ? `<select class="form-input" style="display:inline-block;width:auto;min-width:130px;padding:4px 28px 4px 8px;font-size:13px;vertical-align:middle;" data-emie-onchange="changePlannerBoardScope(event.target.value)"><option value="mine" ${plannerBoardScope === 'mine' ? 'selected' : ''}>${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}</option><option value="all" ${plannerBoardScope === 'all' ? 'selected' : ''}>全部产品企划</option></select>` : `${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}（${roleLabel(EMIE.state.currentRole)}）`}</span></h2>
     ${!executionRole ? `<div class="stats-grid dashboard-stats-row">
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigate('orders')"><div class="stat-icon blue">📁</div><div><div class="stat-value">${stats.totalProjects}</div><div class="stat-label">${EMIE.state.currentRole === 'admin' ? '全部项目' : '我的项目'}</div></div></div>
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigate('channel')"><div class="stat-icon blue">📦</div><div><div class="stat-value">${stats.channelProjects}</div><div class="stat-label">渠道定制单</div></div></div>
@@ -64,6 +66,8 @@ async function renderDashboard(main, role, uid) {
     ${executionRole ? '<div id="dashboardExecutionTasks"><div class="empty" style="padding:24px;"><p>正在加载关联子任务…</p></div></div>' : renderProjectSummary(channel, '📦 渠道定制单') + renderProjectSummary(regular, '🏭 公司常规品')}
     <div id="dashboardWorkloadSection"></div>
   `;
+  const plannerScopeSelect = main.querySelector('select.form-input');
+  if (plannerScopeSelect) plannerScopeSelect.addEventListener('change', e => changePlannerBoardScope(e.target.value));
   // 仅 admin 可见工作量概览
   if (EMIE.state.currentRole === 'admin') {
     loadDashboardWorkloadSection();
@@ -146,7 +150,7 @@ async function loadDashboardRoleStatus(role, uid, myDept) {
   const container = document.getElementById('dashboardRoleStatus');
   if (!container) return;
   try {
-    const response = await apiGet('/dashboard/role-status');
+    const response = await apiGet('/dashboard/role-status?scope=' + (EMIE.state.currentRole === 'planner' ? plannerBoardScope : 'all'));
     const roleStatus = response || {};
     let html = '';
     if (EMIE.state.currentRole === 'admin') {
@@ -162,9 +166,23 @@ async function loadDashboardRoleStatus(role, uid, myDept) {
     } else if (myDept) {
       html = renderRolePanelFromData(roleStatus[myDept.role] || {}, myDept.role, myDept.id, uid);
     }
-    container.innerHTML = html;
+  container.innerHTML = html;
+  container.querySelectorAll('[data-user-card-id]').forEach(card => {
+    card.addEventListener('click', () => showUserTasksPopup(card.dataset.userCardId, card.dataset.userCardName || ''));
+  });
   } catch (error) {
     container.innerHTML = '<div class="empty" style="padding:20px;"><p>状态面板暂时无法加载</p></div>';
+  }
+}
+
+async function changePlannerBoardScope(scope) {
+  const nextScope = scope === 'all' ? 'all' : 'mine';
+  if (nextScope === plannerBoardScope && document.querySelector('#dashboardRoleStatus')) return;
+  plannerBoardScope = nextScope;
+  const main = document.querySelector('main');
+  if (main) {
+    main.innerHTML = '<div class="loading">正在更新企划范围…</div>';
+    await renderDashboard(main, EMIE.state.currentRole, getCurrentUserId());
   }
 }
 
@@ -411,11 +429,11 @@ function renderRolePanelFromData(statusData, role, deptId, excludeUserId) {
 /** 渲染单个用户卡片 */
 function renderUserCard(u) {
   // 忙碌的用户整个卡片可点击，弹出任务列表
-  const clickAttr = u.busy ? `data-emie-onclick="showUserTasksPopup('${u.id}','${u.name}')" style="cursor:pointer;"` : '';
+  const clickAttr = u.busy ? `data-user-card-id="${escHtml(u.id)}" data-user-card-name="${escHtml(u.name || '')}" style="cursor:pointer;"` : '';
   return `<div class="designer-card ${u.busy ? 'busy' : 'idle'}" ${clickAttr}>
     <div class="designer-avatar">${u.name.charAt(0)}</div>
     <div class="designer-info">
-      <div class="designer-name">${u.name}</div>
+      <div class="designer-name">${escHtml(u.name || '')}</div>
       <div class="designer-title">${escHtml(displayText(u.title, '未设置职级'))}</div>
       <div class="designer-tasks">
         ${u.busy
@@ -438,9 +456,8 @@ function showUserTasksPopup(userId, userName) {
   modal.id = 'userTasksPopup';
   modal.onclick = function(e) { if (e.target === this) closeM('userTasksPopup'); };
   modal.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('userTasksPopup')">✕</button>
     <div class="modal" style="max-width:500px;">
-      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📋 ${escHtml(userName)} 的进行中任务</div></div></div>
+      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📋 ${escHtml(userName)} 的进行中任务</div></div><button class="modal-close" data-emie-onclick="closeM('userTasksPopup')">✕</button></div>
       <div class="modal-body" id="userTasksPopupBody">
         <div style="text-align:center;padding:20px;color:var(--gray-400);">加载中...</div>
       </div>
@@ -495,7 +512,7 @@ async function loadUserTasksPopup(userId) {
     }
     body.innerHTML = html;
   } catch(e) {
-    document.getElementById('userTasksPopupBody').innerHTML = `<div style="text-align:center;padding:20px;color:var(--danger);">加载失败: ${e.message}</div>`;
+    document.getElementById('userTasksPopupBody').innerHTML = `<div style="text-align:center;padding:20px;color:var(--danger);">加载失败: ${escHtml(e.message || '未知错误')}</div>`;
   }
 }
 
@@ -536,6 +553,7 @@ function renderProjectSummary(projects, title) {
 // ==================== 项目列表 ====================
 
 EMIE.registerActions({
+  changePlannerBoardScope,
   updateBadges,
   renderDashboard,
   loadDashboardWorkloadSection,
@@ -549,6 +567,7 @@ EMIE.registerActions({
 });
 
 EMIE.registerModule('dashboardHome', {
+  changePlannerBoardScope,
   updateBadges,
   renderDashboard,
   loadDashboardWorkloadSection,

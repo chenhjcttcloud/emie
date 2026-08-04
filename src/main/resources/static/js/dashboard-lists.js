@@ -51,6 +51,8 @@ async function openDesignRequirementDetail(id) {
     const myScore = (detail.scoringRecords || []).find(s =>
       s.reviewerId === EMIE.state.currentUserId || (!s.reviewerId && s.role === myRole));
     const canDeliver = myRole === 'designer' && detail.designerId === EMIE.state.currentUserId;
+    const canConfirmRevision = canDeliver && detail.status === 'rejected';
+    const canReject = myRole === 'planner' && detail.plannerId === EMIE.state.currentUserId && ['pending_review', 'pending_self_score'].includes(detail.status);
     const requirementMaterials = renderDesignRequirementMaterials(
       detail.referenceImagesJson, detail.attachmentsJson);
     const deliveryMaterials = renderDesignRequirementMaterials(
@@ -101,7 +103,9 @@ async function openDesignRequirementDetail(id) {
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline" data-emie-onclick="closeM('designRequirementDetailModal')">关闭</button>
-          ${canDeliver && !detail.deliveryContent ? `<button class="btn btn-primary" data-emie-onclick="openDesignRequirementDelivery(${id})">📦 提交交付成果</button>` : ''}
+          ${canConfirmRevision ? `<button class="btn btn-warning" data-emie-onclick="confirmDesignRequirementRevision(${id})">🛠️ 确认修改</button>` : ''}
+          ${canReject ? `<button class="btn btn-danger" data-emie-onclick="openDesignRequirementReject(${id})">↩️ 驳回</button>` : ''}
+          ${canDeliver && ['draft', 'in_progress'].includes(detail.status) ? `<button class="btn btn-primary" data-emie-onclick="openDesignRequirementDelivery(${id})">📦 提交交付成果</button>` : ''}
           ${myScore?.status === 'pending' && myScore.stage === 'self' ? `<button class="btn btn-warning" data-emie-onclick="openDesignRequirementScore(${id},true)">⭐ 完成自评</button>` : ''}
           ${myScore?.status === 'pending' && myScore.stage === 'review' ? `<button class="btn btn-primary" data-emie-onclick="openDesignRequirementScore(${id},false)">⭐ 立即评分</button>` : ''}
         </div>
@@ -110,6 +114,29 @@ async function openDesignRequirementDetail(id) {
   } catch (error) {
     alert('加载详情失败：' + error.message);
   }
+}
+
+function openDesignRequirementReject(id) {
+  const modal = document.createElement('div'); modal.className = 'modal-overlay'; modal.id = 'designRequirementRejectModal';
+  modal.innerHTML = `<div class="modal"><div class="modal-header"><div class="modal-title">↩️ 驳回设计/送审需求</div></div><div class="modal-body"><div class="form-group"><label class="form-label">驳回意见</label><textarea class="form-textarea" id="designRequirementRejectComments" required></textarea></div><div class="form-group"><label class="form-label">要求完成时间</label><input type="date" class="form-input" id="designRequirementRejectDeadline" required min="${new Date().toISOString().slice(0,10)}"></div></div><div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('designRequirementRejectModal')">取消</button><button class="btn btn-danger" data-emie-onclick="submitDesignRequirementReject(${id})">确认驳回</button></div></div>`;
+  document.body.appendChild(modal);
+}
+
+async function submitDesignRequirementReject(id) {
+  const comments = document.getElementById('designRequirementRejectComments')?.value.trim();
+  const requiredCompletionDate = document.getElementById('designRequirementRejectDeadline')?.value;
+  if (!comments || !requiredCompletionDate) return alert('请填写驳回意见和要求完成时间');
+  try { await apiPost(`/design-requirements/${id}/reject`, { comments, requiredCompletionDate }); closeM('designRequirementRejectModal'); closeM('designRequirementDetailModal'); await openDesignRequirementDetail(id); }
+  catch (e) { alert('驳回失败：' + e.message); }
+}
+
+async function confirmDesignRequirementRevision(id) {
+  if (!confirm('确认开始修改该设计/送审需求吗？')) return;
+  try {
+    await apiPost(`/design-requirements/${id}/confirm-revision`, {});
+    closeM('designRequirementDetailModal');
+    await openDesignRequirementDetail(id);
+  } catch (e) { alert('确认修改失败：' + e.message); }
 }
 
 function openDesignRequirementDelivery(id) {
@@ -564,6 +591,9 @@ EMIE.registerActions({
   openListItemDetail,
   openDesignRequirementDetail,
   openDesignRequirementDelivery,
+  confirmDesignRequirementRevision,
+  openDesignRequirementReject,
+  submitDesignRequirementReject,
   submitDesignRequirementDelivery,
   openDesignRequirementScore,
   submitDesignRequirementScore,
@@ -591,6 +621,9 @@ EMIE.registerModule('dashboardLists', {
   openListItemDetail,
   openDesignRequirementDetail,
   openDesignRequirementDelivery,
+  confirmDesignRequirementRevision,
+  openDesignRequirementReject,
+  submitDesignRequirementReject,
   openDesignRequirementScore,
   changeProjectListPage,
   jumpProjectListPage,

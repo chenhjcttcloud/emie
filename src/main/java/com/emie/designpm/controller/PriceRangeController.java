@@ -23,7 +23,8 @@ public class PriceRangeController {
     }
 
     @GetMapping("/all")
-    public ResponseEntity<List<PriceRange>> listAll() {
+    public ResponseEntity<List<PriceRange>> listAll(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
         return ResponseEntity.ok(repo.findAllByOrderBySortOrderAsc());
     }
 

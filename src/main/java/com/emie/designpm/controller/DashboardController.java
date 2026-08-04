@@ -7,6 +7,7 @@ import com.emie.designpm.repository.DepartmentRepository;
 import com.emie.designpm.repository.ProjectRepository;
 import com.emie.designpm.repository.ScoringRepository;
 import com.emie.designpm.repository.SubTaskRepository;
+import com.emie.designpm.repository.UserRepository;
 import com.emie.designpm.service.ProjectService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +28,7 @@ public class DashboardController {
     private final ProjectService projectService;
     private final SubTaskRepository subTaskRepository;
     private final DepartmentRepository departmentRepository;
+    private final UserRepository userRepository;
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
@@ -37,12 +39,14 @@ public class DashboardController {
                                ScoringRepository scoringRepository,
                                ProjectService projectService,
                                SubTaskRepository subTaskRepository,
-                               DepartmentRepository departmentRepository) {
+                               DepartmentRepository departmentRepository,
+                               UserRepository userRepository) {
         this.projectRepository = projectRepository;
         this.scoringRepository = scoringRepository;
         this.projectService = projectService;
         this.subTaskRepository = subTaskRepository;
         this.departmentRepository = departmentRepository;
+        this.userRepository = userRepository;
     }
 
     /**
@@ -53,6 +57,7 @@ public class DashboardController {
     public ResponseEntity<Map<String, Object>> getFullDashboard(
             @RequestParam String role,
             @RequestParam String userId,
+            @RequestParam(required = false, defaultValue = "mine") String scope,
             @RequestParam(required = false, defaultValue = "true") boolean includeRoleStatus,
             HttpServletRequest request) {
         AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
@@ -62,8 +67,11 @@ public class DashboardController {
         Map<String, Object> result = new LinkedHashMap<>();
 
         // 1. 项目列表
-        List<Long> visibleProjectIds = projectService.findVisibleProjectIds(role, userId);
-        Page<Project> summaryPage = projectService.getProjectsPage(role, userId, null, false, PageRequest.of(0, 15));
+        boolean allPlanners = "planner".equals(role) && "all".equalsIgnoreCase(scope);
+        List<Long> visibleProjectIds = visibleProjectIds(role, userId, allPlanners);
+        Page<Project> summaryPage = allPlanners
+                ? projectService.getProjectsPage("admin", userId, null, false, PageRequest.of(0, 15))
+                : projectService.getProjectsPage(role, userId, null, false, PageRequest.of(0, 15));
         List<Project> projects = summaryPage.getContent();
         Map<Long, int[]> taskCountMap = projectService.getTaskCountMap(projects);
         Map<Long, Double> scoreMap = projectService.computeProjectScoresBatch(projects);
@@ -73,7 +81,7 @@ public class DashboardController {
         result.put("orders", orders);
 
         // 2. Dashboard stats
-        result.put("stats", computeStatsByIds(visibleProjectIds, role, userId));
+        result.put("stats", computeStatsByIds(visibleProjectIds, allPlanners ? "admin" : role, userId));
 
         // 3. 四个角色状态看板
         if (includeRoleStatus) {
@@ -89,16 +97,28 @@ public class DashboardController {
         return ResponseEntity.ok(result);
     }
 
+    private List<Long> visibleProjectIds(String role, String userId, boolean allPlanners) {
+        if (!allPlanners) return projectService.findVisibleProjectIds(role, userId);
+        return userRepository.findByRole("planner").stream()
+                .map(u -> projectService.findVisibleProjectIds("planner", u.getUserId()))
+                .flatMap(Collection::stream).distinct().toList();
+    }
+
     @GetMapping("/role-status")
-    public ResponseEntity<Map<String, Object>> getRoleStatus(HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> getRoleStatus(@RequestParam(defaultValue = "all") String scope,
+                                                             HttpServletRequest request) {
         AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
-        return ResponseEntity.ok(loadRoleStatus(session.role(), session.userId()));
+        return ResponseEntity.ok(loadRoleStatus(session.role(), session.userId(), scope));
     }
 
     private Map<String, Object> loadRoleStatus(String viewerRole, String viewerUserId) {
+        return loadRoleStatus(viewerRole, viewerUserId, "all");
+    }
+
+    private Map<String, Object> loadRoleStatus(String viewerRole, String viewerUserId, String scope) {
         Map<String, Object> roleStatus = new LinkedHashMap<>();
         for (String r : ALL_ROLES) {
-            roleStatus.put(r, projectService.getRoleStatus(r, viewerRole, viewerUserId));
+            roleStatus.put(r, projectService.getRoleStatus(r, viewerRole, viewerUserId, scope));
         }
         return roleStatus;
     }
@@ -152,11 +172,14 @@ public class DashboardController {
 
     private Map<String, Object> computeStatsByIds(List<Long> projectIds, String role, String userId) {
         Map<String, Object> stats = new LinkedHashMap<>();
-        stats.put("totalProjects", projectService.countVisibleProjects(role, userId, null, false));
-        stats.put("channelProjects", projectService.countVisibleProjects(role, userId, "channel_custom", false));
-        stats.put("regularProjects", projectService.countVisibleProjects(role, userId, "regular", false));
-        stats.put("inProgress", projectService.countVisibleProjects(role, userId, "in_progress", false)
-                + projectService.countVisibleProjects(role, userId, "planner_accepted", false));
+        List<Project> visibleProjects = projectIds.isEmpty() ? List.of() : projectRepository.findAllById(projectIds);
+        stats.put("totalProjects", visibleProjects.size());
+        stats.put("channelProjects", visibleProjects.stream().filter(p -> "channel_custom".equals(p.getType())).count());
+        stats.put("regularProjects", visibleProjects.stream().filter(p -> "regular".equals(p.getType())).count());
+        stats.put("inProgress", visibleProjects.stream().filter(p -> {
+            String s = projectService.computeProjectStatus(p);
+            return "in_progress".equals(s) || "planner_accepted".equals(s) || "completed_pending_score".equals(s);
+        }).count());
         long allTasks = 0, approvedTasks = 0, pendingTasks = 0, pendingScore = 0;
         long channelTasks = 0;
         if (!projectIds.isEmpty()) {

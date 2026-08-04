@@ -47,7 +47,7 @@ async function checkSystemVersion() {
 
 async function initApp() {
   // 检查飞书 SSO 回调
-  checkFeishuCallback();
+  await checkFeishuCallback();
 
   // 飞书客户端内自动静默登录（WebView 环境）
   if (typeof tt !== 'undefined' && tt.login) {
@@ -357,21 +357,24 @@ function handleFeishuLogin() {
 }
 
 // 检测飞书 SSO 回调
-function checkFeishuCallback() {
+async function checkFeishuCallback() {
   const params = new URLSearchParams(window.location.search);
-  const token = params.get('sso_token');
+  const ticket = params.get('sso_ticket');
   const error = params.get('sso_error');
   if (error) {
     alert('飞书登录失败: ' + error);
     window.history.replaceState({}, document.title, window.location.pathname);
     return false;
   }
-  if (!token) return false;
-  const userId = params.get('userId') || '';
-  const userName = params.get('userName') || '';
-  const role = params.get('role') || '';
-  localStorage.setItem('design_pm_token', token);
-  localStorage.setItem('design_pm_user', JSON.stringify({ userId, userName, role }));
+  if (!ticket) return false;
+  const response = await fetch('/api/auth/feishu/exchange', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ticket })
+  });
+  if (!response.ok) { alert('飞书登录票据已失效，请重新登录'); return false; }
+  const data = await response.json();
+  localStorage.setItem('design_pm_token', data.token);
+  localStorage.setItem('design_pm_user', JSON.stringify(data.user || {}));
   window.history.replaceState({}, document.title, window.location.pathname);
   // 只保存回调 token，由 initApp 统一调用 /me 并启动一次 showApp，避免并发首屏渲染。
   return true;

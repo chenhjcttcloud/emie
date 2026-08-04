@@ -56,6 +56,7 @@ public class AuthFilter implements Filter {
             path.equals("/api/auth/feishu/callback") ||
             path.equals("/api/auth/feishu/config") ||
             path.equals("/api/auth/feishu/auto-login") ||
+            path.equals("/api/auth/feishu/exchange") ||
             path.equals("/api/admin/public-config") ||
             path.equals("/favicon.ico") ||
             path.startsWith("/css/") ||
@@ -71,9 +72,7 @@ public class AuthFilter implements Filter {
         if (path.startsWith("/api/")) {
             String token = req.getHeader("X-Auth-Token");
             // 允许 token 通过查询参数传递（用于 <img> 等无法设置 Header 的场景）
-            if (token == null || token.isBlank()) {
-                token = req.getParameter("token");
-            }
+            // 认证令牌不得通过 URL 传递，避免进入历史记录、Referer 和访问日志。
             AuthController.AuthSession session = AuthController.validateToken(token);
             if (token == null || session == null) {
                 res.setStatus(401);
@@ -128,6 +127,7 @@ public class AuthFilter implements Filter {
                 || path.startsWith("/api/price-ranges")
                 || path.startsWith("/api/ip-options"))) return "admin.catalog.manage";
         if (!"GET".equals(method) && path.startsWith("/api/users/org/")) return "admin.department.manage";
+        if (path.equals("/api/system/archive") && "POST".equals(method)) return "admin.system_monitor.manage";
         if (path.startsWith("/api/system/")) return "admin.system_monitor.view";
         if (path.startsWith("/api/project-import/")) return "admin.project_import.execute";
         if (path.startsWith("/api/share/admin/")) return "admin.share.manage";

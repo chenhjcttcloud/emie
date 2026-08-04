@@ -65,6 +65,9 @@ public class DesignRequirement {
     private String deliveryReferenceImagesJson;
 
     private LocalDateTime deliveredAt;
+    @Column(columnDefinition = "TEXT")
+    private String rejectionComments;
+    private String rejectionDeadline;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;

@@ -1,7 +1,7 @@
 // EMIE 声明式事件运行时：代替 HTML 内联 on* 属性，并支持后续动态渲染的内容。
 const EMIE = window.EMIE;
 const compiledEventHandlers = new Map();
-const forbiddenEventSource = /\b(?:constructor|__proto__|prototype|window|globalThis|Function|eval|import|fetch|XMLHttpRequest|WebSocket|localStorage|sessionStorage|cookie)\b/;
+const forbiddenEventSource = /\b(?:constructor|__proto__|prototype|window|globalThis|Function|eval|import|fetch|XMLHttpRequest|WebSocket|localStorage|sessionStorage|cookie)\b/i;
 
 function validateEventSource(source) {
   if (forbiddenEventSource.test(source)) throw new Error('事件动作包含禁止内容');

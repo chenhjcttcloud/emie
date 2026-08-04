@@ -355,7 +355,7 @@ public class FileArchiveService {
         JSch jsch = new JSch();
         Session session = jsch.getSession(nasUser, nasHost, getNasPort());
         session.setPassword(nasPassword);
-        session.setConfig("StrictHostKeyChecking", "no");
+        session.setConfig("StrictHostKeyChecking", "yes");
         session.connect(10_000);
 
         ChannelSftp channel = (ChannelSftp) session.openChannel("sftp");

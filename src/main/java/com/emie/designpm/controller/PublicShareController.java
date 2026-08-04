@@ -242,11 +242,11 @@ public class PublicShareController {
             </body>
             </html>
             """.formatted(
-                    title, viewCount,
+                    esc(title), viewCount,
                     esc(projectTitle != null && !projectTitle.isBlank() ? projectTitle : "项目详情"),
-                    safe(data, "status"), statusLabel, createdAt.substring(0, Math.min(10, createdAt.length())),
-                    typeLabel, deadline, salesName, plannerName,
-                    productCategory, ipName == null || ipName.isBlank() ? "无IP" : ipName, priceRange,
+                    esc(safe(data, "status")), esc(statusLabel), esc(createdAt.substring(0, Math.min(10, createdAt.length()))),
+                    esc(typeLabel), esc(deadline), esc(salesName), esc(plannerName),
+                    esc(productCategory), esc(ipName == null || ipName.isBlank() ? "无IP" : ipName), esc(priceRange),
                     esc(productRequirements), esc(description),
                     taskRows
             );

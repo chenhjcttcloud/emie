@@ -129,6 +129,11 @@ public class FileController {
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "文件为空"));
         }
+        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        long maxBytes = 200L * 1024 * 1024;
+        if (file.getSize() > maxBytes) {
+            return ResponseEntity.status(413).body(Map.of("error", "文件超过当前角色允许的大小限制"));
+        }
 
         String originalName = file.getOriginalFilename();
         if (originalName == null || !SecurityUtil.isValidAttachmentFile(originalName)) {
@@ -151,7 +156,7 @@ public class FileController {
             fileArchiveService.recordUpload(storedName, originalName, file.getSize(),
                     mimeType != null ? mimeType : "application/octet-stream",
                     null, null,
-                    Optional.ofNullable((AuthController.AuthSession) request.getAttribute("authSession"))
+                            Optional.ofNullable(session)
                             .map(AuthController.AuthSession::userId).orElse(null));
 
             Map<String, Object> result = new LinkedHashMap<>();
@@ -216,6 +221,7 @@ public class FileController {
     }
 
     private ResponseEntity<Object> serveFile(Path filePath, String fileName, boolean forceDownload) throws IOException {
+        fileName = fileName.replaceAll("[\\r\\n\\\"\\\\/]", "_");
         String mimeType = URLConnection.guessContentTypeFromName(fileName);
         if (mimeType == null) mimeType = "application/octet-stream";
         Resource resource = new UrlResource(filePath.toUri());

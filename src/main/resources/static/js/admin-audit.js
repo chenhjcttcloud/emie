@@ -50,7 +50,7 @@ async function loadAdminLogs() {
           l.username + '</strong></td><td style="font-size:13px;">' + l.action + '</td><td>' + pl + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   } catch (e) {
-    container.innerHTML = '<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ' + e.message + '</p></div>';
+    container.innerHTML = '<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ' + escHtml(e.message || '未知错误') + '</p></div>';
   }
 }
 
@@ -110,7 +110,7 @@ async function renderAdminShares(container) {
         </div>
       </div>`;
   } catch (e) {
-    container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${e.message}</p></div>`;
+      container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${escHtml(e.message || '未知错误')}</p></div>`;
   }
 }
 
