@@ -91,11 +91,29 @@ function enhanceDateInputs(root = document) {
   });
 }
 
+// 旧弹窗模板把关闭按钮放在 modal 外部，容易因弹窗高度变化而漂移。
+// 动态插入时统一移动到标题栏，由标题栏定位规则负责布局。
+function normalizeModalCloseButtons(root = document) {
+  root.querySelectorAll?.('.modal-overlay > .modal-close-float').forEach(button => {
+    const overlay = button.parentElement;
+    const modal = overlay?.querySelector(':scope > .modal');
+    const header = modal?.querySelector(':scope > .modal-header');
+    if (!header || header.querySelector('.modal-close')) return;
+    button.classList.remove('modal-close-float');
+    button.classList.add('modal-close');
+    header.appendChild(button);
+  });
+}
+
 // 页面大部分表单由模块按需动态渲染，统一监听新增节点，避免遗漏任何日期控件。
 if (document.body) {
   enhanceDateInputs(document);
+  normalizeModalCloseButtons(document);
   new MutationObserver(mutations => mutations.forEach(mutation => mutation.addedNodes.forEach(node => {
-    if (node.nodeType === 1) enhanceDateInputs(node);
+    if (node.nodeType === 1) {
+      enhanceDateInputs(node);
+      normalizeModalCloseButtons(node);
+    }
   }))).observe(document.body, { childList: true, subtree: true });
 }
 
