@@ -1,4 +1,6 @@
 target/
+!target/
+!target/design-pm-1.0.0.jar
 .workbuddy/
 .codebuddy/
 .sheet-work/
@@ -26,5 +28,6 @@ db/
 *.sql
 *.sql.gz
 design-pm-*.jar
+!target/design-pm-1.0.0.jar
 project-import-*.xlsx
 release-sha.txt

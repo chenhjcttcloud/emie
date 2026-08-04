@@ -9,6 +9,7 @@ import com.emie.designpm.service.NotificationRetryService;
 import com.emie.designpm.service.PermissionManagementService;
 import com.emie.designpm.service.PermissionGovernanceService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.CacheControl;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.data.domain.PageRequest;
@@ -47,7 +48,11 @@ public class AdminController {
     /** 公开配置（供登录页等无需登录的场景使用） */
     @GetMapping("/public-config")
     public ResponseEntity<Map<String, String>> getPublicConfig() {
-        return ResponseEntity.ok(adminService.getPublicConfig());
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .header("Pragma", "no-cache")
+                .header("Expires", "0")
+                .body(adminService.getPublicConfig());
     }
 
     // ==================== 系统配置管理 ====================

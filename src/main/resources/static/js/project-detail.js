@@ -42,6 +42,23 @@ function formatProjectIp(ipName, ipSubOptions) {
   }
 }
 
+function renderProjectRelatedRoles(detail) {
+  const groups = { designer: [], supplychain: [], promotion: [] };
+  (detail.tasks || []).forEach(task => {
+    const role = String(task.assigneeRole || 'designer').toLowerCase();
+    if (!groups[role]) return;
+    const name = task.designerName || task.designerId;
+    if (name && !groups[role].includes(name)) groups[role].push(name);
+  });
+  const entries = [];
+  groups.designer.forEach((name, index) => entries.push({ label: `设计师${index + 1}`, name, tone: 'blue' }));
+  if (groups.supplychain.length) entries.push({ label: '供应链', name: groups.supplychain.join('、'), tone: 'teal' });
+  if (groups.promotion.length) entries.push({ label: '产品推广', name: groups.promotion.join('、'), tone: 'purple' });
+  if (!entries.length) return '';
+  const tones = { blue: ['#EFF6FF', '#1D4ED8'], teal: ['#F0FDFA', '#0D9488'], purple: ['#F5F3FF', '#7C3AED'] };
+  return `<div class="detail-section" style="margin-top:14px;"><div class="detail-section-title">👥 项目关联角色</div><div style="display:flex;flex-wrap:wrap;gap:10px;">${entries.map(entry => { const tone = tones[entry.tone]; return `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:${tone[0]};color:${tone[1]};min-width:150px;"><span style="font-size:12px;font-weight:700;">${entry.label}</span><span style="font-size:13px;font-weight:600;">${escHtml(entry.name)}</span></div>`; }).join('')}</div></div>`;
+}
+
 // ==================== 项目详情 ====================
 async function openProjectDetail(pid) {
   if (!tryOpenModal('projectDetailModal')) return;
@@ -115,7 +132,7 @@ function renderProjectDetailContent(detail) {
         ${detail.productCategory ? `<div class="detail-item"><div class="detail-label">产品类目</div><div class="detail-value">${escHtml(detail.productCategory)}${detail.productCategory === '其他' && detail.productCategoryNote ? `（${escHtml(detail.productCategoryNote)}）` : ''}</div></div>` : ''}
         ${detail.priceRange ? `<div class="detail-item"><div class="detail-label">参考零售价</div><div class="detail-value">${escHtml(detail.priceRange)}</div></div>` : ''}
         ${detail.targetMarket ? `<div class="detail-item"><div class="detail-label">目标市场</div><div class="detail-value">${(() => { try { return JSON.parse(detail.targetMarket).map(escHtml).join('、'); } catch(e) { return escHtml(detail.targetMarket); } })()}</div></div>` : ''}
-        ${detail.complianceItems ? `<div class="detail-item" style="grid-column:1/-1;"><div class="detail-label" style="color:var(--warning);font-weight:600;">⚠️ 合规处罚<span style="color:var(--gray-400);font-weight:400;font-size:12px;margin-left:6px;">提醒产品企划关注相关供应商是否有相关资质</span></div><div class="detail-value" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">${(() => { try { return JSON.parse(detail.complianceItems).map(i => `<span style="display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:500;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;">⚠ ${escHtml(i)}</span>`).join(''); } catch(e) { return escHtml(detail.complianceItems); } })()}</div></div>` : ''}
+        ${detail.complianceItems ? `<div class="detail-item" style="grid-column:1/-1;background:linear-gradient(135deg,#FFFBEB,#FFF7ED);border:1px solid #FDE68A;border-radius:10px;padding:12px 14px;"><div style="display:flex;align-items:center;gap:7px;color:#92400E;font-weight:700;font-size:13px;">⚠️ 合规事项 <span style="font-size:11px;font-weight:400;color:#A16207;">请确认相关供应商资质</span></div><div class="detail-value" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">${(() => { try { return JSON.parse(detail.complianceItems).map(i => `<span style="display:inline-flex;align-items:center;padding:5px 10px;border-radius:8px;font-size:12px;font-weight:600;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;">${escHtml(i)}</span>`).join(''); } catch(e) { return escHtml(detail.complianceItems); } })()}</div></div>` : ''}
         <div class="detail-item"><div class="detail-label">要求完成时间</div><div class="detail-value">${formatDate(detail.deadline)}</div></div>
       </div>
       <div style="margin-top:8px;"><div class="detail-label">产品要求</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(detail.productRequirements || '-')}</div></div>
@@ -123,6 +140,8 @@ function renderProjectDetailContent(detail) {
       ${renderProjectReferenceImages(detail)}
       ${renderProjectAttachments(detail)}
     </div>
+
+    ${renderProjectRelatedRoles(detail)}
 
     <div class="detail-section">
       <div class="detail-section-title">
@@ -185,6 +204,7 @@ function renderSubTaskCard(detail, task, idx) {
   }[task.workflowStage] || '未设置阶段';
   const rejectionRecords = Array.isArray(task.rejectionRecords) ? task.rejectionRecords : [];
   const latestRejection = rejectionRecords.length ? rejectionRecords[rejectionRecords.length - 1] : null;
+  const deliveryVersions = Array.isArray(task.deliveryVersions) ? task.deliveryVersions : [];
   const visibleDeadline = task.status === 'rejected' && latestRejection?.requiredCompletionDate
     ? latestRejection.requiredCompletionDate : task.plannedDate;
 
@@ -211,16 +231,7 @@ function renderSubTaskCard(detail, task, idx) {
       ${task.deliverables ? `<div class="detail-item"><div class="detail-label">交付成果</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.deliverables)}</div></div>` : ''}
     </div>` : ''}
 
-    ${rejectionRecords.length ? `<div style="margin-top:10px;border-top:1px solid var(--gray-100);">
-      ${rejectionRecords.map(record => `
-        <button type="button" data-emie-onclick="openTaskRejectionRecord(${task.id},${record.attemptNo})"
-          style="width:100%;display:flex;align-items:center;gap:8px;padding:8px 4px;border:0;border-bottom:1px solid var(--gray-100);background:transparent;cursor:pointer;text-align:left;font-size:11px;color:var(--gray-500);">
-          <span style="color:#A32D2D;font-weight:600;white-space:nowrap;">↩ 第 ${record.attemptNo} 次驳回</span>
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escHtml(record.reason || '未填写驳回意见')}</span>
-          <span style="white-space:nowrap;color:var(--gray-400);">${fmtDT(record.reviewedAt)}</span>
-          <span style="color:var(--primary);white-space:nowrap;">查看详情 ›</span>
-        </button>`).join('')}
-    </div>` : ''}
+    ${deliveryVersions.length ? `<div style="margin-top:12px;border-top:1px solid var(--gray-100);padding-top:10px;"><div style="font-size:13px;font-weight:700;margin-bottom:6px;">交付版本 <span style="color:var(--gray-400);font-weight:400;">(${deliveryVersions.length})</span></div>${deliveryVersions.map(version => { const rejection = rejectionRecords.find(record => Number(record.attemptNo) === Number(version.versionNo)); return `<details style="border:1px solid var(--gray-200);border-radius:8px;margin-bottom:5px;overflow:hidden;background:var(--gray-50);"><summary style="display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;list-style:none;font-size:12px;"><strong>V${version.versionNo}</strong><span class="badge ${version.submissionType === 'redelivery' ? 'badge-rejected' : version.submissionType === 'correction' ? 'badge-pending' : 'badge-completed'}">${version.submissionType === 'redelivery' ? '驳回后重交' : version.submissionType === 'correction' ? '主动修正' : '首次交付'}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray-600);">${escHtml(version.changeSummary || '')}</span><span style="color:var(--gray-400);white-space:nowrap;">${version.submittedAt ? fmtDT(version.submittedAt) : ''}</span><span style="color:var(--gray-400);">⌄</span></summary><div style="padding:10px 12px;border-top:1px solid var(--gray-200);background:#fff;"><div style="font-size:12px;color:var(--gray-700);white-space:pre-wrap;">${escHtml(version.deliverables || '未填写文字交付内容')}</div>${rejection ? `<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#FFF8F8;color:#A32D2D;font-size:12px;"><strong>驳回意见：</strong>${escHtml(rejection.reason || '未填写驳回意见')}</div>` : ''}${version.referenceImagesJson ? renderSubTaskImages(version.referenceImagesJson) : ''}${version.attachmentsJson ? renderTaskAttachments(version.attachmentsJson) : ''}</div></details>`; }).join('')}</div>` : ''}
 
     ${task.reviewComments ? `<div class="review-box ${task.status === 'rejected' ? 'rejected' : 'approved'}"><strong>${task.status === 'rejected' ? '驳回意见' : '验收意见'}：</strong>${escHtml(task.reviewComments)}</div>` : ''}
 

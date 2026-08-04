@@ -12,9 +12,30 @@ function notifySystemVersion(version) {
   if (!previous || previous === version || document.getElementById('systemVersionNotice')) return;
   const notice = document.createElement('div');
   notice.id = 'systemVersionNotice';
-  notice.style.cssText = 'position:fixed;right:24px;bottom:24px;z-index:10000;background:#fff;border:1px solid var(--primary);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.16);padding:16px 18px;max-width:340px;';
-  notice.innerHTML = `<div style="font-weight:700;margin-bottom:6px;">系统已更新</div><div style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">检测到新版本，当前页面数据不会自动丢失。请在合适时刷新页面。</div><div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="this.closest('#systemVersionNotice').remove()">稍后再说</button><button class="btn btn-primary btn-sm" data-emie-onclick="location.reload()">立即刷新</button></div>`;
+  notice.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.42);display:flex;align-items:center;justify-content:center;padding:20px;';
+  notice.innerHTML = `<div style="background:#fff;border:1px solid var(--primary);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.22);padding:22px;max-width:380px;width:100%;"><div style="font-weight:700;font-size:17px;margin-bottom:8px;">系统已更新</div><div style="font-size:13px;color:var(--gray-500);line-height:1.7;margin-bottom:16px;">检测到新版本。为避免飞书内置浏览器继续使用旧缓存，需要清理页面缓存并重新加载。当前登录状态和已保存数据不会受影响。</div><div style="display:flex;justify-content:flex-end;"><button class="btn btn-primary" data-emie-onclick="forceRefreshForVersion()">清理缓存并刷新</button></div></div>`;
   document.body.appendChild(notice);
+}
+
+/** 清理 WebView 可控缓存后刷新；不清理 token/localStorage，避免打断用户当前登录。 */
+async function forceRefreshForVersion() {
+  const button = document.querySelector('#systemVersionNotice .btn-primary');
+  if (button) { button.disabled = true; button.textContent = '正在刷新…'; }
+  try {
+    if (window.caches?.keys) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(key => caches.delete(key)));
+    }
+    if (navigator.serviceWorker?.getRegistrations) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map(registration => registration.unregister()));
+    }
+  } catch (e) {
+    console.warn('清理页面缓存失败，继续强制刷新:', e);
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.set('__emie_version', localStorage.getItem('emie_system_version') || String(Date.now()));
+  window.location.replace(url.toString());
 }
 
 async function checkSystemVersion() {
@@ -71,7 +92,6 @@ async function initApp() {
         const vp = document.querySelector('meta[name="viewport"]');
         if (vp) vp.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0';
         showApp();
-        startIdleMonitor();
         // 渲染完成后滚动到顶部
         setTimeout(() => { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; }, 100);
         return;
@@ -313,7 +333,6 @@ async function handleLogin(event) {
     EMIE.adminState.currentTab = 'dashboard';
     EMIE.state.cache = { orders: [] };
     showApp();
-    startIdleMonitor();
     setTimeout(() => { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; }, 100);
   } catch (e) {
     errEl.textContent = '网络错误，请重试';

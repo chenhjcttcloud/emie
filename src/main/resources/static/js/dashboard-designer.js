@@ -3,6 +3,7 @@ const roleLabel = (...args) => EMIE.actions.roleLabel(...args);
 const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const getTaskStatusInfo = (...args) => EMIE.actions.getTaskStatusInfo(...args);
 const formatDate = (...args) => EMIE.actions.formatDate(...args);
+const fmtDT = (...args) => EMIE.actions.fmtDT(...args);
 const getCurrentUserId = (...args) => EMIE.actions.getCurrentUserId(...args);
 const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const taskAccept = (...args) => EMIE.actions.taskAccept(...args);
@@ -117,6 +118,8 @@ function renderDesignerTaskCards(tasks, readOnly = false) {
         const tsi = getTaskStatusInfo(t.status);
         const needScore = t.scoringRecords && t.scoringRecords.some(sr => sr.score == null && (sr.role === 'designer' || sr.role === 'supplychain'));
         const modificationCount = Array.isArray(t.rejectionRecords) ? t.rejectionRecords.length : 0;
+        const deliveryVersions = Array.isArray(t.deliveryVersions) ? t.deliveryVersions : [];
+        const rejectionRecords = Array.isArray(t.rejectionRecords) ? t.rejectionRecords : [];
         return `<div class="subtask-card" style="${t._unassigned ? 'border-left:3px solid var(--warning);' : ''}">
           <div class="subtask-header">
             <div class="subtask-name">${t._unassigned ? '📋' : tsi.icon} 子任务：${escHtml(t.name || '-')} <span class="subtask-project-inline">（所属项目：${escHtml(t.projectName || '未命名项目')}）</span> <span style="font-size:11px;color:var(--gray-400);font-weight:400;">#${t.id}</span></div>
@@ -130,8 +133,8 @@ function renderDesignerTaskCards(tasks, readOnly = false) {
           </div>
           ${t.details ? `<div style="font-size:13px;color:var(--gray-600);margin-top:8px;">📝 ${escHtml(t.details)}</div>` : ''}
           ${t.reviewComments ? `<div class="review-box ${t.status === 'rejected' ? 'rejected' : 'approved'}">${t.status === 'rejected' ? '驳回意见' : '验收意见'}：${escHtml(t.reviewComments)}</div>` : ''}
-          ${modificationCount ? `<div style="margin-top:10px;font-size:12px;color:#A32D2D;">↩ 有 ${modificationCount} 次修改要求记录，可在子任务详情中查看</div>` : ''}
           ${t.scoringRecords ? renderScoringMini(t) : ''}
+          ${deliveryVersions.length ? `<div style="margin-top:12px;"><div style="font-size:13px;font-weight:700;margin-bottom:6px;">交付版本 <span style="color:var(--gray-400);font-weight:400;">(${deliveryVersions.length})</span></div>${deliveryVersions.map(version => { const rejection = rejectionRecords.find(record => Number(record.attemptNo) === Number(version.versionNo)); return `<details style="border:1px solid var(--gray-200);border-radius:8px;margin-bottom:5px;overflow:hidden;background:var(--gray-50);"><summary style="display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;list-style:none;font-size:12px;"><strong>V${version.versionNo}</strong><span class="badge ${version.submissionType === 'redelivery' ? 'badge-rejected' : version.submissionType === 'correction' ? 'badge-pending' : 'badge-completed'}">${version.submissionType === 'redelivery' ? '驳回后重交' : version.submissionType === 'correction' ? '主动修正' : '首次交付'}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray-600);">${escHtml(version.changeSummary || '')}</span><span style="color:var(--gray-400);white-space:nowrap;">${version.submittedAt ? fmtDT(version.submittedAt) : ''}</span><span style="color:var(--gray-400);">⌄</span></summary><div style="padding:10px 12px;border-top:1px solid var(--gray-200);background:#fff;"><div style="font-size:12px;color:var(--gray-700);white-space:pre-wrap;">${escHtml(version.deliverables || '未填写文字交付内容')}</div>${rejection ? `<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#FFF8F8;color:#A32D2D;font-size:12px;"><strong>驳回意见：</strong>${escHtml(rejection.reason || '未填写驳回意见')}</div>` : ''}${taskDetailFiles(version.referenceImagesJson, true)}${taskDetailFiles(version.attachmentsJson, false)}</div></details>`; }).join('')}</div>` : ''}
           <div class="subtask-actions">
             ${!readOnly && t.status === 'pending' && !t._unassigned ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskAccept(${t.projectId},${t.id})">✅ 接单</button>` : ''}
             ${!readOnly && t._unassigned ? `<button class="btn btn-success btn-sm" data-emie-onclick="taskAccept(${t.projectId},${t.id})">📋 认领并接单</button>` : ''}

@@ -47,7 +47,7 @@ async function renderDashboard(main, role, uid) {
 
   main.innerHTML = `
     <h2 style="font-size:22px;margin-bottom:20px;">📊 工作台 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">— ${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}（${roleLabel(EMIE.state.currentRole)}）</span></h2>
-    <div class="stats-grid dashboard-stats-row">
+    ${!executionRole ? `<div class="stats-grid dashboard-stats-row">
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigate('orders')"><div class="stat-icon blue">📁</div><div><div class="stat-value">${stats.totalProjects}</div><div class="stat-label">${EMIE.state.currentRole === 'admin' ? '全部项目' : '我的项目'}</div></div></div>
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigate('channel')"><div class="stat-icon blue">📦</div><div><div class="stat-value">${stats.channelProjects}</div><div class="stat-label">渠道定制单</div></div></div>
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigate('regular')"><div class="stat-icon green">🏭</div><div><div class="stat-value">${stats.regularProjects}</div><div class="stat-label">公司常规品</div></div></div>
@@ -58,7 +58,7 @@ async function renderDashboard(main, role, uid) {
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateTaskBucket('pending')"><div class="stat-icon yellow">⏳</div><div><div class="stat-value">${stats.pendingTasks}</div><div class="stat-label">待处理子任务</div></div></div>
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateTaskBucket('completed')"><div class="stat-icon green">✅</div><div><div class="stat-value">${stats.approvedTasks}</div><div class="stat-label">已完成子任务</div></div></div>
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigate('scoring')"><div class="stat-icon yellow">⭐</div><div><div class="stat-value">${stats.pendingScore}</div><div class="stat-label">待评分</div></div></div>
-    </div>
+    </div>` : ''}
     ${rolePanelsHtml}
     ${!executionRole && orders.length === 0 ? `<div class="empty"><div class="empty-icon">📭</div><p>暂无您负责的项目</p></div>` : ''}
     ${executionRole ? '<div id="dashboardExecutionTasks"><div class="empty" style="padding:24px;"><p>正在加载关联子任务…</p></div></div>' : renderProjectSummary(channel, '📦 渠道定制单') + renderProjectSummary(regular, '🏭 公司常规品')}
@@ -109,6 +109,11 @@ async function loadDashboardExecutionTasks(uid, role) {
                 <thead><tr><th>子任务</th><th>所属项目</th><th>发布人</th><th>要求完成</th><th>状态</th><th>驳回意见</th><th>操作</th></tr></thead>
                 <tbody>${display.map(t => {
                   const statusInfo = getTaskStatusInfo(t.status);
+                  if (String(role || '').toLowerCase().replace(/[-_]/g, '') === 'supplychain'
+                      && ['accepted', 'rejected'].includes(t.status)) {
+                    statusInfo.label = '进行中';
+                    statusInfo.icon = '🔧';
+                  }
                   return `
                     <tr style="cursor:pointer;" data-emie-onclick="openPublishedSubTaskDetail(${t.id})">
                       <td><strong>${escHtml(t.name || '-')}</strong><div style="font-size:11px;color:var(--gray-400);margin-top:2px;">#${t.id}</div></td>
@@ -127,12 +132,11 @@ async function loadDashboardExecutionTasks(uid, role) {
           </div>
         </div>`;
     };
-    const channelTasks = tasks.filter(t => t.projectType === 'channel_custom');
-    const regularTasks = tasks.filter(t => t.projectType === 'regular');
-    const otherTasks = tasks.filter(t => !['channel_custom', 'regular'].includes(t.projectType));
-    container.innerHTML = renderGroup(channelTasks, '📦 渠道定制单子任务')
-      + renderGroup(regularTasks, '🏭 公司常规品子任务')
-      + renderGroup(otherTasks, '📌 其他关联子任务');
+    const pendingTasks = tasks.filter(t => t.status === 'pending');
+    const designingTasks = tasks.filter(t => ['accepted', 'rejected'].includes(t.status));
+    const activeTitle = String(role || '').toLowerCase().replace(/[-_]/g, '') === 'supplychain' ? '🔧 进行中' : '🎨 设计中';
+    container.innerHTML = renderGroup(pendingTasks, '📥 待接单')
+      + renderGroup(designingTasks, activeTitle);
   } catch (error) {
     container.innerHTML = `<div class="empty"><p>关联子任务加载失败：${escHtml(error.message)}</p></div>`;
   }

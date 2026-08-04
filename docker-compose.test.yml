@@ -1,0 +1,68 @@
+services:
+  test-mysql:
+    image: mysql:8.4
+    container_name: emie-test-mysql
+    restart: unless-stopped
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    environment:
+      MYSQL_DATABASE: ${DESIGNPM_TEST_DB_NAME:-designpmtest}
+      MYSQL_USER: ${DESIGNPM_TEST_DB_USER:?Set DESIGNPM_TEST_DB_USER}
+      MYSQL_PASSWORD: ${DESIGNPM_TEST_DB_PASSWORD:?Set DESIGNPM_TEST_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DESIGNPM_TEST_DB_ROOT_PASSWORD:-local-test-root}
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - emie-test-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  test-redis:
+    image: redis:8.8.1
+    container_name: emie-test-redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${SPRING_DATA_REDIS_PASSWORD:?Set SPRING_DATA_REDIS_PASSWORD}", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - emie-test-redis-data:/data
+
+  test-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: emie-test-app
+    restart: unless-stopped
+    entrypoint: ["java", "-jar", "app.jar"]
+    command: ["--spring.profiles.active=dev"]
+    depends_on:
+      test-mysql:
+        condition: service_healthy
+      test-redis:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DESIGNPM_TEST_DB_HOST: test-mysql
+      DESIGNPM_TEST_DB_NAME: ${DESIGNPM_TEST_DB_NAME:?Set DESIGNPM_TEST_DB_NAME}
+      DESIGNPM_TEST_DB_USER: ${DESIGNPM_TEST_DB_USER:?Set DESIGNPM_TEST_DB_USER}
+      DESIGNPM_TEST_DB_PASSWORD: ${DESIGNPM_TEST_DB_PASSWORD:?Set DESIGNPM_TEST_DB_PASSWORD}
+      DESIGNPM_TEST_DB_USE_SSL: ${DESIGNPM_TEST_DB_USE_SSL:-false}
+      SPRING_DATA_REDIS_HOST: test-redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: ${SPRING_DATA_REDIS_PASSWORD:?Set SPRING_DATA_REDIS_PASSWORD}
+      SPRING_DATA_REDIS_DATABASE: 0
+      SPRING_FLYWAY_ENABLED: true
+      TZ: Asia/Shanghai
+      JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Shanghai -Xmx512m -Xms128m -XX:+UseSerialGC -Xss512k -XX:MaxMetaspaceSize=256m
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+
+volumes:
+  emie-test-mysql-data:
+  emie-test-redis-data:
