@@ -433,6 +433,7 @@ public class ProjectService {
 
     // ==================== Sub-Task Management ====================
 
+    @org.springframework.transaction.annotation.Transactional
     public Project addSubTask(Long projectId, Map<String, Object> body) {
         Project p = projectRepository.findById(projectId)
                 .orElseThrow(() -> new RuntimeException("项目不存在"));
