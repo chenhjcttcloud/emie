@@ -433,7 +433,7 @@ function renderProjectActions(detail) {
   }
   if (detail.feishuChatStatus === 'created' && detail.feishuChatId) {
     actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="openProjectFeishuChat('${escJsString(detail.feishuChatId)}')">💬 进入项目群</button>`;
-  } else if (!detail.feishuChatStatus || detail.feishuChatStatus === 'not_created' || detail.feishuChatStatus === 'failed') {
+  } else if (!detail.feishuChatStatus || ['not_created', 'failed', 'dissolved'].includes(detail.feishuChatStatus)) {
     actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="createProjectFeishuChat(${detail.id})">💬 创建项目群</button>`;
   }
   if (detail.feishuChatStatus === 'created' && ['completed', 'terminated', 'pending_terminate'].includes(detail.status)) {
