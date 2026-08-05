@@ -195,7 +195,7 @@ async function showApp() {
     } catch(e) { /* ignore */ }
     checkSystemVersion();
     // 已打开的页面通过短轮询感知新版本；切回页面时另行立即检查。
-    if (!EMIE.state.versionCheckTimer) EMIE.state.versionCheckTimer = setInterval(checkSystemVersion, 30000);
+    if (!EMIE.state.versionCheckTimer) EMIE.state.versionCheckTimer = setInterval(checkSystemVersion, 10000);
     if (!EMIE.state.versionFocusBound) {
       window.addEventListener('focus', checkSystemVersion);
       document.addEventListener('visibilitychange', () => { if (!document.hidden) checkSystemVersion(); });
