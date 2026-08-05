@@ -504,6 +504,7 @@ public class ProjectService {
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
+        // 统一按负责人 ID 通知，designerId 兼容设计、供应链、销售、产品推广等负责人类型。
         safeNotifyAfterCommit("TASK_ASSIGNED", task.getDesignerId(), "sub_task", task.getId(),
                 (String) body.getOrDefault("currentUserId", ""), notificationContext(saved, task, currentUser, ""));
         return saved;
