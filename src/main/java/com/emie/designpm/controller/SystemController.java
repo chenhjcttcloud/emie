@@ -14,6 +14,7 @@ import java.time.YearMonth;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import com.emie.designpm.dto.PageResponse;
 
 @RestController
 @RequestMapping("/api/system")
@@ -60,9 +61,11 @@ public class SystemController {
 
     /** 获取系统操作日志，支持日期范围筛选（自动合并数据库 + 归档文件） */
     @GetMapping("/logs")
-    public ResponseEntity<List<Map<String, Object>>> getSystemLogs(
+    public ResponseEntity<PageResponse<Map<String, Object>>> getSystemLogs(
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "30") int size,
             HttpServletRequest request) {
 
         if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
@@ -82,7 +85,13 @@ public class SystemController {
         }
 
         List<Map<String, Object>> result = logArchiveService.queryLogs(start, end);
-        return ResponseEntity.ok(result);
+        int safeSize = Math.min(Math.max(size, 10), 100);
+        int safePage = Math.max(page, 0);
+        int total = result.size();
+        int from = Math.min(safePage * safeSize, total);
+        int to = Math.min(from + safeSize, total);
+        int totalPages = total == 0 ? 0 : (int) Math.ceil(total / (double) safeSize);
+        return ResponseEntity.ok(new PageResponse<>(result.subList(from, to), safePage, safeSize, total, totalPages));
     }
 
     /** 手动触发归档指定月份（管理员用） */

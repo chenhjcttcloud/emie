@@ -17,6 +17,7 @@ async function renderAdminLogs(container) {
     </div>
     <div id="logContainer"><div class="loading">加载中</div></div>
   `;
+  EMIE.adminState.logPage = 0;
   await loadAdminLogs();
 }
 
@@ -31,14 +32,17 @@ async function loadAdminLogs() {
     const params = [];
     if (startDate) params.push('startDate=' + startDate);
     if (endDate) params.push('endDate=' + endDate);
+    params.push('page=' + (EMIE.adminState.logPage || 0));
+    params.push('size=15');
     if (params.length) url += '?' + params.join('&');
-    const logs = await apiGet(url);
+    const pageResult = await apiGet(url);
+    const logs = pageResult.items || [];
     if (!logs.length) {
       container.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><p>暂无日志记录</p></div>';
       return;
     }
-    container.innerHTML = '<div style="font-size:13px;color:var(--gray-400);margin-bottom:8px;">共 ' + logs.length + ' 条记录</div>' +
-      '<div class="card" style="padding:0;overflow-x:auto;"><table><thead><tr>' +
+    container.innerHTML = '<div style="font-size:13px;color:var(--gray-400);margin-bottom:8px;">共 ' + pageResult.total + ' 条记录</div>' +
+      '<div class="card admin-log-table-wrap" style="padding:0;overflow:auto;max-height:calc(100vh - 260px);"><table><thead><tr>' +
       '<th style="width:60px;">#</th><th style="width:150px;">时间</th><th style="width:60px;">角色</th>' +
       '<th style="width:80px;">操作人</th><th>操作内容</th><th style="width:80px;">关联项目</th></tr></thead><tbody>' +
       logs.map(l => {
@@ -48,10 +52,16 @@ async function loadAdminLogs() {
         return '<tr><td style="color:var(--gray-400);">' + l.id + '</td><td style="white-space:nowrap;font-size:12px;">' +
           l.time + '</td><td><span class="badge badge-progress" style="font-size:11px;">' + rn + '</span></td><td><strong>' +
           l.username + '</strong></td><td style="font-size:13px;">' + l.action + '</td><td>' + pl + '</td></tr>';
-      }).join('') + '</tbody></table></div>';
+      }).join('') + '</tbody></table></div>' + (pageResult.totalPages > 1 ? `<div class="project-pagination"><span>第 ${pageResult.page + 1} / ${pageResult.totalPages} 页</span><div><button class="btn btn-outline btn-sm" ${pageResult.page <= 0 ? 'disabled' : ''} data-emie-onclick="changeAdminLogPage(${pageResult.page - 1})">上一页</button><button class="btn btn-outline btn-sm" ${pageResult.page >= pageResult.totalPages - 1 ? 'disabled' : ''} data-emie-onclick="changeAdminLogPage(${pageResult.page + 1})">下一页</button></div></div>` : '');
   } catch (e) {
     container.innerHTML = '<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ' + escHtml(e.message || '未知错误') + '</p></div>';
   }
+}
+
+async function changeAdminLogPage(page) {
+  if (page < 0) return;
+  EMIE.adminState.logPage = page;
+  await loadAdminLogs();
 }
 
 // ===== Admin: 分享管理 =====
@@ -187,6 +197,7 @@ async function adminRevokeShare(id) {
 EMIE.registerActions({
   renderAdminLogs,
   loadAdminLogs,
+  changeAdminLogPage,
   renderAdminShares,
   adminEditShare,
   doAdminUpdateShare,
@@ -196,6 +207,7 @@ EMIE.registerActions({
 EMIE.registerModule('adminAudit', {
   renderAdminLogs,
   loadAdminLogs,
+  changeAdminLogPage,
   renderAdminShares,
   adminEditShare,
   doAdminUpdateShare,

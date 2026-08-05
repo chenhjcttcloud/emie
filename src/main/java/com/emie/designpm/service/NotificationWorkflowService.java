@@ -91,7 +91,8 @@ public class NotificationWorkflowService {
     }
 
     private void sendFeishu(NotificationEvent event, Notification n, User user, NotificationTemplateService.Template t, String actor) {
-        NotificationDelivery d = deliveries.save(NotificationDelivery.builder().notificationId(n.getId()).channel("feishu").status("pending").retryCount(0).cardPayload(t.feishuCardJson()).build());
+        NotificationDelivery d = deliveries.save(NotificationDelivery.builder().notificationId(n.getId()).channel("feishu").status("pending").retryCount(0).createdAt(LocalDateTime.now()).cardPayload(t.feishuCardJson()).build());
+        d.setFirstAttemptAt(LocalDateTime.now()); d.setLastAttemptAt(LocalDateTime.now());
         try {
             if (user.getFeishuOpenId() == null || user.getFeishuOpenId().isBlank()) throw new IllegalArgumentException("收件人未绑定飞书 Open ID");
             d.setExternalMessageId(feishu.sendInteractiveMessage(user.getFeishuOpenId(), t.feishuCardJson())); d.setStatus("delivered"); d.setDeliveredAt(LocalDateTime.now());
@@ -105,7 +106,7 @@ public class NotificationWorkflowService {
                 deliveries.save(d);
                 audit(event, n, d, "feishu_text_fallback_delivered", actor, "卡片解析失败，已降级为文本通知：" + cardError);
             } catch (Exception fallbackError) {
-                d.setStatus("failed"); d.setErrorMsg(limit(cardError + "；文本降级也失败：" + fallbackError.getMessage())); deliveries.save(d);
+                d.setStatus("failed"); d.setFailedAt(LocalDateTime.now()); d.setErrorMsg(limit(cardError + "；文本降级也失败：" + fallbackError.getMessage())); deliveries.save(d);
                 audit(event, n, d, "feishu_failed", actor, "卡片和文本通知均失败：" + limit(d.getErrorMsg()));
             }
         }

@@ -27,25 +27,14 @@ async function renderAdmin(main, role, uid) {
         <h2>⚙️ 系统管理</h2>
         <p>管理系统配置、外观、用户权限等</p>
       </div>
-      <div class="admin-tabs" id="adminTabs">
-        <button class="admin-tab ${EMIE.adminState.currentTab === 'dashboard' ? 'active' : ''}" data-emie-onclick="switchAdminTab('dashboard')">📊 概览</button>
-        <button class="admin-tab ${EMIE.adminState.currentTab === 'config' ? 'active' : ''}" data-emie-onclick="switchAdminTab('config')">🔧 系统配置</button>
-        <button class="admin-tab ${EMIE.adminState.currentTab === 'notificationTemplates' ? 'active' : ''}" data-emie-onclick="switchAdminTab('notificationTemplates')">💬 通知文案</button>
-        <button class="admin-tab ${EMIE.adminState.currentTab === 'appearance' ? 'active' : ''}" data-emie-onclick="switchAdminTab('appearance')">🎨 外观</button>
-        <button class="admin-tab ${EMIE.adminState.currentTab === 'users' ? 'active' : ''}" data-emie-onclick="switchAdminTab('users')">👥 用户管理</button>
-        <button class="admin-tab ${EMIE.adminState.currentTab === 'roles' ? 'active' : ''}" data-emie-onclick="switchAdminTab('roles')">🔐 角色管理</button>
-        <button class="admin-tab ${EMIE.adminState.currentTab === 'categories' ? 'active' : ''}" data-emie-onclick="switchAdminTab('categories')">📂 产品类目</button>
-        <button class="admin-tab ${EMIE.adminState.currentTab === 'ipOptions' ? 'active' : ''}" data-emie-onclick="switchAdminTab('ipOptions')">🏷️ IP配置</button>
-        <button class="admin-tab ${EMIE.adminState.currentTab === 'compliance' ? 'active' : ''}" data-emie-onclick="switchAdminTab('compliance')">⚖️ 合规处罚</button>
-        <button class="admin-tab ${EMIE.adminState.currentTab === 'priceRanges' ? 'active' : ''}" data-emie-onclick="switchAdminTab('priceRanges')">💰 参考零售价</button>
-        <button class="admin-tab ${EMIE.adminState.currentTab === 'org' ? 'active' : ''}" data-emie-onclick="switchAdminTab('org')">🏢 组织架构</button>
-        <button class="admin-tab ${EMIE.adminState.currentTab === 'scoring' ? 'active' : ''}" data-emie-onclick="switchAdminTab('scoring')">⭐ 评分管理</button>
-        <button class="admin-tab ${EMIE.adminState.currentTab === 'logs' ? 'active' : ''}" data-emie-onclick="switchAdminTab('logs')">📜 日志</button>
-        <button class="admin-tab ${EMIE.adminState.currentTab === 'shares' ? 'active' : ''}" data-emie-onclick="switchAdminTab('shares')">🔗 分享管理</button>
-        <button class="admin-tab ${EMIE.adminState.currentTab === 'filestorage' ? 'active' : ''}" data-emie-onclick="switchAdminTab('filestorage')">📦 文件存储</button>
-        <button class="admin-tab ${EMIE.adminState.currentTab === 'workload' ? 'active' : ''}" data-emie-onclick="switchAdminTab('workload')">📊 工作量</button>
-      </div>
-      <div id="adminContent"></div>
+      <div class="admin-layout"><aside class="admin-tabs" id="adminTabs">
+        <div class="admin-tab-group"><div class="admin-tab-group-title">总览</div><button class="admin-tab ${EMIE.adminState.currentTab === 'dashboard' ? 'active' : ''}" data-emie-onclick="switchAdminTab('dashboard')">📊 概览</button></div>
+        <div class="admin-tab-group"><div class="admin-tab-group-title">系统与外观</div><button class="admin-tab ${EMIE.adminState.currentTab === 'config' ? 'active' : ''}" data-emie-onclick="switchAdminTab('config')">🔧 系统配置</button><button class="admin-tab ${EMIE.adminState.currentTab === 'appearance' ? 'active' : ''}" data-emie-onclick="switchAdminTab('appearance')">🎨 外观</button></div>
+        <div class="admin-tab-group"><div class="admin-tab-group-title">用户与权限</div><button class="admin-tab ${EMIE.adminState.currentTab === 'users' ? 'active' : ''}" data-emie-onclick="switchAdminTab('users')">👥 用户管理</button><button class="admin-tab ${EMIE.adminState.currentTab === 'roles' ? 'active' : ''}" data-emie-onclick="switchAdminTab('roles')">🔐 角色与权限</button><button class="admin-tab ${EMIE.adminState.currentTab === 'org' ? 'active' : ''}" data-emie-onclick="switchAdminTab('org')">🏢 组织架构</button></div>
+        <div class="admin-tab-group"><div class="admin-tab-group-title">业务配置</div><button class="admin-tab ${EMIE.adminState.currentTab === 'categories' ? 'active' : ''}" data-emie-onclick="switchAdminTab('categories')">📂 产品类目</button><button class="admin-tab ${EMIE.adminState.currentTab === 'ipOptions' ? 'active' : ''}" data-emie-onclick="switchAdminTab('ipOptions')">🏷️ IP配置</button><button class="admin-tab ${EMIE.adminState.currentTab === 'compliance' ? 'active' : ''}" data-emie-onclick="switchAdminTab('compliance')">⚖️ 合规处罚</button><button class="admin-tab ${EMIE.adminState.currentTab === 'priceRanges' ? 'active' : ''}" data-emie-onclick="switchAdminTab('priceRanges')">💰 参考零售价</button><button class="admin-tab ${EMIE.adminState.currentTab === 'scoring' ? 'active' : ''}" data-emie-onclick="switchAdminTab('scoring')">⭐ 评分管理</button></div>
+        <div class="admin-tab-group"><div class="admin-tab-group-title">通知与集成</div><button class="admin-tab ${EMIE.adminState.currentTab === 'notificationTemplates' ? 'active' : ''}" data-emie-onclick="switchAdminTab('notificationTemplates')">💬 通知文案</button><button class="admin-tab ${EMIE.adminState.currentTab === 'filestorage' ? 'active' : ''}" data-emie-onclick="switchAdminTab('filestorage')">📦 文件与存储</button></div>
+        <div class="admin-tab-group"><div class="admin-tab-group-title">运维与审计</div><button class="admin-tab ${EMIE.adminState.currentTab === 'logs' ? 'active' : ''}" data-emie-onclick="switchAdminTab('logs')">📜 日志</button><button class="admin-tab ${EMIE.adminState.currentTab === 'shares' ? 'active' : ''}" data-emie-onclick="switchAdminTab('shares')">🔗 分享管理</button><button class="admin-tab ${EMIE.adminState.currentTab === 'workload' ? 'active' : ''}" data-emie-onclick="switchAdminTab('workload')">📊 工作量</button></div>
+      </aside><main id="adminContent"></main></div>
     </div>`;
   await renderAdminContent();
 }
@@ -286,7 +275,7 @@ async function renderAdminConfig(container) {
         <textarea class="form-textarea" id="temporaryBroadcastContent" placeholder="请输入更新时间、影响范围和注意事项" maxlength="2000" rows="5"></textarea>
       </div></div>`);
     container.insertAdjacentHTML('beforeend', `<div class="config-card" data-group="notification-failures">
-      <div class="config-card-header"><h3>🛠️ 飞书发送记录</h3><button class="btn btn-sm btn-secondary" data-emie-onclick="loadNotificationFailures()">🔄 刷新</button></div>
+      <div class="config-card-header"><h3>🛠️ 通知发送记录（仅管理员）</h3><button class="btn btn-sm btn-secondary" data-emie-onclick="loadNotificationFailures()">🔄 刷新</button></div>
       <div class="config-card-body" id="notificationFailures"><div class="loading">加载中</div></div>
     </div>`);
     await loadNotificationFailures();
@@ -330,7 +319,8 @@ async function loadNotificationFailures() {
   if (!target) return;
   try {
     const rows = await apiGet('/admin/notifications/failures');
-    target.innerHTML = rows.length ? `<div class="table-responsive"><table class="data-table"><thead><tr><th>状态</th><th>收件人</th><th>通知标题</th><th>发送内容</th><th>原因</th><th>重试</th><th>操作</th></tr></thead><tbody>${rows.map(r => `<tr><td>${escHtml(r.statusLabel || r.status || '')}</td><td>${escHtml(r.recipientUserId || '')}</td><td>${escHtml(r.title || '')}</td><td style="max-width:320px;white-space:pre-wrap;">${escHtml(r.content || '')}</td><td>${escHtml(r.errorMsg || '—')}</td><td>${r.retryCount ?? 0}</td><td>${['failed','dead_letter'].includes(r.status) ? `<button class="btn btn-sm btn-primary" data-emie-onclick="retryNotificationDelivery(${r.deliveryId})">重新发送</button>` : '—'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无飞书发送记录</div>';
+    const fmt = value => value ? new Date(value).toLocaleString('zh-CN', {hour12:false}) : '—';
+    target.innerHTML = rows.length ? `<div class="table-responsive"><table class="data-table"><thead><tr><th>结果</th><th>业务流程</th><th>收件人</th><th>触发时间</th><th>最近尝试</th><th>发送内容</th><th>失败原因</th><th>操作</th></tr></thead><tbody>${rows.map(r => `<tr><td>${escHtml(r.statusLabel || r.status || '')}<br><small>重试 ${r.retryCount ?? 0} 次</small></td><td>${escHtml(r.processLabel || '系统通知')}</td><td>${escHtml(r.recipientName ? `${r.recipientName}（${r.recipientUserId || ''}）` : (r.recipientUserId || ''))}</td><td>${fmt(r.createdAt)}</td><td>${fmt(r.lastAttemptAt || r.firstAttemptAt)}${r.deliveredAt ? `<br>成功：${fmt(r.deliveredAt)}` : ''}${r.nextRetryAt ? `<br>下次：${fmt(r.nextRetryAt)}` : ''}</td><td style="max-width:320px;white-space:pre-wrap;">${escHtml(r.content || '')}</td><td>${escHtml(r.errorMsg || '—')}</td><td>${['failed','dead_letter','blocked'].includes(r.status) ? `<button class="btn btn-sm btn-primary" data-emie-onclick="retryNotificationDelivery(${r.deliveryId})">重新发送</button>` : '—'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无通知发送记录</div>';
   } catch (e) { target.innerHTML = `<div class="error-state">加载失败：${escHtml(e.message)}</div>`; }
 }
 

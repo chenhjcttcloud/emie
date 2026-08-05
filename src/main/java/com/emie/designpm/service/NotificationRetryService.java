@@ -4,10 +4,12 @@ import com.emie.designpm.entity.Notification;
 import com.emie.designpm.entity.NotificationAuditLog;
 import com.emie.designpm.entity.NotificationDelivery;
 import com.emie.designpm.entity.User;
+import com.emie.designpm.entity.NotificationEvent;
 import com.emie.designpm.repository.NotificationAuditLogRepository;
 import com.emie.designpm.repository.NotificationDeliveryRepository;
 import com.emie.designpm.repository.NotificationRepository;
 import com.emie.designpm.repository.UserRepository;
+import com.emie.designpm.repository.NotificationEventRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,14 +28,23 @@ public class NotificationRetryService {
     private final UserRepository users;
     private final NotificationAuditLogRepository audits;
     private final FeishuBaseService feishu;
+    private final NotificationEventRepository events;
 
     public NotificationRetryService(NotificationDeliveryRepository deliveries, NotificationRepository notifications,
                                     UserRepository users, NotificationAuditLogRepository audits, FeishuBaseService feishu) {
+        this(deliveries, notifications, users, audits, feishu, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public NotificationRetryService(NotificationDeliveryRepository deliveries, NotificationRepository notifications,
+                                    UserRepository users, NotificationAuditLogRepository audits, FeishuBaseService feishu,
+                                    NotificationEventRepository events) {
         this.deliveries = deliveries;
         this.notifications = notifications;
         this.users = users;
         this.audits = audits;
         this.feishu = feishu;
+        this.events = events;
     }
 
     @Scheduled(fixedDelayString = "${notification.retry-delay-ms:30000}")
@@ -70,10 +81,24 @@ public class NotificationRetryService {
                 row.put("deliveryId", d.getId());
                 row.put("notificationId", n.getId());
                 row.put("recipientUserId", n.getRecipientUserId());
+                users.findByUserId(n.getRecipientUserId()).ifPresent(u -> row.put("recipientName", u.getName()));
+                NotificationEvent event = events == null ? null : events.findById(n.getEventId()).orElse(null);
+                if (event != null) {
+                    row.put("eventType", event.getEventType());
+                    row.put("processLabel", processLabel(event.getEventType()));
+                    row.put("actorUserId", event.getActorUserId());
+                }
+                row.put("aggregateType", n.getAggregateType());
+                row.put("aggregateId", n.getAggregateId());
                 row.put("title", n.getTitle());
                 row.put("content", n.getContent());
                 row.put("status", d.getStatus());
                 row.put("statusLabel", statusLabel(d.getStatus()));
+                row.put("createdAt", d.getCreatedAt());
+                row.put("firstAttemptAt", d.getFirstAttemptAt());
+                row.put("lastAttemptAt", d.getLastAttemptAt());
+                row.put("failedAt", d.getFailedAt());
+                row.put("nextRetryAt", d.getNextRetryAt());
                 row.put("retryCount", d.getRetryCount());
                 row.put("errorMsg", d.getErrorMsg());
                 row.put("nextRetryAt", d.getNextRetryAt());
@@ -82,6 +107,18 @@ public class NotificationRetryService {
             }
         }
         return result.stream().limit(100).toList();
+    }
+
+    private String processLabel(String eventType) {
+        return switch (eventType) {
+            case "TASK_ASSIGNED" -> "产品企划派发子任务";
+            case "TASK_DELIVERED" -> "子任务负责人首次交付成果";
+            case "TASK_REJECTED" -> "产品企划驳回子任务";
+            case "TASK_REDELIVERED" -> "子任务负责人重新交付成果";
+            case "TASK_SUBMITTED_FOR_REVIEW" -> "子任务送审";
+            case "REVIEW_APPROVED" -> "子任务验收通过";
+            default -> eventType == null ? "其他系统通知" : eventType;
+        };
     }
 
     private String statusLabel(String status) {
@@ -102,6 +139,7 @@ public class NotificationRetryService {
         if (!"feishu".equals(d.getChannel())) throw new IllegalArgumentException("仅支持重试飞书通知");
         d.setStatus("failed");
         d.setRetryCount(0);
+        d.setLastAttemptAt(LocalDateTime.now());
         d.setNextRetryAt(LocalDateTime.now());
         d.setErrorMsg("管理员手动重新排队");
         deliveries.save(d);
@@ -120,8 +158,12 @@ public class NotificationRetryService {
             return;
         }
         try {
+            LocalDateTime now = LocalDateTime.now();
+            if (delivery.getFirstAttemptAt() == null) delivery.setFirstAttemptAt(now);
+            delivery.setLastAttemptAt(now);
             delivery.setExternalMessageId(feishu.sendInteractiveMessage(user.getFeishuOpenId(), delivery.getCardPayload()));
             delivery.setStatus("delivered");
+            delivery.setFailedAt(null);
             delivery.setDeliveredAt(LocalDateTime.now());
             delivery.setNextRetryAt(null);
             deliveries.save(delivery);
@@ -132,6 +174,8 @@ public class NotificationRetryService {
     }
 
     private void scheduleOrDeadLetter(NotificationDelivery delivery, String error) {
+        delivery.setLastAttemptAt(LocalDateTime.now());
+        delivery.setFailedAt(LocalDateTime.now());
         delivery.setRetryCount((delivery.getRetryCount() == null ? 0 : delivery.getRetryCount()) + 1);
         delivery.setErrorMsg(error);
         if (delivery.getRetryCount() >= MAX_RETRIES) {

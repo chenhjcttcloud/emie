@@ -39,6 +39,11 @@ public class NotificationDelivery {
     @Builder.Default
     private Integer retryCount = 0;
 
+    @Column(nullable = false)
+    private LocalDateTime createdAt;
+    private LocalDateTime firstAttemptAt;
+    private LocalDateTime lastAttemptAt;
+    private LocalDateTime failedAt;
     private LocalDateTime nextRetryAt;
     private LocalDateTime deliveredAt;
 
@@ -50,4 +55,9 @@ public class NotificationDelivery {
 
     @Column(columnDefinition = "LONGTEXT")
     private String cardPayload;
+
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null) createdAt = LocalDateTime.now();
+    }
 }
