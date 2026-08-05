@@ -48,7 +48,6 @@ public class NotificationRetryService {
     }
 
     @Scheduled(fixedDelayString = "${notification.retry-delay-ms:30000}")
-    @Transactional
     public void retryDueDeliveries() {
         List<NotificationDelivery> due = deliveries
                 .findTop50ByStatusInAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(
