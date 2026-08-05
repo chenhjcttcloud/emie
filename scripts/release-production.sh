@@ -141,6 +141,12 @@ scripts/mvnw-java21.sh package
 jar_sha="$(sha256sum "$JAR_PATH" | sed "s/ .*//")"
 target_short="${target_sha:0:7}"
 remote_incoming="$REMOTE_INCOMING_DIR/app-$target_sha.jar"
+latest_migration="$(find "$PROJECT_ROOT/src/main/resources/db/migration" -maxdepth 1 -type f -name 'V*__bump_system_version_*.sql' | sort -V | tail -1)"
+expected_version="$(basename "$latest_migration" | sed -n 's/.*_\([0-9][0-9]*_[0-9][0-9]*_[0-9][0-9]*\)\.sql/\1/p' | tr '_' '.')"
+[[ "$expected_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+  echo "未找到有效的系统版本迁移，禁止生产发布。" >&2; exit 1;
+}
+printf "target_version=%s\n" "$expected_version"
 
 printf "阶段 4/5：增量上传发布产物...\n"
 run_ssh "mkdir -p '$REMOTE_INCOMING_DIR' '$DEPLOY_DIR/.release-tools'"
@@ -187,4 +193,8 @@ run_ssh "cat '$DEPLOY_DIR/release-sha.txt'"
 printf "public_http="
 curl "${public_curl_args[@]}" -o /dev/null -w "%{http_code}\n" \
   "${SERVER_PUBLIC_URL%/}/"
+public_config="$(curl "${public_curl_args[@]}" "${SERVER_PUBLIC_URL%/}/api/admin/public-config?versionCheck=$(date +%s)")"
+printf '%s' "$public_config" | tr -d '[:space:]' | grep -q '"system.version":"'"$expected_version"'"' || {
+  echo "生产版本号校验失败，当前不是目标版本 $expected_version。" >&2; exit 1;
+}
 printf "生产发布完成：%s\n" "$target_short"

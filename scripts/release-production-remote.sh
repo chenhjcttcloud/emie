@@ -8,6 +8,7 @@ DEPLOY_DIR="${DEPLOY_DIR:-/home/emie/emie-deploy}"
 BACKUP_ROOT="${BACKUP_ROOT:-/home/emie/emie-deploy-backups}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8080/api/health/live}"
 RUNTIME_IMAGE="${RUNTIME_IMAGE:-emie-app-runtime:java21}"
+RELEASE_LOCK="$DEPLOY_DIR/.release.lock"
 
 target_sha="${1:-}"
 incoming_jar="${2:-}"
@@ -38,6 +39,11 @@ get_env_value() {
 [[ "$expected_jar_sha" =~ ^[0-9a-f]{64}$ ]] || die "JAR 校验值格式错误"
 [[ "$incoming_jar" == "$DEPLOY_DIR/incoming/app-$target_sha.jar" ]] ||
   die "JAR 必须使用受控 incoming 路径"
+
+if ! mkdir "$RELEASE_LOCK" 2>/dev/null; then
+  die "已有生产发布正在执行，拒绝并发切换"
+fi
+trap 'rmdir "$RELEASE_LOCK" 2>/dev/null || true' EXIT
 
 for command_name in docker jq curl gzip sha256sum stat sed; do
   require_command "$command_name"
