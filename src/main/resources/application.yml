@@ -71,6 +71,8 @@ spring:
       connection-timeout: 5000
       idle-timeout: 300000
       max-lifetime: 1200000
+      validation-timeout: 2000
+      keepalive-time: 120000
   jpa:
     hibernate:
       ddl-auto: update
@@ -106,6 +108,8 @@ spring:
       connection-timeout: 5000
       idle-timeout: 300000
       max-lifetime: 1200000
+      validation-timeout: 2000
+      keepalive-time: 120000
   jpa:
     hibernate:
       ddl-auto: update
@@ -136,6 +140,8 @@ spring:
       connection-timeout: 5000
       idle-timeout: 300000
       max-lifetime: 1200000
+      validation-timeout: 2000
+      keepalive-time: 120000
       leak-detection-threshold: ${DESIGNPM_DB_LEAK_DETECTION_MS:10000}
   jpa:
     hibernate:
@@ -179,6 +185,8 @@ spring:
       connection-timeout: 5000
       idle-timeout: 300000
       max-lifetime: 1200000
+      validation-timeout: 2000
+      keepalive-time: 120000
   jpa:
     hibernate:
       ddl-auto: update

@@ -3,16 +3,15 @@ package com.emie.designpm.service;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.repository.*;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.Map;
-import java.util.Collection;
 import java.util.UUID;
 
 /** 业务事件的统一通知入口：先创建站内必达通知，再尝试飞书投递并保留审计。 */
@@ -27,15 +26,18 @@ public class NotificationWorkflowService {
     private final UserRepository users;
     private final SystemConfigRepository configs;
     private final FeishuBaseService feishu;
+    private final TransactionTemplate requiresNew;
 
     public NotificationWorkflowService(NotificationOutboxService outbox, NotificationTemplateService templates,
             NotificationRepository notifications, NotificationDeliveryRepository deliveries,
-            NotificationAuditLogRepository audits, UserRepository users, SystemConfigRepository configs, FeishuBaseService feishu) {
+            NotificationAuditLogRepository audits, UserRepository users, SystemConfigRepository configs, FeishuBaseService feishu,
+            PlatformTransactionManager transactionManager) {
         this.outbox = outbox; this.templates = templates; this.notifications = notifications; this.deliveries = deliveries;
         this.audits = audits; this.users = users; this.configs = configs; this.feishu = feishu;
+        this.requiresNew = new TransactionTemplate(transactionManager);
+        this.requiresNew.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void notifyUser(String eventType, String recipientUserId, String aggregateType, Long aggregateId,
                            String actorUserId, Map<String, String> context) {
         if (recipientUserId == null || recipientUserId.isBlank() || recipientUserId.equals(actorUserId)) return;
@@ -43,17 +45,22 @@ public class NotificationWorkflowService {
             throw new IllegalArgumentException("通知业务对象 ID 不能为空");
         }
         NotificationTemplateService.Template t = templates.render(eventType, context);
-        NotificationEvent event = outbox.publish(eventType, aggregateType, aggregateId, 1, actorUserId,
-                eventType + ":" + aggregateType + ":" + aggregateId + ":" + UUID.randomUUID(), t.content());
-        Notification n = notifications.save(Notification.builder().eventId(event.getId()).recipientUserId(recipientUserId)
-                .category("workflow").priority(t.priority()).mandatory(t.mandatory()).title(t.title()).content(t.content())
-                .deepLink(t.deepLink()).aggregateType(aggregateType).aggregateId(aggregateId).status("unread").createdAt(LocalDateTime.now()).build());
-        NotificationDelivery inApp = deliveries.save(NotificationDelivery.builder().notificationId(n.getId()).channel("in_app")
-                .status("delivered").retryCount(0).deliveredAt(LocalDateTime.now()).build());
-        audit(event, n, inApp, "in_app_delivered", actorUserId, "工作流站内通知已创建");
+        NotificationBundle bundle = requiresNew.execute(status -> {
+            NotificationEvent event = outbox.publish(eventType, aggregateType, aggregateId, 1, actorUserId,
+                    eventType + ":" + aggregateType + ":" + aggregateId + ":" + UUID.randomUUID(), t.content());
+            Notification n = notifications.save(Notification.builder().eventId(event.getId()).recipientUserId(recipientUserId)
+                    .category("workflow").priority(t.priority()).mandatory(t.mandatory()).title(t.title()).content(t.content())
+                    .deepLink(t.deepLink()).aggregateType(aggregateType).aggregateId(aggregateId).status("unread").createdAt(LocalDateTime.now()).build());
+            NotificationDelivery inApp = deliveries.save(NotificationDelivery.builder().notificationId(n.getId()).channel("in_app")
+                    .status("delivered").retryCount(0).deliveredAt(LocalDateTime.now()).build());
+            audit(event, n, inApp, "in_app_delivered", actorUserId, "工作流站内通知已创建");
+            return new NotificationBundle(event, n);
+        });
         if (!enabled("notification.feishuEnabled")) return;
-        users.findByUserId(recipientUserId).ifPresent(user -> sendFeishu(event, n, user, t, actorUserId));
+        users.findByUserId(recipientUserId).ifPresent(user -> sendFeishu(bundle.event(), bundle.notification(), user, t, actorUserId));
     }
+
+    private record NotificationBundle(NotificationEvent event, Notification notification) {}
 
     /** 业务数据提交成功后再创建通知，避免通知先于项目/任务事务提交或业务回滚后仍被发出。 */
     public void notifyUserAfterCommit(String eventType, String recipientUserId, String aggregateType, Long aggregateId,

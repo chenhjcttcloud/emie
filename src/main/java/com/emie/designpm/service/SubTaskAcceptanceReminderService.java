@@ -5,7 +5,6 @@ import com.emie.designpm.repository.NotificationRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import jakarta.annotation.PostConstruct;
 
 import java.time.LocalDateTime;
@@ -37,7 +36,6 @@ public class SubTaskAcceptanceReminderService {
     }
 
     @Scheduled(fixedDelayString = "${notification.task-acceptance-reminder-ms:300000}")
-    @Transactional(readOnly = true)
     public void remindUnacceptedTasks() {
         LocalDateTime cutoff = LocalDateTime.now().minusMinutes(30);
         for (SubTask task : subTasks.findTop100ByStatusAndCreatedAtBetweenOrderByCreatedAtAsc(
