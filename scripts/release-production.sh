@@ -105,9 +105,14 @@ run_ssh() {
 printf "阶段 1/5：核对生产目标与当前服务...\n"
 remote_current_sha="$(
   run_ssh \
-    "test -f '$DEPLOY_DIR/release-sha.txt'; curl -fsS http://127.0.0.1:8080/api/admin/public-config >/dev/null; tr -d '[:space:]' < '$DEPLOY_DIR/release-sha.txt'"
+    "test -f '$DEPLOY_DIR/release-sha.txt'; curl -fsS http://127.0.0.1:8080/api/admin/public-config > /tmp/emie-public-config.json; tr -d '[:space:]' < '$DEPLOY_DIR/release-sha.txt'"
 )"
+remote_version="$(run_ssh "sed -n 's/.*\\\"system.version\\\":\\\"\\([0-9][0-9]*\\.[0-9][0-9]*\\.[0-9][0-9]*\\)\\\".*/\\1/p' /tmp/emie-public-config.json")"
+[[ "$remote_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "生产当前版本号无效，禁止发布。" >&2; exit 1; }
+IFS=. read -r version_major version_minor version_patch <<< "$remote_version"
+expected_version="$version_major.$version_minor.$((version_patch + 1))"
 printf "remote_release=%s\n" "$remote_current_sha"
+printf "current_version=%s target_version=%s\n" "$remote_version" "$expected_version"
 printf "%s\n" "$SERVER_SUDO_PASSWORD" |
   SSHPASS="$SERVER_SUDO_PASSWORD" sshpass -e ssh "${ssh_args[@]}" "$SERVER_USER@$SERVER_HOST" \
     "sudo -S -p '' docker inspect emie-app --format 'sudo_container={{.State.Status}}' >/dev/null"
@@ -141,11 +146,6 @@ scripts/mvnw-java21.sh package
 jar_sha="$(sha256sum "$JAR_PATH" | sed "s/ .*//")"
 target_short="${target_sha:0:7}"
 remote_incoming="$REMOTE_INCOMING_DIR/app-$target_sha.jar"
-latest_migration="$(find "$PROJECT_ROOT/src/main/resources/db/migration" -maxdepth 1 -type f -name 'V*__bump_system_version_*.sql' | sort -V | tail -1)"
-expected_version="$(basename "$latest_migration" | sed -n 's/.*_\([0-9][0-9]*_[0-9][0-9]*_[0-9][0-9]*\)\.sql/\1/p' | tr '_' '.')"
-[[ "$expected_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
-  echo "未找到有效的系统版本迁移，禁止生产发布。" >&2; exit 1;
-}
 printf "target_version=%s\n" "$expected_version"
 
 printf "阶段 4/5：增量上传发布产物...\n"
@@ -186,7 +186,7 @@ uploaded_sha="$(run_ssh "sha256sum '$remote_incoming' | sed 's/ .*//'")"
 printf "阶段 5/5：备份数据库并原子切换候选容器...\n"
 printf "%s\n" "$SERVER_SUDO_PASSWORD" |
   SSHPASS="$SERVER_SUDO_PASSWORD" sshpass -e ssh "${ssh_args[@]}" "$SERVER_USER@$SERVER_HOST" \
-    "sudo -S -p '' env DEPLOY_DIR='$DEPLOY_DIR' bash '$REMOTE_HELPER' '$target_sha' '$remote_incoming' '$jar_sha'"
+    "sudo -S -p '' env DEPLOY_DIR='$DEPLOY_DIR' bash '$REMOTE_HELPER' '$target_sha' '$remote_incoming' '$jar_sha' '$expected_version'"
 
 printf "release_sha="
 run_ssh "cat '$DEPLOY_DIR/release-sha.txt'"

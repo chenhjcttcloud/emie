@@ -267,6 +267,10 @@ public class AdminService {
             configRepository.findByConfigKey(key).ifPresent(c ->
                 result.put(c.getConfigKey(), c.getConfigValue() != null ? c.getConfigValue() : ""));
         }
+        String runtimeVersion = System.getenv("APP_VERSION");
+        if (runtimeVersion != null && runtimeVersion.matches("\\d+\\.\\d+\\.\\d+")) {
+            result.put("system.version", runtimeVersion);
+        }
         return result;
     }
 

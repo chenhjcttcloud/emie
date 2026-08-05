@@ -13,6 +13,7 @@ RELEASE_LOCK="$DEPLOY_DIR/.release.lock"
 target_sha="${1:-}"
 incoming_jar="${2:-}"
 expected_jar_sha="${3:-}"
+expected_version="${4:-}"
 
 die() {
   printf "release_error=%s\n" "$*" >&2
@@ -37,6 +38,7 @@ get_env_value() {
 [[ "${EUID:-$(id -u)}" -eq 0 ]] || die "必须通过 sudo 执行"
 [[ "$target_sha" =~ ^[0-9a-f]{40}$ ]] || die "目标提交必须是 40 位 SHA"
 [[ "$expected_jar_sha" =~ ^[0-9a-f]{64}$ ]] || die "JAR 校验值格式错误"
+[[ "$expected_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "目标版本号格式错误"
 [[ "$incoming_jar" == "$DEPLOY_DIR/incoming/app-$target_sha.jar" ]] ||
   die "JAR 必须使用受控 incoming 路径"
 
@@ -90,6 +92,14 @@ for env_index in "${!runtime_env[@]}"; do
     runtime_env[$env_index]="JAVA_TOOL_OPTIONS=${java_options} -XX:MaxMetaspaceSize=256m"
   fi
 done
+version_env_set="false"
+for env_index in "${!runtime_env[@]}"; do
+  if [[ "${runtime_env[$env_index]}" == APP_VERSION=* ]]; then
+    runtime_env[$env_index]="APP_VERSION=$expected_version"
+    version_env_set="true"
+  fi
+done
+[[ "$version_env_set" == "true" ]] || runtime_env+=("APP_VERSION=$expected_version")
 for required_env in \
   SPRING_PROFILES_ACTIVE DESIGNPM_DB_HOST DESIGNPM_DB_NAME DESIGNPM_DB_USER \
   DESIGNPM_DB_PASSWORD SPRING_DATA_REDIS_HOST SPRING_DATA_REDIS_PORT; do
