@@ -94,7 +94,9 @@ public class NotificationRetryService {
                 row.put("content", n.getContent());
                 row.put("status", d.getStatus());
                 row.put("statusLabel", statusLabel(d.getStatus()));
-                row.put("createdAt", d.getCreatedAt());
+                // 触发时间属于业务通知事件，而不是投递队列记录。历史数据在新增
+                // notification_deliveries.created_at 时可能被填成迁移时间，不能作为触发时间。
+                row.put("createdAt", n.getCreatedAt() != null ? n.getCreatedAt() : d.getCreatedAt());
                 row.put("firstAttemptAt", d.getFirstAttemptAt());
                 row.put("lastAttemptAt", d.getLastAttemptAt());
                 row.put("failedAt", d.getFailedAt());
