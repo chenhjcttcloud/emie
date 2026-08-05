@@ -12,8 +12,8 @@ function notifySystemVersion(version) {
   if (!previous || previous === version || document.getElementById('systemVersionNotice')) return;
   const notice = document.createElement('div');
   notice.id = 'systemVersionNotice';
-  notice.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.42);display:flex;align-items:center;justify-content:center;padding:20px;';
-  notice.innerHTML = `<div style="background:#fff;border:1px solid var(--primary);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.22);padding:22px;max-width:380px;width:100%;"><div style="font-weight:700;font-size:17px;margin-bottom:8px;">系统已更新</div><div style="font-size:13px;color:var(--gray-500);line-height:1.7;margin-bottom:16px;">检测到新版本。为避免飞书内置浏览器继续使用旧缓存，需要清理页面缓存并重新加载。当前登录状态和已保存数据不会受影响。</div><div style="display:flex;justify-content:flex-end;"><button class="btn btn-primary" data-emie-onclick="forceRefreshForVersion()">清理缓存并刷新</button></div></div>`;
+  notice.style.cssText = 'position:fixed;bottom:16px;left:16px;z-index:10000;max-width:360px;pointer-events:none;';
+  notice.innerHTML = `<div style="pointer-events:auto;background:#fff;border:1px solid #BFDBFE;border-left:4px solid var(--primary);border-radius:10px;box-shadow:0 8px 24px rgba(15,23,42,.16);padding:12px 14px;display:flex;align-items:center;gap:12px;"><div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;color:#1E3A8A;margin-bottom:3px;">系统已更新</div><div style="font-size:12px;color:var(--gray-500);line-height:1.5;">当前操作不会被打断。完成后点击刷新即可使用最新版本。</div></div><button class="btn btn-primary btn-sm" data-emie-onclick="forceRefreshForVersion()" style="white-space:nowrap;">立即刷新</button><button class="modal-close" aria-label="稍后刷新" data-emie-onclick="document.getElementById('systemVersionNotice')?.remove()" style="position:static;width:24px;height:24px;">✕</button></div>`;
   document.body.appendChild(notice);
 }
 
@@ -184,11 +184,11 @@ async function showApp() {
         const logoEl = document.querySelector('.logo');
         if (logoEl) {
           if (cfg['app.logo']) {
-            logoEl.innerHTML = `<img src="${cfg['app.logo']}" style="height:32px;width:auto;vertical-align:middle;margin-right:8px;" alt="logo"><span>${cfg['app.title'] || '产品管理系统'}</span>`;
+            logoEl.innerHTML = `<img src="${cfg['app.logo']}" style="height:32px;width:auto;vertical-align:middle;margin-right:8px;" alt="logo"><span>${cfg['app.title'] || '产品管理系统'}</span><small class="app-version">v${cfg['system.version'] || '—'}</small>`;
           } else if (cfg['app.logoEmoji']) {
-            logoEl.innerHTML = `${cfg['app.logoEmoji']} ${cfg['app.title'] || '产品管理系统'}<span>${cfg['app.subtitle'] || 'Product Management'}</span>`;
+            logoEl.innerHTML = `${cfg['app.logoEmoji']} ${cfg['app.title'] || '产品管理系统'}<small class="app-version">v${cfg['system.version'] || '—'}</small><span>${cfg['app.subtitle'] || 'Product Management'}</span>`;
           } else {
-            logoEl.innerHTML = `🎨 ${cfg['app.title'] || '产品管理系统'}<span>${cfg['app.subtitle'] || 'Product Management'}</span>`;
+            logoEl.innerHTML = `🎨 ${cfg['app.title'] || '产品管理系统'}<small class="app-version">v${cfg['system.version'] || '—'}</small><span>${cfg['app.subtitle'] || 'Product Management'}</span>`;
           }
         }
       }
@@ -512,6 +512,7 @@ EMIE.registerActions({
   closeIdleLogoutModal,
   startIdleMonitor,
   openNotificationDeepLink,
+  forceRefreshForVersion,
   roleLabel,
 });
 
@@ -529,6 +530,7 @@ EMIE.registerModule('coreAuth', {
   handleLogout,
   startIdleMonitor,
   openNotificationDeepLink,
+  forceRefreshForVersion,
   closeIdleLogoutModal,
   roleLabel,
 });
