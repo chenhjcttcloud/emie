@@ -49,7 +49,7 @@ public class NotificationTemplateService {
             case "REVIEW_PENDING" -> create(eventType, "有审核待办", "项目“{{projectName}}”的子任务“{{taskName}}”等待{{reviewRole}}审核。", "high", true, reviewLink(context), project, "审核待办：" + task, deadline, actor, context);
             case "REVIEW_APPROVED" -> create(eventType, "审核已通过", "“{{taskName}}”已由{{actorName}}审核通过。", "normal", false, reviewLink(context), project, "审核通过：" + task, deadline, actor, context);
             case "REVIEW_REJECTED" -> create(eventType, "审核已驳回", "“{{taskName}}”审核未通过，原因：{{reason}}。", "high", true, reviewLink(context), project, "审核驳回：" + task, deadline, actor, context);
-            case "PROJECT_REMINDER", "TASK_REMINDER" -> create(eventType, "待办催办提醒", "{{actorName}}提醒你处理“{{targetName}}”。当前负责人：{{targetName}}。", "high", true, "PROJECT_REMINDER".equals(eventType) ? projectLink(context) : taskLink(context), project, "催办提醒", deadline, actor, context);
+            case "PROJECT_REMINDER", "TASK_REMINDER" -> create(eventType, "待办催办提醒", "{{actorName}}提醒你处理“{{targetName}}”。当前负责人：{{currentOwnerName}}。", "high", true, "PROJECT_REMINDER".equals(eventType) ? projectLink(context) : taskLink(context), project, "催办提醒", deadline, actor, context);
             case "TASK_DUE_SOON" -> create(eventType, "子任务即将到期", "子任务“{{taskName}}”将于{{deadline}}到期，请及时处理。", "high", true, taskLink(context), project, "即将到期：" + task, deadline, actor, context);
             case "TASK_OVERDUE" -> create(eventType, "子任务已逾期", "子任务“{{taskName}}”已超过计划完成时间{{deadline}}，请尽快处理。", "urgent", true, taskLink(context), project, "已逾期：" + task, deadline, actor, context);
             case "SYSTEM_ALERT" -> create(eventType, "系统通知告警", "{{message}}", "urgent", true, "/admin?tab=logs", project, "系统告警", deadline, actor, context);

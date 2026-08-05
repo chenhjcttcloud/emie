@@ -11,4 +11,8 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     long countByRecipientUserIdAndStatus(String recipientUserId, String status);
 
     List<Notification> findByIdIn(Collection<Long> ids);
+
+    boolean existsByRecipientUserIdAndAggregateTypeAndAggregateIdAndTitleAndCreatedAtAfter(
+            String recipientUserId, String aggregateType, Long aggregateId, String title,
+            java.time.LocalDateTime createdAt);
 }

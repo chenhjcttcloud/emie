@@ -790,11 +790,11 @@ public class ProjectService {
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
-        safeNotify("TASK_DELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
+        safeNotifyAfterCommit("TASK_DELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
                 notificationContext(p, task, currentUser, ""));
         if ("channel_custom".equals(p.getType()) && p.getSalesId() != null && !p.getSalesId().isBlank()
                 && !p.getSalesId().equals(currentUserId)) {
-            safeNotify("TASK_DELIVERED", p.getSalesId(), "sub_task", task.getId(), currentUserId,
+            safeNotifyAfterCommit("TASK_DELIVERED", p.getSalesId(), "sub_task", task.getId(), currentUserId,
                     notificationContext(p, task, currentUser, "销售关联项目已收到设计交付成果"));
         }
         return saved;
@@ -814,7 +814,7 @@ public class ProjectService {
         String user = (String) body.getOrDefault("currentUser", "");
         p.getLogs().add(new ActivityLog("子任务送审：" + task.getName(), user, role, p));
         Project saved = projectRepository.saveAndFlush(p);
-        safeNotify("TASK_SUBMITTED_FOR_REVIEW", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
+        safeNotifyAfterCommit("TASK_SUBMITTED_FOR_REVIEW", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
                 notificationContext(p, task, user, ""));
         return saved;
     }
@@ -933,6 +933,11 @@ public class ProjectService {
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
         safeNotifyAfterCommit("TASK_REDELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
                 notificationContext(p, task, currentUser, changeSummary));
+        if ("channel_custom".equals(p.getType()) && p.getSalesId() != null && !p.getSalesId().isBlank()
+                && !p.getSalesId().equals(currentUserId)) {
+            safeNotifyAfterCommit("TASK_REDELIVERED", p.getSalesId(), "sub_task", task.getId(), currentUserId,
+                    notificationContext(p, task, currentUser, "销售关联项目已收到重新交付成果"));
+        }
         return saved;
     }
 
@@ -1246,7 +1251,7 @@ public class ProjectService {
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(rejectionReferenceImagesJson, "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(rejectionAttachmentsJson, "sub_task", task.getId());
-        safeNotify("TASK_REJECTED", task.getDesignerId(), "sub_task", task.getId(), currentUserId,
+        safeNotifyAfterCommit("TASK_REJECTED", task.getDesignerId(), "sub_task", task.getId(), currentUserId,
                 notificationContext(p, task, currentUser, comments));
         return saved;
     }

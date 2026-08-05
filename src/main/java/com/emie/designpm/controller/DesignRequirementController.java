@@ -190,16 +190,10 @@ public class DesignRequirementController {
         d.setStatus("pending_self_score");
         repository.save(d);
         scoringService.activateSelfScore(d);
-        // 设计/送审需求若由销售发起，设计师交付后同步通知对应销售。
-        String salesId = null;
-        if ("sales".equals(normalizeRole(d.getResponsibleRole()))) {
-            salesId = d.getResponsibleId();
-        }
-        if (salesId == null || salesId.isBlank()) {
-            User owner = userService.getUserByUserId(d.getOwnerId());
-            if (isActiveRole(owner, "sales")) salesId = owner.getUserId();
-        }
-        if (salesId != null && !salesId.isBlank() && notificationWorkflowService != null) {
+        // 设计/送审需求统一通知创建人：无论由销售、产品推广还是产品企划创建，
+        // 首次交付和驳回后的重新交付都回到同一个需求发起人。
+        String ownerId = d.getOwnerId();
+        if (ownerId != null && !ownerId.isBlank() && notificationWorkflowService != null) {
             try {
                 java.util.Map<String, String> context = new java.util.LinkedHashMap<>();
                 context.put("projectName", d.getName());
@@ -207,7 +201,7 @@ public class DesignRequirementController {
                 context.put("actorName", session.name());
                 context.put("projectLink", "/?view=design-needs&requirementId=" + d.getId());
                 context.put("message", "设计师已提交交付成果");
-                notificationWorkflowService.notifyUserAfterCommit("DESIGN_REQUIREMENT_DELIVERED", salesId,
+                notificationWorkflowService.notifyUserAfterCommit("DESIGN_REQUIREMENT_DELIVERED", ownerId,
                         "design_requirement", d.getId(), session.userId(), context);
             } catch (Exception ignored) { }
         }
