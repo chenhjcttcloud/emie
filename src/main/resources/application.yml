@@ -131,10 +131,11 @@ spring:
     password: ${DESIGNPM_DB_PASSWORD}
     hikari:
       maximum-pool-size: ${DESIGNPM_DB_POOL_MAX:20}
-      minimum-idle: ${DESIGNPM_DB_POOL_MIN:2}
+      minimum-idle: ${DESIGNPM_DB_POOL_MIN:3}
       connection-timeout: 5000
       idle-timeout: 300000
       max-lifetime: 1200000
+      leak-detection-threshold: ${DESIGNPM_DB_LEAK_DETECTION_MS:10000}
   jpa:
     hibernate:
       ddl-auto: validate

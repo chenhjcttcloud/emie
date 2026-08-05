@@ -6,7 +6,7 @@ APP_CONTAINER="${APP_CONTAINER:-emie-app}"
 MYSQL_CONTAINER="${MYSQL_CONTAINER:-1Panel-mysql-ZRpM}"
 DEPLOY_DIR="${DEPLOY_DIR:-/home/emie/emie-deploy}"
 BACKUP_ROOT="${BACKUP_ROOT:-/home/emie/emie-deploy-backups}"
-HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8080/api/admin/public-config}"
+HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8080/api/health/live}"
 RUNTIME_IMAGE="${RUNTIME_IMAGE:-emie-app-runtime:java21}"
 
 target_sha="${1:-}"
