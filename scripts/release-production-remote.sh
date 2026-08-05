@@ -56,8 +56,11 @@ release_file="$DEPLOY_DIR/release-sha.txt"
 old_sha="$(tr -d "[:space:]" < "$release_file" 2>/dev/null || true)"
 
 docker inspect "$APP_CONTAINER" >/dev/null 2>&1 || die "当前应用容器不存在"
-curl --fail --silent --show-error "$HEALTH_URL" >/dev/null ||
-  die "当前生产健康检查失败，禁止开始发布"
+if ! curl --fail --silent --show-error "$HEALTH_URL" >/dev/null 2>&1; then
+  # 兼容尚未包含 /api/health/live 的旧生产容器。
+  curl --fail --silent --show-error http://127.0.0.1:8080/api/admin/public-config >/dev/null ||
+    die "当前生产健康检查失败，禁止开始发布"
+fi
 [[ -f "$incoming_jar" ]] || die "待发布 JAR 不存在"
 actual_jar_sha="$(sha256sum "$incoming_jar" | sed "s/ .*//")"
 [[ "$actual_jar_sha" == "$expected_jar_sha" ]] || die "上传 JAR 校验不一致"
