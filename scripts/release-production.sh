@@ -105,7 +105,7 @@ run_ssh() {
 printf "阶段 1/5：核对生产目标与当前服务...\n"
 remote_current_sha="$(
   run_ssh \
-    "test -f '$DEPLOY_DIR/release-sha.txt'; curl -fsS http://127.0.0.1:8080/api/health/live >/dev/null; tr -d '[:space:]' < '$DEPLOY_DIR/release-sha.txt'"
+    "test -f '$DEPLOY_DIR/release-sha.txt'; curl -fsS http://127.0.0.1:8080/api/admin/public-config >/dev/null; tr -d '[:space:]' < '$DEPLOY_DIR/release-sha.txt'"
 )"
 printf "remote_release=%s\n" "$remote_current_sha"
 printf "%s\n" "$SERVER_SUDO_PASSWORD" |
