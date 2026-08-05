@@ -29,10 +29,10 @@ async function renderAdmin(main, role, uid) {
       </div>
       <div class="admin-layout"><aside class="admin-tabs" id="adminTabs">
         <div class="admin-tab-group"><div class="admin-tab-group-title">总览</div><button class="admin-tab ${EMIE.adminState.currentTab === 'dashboard' ? 'active' : ''}" data-emie-onclick="switchAdminTab('dashboard')">📊 概览</button></div>
-        <div class="admin-tab-group"><div class="admin-tab-group-title">系统与外观</div><button class="admin-tab ${EMIE.adminState.currentTab === 'config' ? 'active' : ''}" data-emie-onclick="switchAdminTab('config')">🔧 系统配置</button><button class="admin-tab ${EMIE.adminState.currentTab === 'appearance' ? 'active' : ''}" data-emie-onclick="switchAdminTab('appearance')">🎨 外观</button></div>
+        <div class="admin-tab-group"><div class="admin-tab-group-title">系统与外观</div><button class="admin-tab ${EMIE.adminState.currentTab === 'config' ? 'active' : ''}" data-emie-onclick="switchAdminTab('config')">🔧 系统配置</button><button class="admin-tab ${EMIE.adminState.currentTab === 'appearance' ? 'active' : ''}" data-emie-onclick="switchAdminTab('appearance')">🎨 外观</button><button class="admin-tab ${EMIE.adminState.currentTab === 'filestorage' ? 'active' : ''}" data-emie-onclick="switchAdminTab('filestorage')">📦 文件与存储</button></div>
         <div class="admin-tab-group"><div class="admin-tab-group-title">用户与权限</div><button class="admin-tab ${EMIE.adminState.currentTab === 'users' ? 'active' : ''}" data-emie-onclick="switchAdminTab('users')">👥 用户管理</button><button class="admin-tab ${EMIE.adminState.currentTab === 'roles' ? 'active' : ''}" data-emie-onclick="switchAdminTab('roles')">🔐 角色与权限</button><button class="admin-tab ${EMIE.adminState.currentTab === 'org' ? 'active' : ''}" data-emie-onclick="switchAdminTab('org')">🏢 组织架构</button></div>
         <div class="admin-tab-group"><div class="admin-tab-group-title">业务配置</div><button class="admin-tab ${EMIE.adminState.currentTab === 'categories' ? 'active' : ''}" data-emie-onclick="switchAdminTab('categories')">📂 产品类目</button><button class="admin-tab ${EMIE.adminState.currentTab === 'ipOptions' ? 'active' : ''}" data-emie-onclick="switchAdminTab('ipOptions')">🏷️ IP配置</button><button class="admin-tab ${EMIE.adminState.currentTab === 'compliance' ? 'active' : ''}" data-emie-onclick="switchAdminTab('compliance')">⚖️ 合规处罚</button><button class="admin-tab ${EMIE.adminState.currentTab === 'priceRanges' ? 'active' : ''}" data-emie-onclick="switchAdminTab('priceRanges')">💰 参考零售价</button><button class="admin-tab ${EMIE.adminState.currentTab === 'scoring' ? 'active' : ''}" data-emie-onclick="switchAdminTab('scoring')">⭐ 评分管理</button></div>
-        <div class="admin-tab-group"><div class="admin-tab-group-title">通知与集成</div><button class="admin-tab ${EMIE.adminState.currentTab === 'notificationTemplates' ? 'active' : ''}" data-emie-onclick="switchAdminTab('notificationTemplates')">💬 通知文案</button><button class="admin-tab ${EMIE.adminState.currentTab === 'filestorage' ? 'active' : ''}" data-emie-onclick="switchAdminTab('filestorage')">📦 文件与存储</button></div>
+        <div class="admin-tab-group"><div class="admin-tab-group-title">通知中心</div><button class="admin-tab ${EMIE.adminState.currentTab === 'notificationCenter' ? 'active' : ''}" data-emie-onclick="switchAdminTab('notificationCenter')">🔔 通知设置与发送记录</button><button class="admin-tab ${EMIE.adminState.currentTab === 'notificationTemplates' ? 'active' : ''}" data-emie-onclick="switchAdminTab('notificationTemplates')">💬 通知文案</button></div>
         <div class="admin-tab-group"><div class="admin-tab-group-title">运维与审计</div><button class="admin-tab ${EMIE.adminState.currentTab === 'logs' ? 'active' : ''}" data-emie-onclick="switchAdminTab('logs')">📜 日志</button><button class="admin-tab ${EMIE.adminState.currentTab === 'shares' ? 'active' : ''}" data-emie-onclick="switchAdminTab('shares')">🔗 分享管理</button><button class="admin-tab ${EMIE.adminState.currentTab === 'workload' ? 'active' : ''}" data-emie-onclick="switchAdminTab('workload')">📊 工作量</button></div>
       </aside><main id="adminContent"></main></div>
     </div>`;
@@ -55,6 +55,8 @@ async function renderAdminContent() {
   try {
     if (EMIE.adminState.currentTab === 'dashboard') {
       await renderAdminDashboard(container);
+    } else if (EMIE.adminState.currentTab === 'notificationCenter') {
+      await renderAdminNotificationCenter(container);
     } else if (EMIE.adminState.currentTab === 'config') {
       await renderAdminConfig(container);
     } else if (EMIE.adminState.currentTab === 'notificationTemplates') {
@@ -89,6 +91,14 @@ async function renderAdminContent() {
   } catch (e) {
     container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${e.message}</p></div>`;
   }
+}
+
+async function renderAdminNotificationCenter(container) {
+  await renderAdminConfig(container);
+  container.querySelectorAll('.config-card').forEach(card => {
+    const group = card.dataset.group || '';
+    if (!['notification', 'temporary-broadcast', 'notification-failures'].includes(group)) card.remove();
+  });
 }
 
 // ===== Admin: 概览 =====
@@ -230,7 +240,7 @@ async function renderAdminConfig(container) {
 
   let html = '';
   for (const [group, items] of Object.entries(configs)) {
-    if (group === 'appearance' || group === 'notification_templates') continue; // 独立页面管理
+    if (group === 'appearance' || group === 'notification_templates' || (group === 'notification' && EMIE.adminState.currentTab === 'config')) continue; // 独立页面管理
     html += `
       <div class="config-card" data-group="${group}">
         <div class="config-card-header">
@@ -265,7 +275,7 @@ async function renderAdminConfig(container) {
   }
 
   container.innerHTML = html;
-  if (configs.notification) {
+  if (configs.notification && EMIE.adminState.currentTab === 'notificationCenter') {
     container.insertAdjacentHTML('beforeend', `<div class="config-card" data-group="temporary-broadcast">
       <div class="config-card-header"><h3>📣 系统更新通知</h3><button class="btn btn-primary" id="temporaryBroadcastSendButton" data-emie-onclick="sendTemporaryBroadcast()">发送给全部用户</button></div>
       <div class="config-card-body">
