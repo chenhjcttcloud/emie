@@ -68,7 +68,7 @@ async function renderDashboard(main, role, uid) {
     </div>` : ''}
     ${rolePanelsHtml}
     ${!executionRole && orders.length === 0 ? `<div class="empty"><div class="empty-icon">📭</div><p>暂无您负责的项目</p></div>` : ''}
-    ${executionRole ? '<div id="dashboardExecutionTasks"><div class="empty" style="padding:24px;"><p>正在加载关联子任务…</p></div></div>' : renderProjectSummary(channel, '📦 渠道定制单') + renderProjectSummary(regular, '🏭 公司常规品')}
+    ${role === 'planner' ? '<div id="dashboardPlannerTasks"><div class="empty" style="padding:24px;"><p>正在加载子任务面板…</p></div></div>' + renderProjectSummary(channel, '📦 渠道定制单') + renderProjectSummary(regular, '🏭 公司常规品') : executionRole ? '<div id="dashboardExecutionTasks"><div class="empty" style="padding:24px;"><p>正在加载关联子任务…</p></div></div>' : renderProjectSummary(channel, '📦 渠道定制单') + renderProjectSummary(regular, '🏭 公司常规品')}
     <div id="dashboardWorkloadSection"></div>
   `;
   const plannerScopeSelect = main.querySelector('select.form-input');
@@ -78,7 +78,31 @@ async function renderDashboard(main, role, uid) {
     loadDashboardWorkloadSection();
   }
   loadDashboardRoleStatus(role, uid, myDept);
+  if (role === 'planner') loadDashboardPlannerTasks(uid);
   if (executionRole) loadDashboardExecutionTasks(uid, EMIE.state.currentRole);
+}
+
+async function loadDashboardPlannerTasks(uid) {
+  const container = document.getElementById('dashboardPlannerTasks');
+  if (!container) return;
+  try {
+    const endpoint = plannerBoardScope === 'all' ? '/projects/department-subtasks' : '/projects/my-subtasks';
+    const rows = await apiGet(endpoint);
+    const tasks = (rows || []).filter(t => !['completed', 'approved', 'terminated', 'pending_terminate'].includes(String(t.projectStatus || '').toLowerCase()));
+    EMIE.dashboardState.designerTaskCache = tasks;
+    const groups = [
+      ['pending', '📥 待接单', '待接单'],
+      ['active', '🔄 进行中', '进行中'],
+      ['delivered', '📤 待送审', '待送审'],
+      ['submitted_for_review', '🔎 送审中', '送审中']
+    ];
+    const grouped = key => tasks.filter(t => key === 'active' ? ['accepted', 'rejected'].includes(t.status) : t.status === key);
+    const renderGroup = ([key, title, label]) => {
+      const list = grouped(key);
+      return `<div class="type-section"><div class="card" style="padding:0;"><div style="padding:16px 20px 0;"><div class="type-section-title">${title} <span class="count">共 ${list.length} 个</span></div></div><div style="padding:0 20px 16px;">${list.length ? `<div class="table-wrap"><table><thead><tr><th>子任务</th><th>所属项目</th><th>负责人</th><th>要求完成</th><th>状态</th></tr></thead><tbody>${list.slice(0, 8).map(t => `<tr style="cursor:pointer" data-emie-onclick="openPublishedSubTaskDetail(${t.id})"><td><strong>${escHtml(t.name || '-')}</strong><div style="font-size:11px;color:var(--gray-400)">#${t.id}</div></td><td>${escHtml(t.projectName || '-')}</td><td>${escHtml(t.designerName || t.assigneeName || '待接单')}</td><td>${formatDate(t.plannedDate)}</td><td><span class="badge ${getTaskStatusInfo(t.status).cls}">${label}</span></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state" style="padding:14px">暂无子任务</div>'}</div></div></div>`;
+    };
+    container.innerHTML = groups.map(renderGroup).join('');
+  } catch (error) { container.innerHTML = `<div class="empty"><p>子任务面板加载失败：${escHtml(error.message)}</p></div>`; }
 }
 
 async function loadDashboardExecutionTasks(uid, role) {
@@ -535,7 +559,7 @@ function renderProjectSummary(projects, title) {
         <thead><tr><th>项目编号</th><th>产品名称</th><th>需求方</th><th>产品企划</th><th>产品类目</th><th>目标市场</th><th>子任务数</th><th>进度</th><th>评分</th><th>要求时间</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>${display.map(o => {
           const st = getProjectStatusInfo(o.status);
-          return `<tr style="cursor:pointer;">
+          return `<tr style="cursor:pointer;" data-emie-onclick="openProjectDetail(${o.id})">
             <td><strong>${escHtml(o.projectCode || ('#' + o.id))}</strong></td>
             <td>${escHtml(displayText(o.productName, '未设置'))}</td>
             <td>${o.salesName || '-'}</td>
