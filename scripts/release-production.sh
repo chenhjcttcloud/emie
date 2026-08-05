@@ -110,7 +110,11 @@ remote_current_sha="$(
 remote_version="$(run_ssh "sed -n 's/.*\\\"system.version\\\":\\\"\\([0-9][0-9]*\\.[0-9][0-9]*\\.[0-9][0-9]*\\)\\\".*/\\1/p' /tmp/emie-public-config.json")"
 [[ "$remote_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "生产当前版本号无效，禁止发布。" >&2; exit 1; }
 IFS=. read -r version_major version_minor version_patch <<< "$remote_version"
-expected_version="$version_major.$version_minor.$((version_patch + 1))"
+if (( version_patch >= 9 )); then
+  expected_version="$version_major.$((version_minor + 1)).0"
+else
+  expected_version="$version_major.$version_minor.$((version_patch + 1))"
+fi
 printf "remote_release=%s\n" "$remote_current_sha"
 printf "current_version=%s target_version=%s\n" "$remote_version" "$expected_version"
 printf "%s\n" "$SERVER_SUDO_PASSWORD" |
