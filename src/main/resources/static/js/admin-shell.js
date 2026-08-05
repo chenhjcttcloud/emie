@@ -324,18 +324,25 @@ async function waitForTemporaryBroadcast(jobId) {
   throw new Error('后台发送仍在继续，请稍后查看飞书失败通知记录');
 }
 
-async function loadNotificationFailures() {
+let notificationFailuresRows = [];
+let notificationFailuresPage = 1;
+const NOTIFICATION_FAILURES_PAGE_SIZE = 15;
+
+async function loadNotificationFailures(page = notificationFailuresPage) {
   const target = document.getElementById('notificationFailures');
   if (!target) return;
   try {
-    const rows = await apiGet('/admin/notifications/failures');
+    if (!notificationFailuresRows.length || page === 1) notificationFailuresRows = await apiGet('/admin/notifications/failures');
+    notificationFailuresPage = Math.max(1, Math.min(page, Math.max(1, Math.ceil(notificationFailuresRows.length / NOTIFICATION_FAILURES_PAGE_SIZE))));
+    const rows = notificationFailuresRows.slice((notificationFailuresPage - 1) * NOTIFICATION_FAILURES_PAGE_SIZE, notificationFailuresPage * NOTIFICATION_FAILURES_PAGE_SIZE);
     const fmt = value => value ? new Date(value).toLocaleString('zh-CN', {hour12:false}) : '—';
-    target.innerHTML = rows.length ? `<div class="table-responsive"><table class="data-table"><thead><tr><th>结果</th><th>业务流程</th><th>收件人</th><th>触发时间</th><th>最近尝试</th><th>发送内容</th><th>失败原因</th><th>操作</th></tr></thead><tbody>${rows.map(r => `<tr><td>${escHtml(r.statusLabel || r.status || '')}<br><small>重试 ${r.retryCount ?? 0} 次</small></td><td>${escHtml(r.processLabel || '系统通知')}</td><td>${escHtml(r.recipientName ? `${r.recipientName}（${r.recipientUserId || ''}）` : (r.recipientUserId || ''))}</td><td>${fmt(r.createdAt)}</td><td>${fmt(r.lastAttemptAt || r.firstAttemptAt)}${r.deliveredAt ? `<br>成功：${fmt(r.deliveredAt)}` : ''}${r.nextRetryAt ? `<br>下次：${fmt(r.nextRetryAt)}` : ''}</td><td style="max-width:320px;white-space:pre-wrap;">${escHtml(r.content || '')}</td><td>${escHtml(r.errorMsg || '—')}</td><td>${['failed','dead_letter','blocked'].includes(r.status) ? `<button class="btn btn-sm btn-primary" data-emie-onclick="retryNotificationDelivery(${r.deliveryId})">重新发送</button>` : '—'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无通知发送记录</div>';
+    const totalPages = Math.max(1, Math.ceil(notificationFailuresRows.length / NOTIFICATION_FAILURES_PAGE_SIZE));
+    target.innerHTML = notificationFailuresRows.length ? `<div class="table-responsive"><table class="data-table"><thead><tr><th>结果</th><th>业务流程</th><th>收件人</th><th>触发时间</th><th>最近尝试</th><th>发送内容</th><th>失败原因</th><th>操作</th></tr></thead><tbody>${rows.map(r => `<tr><td>${escHtml(r.statusLabel || r.status || '')}<br><small>重试 ${r.retryCount ?? 0} 次</small></td><td>${escHtml(r.processLabel || '系统通知')}</td><td>${escHtml(r.recipientName ? `${r.recipientName}（${r.recipientUserId || ''}）` : (r.recipientUserId || ''))}</td><td>${fmt(r.createdAt)}</td><td>${fmt(r.lastAttemptAt || r.firstAttemptAt)}${r.deliveredAt ? `<br>成功：${fmt(r.deliveredAt)}` : ''}${r.nextRetryAt ? `<br>下次：${fmt(r.nextRetryAt)}` : ''}</td><td style="max-width:320px;white-space:pre-wrap;">${escHtml(r.content || '')}</td><td>${escHtml(r.errorMsg || '—')}</td><td>${['failed','dead_letter','blocked'].includes(r.status) ? `<button class="btn btn-sm btn-primary" data-emie-onclick="retryNotificationDelivery(${r.deliveryId})">重新发送</button>` : '—'}</td></tr>`).join('')}</tbody></table></div><div class="admin-pagination"><span>共 ${notificationFailuresRows.length} 条 · 第 ${notificationFailuresPage}/${totalPages} 页</span><button class="btn btn-sm btn-secondary" ${notificationFailuresPage <= 1 ? 'disabled' : ''} data-emie-onclick="loadNotificationFailures(${notificationFailuresPage - 1})">上一页</button><button class="btn btn-sm btn-secondary" ${notificationFailuresPage >= totalPages ? 'disabled' : ''} data-emie-onclick="loadNotificationFailures(${notificationFailuresPage + 1})">下一页</button></div>` : '<div class="empty-state">暂无通知发送记录</div>';
   } catch (e) { target.innerHTML = `<div class="error-state">加载失败：${escHtml(e.message)}</div>`; }
 }
 
 async function retryNotificationDelivery(id) {
-  try { await apiPost(`/admin/notifications/deliveries/${id}/retry`, {}); showAdminToast('✅ 已重新排队，系统将在下一轮发送', 'success'); await loadNotificationFailures(); }
+  try { await apiPost(`/admin/notifications/deliveries/${id}/retry`, {}); showAdminToast('✅ 已重新排队，系统将在下一轮发送', 'success'); notificationFailuresRows = []; await loadNotificationFailures(1); }
   catch (e) { showAdminToast('❌ 重试失败：' + e.message, 'error'); }
 }
 
