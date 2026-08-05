@@ -16,12 +16,13 @@ increment_import() {
   printf 'cache_bump=%s v%s->v%s\n' "$module" "$current" "$next"
 }
 
-files=("$@")
+files=()
+files+=("$@")
 if [[ ${#files[@]} -eq 0 ]]; then
   while IFS= read -r file; do files+=("$file"); done < <(git diff --name-only --diff-filter=ACMR -- src/main/resources/static/js)
 fi
 
-for file in "${files[@]}"; do
+for file in "${files[@]-}"; do
   module="$(basename "$file")"
   [[ "$module" == *.js && -f "$ROOT/src/main/resources/static/js/$module" ]] || continue
   [[ "$module" == "bootstrap.js" ]] || increment_import "$module" "$file"

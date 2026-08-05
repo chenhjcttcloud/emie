@@ -72,7 +72,8 @@ public class AuthFilter implements Filter {
         if (path.startsWith("/api/")) {
             String token = req.getHeader("X-Auth-Token");
             // 允许 token 通过查询参数传递（用于 <img> 等无法设置 Header 的场景）
-            // 认证令牌不得通过 URL 传递，避免进入历史记录、Referer 和访问日志。
+            // 图片/缩略图无法设置请求头，兼容其通过查询参数携带令牌的场景。
+            if (token == null || token.isBlank()) token = req.getParameter("token");
             AuthController.AuthSession session = AuthController.validateToken(token);
             if (token == null || session == null) {
                 res.setStatus(401);
