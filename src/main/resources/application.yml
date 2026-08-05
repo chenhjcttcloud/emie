@@ -130,7 +130,7 @@ spring:
     username: ${DESIGNPM_DB_USER}
     password: ${DESIGNPM_DB_PASSWORD}
     hikari:
-      maximum-pool-size: ${DESIGNPM_DB_POOL_MAX:10}
+      maximum-pool-size: ${DESIGNPM_DB_POOL_MAX:20}
       minimum-idle: ${DESIGNPM_DB_POOL_MIN:2}
       connection-timeout: 5000
       idle-timeout: 300000
