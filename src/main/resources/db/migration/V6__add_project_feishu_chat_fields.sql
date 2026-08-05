@@ -1,0 +1,10 @@
+SET @sql = (SELECT IF(COUNT(*) = 0, 'ALTER TABLE projects ADD COLUMN feishu_chat_id VARCHAR(100) NULL', 'SELECT 1') FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'projects' AND column_name = 'feishu_chat_id');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @sql = (SELECT IF(COUNT(*) = 0, 'ALTER TABLE projects ADD COLUMN feishu_chat_status VARCHAR(20) NOT NULL DEFAULT ''not_created''', 'SELECT 1') FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'projects' AND column_name = 'feishu_chat_status');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @sql = (SELECT IF(COUNT(*) = 0, 'ALTER TABLE projects ADD COLUMN feishu_chat_error TEXT NULL', 'SELECT 1') FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'projects' AND column_name = 'feishu_chat_error');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @sql = (SELECT IF(COUNT(*) = 0, 'ALTER TABLE projects ADD COLUMN feishu_chat_created_at DATETIME NULL', 'SELECT 1') FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'projects' AND column_name = 'feishu_chat_created_at');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @sql = (SELECT IF(COUNT(*) = 0, 'ALTER TABLE projects ADD COLUMN feishu_chat_dissolved_at DATETIME NULL', 'SELECT 1') FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'projects' AND column_name = 'feishu_chat_dissolved_at');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;

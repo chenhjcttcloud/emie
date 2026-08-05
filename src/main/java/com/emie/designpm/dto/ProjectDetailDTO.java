@@ -36,4 +36,8 @@ public class ProjectDetailDTO {
     private int progressPercent;
     private String createdAt;
     private String updatedAt;
+    private String feishuChatId;
+    private String feishuChatStatus;
+    private String feishuChatError;
+    private boolean feishuChatEnabled;
 }

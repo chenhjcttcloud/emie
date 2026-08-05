@@ -50,6 +50,18 @@ public class Project {
     @Column(length = 30)
     private String workflowStatus = "current";
 
+    /** 项目协作群信息；由飞书机器人创建和维护。 */
+    @Column(length = 100)
+    private String feishuChatId;
+    @Column(length = 20)
+    private String feishuChatStatus = "not_created";
+    @Column(nullable = false)
+    private boolean feishuChatEnabled = false;
+    @Column(columnDefinition = "TEXT")
+    private String feishuChatError;
+    private LocalDateTime feishuChatCreatedAt;
+    private LocalDateTime feishuChatDissolvedAt;
+
     // 渠道定制单特有
     private String salesId;
     private String salesName;

@@ -431,6 +431,14 @@ function renderProjectActions(detail) {
   if (detail.status === 'terminated') {
     actions += `<span style="color:var(--danger);font-size:13px;font-weight:600;">⛔ 该项目已终止，无法进行任何操作</span>`;
   }
+  if (detail.feishuChatStatus === 'created' && detail.feishuChatId) {
+    actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="openProjectFeishuChat('${escJsString(detail.feishuChatId)}')">💬 进入项目群</button>`;
+  } else if (!detail.feishuChatStatus || detail.feishuChatStatus === 'not_created' || detail.feishuChatStatus === 'failed') {
+    actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="createProjectFeishuChat(${detail.id})">💬 创建项目群</button>`;
+  }
+  if (detail.feishuChatStatus === 'created' && ['completed', 'terminated', 'pending_terminate'].includes(detail.status)) {
+    actions += `<button class="btn btn-danger btn-sm" data-emie-onclick="dissolveProjectFeishuChat(${detail.id})">解散项目群</button>`;
+  }
   // 管理员可永久删除项目
   if (EMIE.state.currentRole === 'admin') {
     actions += `<button class="btn btn-danger btn-sm" data-emie-onclick="deleteProject(${detail.id})" title="永久删除项目和所有关联数据">🗑️ 删除</button>`;
@@ -438,6 +446,19 @@ function renderProjectActions(detail) {
   actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="shareProject(${detail.id})">🔗 分享</button>`;
   actions += `<button class="btn btn-outline" data-emie-onclick="closeM('projectDetailModal')">关闭</button>`;
   return actions;
+}
+
+async function createProjectFeishuChat(id) {
+  try { await apiPost(`/projects/${id}/feishu-chat/create`, {}); alert('项目群创建成功'); await refreshAfterMutation(); }
+  catch (e) { alert('创建项目群失败：' + e.message); }
+}
+async function dissolveProjectFeishuChat(id) {
+  if (!confirm('确认解散项目群？解散后无法恢复。')) return;
+  try { await apiPost(`/projects/${id}/feishu-chat/dissolve`, {}); alert('项目群已解散'); await refreshAfterMutation(); }
+  catch (e) { alert('解散项目群失败：' + e.message); }
+}
+function openProjectFeishuChat(chatId) {
+  window.location.href = `https://applink.feishu.cn/client/chat/open?openChatId=${encodeURIComponent(chatId)}`;
 }
 
 // 飞书兼容的确认弹窗
@@ -973,6 +994,9 @@ EMIE.registerActions({
   renderProjectPipeline,
   plannerAcceptProject,
   plannerAcceptFromList,
+  createProjectFeishuChat,
+  dissolveProjectFeishuChat,
+  openProjectFeishuChat,
 });
 
 EMIE.registerModule('projectDetail', {
@@ -988,4 +1012,7 @@ EMIE.registerModule('projectDetail', {
   renderAttachmentActions,
   plannerAcceptProject,
   plannerAcceptFromList,
+  createProjectFeishuChat,
+  dissolveProjectFeishuChat,
+  openProjectFeishuChat,
 });

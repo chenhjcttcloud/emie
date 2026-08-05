@@ -23,7 +23,7 @@ const handleFileUpload = (...args) => EMIE.actions.handleFileUpload(...args);
 const roleLabel = (...args) => EMIE.actions.roleLabel(...args);
 
 // ==================== 产品类目 / 目标市场选择 ====================
-function onCategoryChange(sel) {
+function onCategoryChange(sel, markModified = true) {
   const wrapper = document.getElementById('categoryNoteWrapper');
   if (sel.value === '其他') {
     wrapper.style.display = 'block';
@@ -34,7 +34,7 @@ function onCategoryChange(sel) {
   }
   sel.closest('.form-group')?.querySelector('.field-error')?.remove();
   sel.style.borderColor = '';
-  formModified();
+  if (markModified) formModified();
 }
 
 function toggleMarket(el) {
@@ -69,7 +69,7 @@ function parseIpSubOptions(ip) {
   }
 }
 
-function onIpChange(select) {
+function onIpChange(select, markModified = true) {
   const group = document.getElementById('ipSubOptionGroup');
   const chips = document.getElementById('ipSubOptionChips');
   const input = document.getElementById('ipSubOptionsInput');
@@ -82,7 +82,7 @@ function onIpChange(select) {
   if (!ip || options.length === 0) {
     group.style.display = 'none';
     group.dataset.selectionMode = '';
-    formModified();
+    if (markModified) formModified();
     return;
   }
   const mode = ip.subOptionSelectionMode === 'single' ? 'single' : 'multiple';
@@ -90,7 +90,7 @@ function onIpChange(select) {
   group.dataset.selectionMode = mode;
   hint.textContent = mode === 'single' ? '请选择一个二级 IP' : '可多选';
   chips.innerHTML = options.map(value => `<span class="chip" data-value="${escHtml(value)}" data-emie-onclick="toggleIpSubOption(this)">${escHtml(value)}</span>`).join('');
-  formModified();
+  if (markModified) formModified();
 }
 
 function toggleIpSubOption(el) {
@@ -274,6 +274,10 @@ function openCreateProject(type) {
             <div class="form-hint">提醒产品企划关注相关供应商是否有相关资质</div>
           </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 要求完成时间</label>${renderDatePicker('deadline', {value: draft?.deadline || ''})}</div>
+          <div class="form-group" style="margin-top:14px;padding:12px 14px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;"><input type="checkbox" name="feishuChatEnabled" value="true" ${draft?.feishuChatEnabled ? 'checked' : ''} data-emie-onchange="formModified()"> 创建项目飞书群</label>
+            <div class="form-hint" style="margin-top:4px;">开启后会自动创建项目群，并邀请项目相关人员加入；默认不创建。</div>
+          </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 产品要求</label><textarea class="form-textarea" name="productRequirements" placeholder="产品的基本要求和目标..." data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">${escHtml(draft?.productRequirements || '')}</textarea></div>
           <div class="form-group"><label class="form-label">细节描述（可选）</label><textarea class="form-textarea" name="description" placeholder="补充细节说明..." data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">${escHtml(draft?.description || '')}</textarea></div>
         </form>
@@ -307,7 +311,7 @@ function openCreateProject(type) {
 
   const ipSelect = document.getElementById('ipNameSelect');
   if (ipSelect) {
-    onIpChange(ipSelect);
+    onIpChange(ipSelect, false);
     if (draft?.ipSubOptions) {
       try {
         const selected = JSON.parse(draft.ipSubOptions);
@@ -323,7 +327,7 @@ function openCreateProject(type) {
       const sel = document.getElementById('productCategorySelect');
       if (sel) {
         sel.value = draft.productCategory;
-        onCategoryChange(sel);
+        onCategoryChange(sel, false);
       }
     }
     if (draft.targetMarket) {

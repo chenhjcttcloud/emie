@@ -74,6 +74,11 @@ public class ProjectService {
         return projectRepository.findById(id);
     }
 
+    /** 保存项目群状态等系统级字段。 */
+    public Project saveProject(Project project) {
+        return projectRepository.save(project);
+    }
+
     /** 获取项目列表（轻量版，不使用 JOIN FETCH tasks） */
     public List<Project> getProjectsByRoleAndUser(String role, String userId) {
         return projectAccessService.findVisibleProjectsLight(role, userId);
@@ -211,6 +216,7 @@ public class ProjectService {
         String deadline = (String) body.get("deadline");
         String productRequirements = SecurityUtil.sanitizeText((String) body.get("productRequirements"), 2000);
         String description = SecurityUtil.sanitizeText((String) body.getOrDefault("description", ""), 2000);
+        boolean feishuChatEnabled = Boolean.parseBoolean(String.valueOf(body.getOrDefault("feishuChatEnabled", "false")));
 
         if ("channel_custom".equals(type) && !List.of("sales", "admin").contains(currentRole)) {
             throw new RuntimeException("仅销售或管理员可创建渠道定制项目");
@@ -252,6 +258,7 @@ public class ProjectService {
         p.setProductName(productName.trim());
         p.setProductRequirements(productRequirements);
         p.setDescription(description);
+        p.setFeishuChatEnabled(feishuChatEnabled);
 
         // 通用字段（所有项目类型）
         String catName = (String) body.get("productCategory");

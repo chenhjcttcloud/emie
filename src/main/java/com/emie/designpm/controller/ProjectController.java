@@ -14,6 +14,7 @@ import com.emie.designpm.service.ProjectService;
 import com.emie.designpm.service.ProjectAccessService;
 import com.emie.designpm.service.ProjectWorkflowService;
 import com.emie.designpm.service.PermissionService;
+import com.emie.designpm.service.UserService;
 import com.emie.designpm.util.ProjectAccessPolicy;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -40,6 +41,10 @@ public class ProjectController {
     private final ProjectAccessService projectAccessService;
     private final ProjectWorkflowService projectWorkflowService;
     private final PermissionService permissionService;
+    @Autowired(required = false)
+    private UserService userService;
+    @Autowired(required = false)
+    private com.emie.designpm.service.FeishuChatService feishuChatService;
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
@@ -326,12 +331,49 @@ public class ProjectController {
                         "permission", permission));
             }
             Project p = projectService.createProject(withSessionContext(body, request));
+            if (p.isFeishuChatEnabled()) ensureProjectChat(p);
             return ResponseEntity.ok(toDetail(p));
         } catch (SecurityException e) {
             return ResponseEntity.status(403).body(Map.of("error", e.getMessage()));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    @PostMapping("/{id}/feishu-chat/create")
+    public ResponseEntity<?> createProjectChat(@PathVariable Long id, HttpServletRequest request) {
+        try {
+            AuthController.AuthSession session = getSession(request);
+            Project p = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
+            if (!canManageProjectChat(p, session)) return ResponseEntity.status(403).body(Map.of("error", "无权管理该项目群"));
+            if (feishuChatService == null || !feishuChatService.enabled()) return ResponseEntity.badRequest().body(Map.of("error", "飞书应用配置未完成"));
+            if (p.getFeishuChatId() != null && !p.getFeishuChatId().isBlank()) return ResponseEntity.ok(toDetail(p));
+            String owner = "channel_custom".equals(p.getType()) ? (p.getSalesName() + "（销售）") : (p.getPlannerName() + "（产品企划）");
+            String name = ("channel_custom".equals(p.getType()) ? "定制" : "常规") + "-#" + p.getId() + "-" + owner;
+            String chatId = feishuChatService.createChat(name, List.of());
+            p.setFeishuChatEnabled(true);
+            p.setFeishuChatId(chatId); p.setFeishuChatStatus("created"); p.setFeishuChatError(null); p.setFeishuChatCreatedAt(java.time.LocalDateTime.now());
+            syncProjectChatMembers(p);
+            return ResponseEntity.ok(toDetail(projectService.saveProject(p)));
+        } catch (Exception e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
+    }
+
+    @PostMapping("/{id}/feishu-chat/dissolve")
+    public ResponseEntity<?> dissolveProjectChat(@PathVariable Long id, HttpServletRequest request) {
+        try {
+            AuthController.AuthSession session = getSession(request);
+            Project p = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
+            if (!canManageProjectChat(p, session)) return ResponseEntity.status(403).body(Map.of("error", "无权解散该项目群"));
+            if (!List.of("completed", "terminated", "pending_terminate").contains(p.getStatus())) return ResponseEntity.badRequest().body(Map.of("error", "项目未完成或未终止，不能解散群聊"));
+            feishuChatService.dissolve(p.getFeishuChatId());
+            p.setFeishuChatStatus("dissolved"); p.setFeishuChatDissolvedAt(java.time.LocalDateTime.now());
+            return ResponseEntity.ok(toDetail(projectService.saveProject(p)));
+        } catch (Exception e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
+    }
+
+    private boolean canManageProjectChat(Project p, AuthController.AuthSession s) {
+        if (s == null) return false;
+        return "admin".equals(s.role()) || ("channel_custom".equals(p.getType()) ? Objects.equals(p.getSalesId(), s.userId()) : Objects.equals(p.getPlannerId(), s.userId()));
     }
 
     /** 编辑已创建项目的基础资料。权限不复用通用管理权限，严格限制为项目归属创建人。 */
@@ -399,10 +441,49 @@ public class ProjectController {
                         "permission", "subtask.create"));
             }
             Project p = projectService.addSubTask(id, withSessionContext(body, request));
+            if (p.isFeishuChatEnabled()) { ensureProjectChat(p); syncProjectChatMembers(p); }
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    /** 建群与业务写入解耦：飞书暂时不可用时不阻断项目/子任务保存。 */
+    private void ensureProjectChat(Project p) {
+        if (p == null || feishuChatService == null || !feishuChatService.enabled()
+                || (p.getFeishuChatId() != null && !p.getFeishuChatId().isBlank())) return;
+        try {
+            String owner = "channel_custom".equals(p.getType()) ? (p.getSalesName() + "（销售）") : (p.getPlannerName() + "（产品企划）");
+            String name = ("channel_custom".equals(p.getType()) ? "定制" : "常规") + "-#" + p.getId() + "-" + owner;
+            String chatId = feishuChatService.createChat(name, collectProjectOpenIds(p));
+            p.setFeishuChatId(chatId); p.setFeishuChatStatus("created"); p.setFeishuChatError(null);
+            p.setFeishuChatCreatedAt(java.time.LocalDateTime.now());
+            projectService.saveProject(p);
+        } catch (Exception e) {
+            p.setFeishuChatStatus("failed"); p.setFeishuChatError(e.getMessage()); projectService.saveProject(p);
+        }
+    }
+
+    private void syncProjectChatMembers(Project p) {
+        if (p == null || feishuChatService == null || p.getFeishuChatId() == null || p.getFeishuChatId().isBlank()) return;
+        try { feishuChatService.addMembers(p.getFeishuChatId(), collectProjectOpenIds(p)); }
+        catch (Exception e) { p.setFeishuChatStatus("failed"); p.setFeishuChatError(e.getMessage()); projectService.saveProject(p); }
+    }
+
+    private Collection<String> collectProjectOpenIds(Project p) {
+        Set<String> ids = new LinkedHashSet<>();
+        if (userService == null) return ids;
+        for (String uid : Arrays.asList(p.getPlannerId(), p.getSalesId())) {
+            if (uid == null || uid.isBlank()) continue;
+            User u = userService.getUserByUserId(uid); if (u != null && u.getFeishuOpenId() != null && !u.getFeishuOpenId().isBlank()) ids.add(u.getFeishuOpenId());
+        }
+        if (p.getTasks() != null) for (SubTask t : p.getTasks()) {
+            for (String uid : Arrays.asList(t.getDesignerId(), t.getPublisherId())) {
+                if (uid == null || uid.isBlank()) continue;
+                User u = userService.getUserByUserId(uid); if (u != null && u.getFeishuOpenId() != null && !u.getFeishuOpenId().isBlank()) ids.add(u.getFeishuOpenId());
+            }
+        }
+        return ids;
     }
 
     @PostMapping("/{id}/workflow/complete-execution")
@@ -897,6 +978,10 @@ public class ProjectController {
 
         dto.setCreatedAt(p.getCreatedAt().format(DTF));
         dto.setUpdatedAt(p.getUpdatedAt().format(DTF));
+        dto.setFeishuChatId(p.getFeishuChatId());
+        dto.setFeishuChatStatus(p.getFeishuChatStatus());
+        dto.setFeishuChatError(p.getFeishuChatError());
+        dto.setFeishuChatEnabled(p.isFeishuChatEnabled());
 
         return dto;
     }
