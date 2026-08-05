@@ -17,7 +17,9 @@ import org.springframework.data.domain.Pageable;
 import com.emie.designpm.dto.PageResponse;
 
 import java.util.*;
+import java.io.IOException;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -53,6 +55,16 @@ public class AdminController {
                 .header("Pragma", "no-cache")
                 .header("Expires", "0")
                 .body(adminService.getPublicConfig());
+    }
+
+    /** 已打开页面的轻量版本通道；服务重启后客户端自动重连并立即拿到新版本。 */
+    @GetMapping(value = "/version/stream", produces = "text/event-stream")
+    public SseEmitter versionStream() {
+        SseEmitter emitter = new SseEmitter(0L);
+        try {
+            emitter.send(SseEmitter.event().name("version").data(adminService.getPublicConfig().get("system.version")));
+        } catch (IOException e) { emitter.completeWithError(e); }
+        return emitter;
     }
 
     // ==================== 系统配置管理 ====================

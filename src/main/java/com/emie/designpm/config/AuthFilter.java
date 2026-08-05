@@ -58,6 +58,7 @@ public class AuthFilter implements Filter {
             path.equals("/api/auth/feishu/auto-login") ||
             path.equals("/api/auth/feishu/exchange") ||
             path.equals("/api/admin/public-config") ||
+            path.equals("/api/admin/version/stream") ||
             path.equals("/favicon.ico") ||
             path.startsWith("/css/") ||
             path.startsWith("/js/") ||

@@ -17,6 +17,14 @@ function notifySystemVersion(version) {
   document.body.appendChild(notice);
 }
 
+function connectVersionStream() {
+  if (!window.EventSource || EMIE.state.versionStream) return;
+  const stream = new EventSource('/api/admin/version/stream');
+  stream.addEventListener('version', event => notifySystemVersion(event.data));
+  stream.onerror = () => { stream.close(); EMIE.state.versionStream = null; setTimeout(connectVersionStream, 3000); };
+  EMIE.state.versionStream = stream;
+}
+
 /** 清理 WebView 可控缓存后刷新；不清理 token/localStorage，避免打断用户当前登录。 */
 async function forceRefreshForVersion() {
   const button = document.querySelector('#systemVersionNotice .btn-primary');
@@ -196,6 +204,7 @@ async function showApp() {
     checkSystemVersion();
     // 已打开的页面通过短轮询感知新版本；切回页面时另行立即检查。
     if (!EMIE.state.versionCheckTimer) EMIE.state.versionCheckTimer = setInterval(checkSystemVersion, 10000);
+    connectVersionStream();
     if (!EMIE.state.versionFocusBound) {
       window.addEventListener('focus', checkSystemVersion);
       document.addEventListener('visibilitychange', () => { if (!document.hidden) checkSystemVersion(); });
