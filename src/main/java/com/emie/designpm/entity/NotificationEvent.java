@@ -43,7 +43,7 @@ public class NotificationEvent {
     @Column(length = 100)
     private String actorUserId;
 
-    @Column(nullable = false, length = 64)
+    @Column(nullable = false, length = 128)
     private String idempotencyKey;
 
     @Column(nullable = false, length = 20)
