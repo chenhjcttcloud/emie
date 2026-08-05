@@ -458,7 +458,10 @@ async function dissolveProjectFeishuChat(id) {
   catch (e) { alert('解散项目群失败：' + e.message); }
 }
 function openProjectFeishuChat(chatId) {
-  window.location.href = `https://applink.feishu.cn/client/chat/open?openChatId=${encodeURIComponent(chatId)}`;
+  const url = `https://applink.feishu.cn/client/chat/open?openChatId=${encodeURIComponent(chatId)}`;
+  // 新窗口打开飞书，保留当前项目管理系统页面和填写状态。
+  const opened = window.open(url, '_blank');
+  if (!opened) alert('浏览器拦截了新窗口，请允许本站弹窗后重试。');
 }
 
 // 飞书兼容的确认弹窗
