@@ -4,6 +4,7 @@ import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.repository.DesignRequirementRepository;
 import com.emie.designpm.repository.FileRecordRepository;
+import com.emie.designpm.repository.ProjectRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.FileArchiveService;
 import com.emie.designpm.service.FilePreviewService;
@@ -50,6 +51,7 @@ public class FileController {
     private Path uploadPath;
     private final FileArchiveService fileArchiveService;
     private final FileRecordRepository fileRecordRepository;
+    private final ProjectRepository projectRepository;
     private final ProjectAccessService projectAccessService;
     private final SubTaskRepository subTaskRepository;
     private final DesignRequirementRepository designRequirementRepository;
@@ -63,7 +65,8 @@ public class FileController {
                           SubTaskRepository subTaskRepository,
                           FilePreviewService filePreviewService,
                           FileThumbnailService fileThumbnailService,
-                          DesignRequirementRepository designRequirementRepository) {
+                          DesignRequirementRepository designRequirementRepository,
+                          ProjectRepository projectRepository) {
         this.fileArchiveService = fileArchiveService;
         this.fileRecordRepository = fileRecordRepository;
         this.projectAccessService = projectAccessService;
@@ -71,6 +74,19 @@ public class FileController {
         this.filePreviewService = filePreviewService;
         this.fileThumbnailService = fileThumbnailService;
         this.designRequirementRepository = designRequirementRepository;
+        this.projectRepository = projectRepository;
+    }
+
+    /** 保留旧测试/嵌入式调用方的构造器兼容性。 */
+    public FileController(FileArchiveService fileArchiveService,
+                          FileRecordRepository fileRecordRepository,
+                          ProjectAccessService projectAccessService,
+                          SubTaskRepository subTaskRepository,
+                          FilePreviewService filePreviewService,
+                          FileThumbnailService fileThumbnailService,
+                          DesignRequirementRepository designRequirementRepository) {
+        this(fileArchiveService, fileRecordRepository, projectAccessService, subTaskRepository,
+                filePreviewService, fileThumbnailService, designRequirementRepository, null);
     }
 
     /** 保留旧测试/嵌入式调用方的构造器兼容性。 */
@@ -81,7 +97,7 @@ public class FileController {
                           FilePreviewService filePreviewService,
                           FileThumbnailService fileThumbnailService) {
         this(fileArchiveService, fileRecordRepository, projectAccessService, subTaskRepository,
-                filePreviewService, fileThumbnailService, null);
+                filePreviewService, fileThumbnailService, null, null);
     }
 
     /** 保留旧测试/嵌入式调用方的构造器兼容性。 */
@@ -91,7 +107,7 @@ public class FileController {
                           SubTaskRepository subTaskRepository,
                           FilePreviewService filePreviewService) {
         this(fileArchiveService, fileRecordRepository, projectAccessService, subTaskRepository,
-                filePreviewService, new FileThumbnailService(fileArchiveService));
+                filePreviewService, new FileThumbnailService(fileArchiveService), null, null);
     }
 
     /** 读取受权限保护的缩略图；原图仅用于点击后的大图预览。 */
@@ -376,32 +392,38 @@ public class FileController {
         if (targetType == null || targetType.isBlank() || targetId == null) {
             return false;
         }
+        List<Long> visibleProjectIds = projectAccessService.findVisibleProjectIds(session.role(), session.userId());
+        if (visibleProjectIds.isEmpty()) {
+            return switch (targetType) {
+                case "project" -> getAccessibleProjectsWithTasks(session).stream().anyMatch(project -> targetId.equals(project.getId()));
+                case "sub_task" -> getAccessibleProjectsWithTasks(session).stream().flatMap(project -> project.getTasks().stream())
+                        .anyMatch(task -> targetId.equals(task.getId()));
+                default -> false;
+            };
+        }
         return switch (targetType) {
-            case "project" -> getAccessibleProjectsWithTasks(session).stream()
-                    .anyMatch(project -> targetId.equals(project.getId()));
-            case "sub_task" -> getAccessibleProjectsWithTasks(session).stream()
-                    .flatMap(project -> project.getTasks().stream())
-                    .anyMatch(task -> targetId.equals(task.getId()));
+            case "project" -> visibleProjectIds.contains(targetId);
+            case "sub_task" -> subTaskRepository.findProjectIdById(targetId)
+                    .map(visibleProjectIds::contains).orElse(false);
             case "admin" -> false;
             default -> false;
         };
     }
 
     private boolean isFileVisibleInAccessibleProjects(AuthController.AuthSession session, String storedName, String relativePath) {
-        List<Project> accessibleProjects = getAccessibleProjectsWithTasks(session);
-        for (Project project : accessibleProjects) {
-            if (jsonContainsFile(project.getReferenceImagesJson(), storedName, relativePath)
-                    || jsonContainsFile(project.getAttachmentsJson(), storedName, relativePath)) {
-                return true;
+        List<Long> projectIds = projectAccessService.findVisibleProjectIds(session.role(), session.userId());
+        if (projectIds.isEmpty() || projectRepository == null) {
+            List<Project> accessibleProjects = getAccessibleProjectsWithTasks(session);
+            for (Project project : accessibleProjects) {
+                if (jsonContainsFile(project.getReferenceImagesJson(), storedName, relativePath)
+                        || jsonContainsFile(project.getAttachmentsJson(), storedName, relativePath)) return true;
             }
+            projectIds = accessibleProjects.stream().map(Project::getId).filter(Objects::nonNull).distinct().toList();
+            if (projectIds.isEmpty()) return false;
         }
-        List<Long> projectIds = accessibleProjects.stream()
-                .map(Project::getId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
         return !projectIds.isEmpty()
-                && subTaskRepository.countFileReferencesByProjectIds(projectIds, storedName) > 0;
+                && (projectRepository != null && projectRepository.countFileReferencesByProjectIds(projectIds, storedName) > 0
+                || subTaskRepository.countFileReferencesByProjectIds(projectIds, storedName) > 0);
     }
 
     private List<Project> getAccessibleProjectsWithTasks(AuthController.AuthSession session) {

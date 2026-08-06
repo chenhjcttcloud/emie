@@ -135,4 +135,10 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, Project
 
     @Query("SELECT p.id FROM Project p WHERE p.updatedAt > :after AND p.updatedAt <= :until ORDER BY p.updatedAt ASC, p.id ASC")
     List<Long> findIdsUpdatedBetween(@Param("after") LocalDateTime after, @Param("until") LocalDateTime until, Pageable pageable);
+
+    @Query("SELECT COUNT(p) FROM Project p WHERE p.id IN :projectIds " +
+            "AND (p.referenceImagesJson LIKE CONCAT('%', :storedName, '%') " +
+            "OR p.attachmentsJson LIKE CONCAT('%', :storedName, '%'))")
+    long countFileReferencesByProjectIds(@Param("projectIds") List<Long> projectIds,
+                                         @Param("storedName") String storedName);
 }

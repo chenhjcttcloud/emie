@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
@@ -71,6 +72,7 @@ public class SyncWorker {
 
     /** 每 30 秒消费队列 */
     @Scheduled(fixedDelay = 30_000)
+    @Transactional(transactionManager = "transactionManager")
     public void processQueue() {
         if (!syncLock.tryLock()) {
             log.debug("飞书同步队列跳过：已有同步轮次正在执行");
