@@ -265,7 +265,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 
 /* Layout */
 .app-layout { display:flex; min-height:calc(100vh - 56px); }
-.sidebar { width:220px; background:#fff; border-right:1px solid var(--gray-200); padding:16px 12px; display:flex; flex-direction:column; gap:4px; flex-shrink:0; }
+.sidebar { width:220px; height:calc(100vh - 56px); box-sizing:border-box; background:#fff; border-right:1px solid var(--gray-200); padding:16px 12px; display:flex; flex-direction:column; gap:4px; flex-shrink:0; min-height:0; overflow-y:auto; overflow-x:hidden; position:sticky; top:56px; }
+.sidebar::-webkit-scrollbar { width:6px; }
+.sidebar::-webkit-scrollbar-thumb { background:var(--gray-300); border-radius:8px; }
+.sidebar::-webkit-scrollbar-track { background:transparent; }
 .sidebar-overlay { display:none; }
 .nav-item { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:8px; cursor:pointer; font-size:14px; color:var(--gray-600); transition:all .15s; border:none; background:none; width:100%; text-align:left; }
 .nav-item:hover { background:var(--gray-50); color:var(--gray-800); }
@@ -618,14 +621,32 @@ select.form-select:disabled::-ms-expand { display: none; }
 }
 
 @media (max-width:1100px) and (min-width:769px) {
-  .sidebar { width:196px; padding-left:8px; padding-right:8px; }
-  .nav-item { padding-left:10px; padding-right:10px; }
+  .sidebar { width:196px; padding:10px 8px; gap:2px; }
+  .nav-item { padding:7px 10px; font-size:13px; gap:8px; line-height:1.2; }
+  .nav-icon { font-size:16px; width:20px; }
+  .nav-submenu { margin-bottom:4px; gap:1px; }
+  .nav-subitem { padding:5px 8px; font-size:12px; line-height:1.2; }
   .main-content { padding:16px; min-width:0; }
   .sales-stats { grid-template-columns:repeat(3, minmax(0, 1fr)); }
   .four-col-stats { grid-template-columns:repeat(2, minmax(0, 1fr)); }
   .project-table-wrap { overflow-x:auto; }
   .project-list-table { min-width:760px; }
   .detail-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+}
+
+/* 笔记本较矮或浏览器缩放较大时，压缩侧栏垂直留白，避免常用导航被挤出视口。 */
+@media (max-height:820px) and (min-width:769px) {
+  .sidebar { padding-top:7px; padding-bottom:7px; gap:1px; }
+  .nav-item { padding-top:6px; padding-bottom:6px; }
+  .nav-submenu { margin-bottom:2px; gap:0; }
+  .nav-subitem { padding-top:4px; padding-bottom:4px; }
+}
+
+@media (max-height:700px) and (min-width:769px) {
+  .sidebar { padding-top:4px; padding-bottom:4px; }
+  .nav-item { padding:4px 8px; font-size:12px; }
+  .nav-icon { font-size:14px; width:18px; }
+  .nav-subitem { padding:3px 6px; font-size:11px; }
 }
 
 @media (max-width:900px) and (min-width:769px) {
@@ -800,7 +821,7 @@ select.form-select:disabled::-ms-expand { display: none; }
 @keyframes dots { 0%,20% { content:'.'; } 40% { content:'..'; } 60%,100% { content:'...'; } }
 
 /* ==================== Admin 管理面板 ==================== */
-.admin-page { max-width:1200px; margin:0 auto; }
+.admin-page { max-width:1200px; min-width:0; margin:0 auto; overflow-x:hidden; }
 .admin-header { margin-bottom:24px; }
 .admin-header h2 { font-size:22px; font-weight:700; color:var(--gray-800); }
 .admin-header p { font-size:13px; color:var(--gray-500); margin-top:4px; }
@@ -812,18 +833,42 @@ select.form-select:disabled::-ms-expand { display: none; }
 .admin-log-table-wrap table { width:100%; border-collapse:collapse; }
 .admin-log-table-wrap thead th { position:sticky; top:0; z-index:2; background:var(--gray-50); box-shadow:0 1px 0 var(--gray-200); }
 .admin-log-table-wrap tbody td { padding:8px 10px; border-bottom:1px solid var(--gray-100); vertical-align:top; }
-.admin-layout { display:grid; grid-template-columns:220px minmax(0,1fr); gap:24px; align-items:start; }
-.admin-layout .admin-tabs { display:flex; flex-direction:column; gap:14px; border:1px solid var(--gray-200); border-radius:12px; background:#fff; padding:12px; margin:0; position:sticky; top:16px; max-height:calc(100vh - 32px); overflow-y:auto; }
-.admin-layout .admin-tab-group { display:flex; flex-direction:column; align-items:stretch; gap:2px; padding:0 0 10px; border-right:0; border-bottom:1px solid var(--gray-100); }
+.admin-layout { display:grid; grid-template-columns:clamp(240px,22vw,280px) minmax(0,1fr); gap:24px; align-items:start; min-width:0; max-width:100%; overflow-x:hidden; }
+.admin-layout .admin-tabs { display:flex; flex-direction:column; flex-wrap:nowrap; align-items:stretch; gap:14px; width:100%; height:calc(100vh - 120px); max-height:none; box-sizing:border-box; border:1px solid var(--gray-200); border-radius:12px; background:#fff; padding:12px; margin:0; position:sticky; top:72px; min-width:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
+.admin-layout .admin-tab-group { display:flex; flex-direction:column; flex-wrap:nowrap; align-items:stretch; align-self:stretch; width:100%; gap:2px; min-width:0; padding:0 0 10px; border-right:0; border-bottom:1px solid var(--gray-100); }
 .admin-layout .admin-tab-group:last-child { border-bottom:0; padding-bottom:0; }
 .admin-layout .admin-tab-group-title { width:auto; padding:2px 10px 6px; font-size:11px; letter-spacing:.04em; }
-.admin-layout .admin-tab { width:100%; justify-content:flex-start; border:0; border-radius:7px; padding:9px 10px; color:var(--gray-600); background:transparent; text-align:left; }
+.admin-layout .admin-tab { width:100%; min-width:0; justify-content:flex-start; border:0; border-radius:7px; padding:9px 10px; color:var(--gray-600); background:transparent; text-align:left; white-space:normal; overflow-wrap:anywhere; }
 .admin-layout .admin-tab:hover { background:var(--gray-50); color:var(--primary); }
 .admin-layout .admin-tab.active { background:var(--primary-light); color:var(--primary); font-weight:600; }
+@media (max-width:1100px) and (min-width:801px) {
+  .admin-layout { grid-template-columns:240px minmax(0,1fr); gap:16px; }
+  .admin-layout .admin-tabs { gap:6px; padding:8px; max-height:calc(100vh - 88px); }
+  .admin-layout .admin-tab-group { padding-bottom:5px; }
+  .admin-layout .admin-tab-group-title { padding:1px 8px 3px; font-size:10px; }
+  .admin-layout .admin-tab { padding:6px 8px; font-size:12px; line-height:1.2; }
+}
+@media (max-height:820px) and (min-width:801px) {
+  .admin-layout .admin-tabs { gap:4px; padding:6px; max-height:calc(100vh - 72px); }
+  .admin-layout .admin-tab-group { padding-bottom:3px; }
+  .admin-layout .admin-tab { padding-top:5px; padding-bottom:5px; }
+}
+@media (max-height:700px) and (min-width:801px) {
+  .admin-layout .admin-tabs { gap:2px; padding:4px; max-height:calc(100vh - 64px); }
+  .admin-layout .admin-tab-group { padding-bottom:2px; }
+  .admin-layout .admin-tab-group-title { padding-top:0; padding-bottom:2px; }
+  .admin-layout .admin-tab { padding:4px 6px; font-size:11px; }
+}
 @media (max-width: 800px) {
   .admin-layout { grid-template-columns:1fr; gap:12px; }
   .admin-layout .admin-tabs { position:static; max-height:none; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
   .admin-layout .admin-tab-group { border:0; padding:0; }
+}
+
+/* 系统管理的小导航始终纵向滚动，避免被通用移动端 tab 样式改成横向滚动。 */
+@media (max-width: 800px) {
+  .admin-page .admin-tabs { flex-direction:column; flex-wrap:nowrap; max-height:calc(100vh - 120px); overflow-y:auto; overflow-x:hidden; }
+  .admin-page .admin-tab { width:100%; min-width:0; white-space:normal; overflow-wrap:anywhere; }
 }
 .admin-tab { padding:12px 24px; border:none; background:none; cursor:pointer; font-size:14px; font-weight:500; color:var(--gray-500); border-bottom:2px solid transparent; margin-bottom:-2px; transition:all .15s; white-space:nowrap; }
 .admin-tab:hover { color:var(--gray-700); background:var(--gray-50); border-radius:8px 8px 0 0; }
