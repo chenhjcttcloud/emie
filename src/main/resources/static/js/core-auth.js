@@ -6,9 +6,10 @@ const render = (...args) => EMIE.actions.render(...args);
 
 function notifySystemVersion(version) {
   if (!version) return;
-  const key = 'emie_system_version';
-  const previous = localStorage.getItem(key);
-  localStorage.setItem(key, version);
+  // 版本确认状态按标签页隔离，避免一个标签页刷新后让其他旧标签页漏掉提示。
+  const key = 'emie_system_version_seen';
+  const previous = sessionStorage.getItem(key);
+  sessionStorage.setItem(key, version);
   if (!previous || previous === version || document.getElementById('systemVersionNotice')) return;
   const notice = document.createElement('div');
   notice.id = 'systemVersionNotice';
@@ -42,7 +43,7 @@ async function forceRefreshForVersion() {
     console.warn('清理页面缓存失败，继续强制刷新:', e);
   }
   const url = new URL(window.location.href);
-  url.searchParams.set('__emie_version', localStorage.getItem('emie_system_version') || String(Date.now()));
+  url.searchParams.set('__emie_version', sessionStorage.getItem('emie_system_version_seen') || String(Date.now()));
   window.location.replace(url.toString());
 }
 
