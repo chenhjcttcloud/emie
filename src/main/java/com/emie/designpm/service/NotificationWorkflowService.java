@@ -7,6 +7,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,7 +32,7 @@ public class NotificationWorkflowService {
     public NotificationWorkflowService(NotificationOutboxService outbox, NotificationTemplateService templates,
             NotificationRepository notifications, NotificationDeliveryRepository deliveries,
             NotificationAuditLogRepository audits, UserRepository users, SystemConfigRepository configs, FeishuBaseService feishu,
-            PlatformTransactionManager transactionManager) {
+            @Qualifier("transactionManager") PlatformTransactionManager transactionManager) {
         this.outbox = outbox; this.templates = templates; this.notifications = notifications; this.deliveries = deliveries;
         this.audits = audits; this.users = users; this.configs = configs; this.feishu = feishu;
         this.requiresNew = new TransactionTemplate(transactionManager);
@@ -100,8 +101,16 @@ public class NotificationWorkflowService {
     private void sendFeishu(NotificationEvent event, Notification n, User user, NotificationTemplateService.Template t, String actor) {
         NotificationDelivery d = deliveries.save(NotificationDelivery.builder().notificationId(n.getId()).channel("feishu").status("pending").retryCount(0).createdAt(LocalDateTime.now()).cardPayload(t.feishuCardJson()).build());
         d.setFirstAttemptAt(LocalDateTime.now()); d.setLastAttemptAt(LocalDateTime.now());
+        if (user.getFeishuOpenId() == null || user.getFeishuOpenId().isBlank()) {
+            d.setStatus("blocked");
+            d.setFailedAt(LocalDateTime.now());
+            d.setErrorMsg("收件人未绑定飞书 Open ID");
+            d.setNextRetryAt(null);
+            deliveries.save(d);
+            audit(event, n, d, "feishu_blocked", actor, "收件人未绑定飞书 Open ID，等待绑定后手动重试");
+            return;
+        }
         try {
-            if (user.getFeishuOpenId() == null || user.getFeishuOpenId().isBlank()) throw new IllegalArgumentException("收件人未绑定飞书 Open ID");
             d.setExternalMessageId(feishu.sendInteractiveMessage(user.getFeishuOpenId(), t.feishuCardJson())); d.setStatus("delivered"); d.setDeliveredAt(LocalDateTime.now());
             deliveries.save(d); audit(event, n, d, "feishu_delivered", actor, "工作流飞书通知已投递");
         } catch (Exception e) {
@@ -113,7 +122,12 @@ public class NotificationWorkflowService {
                 deliveries.save(d);
                 audit(event, n, d, "feishu_text_fallback_delivered", actor, "卡片解析失败，已降级为文本通知：" + cardError);
             } catch (Exception fallbackError) {
-                d.setStatus("failed"); d.setFailedAt(LocalDateTime.now()); d.setErrorMsg(limit(cardError + "；文本降级也失败：" + fallbackError.getMessage())); deliveries.save(d);
+                d.setStatus("failed");
+                d.setFailedAt(LocalDateTime.now());
+                d.setRetryCount((d.getRetryCount() == null ? 0 : d.getRetryCount()) + 1);
+                d.setNextRetryAt(LocalDateTime.now().plusSeconds(30));
+                d.setErrorMsg(limit(cardError + "；文本降级也失败：" + fallbackError.getMessage()));
+                deliveries.save(d);
                 audit(event, n, d, "feishu_failed", actor, "卡片和文本通知均失败：" + limit(d.getErrorMsg()));
             }
         }

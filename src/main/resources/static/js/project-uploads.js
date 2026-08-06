@@ -356,7 +356,8 @@ async function handleFileUpload(input, list, maxCount, typeLabel, isImage) {
 }
 
 function renderFileList(list, typeLabel) {
-  const isImage = typeLabel.includes('参考图片');
+  // 驳回弹窗使用“驳回参考图”文案，仍应按图片列表渲染缩略图。
+  const isImage = typeLabel.includes('参考图片') || typeLabel.includes('参考图');
   const context = resolveFileListContext(list, isImage);
   const containerId = context.containerId;
   const c = document.getElementById(containerId);
@@ -445,6 +446,8 @@ function handleUploadDrop(input, files) {
     editProjectAttachmentInput: [EMIE.projectState.editProjectAttachments, 5, '编辑项目附件', false],
     deliverImageInput: [EMIE.projectState.deliverImages, 6, '交付参考图片', true],
     deliverAttachmentInput: [EMIE.projectState.deliverAttachments, 5, '交付附件', false],
+    rejectImageInput: [EMIE.projectState.rejectionImages, 6, '驳回参考图', true],
+    rejectAttachmentInput: [EMIE.projectState.rejectionAttachments, 5, '驳回附件', false],
   }[id];
   if (config) handleFileUpload(files, ...config);
 }

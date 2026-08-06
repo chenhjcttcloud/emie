@@ -5,11 +5,11 @@ import com.emie.designpm.entity.NotificationAuditLog;
 import com.emie.designpm.entity.NotificationDelivery;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.entity.NotificationEvent;
-import com.emie.designpm.repository.NotificationAuditLogRepository;
-import com.emie.designpm.repository.NotificationDeliveryRepository;
-import com.emie.designpm.repository.NotificationRepository;
-import com.emie.designpm.repository.UserRepository;
-import com.emie.designpm.repository.NotificationEventRepository;
+import com.emie.designpm.background.repository.NotificationAuditLogRepository;
+import com.emie.designpm.background.repository.NotificationDeliveryRepository;
+import com.emie.designpm.background.repository.NotificationRepository;
+import com.emie.designpm.background.repository.UserRepository;
+import com.emie.designpm.background.repository.NotificationEventRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,12 +61,12 @@ public class NotificationRetryService implements NotificationRetryOperations {
         for (NotificationDelivery delivery : due) retry(delivery, notificationById, userById);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(transactionManager = "backgroundTransactionManager", readOnly = true)
     public List<Map<String, Object>> recentFailures() {
         return recentFeishuDeliveries();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(transactionManager = "backgroundTransactionManager", readOnly = true)
     public List<Map<String, Object>> recentFeishuDeliveries() {
         List<Map<String, Object>> result = new java.util.ArrayList<>();
         List<NotificationDelivery> recent = deliveries.findRecentFeishu();
@@ -133,7 +133,7 @@ public class NotificationRetryService implements NotificationRetryOperations {
         };
     }
 
-    @Transactional
+    @Transactional(transactionManager = "backgroundTransactionManager")
     public void retryNow(Long deliveryId, String operatorUserId) {
         NotificationDelivery d = deliveries.findById(deliveryId)
                 .orElseThrow(() -> new IllegalArgumentException("通知投递记录不存在"));

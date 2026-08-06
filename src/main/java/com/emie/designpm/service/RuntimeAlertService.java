@@ -7,6 +7,8 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -25,18 +27,21 @@ public class RuntimeAlertService {
     private final SyncQueueRepository syncQueue;
     private final RuntimeAlertRepository alerts;
     private final DataSource dataSource;
+    private final DataSource backgroundDataSource;
     private final int jvmPercent;
     private final int queueSize;
     private final Duration cooldown;
     private final Map<String, Instant> lastAlerts = new ConcurrentHashMap<>();
 
     public RuntimeAlertService(SyncQueueRepository syncQueue, RuntimeAlertRepository alerts, DataSource dataSource,
+                               @Autowired(required = false) @Qualifier("backgroundDataSource") DataSource backgroundDataSource,
                                @Value("${monitoring.jvm-used-percent:85}") int jvmPercent,
                                @Value("${monitoring.sync-queue-pending:100}") int queueSize,
                                @Value("${monitoring.alert-cooldown-minutes:10}") long cooldownMinutes) {
         this.syncQueue = syncQueue;
         this.alerts = alerts;
         this.dataSource = dataSource;
+        this.backgroundDataSource = backgroundDataSource;
         this.jvmPercent = jvmPercent;
         this.queueSize = queueSize;
         this.cooldown = Duration.ofMinutes(Math.max(1, cooldownMinutes));
@@ -65,8 +70,27 @@ public class RuntimeAlertService {
             if (total > 0 && active * 100 / total >= 85) warnOnce("db_pool", "运行时告警 type=db_pool active={} total={} idle={} waiting={}",
                     active, total, hikari.getHikariPoolMXBean().getIdleConnections(), hikari.getHikariPoolMXBean().getThreadsAwaitingConnection());
             else recover("db_pool");
+            checkPool("db_pool_background", backgroundDataSource);
         } catch (SQLException | RuntimeException ignored) {
             log.debug("无法读取数据库连接池指标", ignored);
+        }
+    }
+
+    private void checkPool(String type, DataSource source) {
+        if (source == null) return;
+        try {
+            HikariDataSource hikari = source.unwrap(HikariDataSource.class);
+            int active = hikari.getHikariPoolMXBean().getActiveConnections();
+            int total = hikari.getHikariPoolMXBean().getTotalConnections();
+            if (total > 0 && active * 100 / total >= 85) {
+                warnOnce(type, "运行时告警 type={} active={} total={} idle={} waiting={}",
+                        type, active, total, hikari.getHikariPoolMXBean().getIdleConnections(),
+                        hikari.getHikariPoolMXBean().getThreadsAwaitingConnection());
+            } else {
+                recover(type);
+            }
+        } catch (SQLException | RuntimeException ignored) {
+            log.debug("无法读取{}连接池指标", type, ignored);
         }
     }
 

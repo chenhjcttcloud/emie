@@ -7,22 +7,24 @@ import org.springframework.boot.jdbc.DataSourceBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 /**
  * 后台任务专用连接池基础设施。默认关闭，待后台 Repository/事务迁移完成后再启用，
  * 避免在迁移未完成时出现“配置看似隔离、实际仍走主池”的假隔离状态。
  */
 @Configuration
-@ConditionalOnProperty(name = "app.db-pool-isolation.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "app.db.pool.isolation.enabled", havingValue = "true")
 public class BackgroundDataSourceConfig {
     @Bean(name = "backgroundDataSource", destroyMethod = "close")
-    @ConfigurationProperties(prefix = "app.db-pool-isolation.background")
+    @ConfigurationProperties(prefix = "app.db.pool.isolation.background")
     public HikariDataSource backgroundDataSource() {
         return DataSourceBuilder.create().type(HikariDataSource.class).build();
     }
 
     @Bean(name = "backgroundJdbcTemplate")
-    public JdbcTemplate backgroundJdbcTemplate(HikariDataSource backgroundDataSource) {
+    public JdbcTemplate backgroundJdbcTemplate(
+            @Qualifier("backgroundDataSource") HikariDataSource backgroundDataSource) {
         return new JdbcTemplate(backgroundDataSource);
     }
 }

@@ -52,7 +52,6 @@ public class NotificationTestService {
         this.feishuBaseService = feishuBaseService;
     }
 
-    @Transactional
     public Map<String, Object> sendTest(String userId) {
         User user = userRepository.findByUserId(userId)
                 .orElseThrow(() -> new IllegalArgumentException("当前登录用户不存在"));
@@ -112,7 +111,6 @@ public class NotificationTestService {
         return result;
     }
 
-    @Transactional
     public Map<String, Object> sendTemporaryBroadcast(String title, String content, String operatorUserId) {
         validateTemporaryBroadcast(title, content);
         int total = 0, delivered = 0, failed = 0, unbound = 0;

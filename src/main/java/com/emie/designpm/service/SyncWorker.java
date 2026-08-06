@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.data.domain.PageRequest;
@@ -28,7 +29,7 @@ public class SyncWorker {
     private static final int RECONCILE_ID_BATCH_SIZE = 500;
     private final ReentrantLock syncLock = new ReentrantLock();
 
-    private final SyncQueueRepository syncQueueRepository;
+    private final SyncQueueOperations syncQueueRepository;
     private final ProjectRepository projectRepository;
     private final SubTaskRepository subTaskRepository;
     private final ScoringRepository scoringRepository;
@@ -38,7 +39,7 @@ public class SyncWorker {
     private final SystemConfigRepository systemConfigRepository;
 
     @Autowired
-    public SyncWorker(SyncQueueRepository syncQueueRepository,
+    public SyncWorker(@Qualifier("backgroundSyncQueueRepository") SyncQueueOperations syncQueueRepository,
                       ProjectRepository projectRepository,
                       SubTaskRepository subTaskRepository,
                       ScoringRepository scoringRepository,
@@ -57,7 +58,7 @@ public class SyncWorker {
     }
 
     /** 保留单元测试和旧调用方的构造签名；生产由 Spring 注入配置仓库。 */
-    public SyncWorker(SyncQueueRepository syncQueueRepository,
+    public SyncWorker(SyncQueueOperations syncQueueRepository,
                       ProjectRepository projectRepository,
                       SubTaskRepository subTaskRepository,
                       ScoringRepository scoringRepository,
@@ -83,6 +84,7 @@ public class SyncWorker {
     }
 
     private void processQueueLocked() {
+        recoverStuckItems();
         List<SyncQueue> items = syncQueueRepository.findTop20ByStatusOrderByCreatedAtAsc("pending");
         if (items.isEmpty()) return;
 
@@ -91,7 +93,7 @@ public class SyncWorker {
         for (SyncQueue item : items) {
             try {
                 item.setStatus("processing");
-                syncQueueRepository.save(item);
+                syncQueueRepository.saveQueue(item);
 
                 switch (item.getEntityType()) {
                     case "project" -> {
@@ -134,8 +136,21 @@ public class SyncWorker {
                     log.warn("同步失败(将重试 {}/3): {} {} - {}", item.getRetryCount(), item.getEntityType(), item.getEntityId(), e.getMessage());
                 }
             } finally {
-                syncQueueRepository.save(item);
+                syncQueueRepository.saveQueue(item);
             }
+        }
+    }
+
+    private void recoverStuckItems() {
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(10);
+        List<SyncQueue> stuck = syncQueueRepository.findByStatusAndUpdatedAtBefore("processing", cutoff);
+        for (SyncQueue item : stuck) {
+            item.setStatus("pending");
+            item.setErrorMsg("同步进程中断，已自动恢复");
+            syncQueueRepository.saveQueue(item);
+        }
+        if (!stuck.isEmpty()) {
+            log.warn("飞书同步队列恢复 {} 条卡住任务", stuck.size());
         }
     }
 

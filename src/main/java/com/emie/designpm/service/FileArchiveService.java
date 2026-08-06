@@ -142,7 +142,6 @@ public class FileArchiveService {
     }
 
     /** 归档单个文件 */
-    @Transactional
     public void archiveSingleFile(FileRecord record) throws Exception {
         Path sourceFile = findExistingLocalFile(record.getStoredName());
         if (sourceFile == null) {

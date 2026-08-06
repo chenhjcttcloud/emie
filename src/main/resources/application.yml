@@ -37,19 +37,21 @@ spring:
     time-zone: Asia/Shanghai
 
 app:
-  db-pool-isolation:
+  db:
+    pool:
+      isolation:
     # 完成后台事务迁移前保持关闭，避免产生未接入的“假隔离”连接池。
-    enabled: ${APP_DB_POOL_ISOLATION_ENABLED:false}
-    background:
-      jdbc-url: ${APP_DB_BACKGROUND_JDBC_URL:}
-      username: ${APP_DB_BACKGROUND_DB_USER:}
-      password: ${APP_DB_BACKGROUND_DB_PASSWORD:}
-      maximum-pool-size: ${APP_DB_BACKGROUND_POOL_MAX:5}
-      minimum-idle: ${APP_DB_BACKGROUND_POOL_MIN:1}
-      connection-timeout: ${APP_DB_BACKGROUND_CONNECTION_TIMEOUT:5000}
-      validation-timeout: ${APP_DB_BACKGROUND_VALIDATION_TIMEOUT:2000}
-      idle-timeout: ${APP_DB_BACKGROUND_IDLE_TIMEOUT:300000}
-      max-lifetime: ${APP_DB_BACKGROUND_MAX_LIFETIME:1200000}
+        enabled: ${APP_DB_POOL_ISOLATION_ENABLED:false}
+        background:
+          jdbc-url: ${APP_DB_BACKGROUND_JDBC_URL:}
+          username: ${APP_DB_BACKGROUND_DB_USER:}
+          password: ${APP_DB_BACKGROUND_DB_PASSWORD:}
+          maximum-pool-size: ${APP_DB_BACKGROUND_POOL_MAX:20}
+          minimum-idle: ${APP_DB_BACKGROUND_POOL_MIN:1}
+          connection-timeout: ${APP_DB_BACKGROUND_CONNECTION_TIMEOUT:5000}
+          validation-timeout: ${APP_DB_BACKGROUND_VALIDATION_TIMEOUT:2000}
+          idle-timeout: ${APP_DB_BACKGROUND_IDLE_TIMEOUT:300000}
+          max-lifetime: ${APP_DB_BACKGROUND_MAX_LIFETIME:1200000}
   cors:
     allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
   feishu:
@@ -97,7 +99,7 @@ spring:
         jdbc.batch_size: 50
         order_inserts: true
         order_updates: true
-    open-in-view: true
+    open-in-view: false
 
 app:
   feishu:
@@ -134,7 +136,7 @@ spring:
         jdbc.batch_size: 50
         order_inserts: true
         order_updates: true
-    open-in-view: true
+    open-in-view: false
 
 ---
 # === 生产环境：必须显式提供全部 DESIGNPM_DB_* 变量 ===
@@ -165,7 +167,7 @@ spring:
         jdbc.batch_size: 50
         order_inserts: true
         order_updates: true
-    open-in-view: true
+    open-in-view: false
 
 server:
   address: ${SERVER_ADDRESS:0.0.0.0}
@@ -210,7 +212,7 @@ spring:
         jdbc.batch_size: 50
         order_inserts: true
         order_updates: true
-    open-in-view: true
+    open-in-view: false
 
 server:
   address: ${SERVER_ADDRESS:0.0.0.0}

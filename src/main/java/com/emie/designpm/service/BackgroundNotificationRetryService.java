@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 
 /** 后台连接池通知重试实现；后续在隔离开关启用时接管定时投递。 */
 @Service
-@ConditionalOnProperty(name = "app.db-pool-isolation.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "app.db.pool.isolation.enabled", havingValue = "true")
 public class BackgroundNotificationRetryService {
     private final NotificationDeliveryRepository deliveries;
     private final NotificationRepository notifications;

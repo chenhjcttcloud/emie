@@ -5,6 +5,11 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
+      SERVER_ADDRESS: 0.0.0.0
+      APP_DB_POOL_ISOLATION_ENABLED: ${APP_DB_POOL_ISOLATION_ENABLED:-true}
+      APP_DB_BACKGROUND_JDBC_URL: jdbc:mysql://${DESIGNPM_DB_HOST:?Set DESIGNPM_DB_HOST}:3306/${DESIGNPM_DB_NAME:?Set DESIGNPM_DB_NAME}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      APP_DB_BACKGROUND_DB_USER: ${DESIGNPM_DB_USER:?Set DESIGNPM_DB_USER}
+      APP_DB_BACKGROUND_DB_PASSWORD: ${DESIGNPM_DB_PASSWORD:?Set DESIGNPM_DB_PASSWORD}
       SPRING_DATASOURCE_URL: jdbc:mysql://${DESIGNPM_DB_HOST:?Set DESIGNPM_DB_HOST}:3306/${DESIGNPM_DB_NAME:?Set DESIGNPM_DB_NAME}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: ${DESIGNPM_DB_USER:?Set DESIGNPM_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${DESIGNPM_DB_PASSWORD:?Set DESIGNPM_DB_PASSWORD}
