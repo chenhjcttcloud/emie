@@ -33,11 +33,14 @@ import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.*;
 
 @RestController
 @RequestMapping("/api/files")
 public class FileController {
+    private static final Semaphore UPLOAD_SLOTS = new Semaphore(4);
     private static final Logger log = LoggerFactory.getLogger(FileController.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -126,6 +129,16 @@ public class FileController {
     @PostMapping("/upload")
     public ResponseEntity<Map<String, Object>> uploadFile(@RequestParam("file") MultipartFile file,
                                                           HttpServletRequest request) {
+        boolean acquired = false;
+        try {
+            acquired = UPLOAD_SLOTS.tryAcquire(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return ResponseEntity.status(429).body(Map.of("error", "上传任务排队被中断，请稍后重试"));
+        }
+        if (!acquired) {
+            return ResponseEntity.status(429).body(Map.of("error", "当前上传任务较多，请稍后重试"));
+        }
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "文件为空"));
         }
@@ -167,6 +180,8 @@ public class FileController {
             return ResponseEntity.ok(result);
         } catch (IOException e) {
             return ResponseEntity.internalServerError().body(Map.of("error", "文件保存失败，请稍后重试"));
+        } finally {
+            if (acquired) UPLOAD_SLOTS.release();
         }
     }
 
