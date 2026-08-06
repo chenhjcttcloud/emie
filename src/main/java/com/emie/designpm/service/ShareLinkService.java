@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
@@ -37,6 +38,7 @@ public class ShareLinkService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
+    @Autowired
     public ShareLinkService(ShareLinkRepository shareLinkRepository,
                             ProjectRepository projectRepository,
                             SubTaskRepository subTaskRepository,
