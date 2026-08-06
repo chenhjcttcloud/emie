@@ -42,6 +42,8 @@ import java.util.*;
 @RequestMapping("/api/files")
 public class FileController {
     private static final Semaphore UPLOAD_SLOTS = new Semaphore(4);
+    /** 缩略图先限流再做权限查询，避免批量失效图片请求耗尽主连接池。 */
+    private static final Semaphore THUMBNAIL_REQUEST_SLOTS = new Semaphore(8);
     private static final Logger log = LoggerFactory.getLogger(FileController.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -116,9 +118,14 @@ public class FileController {
         if (!SecurityUtil.isValidFileName(fileName) || !fileName.matches("(?i).+\\.(png|jpe?g|gif|webp|bmp)$")) {
             return ResponseEntity.badRequest().body(Map.of("error", "不是支持的图片文件"));
         }
-        ResponseEntity<Object> authResult = checkDownloadAccess(null, fileName, request);
-        if (authResult != null) return authResult;
+        boolean acquired = false;
         try {
+            acquired = THUMBNAIL_REQUEST_SLOTS.tryAcquire(1, TimeUnit.SECONDS);
+            if (!acquired) {
+                return ResponseEntity.status(429).body(Map.of("error", "缩略图请求较多，请稍后重试"));
+            }
+            ResponseEntity<Object> authResult = checkDownloadAccess(null, fileName, request);
+            if (authResult != null) return authResult;
             Path thumbnail = fileThumbnailService.getOrCreate(fileName, uploadPath.resolve("thumbnail-cache"));
             return ResponseEntity.ok().contentType(MediaType.IMAGE_PNG)
                     .cacheControl(org.springframework.http.CacheControl.maxAge(java.time.Duration.ofDays(7)).cachePrivate())
@@ -129,6 +136,11 @@ public class FileController {
         } catch (IOException e) {
             log.warn("缩略图生成失败 storedName={}: {}", fileName, e.getMessage());
             return ResponseEntity.status(422).body(Map.of("error", "缩略图生成失败"));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return ResponseEntity.status(429).body(Map.of("error", "缩略图请求被中断，请稍后重试"));
+        } finally {
+            if (acquired) THUMBNAIL_REQUEST_SLOTS.release();
         }
     }
 
