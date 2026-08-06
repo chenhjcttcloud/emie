@@ -608,6 +608,34 @@ select.form-select:disabled::-ms-expand { display: none; }
 
 /* ==================== 移动端响应式适配 ==================== */
 
+/* 低分辨率桌面 / 4:3 显示器：优先压缩留白和卡片间距，避免横向溢出。 */
+@media (max-width:1280px) {
+  .main-content { padding:20px; }
+  .card { padding:16px; }
+  .stats-grid { gap:12px; }
+  .stat-card { padding:14px; gap:10px; }
+  .project-list-table th, .project-list-table td { padding-left:8px; padding-right:8px; }
+}
+
+@media (max-width:1100px) and (min-width:769px) {
+  .sidebar { width:196px; padding-left:8px; padding-right:8px; }
+  .nav-item { padding-left:10px; padding-right:10px; }
+  .main-content { padding:16px; min-width:0; }
+  .sales-stats { grid-template-columns:repeat(3, minmax(0, 1fr)); }
+  .four-col-stats { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .project-table-wrap { overflow-x:auto; }
+  .project-list-table { min-width:760px; }
+  .detail-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width:900px) and (min-width:769px) {
+  .header { padding-left:14px; padding-right:14px; }
+  .main-content { padding:12px; }
+  .card { padding:14px; }
+  .project-list-table { min-width:700px; }
+  .modal { max-width:calc(100vw - 32px); }
+}
+
 /* iPad / 小平板 */
 @media (max-width:1024px) {
   .logo-sub { display:none; }
