@@ -171,14 +171,28 @@ async function triggerFeishuSync(button) {
   button.disabled = true;
   button.textContent = '同步中…';
   if (result) result.textContent = '正在处理待同步队列，请稍候…';
+  let poller;
+  const refreshProgress = async () => {
+    try {
+      const stats = await apiGet('/admin/sync/stats');
+      if (!result) return;
+      result.textContent = `同步处理中：待处理 ${stats.pending ?? 0} 条，处理中 ${stats.processing ?? 0} 条，失败 ${stats.fail ?? 0} 条，已完成 ${stats.done ?? 0} 条。`;
+    } catch (_) {
+      // 同步请求本身仍继续，进度刷新失败不影响后台任务。
+    }
+  };
+  await refreshProgress();
+  poller = setInterval(refreshProgress, 2000);
   try {
     const response = await fetch('/api/admin/sync/process', { method: 'POST', headers: authHeaders() });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.message || `请求失败（${response.status}）`);
-    if (result) result.textContent = `${payload.message || '同步处理完成'}，剩余待处理 ${payload.pending ?? 0} 条，失败 ${payload.fail ?? 0} 条。`;
+    await refreshProgress();
+    if (result) result.textContent += ` ${payload.message || '本轮同步处理完成'}。`;
   } catch (e) {
     if (result) result.textContent = `同步失败：${e.message || '未知错误'}`;
   } finally {
+    clearInterval(poller);
     button.disabled = false;
     button.textContent = '立即同步';
   }
