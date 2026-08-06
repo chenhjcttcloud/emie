@@ -67,8 +67,8 @@ class FileArchiveServiceTest {
 
         assertTrue(Files.exists(thumbnail));
         BufferedImage thumbnailImage = ImageIO.read(thumbnail.toFile());
-        assertEquals(480, thumbnailImage.getWidth());
-        assertEquals(240, thumbnailImage.getHeight());
+        assertEquals(640, thumbnailImage.getWidth());
+        assertEquals(320, thumbnailImage.getHeight());
         thumbnailImage.flush();
     }
 
@@ -85,7 +85,7 @@ class FileArchiveServiceTest {
         Files.writeString(source, "not a decodable image");
         Path cache = uploadDir.resolve("thumbnail-cache");
         Files.createDirectories(cache);
-        Path thumbnail = cache.resolve(storedName + ".jpg");
+        Path thumbnail = cache.resolve(storedName + ".png");
         Files.writeString(thumbnail, "cached thumbnail");
         Files.setLastModifiedTime(thumbnail, java.nio.file.attribute.FileTime.fromMillis(
                 Files.getLastModifiedTime(source).toMillis() + 5000));

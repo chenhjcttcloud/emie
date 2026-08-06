@@ -584,7 +584,7 @@ function renderProjectReferenceImages(detail) {
   return `<div style="margin-top:8px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => isRasterImageFile(img.name || storedNameFromFile(img)) ? `<div style="position:relative;display:inline-block;">
-          <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" title="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);cursor:pointer;">
+          <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" title="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="cursor:pointer;">
           <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>` : `<div class="attachment-item" style="width:100%;display:flex;align-items:center;gap:8px;"><span>📐</span><span class="attachment-name" style="flex:1;">${escHtml(img.name || storedNameFromFile(img))}</span>${renderAttachmentActions(img)}</div>`).join('')}
     </div></div>`;
@@ -602,7 +602,7 @@ function renderSubTaskImages(jsonStr) {
   return `<div style="margin-top:8px;padding-left:4px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => isRasterImageFile(img.name || storedNameFromFile(img)) ? `<div style="position:relative;display:inline-block;">
-          <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--gray-200);cursor:pointer;">
+          <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="cursor:pointer;">
           <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>` : `<div class="attachment-item" style="width:100%;display:flex;align-items:center;gap:8px;"><span>📐</span><span class="attachment-name" style="flex:1;">${escHtml(img.name || storedNameFromFile(img))}</span>${renderAttachmentActions(img)}</div>`).join('')}
     </div></div>`;
@@ -643,7 +643,7 @@ function renderTaskAttachments(jsonStr) {
     html += `<div style="margin-top:8px;"><div class="detail-label">🖼️ 交付图片</div>
       <div class="image-preview" style="margin-top:4px;">
         ${images.map(img => `<div style="position:relative;display:inline-block;">
-            <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" draggable="true" loading="lazy" decoding="async" style="width:180px;height:180px;object-fit:contain;border-radius:6px;border:1px solid var(--gray-200);cursor:grab;background:#fff;">
+            <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable img-preview-large" draggable="true" loading="lazy" decoding="async" style="cursor:grab;">
             <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
         </div>`).join('')}
       </div></div>`;

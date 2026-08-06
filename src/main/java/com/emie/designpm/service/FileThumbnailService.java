@@ -3,22 +3,18 @@ package com.emie.designpm.service;
 import org.springframework.stereotype.Service;
 
 import javax.imageio.ImageIO;
-import javax.imageio.ImageWriteParam;
-import javax.imageio.ImageWriter;
-import javax.imageio.stream.ImageOutputStream;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Iterator;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 /** 生成并缓存图片缩略图，原图只在用户点击预览时读取。 */
 @Service
 public class FileThumbnailService {
-    private static final int MAX_SIDE = 480;
+    private static final int MAX_SIDE = 640;
     private static final Semaphore THUMBNAIL_SLOTS = new Semaphore(4);
     private final FileArchiveService fileArchiveService;
 
@@ -35,7 +31,7 @@ public class FileThumbnailService {
         }
         Files.createDirectories(cacheRoot);
         String safeName = storedName.replaceAll("[^a-zA-Z0-9._-]", "_");
-        Path target = cacheRoot.resolve(safeName + ".jpg").normalize();
+        Path target = cacheRoot.resolve(safeName + ".png").normalize();
         if (Files.exists(target) && Files.getLastModifiedTime(target).toMillis() >= Files.getLastModifiedTime(source).toMillis()) {
             return target;
         }
@@ -65,7 +61,7 @@ public class FileThumbnailService {
                     } finally {
                         graphics.dispose();
                     }
-                    writeJpegAtomically(output, target);
+                    writePngAtomically(output, target);
                 } finally {
                     output.flush();
                 }
@@ -81,31 +77,16 @@ public class FileThumbnailService {
         }
     }
 
-    private void writeJpegAtomically(BufferedImage image, Path target) throws IOException {
+    private void writePngAtomically(BufferedImage image, Path target) throws IOException {
         Path temp = target.resolveSibling(target.getFileName() + ".tmp-" + Thread.currentThread().getId());
         try {
-            writeJpeg(image, temp);
+            if (!ImageIO.write(image, "png", temp.toFile())) {
+                throw new IOException("系统不支持 PNG 编码");
+            }
             Files.move(temp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
                     java.nio.file.StandardCopyOption.ATOMIC_MOVE);
         } finally {
             Files.deleteIfExists(temp);
-        }
-    }
-
-    private void writeJpeg(BufferedImage image, Path target) throws IOException {
-        Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpg");
-        if (!writers.hasNext()) throw new IOException("系统不支持 JPEG 缩略图");
-        ImageWriter writer = writers.next();
-        try (ImageOutputStream output = ImageIO.createImageOutputStream(target.toFile())) {
-            writer.setOutput(output);
-            ImageWriteParam param = writer.getDefaultWriteParam();
-            if (param.canWriteCompressed()) {
-                param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-                param.setCompressionQuality(0.78f);
-            }
-            writer.write(null, new javax.imageio.IIOImage(image, null, null), param);
-        } finally {
-            writer.dispose();
         }
     }
 }

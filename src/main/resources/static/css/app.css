@@ -557,7 +557,8 @@ select.form-select:disabled::-ms-expand { display: none; }
 .attachment-action-btn.download:hover { filter:brightness(.97); }
 .file-item-name { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .image-preview { display:flex; gap:8px; flex-wrap:wrap; max-height:200px; overflow-y:auto; contain:content; }
-.image-preview img { width:80px; height:80px; object-fit:cover; border-radius:6px; border:1px solid var(--gray-200); }
+.image-preview img { width:clamp(60px, 12vw, 96px); aspect-ratio:1; height:auto; object-fit:cover; border-radius:6px; border:1px solid var(--gray-200); }
+.image-preview img.img-preview-large { width:min(180px, 28vw); aspect-ratio:1; height:auto; object-fit:contain; background:#fff; }
 
 /* File preview */
 .file-preview-overlay { z-index:12000; padding:16px; background:rgba(15,23,42,.72); }

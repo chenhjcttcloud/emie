@@ -120,7 +120,7 @@ public class FileController {
         if (authResult != null) return authResult;
         try {
             Path thumbnail = fileThumbnailService.getOrCreate(fileName, uploadPath.resolve("thumbnail-cache"));
-            return ResponseEntity.ok().contentType(MediaType.IMAGE_JPEG)
+            return ResponseEntity.ok().contentType(MediaType.IMAGE_PNG)
                     .cacheControl(org.springframework.http.CacheControl.maxAge(java.time.Duration.ofDays(7)).cachePrivate())
                     .lastModified(Files.getLastModifiedTime(thumbnail).toMillis())
                     .body(new UrlResource(thumbnail.toUri()));
