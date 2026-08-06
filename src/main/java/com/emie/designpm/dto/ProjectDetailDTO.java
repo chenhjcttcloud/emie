@@ -30,6 +30,7 @@ public class ProjectDetailDTO {
     private String ipSubOptions;
     private String referenceImagesJson;
     private String attachmentsJson;
+    private String productArchiveJson;
     private List<Map<String, Object>> logs;
     private List<TaskDetailDTO> tasks;
     private Map<String, Object> subTaskWorkflow;

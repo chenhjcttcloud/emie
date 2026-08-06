@@ -21,6 +21,51 @@ const handleCreateRefImages = (...args) => EMIE.actions.handleCreateRefImages(..
 const handleCreateAttachments = (...args) => EMIE.actions.handleCreateAttachments(...args);
 const handleFileUpload = (...args) => EMIE.actions.handleFileUpload(...args);
 const roleLabel = (...args) => EMIE.actions.roleLabel(...args);
+const uploadFile = (...args) => EMIE.actions.uploadFile(...args);
+
+const PRODUCT_ARCHIVE_TYPES = [
+  ['production_config', '生产配置表（盖章）'], ['manual', '说明书'], ['quality_report', '质检报告'],
+  ['ccc_report', '3C报告'], ['business_license', '制造商营业执照'], ['packaging_sign', '包装签字表'],
+  ['specification_box', '规格箱'], ['packaging_pdf', '包装PDF']
+];
+
+function parseProductArchive(value) {
+  let raw = {}; try { raw = JSON.parse(value || '{}') || {}; } catch (e) {}
+  const state = { complete: !!raw.complete, remark: String(raw.remark || '') };
+  PRODUCT_ARCHIVE_TYPES.forEach(([key]) => { state[key] = { files: Array.isArray(raw[key]?.files) ? raw[key].files : [] }; });
+  return state;
+}
+
+function renderProductArchiveEditor() {
+  const state = EMIE.projectState.productArchive;
+  return `<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
+    <div class="form-label" style="margin-bottom:4px;">📦 产品档案资料 <span style="color:var(--gray-400);font-weight:400;">（全部可选）</span></div>
+    <div class="form-hint" style="margin-bottom:12px;">可按资料类型上传文件，作为项目档案保存，不影响项目流程。</div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
+      ${PRODUCT_ARCHIVE_TYPES.map(([key, label]) => `<div style="border:1px solid var(--gray-200);border-radius:8px;padding:10px;">
+        <div style="font-size:12px;font-weight:600;margin-bottom:7px;">${label}</div>
+        <input type="file" multiple id="archiveInput_${key}" style="display:none" data-emie-onchange="handleProductArchiveFiles(this,'${key}')">
+        <button type="button" class="btn btn-outline btn-sm" data-emie-onclick="document.getElementById('archiveInput_${key}').click()">选择文件</button>
+        <div id="archiveList_${key}" style="margin-top:7px;">${state[key].files.map((f, i) => `<div class="file-item"><span class="file-item-name">📎 ${escHtml(f.name)}</span><button class="remove-file" data-emie-onclick="removeProductArchiveFile('${key}',${i})">✕</button></div>`).join('')}</div>
+      </div>`).join('')}
+    </div>
+    <label class="form-label" style="display:flex;align-items:center;gap:8px;margin-top:14px;"><input type="checkbox" id="productArchiveComplete" ${state.complete ? 'checked' : ''} data-emie-onchange="productArchiveChanged()"> 是否齐全</label>
+    <textarea class="form-textarea" id="productArchiveRemark" maxlength="1000" placeholder="档案备注（可选）" style="margin-top:8px;min-height:70px;" data-emie-oninput="productArchiveChanged()">${escHtml(state.remark)}</textarea>
+  </div>`;
+}
+
+async function handleProductArchiveFiles(input, key) {
+  const files = input?.files || [];
+  for (const file of files) {
+    try { const result = await uploadFile(file); EMIE.projectState.productArchive[key].files.push({name: result.name, url: result.url, size: result.size, storedName: result.storedName}); }
+    catch (e) { alert('上传失败: ' + file.name + ' - ' + e.message); }
+  }
+  if (input) input.value = '';
+  const container = document.getElementById('editProjectModal')?.querySelector('.modal-body');
+  if (container) { const old = container.querySelector('[data-product-archive-editor]'); if (old) old.outerHTML = `<div data-product-archive-editor>${renderProductArchiveEditor()}</div>`; }
+}
+function removeProductArchiveFile(key, index) { EMIE.projectState.productArchive[key].files.splice(index, 1); const old = document.querySelector('[data-product-archive-editor]'); if (old) old.innerHTML = renderProductArchiveEditor(); }
+function productArchiveChanged() { const s = EMIE.projectState.productArchive; s.complete = !!document.getElementById('productArchiveComplete')?.checked; s.remark = document.getElementById('productArchiveRemark')?.value || ''; }
 
 // ==================== 产品类目 / 目标市场选择 ====================
 function onCategoryChange(sel, markModified = true) {
@@ -525,6 +570,7 @@ function openEditProject(pid) {
     EMIE.projectState.formModified = false;
     EMIE.projectState.editProjectRefImages = parseJsonArray(detail.referenceImagesJson);
     EMIE.projectState.editProjectAttachments = parseJsonArray(detail.attachmentsJson);
+    EMIE.projectState.productArchive = parseProductArchive(detail.productArchiveJson);
 
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
@@ -559,6 +605,7 @@ function openEditProject(pid) {
           </form>
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);"><div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片</div><div class="upload-area" data-emie-onclick="document.getElementById('editProjectRefImageInput').click()"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="editProjectRefImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleEditProjectRefImages(this)"></div><div class="file-list" id="editProjectRefImageList"></div></div>
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);"><div class="form-label" style="margin-bottom:8px;">📎 附件</div><div class="upload-area" data-emie-onclick="document.getElementById('editProjectAttachmentInput').click()"><div>📁 拖拽文件到此处，或点击选择文件</div><input type="file" id="editProjectAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleEditProjectAttachments(this)"></div><div class="file-list" id="editProjectAttachmentList"></div></div>
+          <div data-product-archive-editor>${renderProductArchiveEditor()}</div>
         </div>
         <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('editProjectModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitEditProject(${pid}))">保存修改</button></div>
       </div>`;
@@ -597,6 +644,8 @@ async function submitEditProject(pid) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data.deadline)) { alert('日期格式不正确，请使用 yyyy-mm-dd'); return; }
   data.referenceImagesJson = JSON.stringify(EMIE.projectState.editProjectRefImages.map(img => ({name: img.name, url: img.url, size: img.size, storedName: img.storedName})));
   data.attachmentsJson = JSON.stringify(EMIE.projectState.editProjectAttachments.map(file => ({name: file.name, url: file.url, size: file.size, storedName: file.storedName})));
+  productArchiveChanged();
+  data.productArchiveJson = JSON.stringify(EMIE.projectState.productArchive);
   try {
     await apiPut(`/projects/${pid}`, data);
     closeM('editProjectModal', true);
@@ -640,6 +689,9 @@ EMIE.registerActions({
   submitEditProject,
   handleEditProjectRefImages,
   handleEditProjectAttachments,
+  handleProductArchiveFiles,
+  removeProductArchiveFile,
+  productArchiveChanged,
   showDateError,
   switchAssigneeType,
   switchEditAssigneeType,

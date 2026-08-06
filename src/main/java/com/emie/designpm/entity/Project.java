@@ -93,6 +93,10 @@ public class Project {
     @Column(columnDefinition = "LONGTEXT")
     private String attachmentsJson;
 
+    /** 可选产品档案资料，按资料类型保存文件列表、是否齐全和备注。 */
+    @Column(columnDefinition = "TEXT")
+    private String productArchiveJson;
+
     /** 产品类目 */
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "product_category_id")

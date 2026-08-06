@@ -143,6 +143,8 @@ function renderProjectDetailContent(detail) {
       ${renderProjectAttachments(detail)}
     </div>
 
+    ${renderProductArchiveSection(detail)}
+
     ${renderProjectRelatedRoles(detail)}
 
     <div class="detail-section">
@@ -167,6 +169,15 @@ function renderProjectDetailContent(detail) {
         <div class="timeline-item"><div class="timeline-dot done"></div><div class="timeline-content"><div class="timeline-title">${cleanLogAction(l.action)}</div><div class="timeline-time">${renderLogLabel(l)} · ${fmtDT(l.time)}</div></div></div>
       `).join('')}</div>
     </div>`;
+}
+
+function renderProductArchiveSection(detail) {
+  let raw = {}; try { raw = JSON.parse(detail.productArchiveJson || '{}') || {}; } catch (e) {}
+  const types = [['production_config','生产配置表（盖章）'],['manual','说明书'],['quality_report','质检报告'],['ccc_report','3C报告'],['business_license','制造商营业执照'],['packaging_sign','包装签字表'],['specification_box','规格箱'],['packaging_pdf','包装PDF']];
+  const hasFiles = types.some(([key]) => Array.isArray(raw[key]?.files) && raw[key].files.length);
+  return `<div class="detail-section"><div class="detail-section-title">📦 产品档案资料 <span style="font-size:12px;color:var(--gray-400);font-weight:400;">（可选）</span></div>
+    ${!hasFiles && !raw.remark ? '<div class="empty" style="padding:18px;">暂无档案资料</div>' : `<div class="detail-grid">${types.map(([key,label]) => { const files = Array.isArray(raw[key]?.files) ? raw[key].files : []; return files.length ? `<div class="detail-item"><div class="detail-label">${label}</div><div class="detail-value">${files.map(f => `<a href="${escHtml(normalizeFileUrl(f.url))}" target="_blank" rel="noopener">📎 ${escHtml(f.name)}</a>`).join('<br>')}</div></div>` : ''; }).join('')}</div>
+    <div style="margin-top:10px;display:flex;gap:20px;font-size:13px;"><span>是否齐全：${raw.complete ? '是' : '未标记'}</span>${raw.remark ? `<span>备注：${escHtml(raw.remark)}</span>` : ''}</div>`}</div>`;
 }
 
 // 清理操作日志文本：删除末尾的（xxx）、（planner已评）等
@@ -987,6 +998,7 @@ EMIE.registerActions({
   renderProjectReferenceImages,
   renderSubTaskImages,
   renderProjectAttachments,
+  renderProductArchiveSection,
   renderTaskAttachments,
   renderProjectScoringSummary,
   renderSubTaskProgress,

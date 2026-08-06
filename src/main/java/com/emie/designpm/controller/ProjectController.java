@@ -939,6 +939,7 @@ public class ProjectController {
         dto.setIpSubOptions(p.getIpSubOptions());
         dto.setReferenceImagesJson(p.getReferenceImagesJson());
         dto.setAttachmentsJson(p.getAttachmentsJson());
+        dto.setProductArchiveJson(p.getProductArchiveJson());
 
         // 详情页需要日志；工作台聚合接口不加载日志，避免历史日志膨胀拖慢响应。
         if (includeLogs) dto.setLogs((preloadedLogs != null ? preloadedLogs : p.getLogs()).stream().map(l -> {

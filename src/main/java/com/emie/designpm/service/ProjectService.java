@@ -375,6 +375,10 @@ public class ProjectService {
         String attachmentsJson = validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false);
         p.setReferenceImagesJson(referenceImagesJson);
         p.setAttachmentsJson(attachmentsJson);
+        if (body.containsKey("productArchiveJson")) {
+            Object archive = body.get("productArchiveJson");
+            p.setProductArchiveJson(SecurityUtil.sanitizeText(archive == null ? "{}" : String.valueOf(archive), 20000));
+        }
 
         Map<String, Object> after = snapshotProject(p);
         p.getLogs().add(new ActivityLog("编辑项目信息：" + p.getProductName(), session.name(), session.role(), p,
@@ -400,6 +404,7 @@ public class ProjectService {
         data.put("ipSubOptions", project.getIpSubOptions());
         data.put("referenceImagesJson", project.getReferenceImagesJson());
         data.put("attachmentsJson", project.getAttachmentsJson());
+        data.put("productArchiveJson", project.getProductArchiveJson());
         return data;
     }
 
