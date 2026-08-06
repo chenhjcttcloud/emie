@@ -511,7 +511,6 @@ public class FileArchiveService {
     }
 
     /** 手动归档所有符合条件文件 */
-    @Transactional
     public Map<String, Object> manualArchive() {
         Map<String, Object> result = new LinkedHashMap<>();
         LocalDateTime cutoff = LocalDateTime.now().minusDays(HOT_RETENTION_DAYS);
@@ -534,7 +533,6 @@ public class FileArchiveService {
     }
 
     /** 恢复指定文件到本地 */
-    @Transactional
     public void restoreFile(Long fileId) throws Exception {
         FileRecord record = fileRecordRepository.findById(fileId)
                 .orElseThrow(() -> new IllegalArgumentException("文件记录不存在"));
