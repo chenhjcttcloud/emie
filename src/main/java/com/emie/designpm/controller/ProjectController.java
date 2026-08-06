@@ -305,12 +305,14 @@ public class ProjectController {
         if (!projectAccessService.canView(projectOpt.get(), session)) {
             return ResponseEntity.status(403).build();
         }
-        // 日志单独查询，避免项目详情同时 fetch 两个集合导致连接和结果集膨胀。
-        projectOpt.get().setLogs(activityLogRepository.findByProjectIdOrderByTimeAsc(id));
+        // 日志单独查询，避免项目详情同时 fetch 两个集合导致连接和结果集膨胀；
+        // 不替换实体的 orphanRemoval 集合，避免 Hibernate 误判为删除全部日志。
+        List<ActivityLog> detailLogs = new ArrayList<>(activityLogRepository.findTop200ByProjectIdOrderByTimeDesc(id));
+        Collections.reverse(detailLogs);
         // 仅记录成功访问，避免把未授权探测误记为正常查询。
         activityLogRepository.save(new ActivityLog(
             "查询项目 #" + id, session.name(), session.role()));
-        return ResponseEntity.ok(toDetail(projectOpt.get()));
+        return ResponseEntity.ok(toDetailWithLogs(projectOpt.get(), detailLogs));
     }
 
     /** 新建项目 */
@@ -891,12 +893,26 @@ public class ProjectController {
         return toDetail(p, null, true);
     }
 
+    private ProjectDetailDTO toDetailWithLogs(Project p, List<ActivityLog> logs) {
+        return toDetail(p, null, logs);
+    }
+
     private ProjectDetailDTO toDetail(Project p, Map<Long, List<Map<String, Object>>> preloadedScoring) {
         return toDetail(p, preloadedScoring, true);
     }
 
     private ProjectDetailDTO toDetail(Project p, Map<Long, List<Map<String, Object>>> preloadedScoring,
                                       boolean includeLogs) {
+        return toDetail(p, preloadedScoring, includeLogs, null);
+    }
+
+    private ProjectDetailDTO toDetail(Project p, Map<Long, List<Map<String, Object>>> preloadedScoring,
+                                      List<ActivityLog> preloadedLogs) {
+        return toDetail(p, preloadedScoring, true, preloadedLogs);
+    }
+
+    private ProjectDetailDTO toDetail(Project p, Map<Long, List<Map<String, Object>>> preloadedScoring,
+                                      boolean includeLogs, List<ActivityLog> preloadedLogs) {
         ProjectDetailDTO dto = new ProjectDetailDTO();
         dto.setId(p.getId());
         dto.setProjectCode(p.getProjectCode());
@@ -925,7 +941,7 @@ public class ProjectController {
         dto.setAttachmentsJson(p.getAttachmentsJson());
 
         // 详情页需要日志；工作台聚合接口不加载日志，避免历史日志膨胀拖慢响应。
-        if (includeLogs) dto.setLogs(p.getLogs().stream().map(l -> {
+        if (includeLogs) dto.setLogs((preloadedLogs != null ? preloadedLogs : p.getLogs()).stream().map(l -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("time", l.getTime().format(DTF));
             m.put("action", l.getAction());

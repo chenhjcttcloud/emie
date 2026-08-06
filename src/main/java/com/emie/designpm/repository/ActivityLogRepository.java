@@ -14,8 +14,7 @@ import java.time.LocalDateTime;
 @Repository
 public interface ActivityLogRepository extends JpaRepository<ActivityLog, Long> {
 
-    @Query("SELECT l FROM ActivityLog l WHERE l.project.id = :projectId ORDER BY l.time ASC, l.id ASC")
-    List<ActivityLog> findByProjectIdOrderByTimeAsc(@Param("projectId") Long projectId);
+    List<ActivityLog> findTop200ByProjectIdOrderByTimeDesc(Long projectId);
 
     @Query("SELECT l.id FROM ActivityLog l WHERE l.id > :afterId ORDER BY l.id ASC")
     List<Long> findIdsAfter(@Param("afterId") Long afterId, Pageable pageable);
