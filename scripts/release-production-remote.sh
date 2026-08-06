@@ -84,6 +84,31 @@ mapfile -t runtime_env < <(
     sed "/^$/d"
 )
 [[ "${#runtime_env[@]}" -ge 12 ]] || die "运行环境变量数量异常"
+set_env_value() {
+  local key="$1" value="$2" env_index
+  for env_index in "${!runtime_env[@]}"; do
+    if [[ "${runtime_env[$env_index]}" == "$key="* ]]; then
+      runtime_env[$env_index]="$key=$value"
+      return
+    fi
+  done
+  runtime_env+=("$key=$value")
+}
+# 双连接池配置必须随候选容器一起传递，不能依赖旧容器是否已经配置过。
+primary_jdbc_url="$(get_env_value SPRING_DATASOURCE_URL 2>/dev/null || true)"
+db_host="$(get_env_value DESIGNPM_DB_HOST 2>/dev/null || true)"
+db_name="$(get_env_value DESIGNPM_DB_NAME 2>/dev/null || true)"
+if [[ -z "$primary_jdbc_url" && -n "$db_host" && -n "$db_name" ]]; then
+  primary_jdbc_url="jdbc:mysql://$db_host:3306/$db_name?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false"
+fi
+set_env_value APP_DB_POOL_ISOLATION_ENABLED "${APP_DB_POOL_ISOLATION_ENABLED:-true}"
+set_env_value APP_DB_BACKGROUND_POOL_MAX "${APP_DB_BACKGROUND_POOL_MAX:-20}"
+set_env_value APP_DB_BACKGROUND_POOL_MIN "${APP_DB_BACKGROUND_POOL_MIN:-3}"
+[[ -n "$primary_jdbc_url" ]] && set_env_value APP_DB_BACKGROUND_JDBC_URL "$primary_jdbc_url"
+db_user="$(get_env_value DESIGNPM_DB_USER 2>/dev/null || true)"
+db_password="$(get_env_value DESIGNPM_DB_PASSWORD 2>/dev/null || true)"
+[[ -n "$db_user" ]] && set_env_value APP_DB_BACKGROUND_DB_USER "$db_user"
+[[ -n "$db_password" ]] && set_env_value APP_DB_BACKGROUND_DB_PASSWORD "$db_password"
 # 生产应用的元空间上限固定为 256MB，避免长期运行和动态代理/类加载增长后触发 OOM。
 for env_index in "${!runtime_env[@]}"; do
   if [[ "${runtime_env[$env_index]}" == JAVA_TOOL_OPTIONS=* ]]; then
