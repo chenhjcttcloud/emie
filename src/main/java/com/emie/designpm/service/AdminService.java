@@ -12,6 +12,7 @@ import com.emie.designpm.dto.PageResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataAccessException;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.annotation.PostConstruct;
@@ -267,12 +268,17 @@ public class AdminService {
             return new LinkedHashMap<>(publicConfigCache);
         }
         Map<String, String> result = new LinkedHashMap<>();
-        // 外观相关配置对外公开
-        for (String key : List.of("app.title", "app.logo", "app.logoEmoji", "app.subtitle",
-                                   "login.bg", "login.bgColor", "system.version",
-                                   "feishu.enabled", "feishu.appId")) {
-            configRepository.findByConfigKey(key).ifPresent(c ->
-                result.put(c.getConfigKey(), c.getConfigValue() != null ? c.getConfigValue() : ""));
+        try {
+            // 外观相关配置对外公开
+            for (String key : List.of("app.title", "app.logo", "app.logoEmoji", "app.subtitle",
+                                       "login.bg", "login.bgColor", "system.version",
+                                       "feishu.enabled", "feishu.appId")) {
+                configRepository.findByConfigKey(key).ifPresent(c ->
+                    result.put(c.getConfigKey(), c.getConfigValue() != null ? c.getConfigValue() : ""));
+            }
+        } catch (DataAccessException e) {
+            if (publicConfigCache != null) return new LinkedHashMap<>(publicConfigCache);
+            throw e;
         }
         String runtimeVersion = System.getenv("APP_VERSION");
         if (runtimeVersion != null && runtimeVersion.matches("\\d+\\.\\d+\\.\\d+")) {

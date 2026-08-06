@@ -48,7 +48,7 @@ app:
           password: ${APP_DB_BACKGROUND_DB_PASSWORD:}
           maximum-pool-size: ${APP_DB_BACKGROUND_POOL_MAX:20}
           minimum-idle: ${APP_DB_BACKGROUND_POOL_MIN:1}
-          connection-timeout: ${APP_DB_BACKGROUND_CONNECTION_TIMEOUT:5000}
+          connection-timeout: ${APP_DB_BACKGROUND_CONNECTION_TIMEOUT:2000}
           validation-timeout: ${APP_DB_BACKGROUND_VALIDATION_TIMEOUT:2000}
           idle-timeout: ${APP_DB_BACKGROUND_IDLE_TIMEOUT:300000}
           max-lifetime: ${APP_DB_BACKGROUND_MAX_LIFETIME:1200000}
@@ -83,7 +83,7 @@ spring:
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
-      connection-timeout: 5000
+      connection-timeout: ${DESIGNPM_DB_CONNECTION_TIMEOUT:2000}
       idle-timeout: 300000
       max-lifetime: 1200000
       validation-timeout: 2000
@@ -120,7 +120,7 @@ spring:
     hikari:
       maximum-pool-size: 10
       minimum-idle: 3
-      connection-timeout: 5000
+      connection-timeout: ${DESIGNPM_DB_CONNECTION_TIMEOUT:2000}
       idle-timeout: 300000
       max-lifetime: 1200000
       validation-timeout: 2000
@@ -152,7 +152,7 @@ spring:
     hikari:
       maximum-pool-size: ${DESIGNPM_DB_POOL_MAX:20}
       minimum-idle: ${DESIGNPM_DB_POOL_MIN:3}
-      connection-timeout: 5000
+      connection-timeout: ${DESIGNPM_DB_CONNECTION_TIMEOUT:2000}
       idle-timeout: 300000
       max-lifetime: 1200000
       validation-timeout: 2000
@@ -197,7 +197,7 @@ spring:
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
-      connection-timeout: 5000
+      connection-timeout: ${DESIGNPM_DB_CONNECTION_TIMEOUT:2000}
       idle-timeout: 300000
       max-lifetime: 1200000
       validation-timeout: 2000
