@@ -444,7 +444,8 @@ function renderProjectActions(detail) {
   }
   if (detail.feishuChatStatus === 'created' && detail.feishuChatId) {
     actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="openProjectFeishuChat('${escJsString(detail.feishuChatId)}')">💬 进入项目群</button>`;
-  } else if (!detail.feishuChatStatus || ['not_created', 'failed', 'dissolved'].includes(detail.feishuChatStatus)) {
+  } else if (!['terminated', 'pending_terminate'].includes(detail.status)
+      && (!detail.feishuChatStatus || ['not_created', 'failed', 'dissolved'].includes(detail.feishuChatStatus))) {
     actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="createProjectFeishuChat(${detail.id})">💬 创建项目群</button>`;
   }
   if (detail.feishuChatStatus === 'created' && ['completed', 'terminated', 'pending_terminate'].includes(detail.status)) {
@@ -460,12 +461,12 @@ function renderProjectActions(detail) {
 }
 
 async function createProjectFeishuChat(id) {
-  try { await apiPost(`/projects/${id}/feishu-chat/create`, {}); alert('项目群创建成功'); await refreshAfterMutation(); }
+  try { await apiPost(`/projects/${id}/feishu-chat/create`, {}); alert('项目群创建成功'); await refreshAfterMutation(id); }
   catch (e) { alert('创建项目群失败：' + e.message); }
 }
 async function dissolveProjectFeishuChat(id) {
   if (!confirm('确认解散项目群？解散后无法恢复。')) return;
-  try { await apiPost(`/projects/${id}/feishu-chat/dissolve`, {}); alert('项目群已解散'); await refreshAfterMutation(); }
+  try { await apiPost(`/projects/${id}/feishu-chat/dissolve`, {}); alert('项目群已解散'); await refreshAfterMutation(id); }
   catch (e) { alert('解散项目群失败：' + e.message); }
 }
 function openProjectFeishuChat(chatId) {
