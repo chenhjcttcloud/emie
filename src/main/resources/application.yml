@@ -99,7 +99,7 @@ spring:
         jdbc.batch_size: 50
         order_inserts: true
         order_updates: true
-    open-in-view: false
+    open-in-view: true
 
 app:
   feishu:
@@ -136,7 +136,7 @@ spring:
         jdbc.batch_size: 50
         order_inserts: true
         order_updates: true
-    open-in-view: false
+    open-in-view: true
 
 ---
 # === 生产环境：必须显式提供全部 DESIGNPM_DB_* 变量 ===
@@ -167,7 +167,7 @@ spring:
         jdbc.batch_size: 50
         order_inserts: true
         order_updates: true
-    open-in-view: false
+    open-in-view: true
 
 server:
   address: ${SERVER_ADDRESS:0.0.0.0}
@@ -212,7 +212,7 @@ spring:
         jdbc.batch_size: 50
         order_inserts: true
         order_updates: true
-    open-in-view: false
+    open-in-view: true
 
 server:
   address: ${SERVER_ADDRESS:0.0.0.0}
