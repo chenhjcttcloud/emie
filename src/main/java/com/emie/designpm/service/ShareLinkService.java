@@ -11,6 +11,8 @@ import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
@@ -31,17 +33,28 @@ public class ShareLinkService {
     private final ProjectRepository projectRepository;
     private final SubTaskRepository subTaskRepository;
     private final UserRepository userRepository;
+    private final TransactionTemplate accessTransaction;
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
     public ShareLinkService(ShareLinkRepository shareLinkRepository,
                             ProjectRepository projectRepository,
                             SubTaskRepository subTaskRepository,
-                            UserRepository userRepository) {
+                            UserRepository userRepository,
+                            PlatformTransactionManager transactionManager) {
         this.shareLinkRepository = shareLinkRepository;
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
         this.userRepository = userRepository;
+        this.accessTransaction = transactionManager == null ? null : new TransactionTemplate(transactionManager);
+    }
+
+    /** 保留测试/嵌入式调用方的构造器。 */
+    public ShareLinkService(ShareLinkRepository shareLinkRepository,
+                            ProjectRepository projectRepository,
+                            SubTaskRepository subTaskRepository,
+                            UserRepository userRepository) {
+        this(shareLinkRepository, projectRepository, subTaskRepository, userRepository, null);
     }
 
     /** 生成分享链接 */
@@ -86,8 +99,19 @@ public class ShareLinkService {
     }
 
     /** 验证并渲染分享内容（公开调用，无鉴权） */
-    @Transactional
     public Map<String, Object> resolveShare(String token, String password) {
+        ShareAccess access = accessTransaction == null
+                ? prepareShareAccess(token, password)
+                : accessTransaction.execute(status -> prepareShareAccess(token, password));
+        if (access == null) throw new IllegalArgumentException("分享链接不存在");
+        if (access.targetType() == null) return access.meta();
+        Map<String, Object> data = fetchTargetData(access.targetType(), access.targetId());
+        data.put("_shareMeta", access.meta());
+        return data;
+    }
+
+    /** 只在短事务内校验分享链接并递增查看次数。 */
+    private ShareAccess prepareShareAccess(String token, String password) {
         ShareLink link = shareLinkRepository.findByToken(token)
                 .orElseThrow(() -> new IllegalArgumentException("分享链接不存在"));
 
@@ -107,7 +131,7 @@ public class ShareLinkService {
         // 校验密码
         if (link.getPassword() != null) {
             if (password == null || password.isBlank()) {
-                return Map.of("needPassword", true, "token", token);
+                return new ShareAccess(null, null, Map.of("needPassword", true, "token", token));
             }
             checkPasswordRateLimit(token);
             String storedPassword = link.getPassword();
@@ -134,16 +158,15 @@ public class ShareLinkService {
         link.setViewCount(link.getViewCount() + 1);
         shareLinkRepository.save(link);
 
-        // 获取并脱敏数据
-        Map<String, Object> data = fetchTargetData(link.getTargetType(), link.getTargetId());
-        data.put("_shareMeta", Map.of(
+        return new ShareAccess(link.getTargetType(), link.getTargetId(), Map.of(
                 "token", token,
                 "targetType", link.getTargetType(),
                 "createdAt", link.getCreatedAt() != null ? link.getCreatedAt().toString() : "",
                 "viewCount", link.getViewCount()
         ));
-        return data;
     }
+
+    private record ShareAccess(String targetType, Long targetId, Map<String, Object> meta) {}
 
     private void checkPasswordRateLimit(String token) {
         AttemptWindow window = passwordAttempts.get(token);
