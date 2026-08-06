@@ -5,7 +5,7 @@ import com.emie.designpm.entity.User;
 import com.emie.designpm.service.AdminService;
 import com.emie.designpm.service.NotificationBroadcastJobService;
 import com.emie.designpm.service.NotificationTestService;
-import com.emie.designpm.service.NotificationRetryService;
+import com.emie.designpm.service.NotificationRetryOperations;
 import com.emie.designpm.service.PermissionManagementService;
 import com.emie.designpm.service.PermissionGovernanceService;
 import org.springframework.http.ResponseEntity;
@@ -28,13 +28,13 @@ public class AdminController {
     private final AdminService adminService;
     private final NotificationTestService notificationTestService;
     private final NotificationBroadcastJobService notificationBroadcastJobService;
-    private final NotificationRetryService notificationRetryService;
+    private final NotificationRetryOperations notificationRetryService;
     private final PermissionManagementService permissionManagementService;
     private final PermissionGovernanceService permissionGovernanceService;
 
     public AdminController(AdminService adminService, NotificationTestService notificationTestService,
                            NotificationBroadcastJobService notificationBroadcastJobService,
-                           NotificationRetryService notificationRetryService,
+                           NotificationRetryOperations notificationRetryService,
                            PermissionManagementService permissionManagementService,
                            PermissionGovernanceService permissionGovernanceService) {
         this.adminService = adminService;
