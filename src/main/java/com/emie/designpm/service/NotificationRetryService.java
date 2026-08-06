@@ -61,12 +61,10 @@ public class NotificationRetryService implements NotificationRetryOperations {
         for (NotificationDelivery delivery : due) retry(delivery, notificationById, userById);
     }
 
-    @Transactional(transactionManager = "backgroundTransactionManager", readOnly = true)
     public List<Map<String, Object>> recentFailures() {
         return recentFeishuDeliveries();
     }
 
-    @Transactional(transactionManager = "backgroundTransactionManager", readOnly = true)
     public List<Map<String, Object>> recentFeishuDeliveries() {
         List<Map<String, Object>> result = new java.util.ArrayList<>();
         List<NotificationDelivery> recent = deliveries.findRecentFeishu();
