@@ -7,7 +7,7 @@ import java.util.Optional;
 
 /** Common queue operations shared by the primary enqueue repository and worker repository. */
 public interface SyncQueueOperations {
-    List<SyncQueue> findTop20ByStatusOrderByCreatedAtAsc(String status);
+    List<SyncQueue> findTop20ByStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(String status, java.time.LocalDateTime now);
     List<SyncQueue> findByEntityTypeAndEntityIdAndStatusIn(String entityType, Long entityId, Collection<String> statuses);
     Optional<SyncQueue> findFirstByEntityTypeAndEntityIdAndStatusOrderByCreatedAtDesc(String entityType, Long entityId, String status);
     long countByStatus(String status);

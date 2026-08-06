@@ -14,7 +14,7 @@ public interface SyncQueueRepository extends JpaRepository<SyncQueue, Long>, Syn
         return save(entity);
     }
 
-    List<SyncQueue> findTop20ByStatusOrderByCreatedAtAsc(String status);
+    List<SyncQueue> findTop20ByStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(String status, java.time.LocalDateTime now);
 
     List<SyncQueue> findByEntityTypeAndEntityIdAndStatusIn(String entityType, Long entityId, Collection<String> statuses);
 

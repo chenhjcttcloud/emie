@@ -85,7 +85,8 @@ public class SyncWorker {
 
     private void processQueueLocked() {
         recoverStuckItems();
-        List<SyncQueue> items = syncQueueRepository.findTop20ByStatusOrderByCreatedAtAsc("pending");
+        List<SyncQueue> items = syncQueueRepository.findTop20ByStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
+                "pending", LocalDateTime.now());
         if (items.isEmpty()) return;
 
         log.info("飞书同步队列: {} 条待处理", items.size());
@@ -123,6 +124,7 @@ public class SyncWorker {
 
                 item.setStatus("done");
                 item.setErrorMsg(null);
+                item.setNextRetryAt(null);
                 log.debug("同步成功: {} {}", item.getEntityType(), item.getEntityId());
 
             } catch (Exception e) {
@@ -133,6 +135,7 @@ public class SyncWorker {
                     log.warn("同步失败(已重试3次): {} {} - {}", item.getEntityType(), item.getEntityId(), e.getMessage());
                 } else {
                     item.setStatus("pending");
+                    item.setNextRetryAt(LocalDateTime.now().plusSeconds(Math.min(900, 30L << Math.min(item.getRetryCount(), 4))));
                     log.warn("同步失败(将重试 {}/3): {} {} - {}", item.getRetryCount(), item.getEntityType(), item.getEntityId(), e.getMessage());
                 }
             } finally {

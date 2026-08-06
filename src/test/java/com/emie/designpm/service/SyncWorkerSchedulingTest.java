@@ -18,7 +18,7 @@ class SyncWorkerSchedulingTest {
     void queueConsumerDoesNotTriggerFullReconciliation() {
         SyncQueueRepository queue = mock(SyncQueueRepository.class);
         SyncQueueService queueService = mock(SyncQueueService.class);
-        when(queue.findTop20ByStatusOrderByCreatedAtAsc("pending")).thenReturn(List.of());
+        when(queue.findTop20ByStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(eq("pending"), any())).thenReturn(List.of());
 
         worker(queue, queueService).processQueue();
 

@@ -49,6 +49,7 @@ public class SyncQueueService {
                 existing.setStatus("pending");
                 existing.setRetryCount(0);
                 existing.setErrorMsg(null);
+                existing.setNextRetryAt(null);
                 syncQueueRepository.save(existing);
                 return "updated";
             }
@@ -68,6 +69,7 @@ public class SyncQueueService {
             item.setStatus("pending");
             item.setRetryCount(0);
             item.setErrorMsg(null);
+            item.setNextRetryAt(null);
             syncQueueRepository.save(item);
             return "updated";
         }
@@ -123,6 +125,7 @@ public class SyncQueueService {
                 item.setStatus("pending");
                 item.setRetryCount(0);
                 item.setErrorMsg(null);
+                item.setNextRetryAt(null);
                 syncQueueRepository.save(item);
                 requeued++;
             } else {
@@ -135,7 +138,8 @@ public class SyncQueueService {
 
     /** 获取待处理队列 */
     public List<SyncQueue> getPending() {
-        return syncQueueRepository.findTop20ByStatusOrderByCreatedAtAsc("pending");
+        return syncQueueRepository.findTop20ByStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
+                "pending", LocalDateTime.now());
     }
 
     /** 统计 */

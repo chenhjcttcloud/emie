@@ -42,6 +42,9 @@ public class SyncQueue {
     @Builder.Default
     private Integer retryCount = 0;
 
+    /** 下次允许请求飞书的时间，避免外部故障时每轮立即重试。 */
+    private LocalDateTime nextRetryAt;
+
     @Column(columnDefinition = "TEXT")
     private String errorMsg;
 
