@@ -33,8 +33,10 @@ public interface SubTaskRepository extends JpaRepository<SubTask, Long> {
 
     List<SubTask> findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(String status, LocalDateTime cutoff);
 
+    @Query("SELECT t FROM SubTask t JOIN FETCH t.project p " +
+            "WHERE t.status = :status AND t.createdAt BETWEEN :from AND :to ORDER BY t.createdAt ASC")
     List<SubTask> findTop100ByStatusAndCreatedAtBetweenOrderByCreatedAtAsc(
-            String status, LocalDateTime from, LocalDateTime to);
+            @Param("status") String status, @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
     @Query("SELECT DISTINCT t FROM SubTask t JOIN FETCH t.project p " +
             "WHERE t.designerId = :userId OR t.publisherId = :userId ORDER BY t.updatedAt DESC, t.id DESC")
