@@ -13,6 +13,10 @@ import java.util.List;
 import java.util.Optional;
 
 public interface SubTaskRepository extends JpaRepository<SubTask, Long> {
+
+    /** 后台飞书同步只需要子任务及所属项目基础字段，显式预加载项目关系。 */
+    @Query("SELECT t FROM SubTask t JOIN FETCH t.project WHERE t.id = :id")
+    Optional<SubTask> findByIdWithProject(@Param("id") Long id);
     @Query("SELECT t.id FROM SubTask t WHERE t.id > :afterId ORDER BY t.id ASC")
     List<Long> findIdsAfter(@Param("afterId") Long afterId, Pageable pageable);
 

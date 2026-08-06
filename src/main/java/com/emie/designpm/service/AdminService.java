@@ -32,6 +32,9 @@ import org.springframework.data.domain.Pageable;
 public class AdminService {
 
     private static final Set<String> BUSINESS_ROLES = Set.of("sales", "planner", "designer", "supplychain", "admin");
+    private static final long PUBLIC_CONFIG_CACHE_MILLIS = 5_000L;
+    private volatile Map<String, String> publicConfigCache;
+    private volatile long publicConfigCacheAt;
 
     /** 将用户管理端可能传入的历史别名统一为系统标准角色标识。 */
     private static String normalizeBusinessRole(String role) {
@@ -258,7 +261,11 @@ public class AdminService {
     }
 
     /** 获取公开配置（无需登录） */
-    public Map<String, String> getPublicConfig() {
+    public synchronized Map<String, String> getPublicConfig() {
+        long now = System.currentTimeMillis();
+        if (publicConfigCache != null && now - publicConfigCacheAt < PUBLIC_CONFIG_CACHE_MILLIS) {
+            return new LinkedHashMap<>(publicConfigCache);
+        }
         Map<String, String> result = new LinkedHashMap<>();
         // 外观相关配置对外公开
         for (String key : List.of("app.title", "app.logo", "app.logoEmoji", "app.subtitle",
@@ -271,7 +278,9 @@ public class AdminService {
         if (runtimeVersion != null && runtimeVersion.matches("\\d+\\.\\d+\\.\\d+")) {
             result.put("system.version", runtimeVersion);
         }
-        return result;
+        publicConfigCache = Collections.unmodifiableMap(new LinkedHashMap<>(result));
+        publicConfigCacheAt = now;
+        return new LinkedHashMap<>(result);
     }
 
     /** 批量更新配置 */
@@ -297,6 +306,12 @@ public class AdminService {
                 configRepository.save(config);
             });
         }
+        invalidatePublicConfigCache();
+    }
+
+    private void invalidatePublicConfigCache() {
+        publicConfigCache = null;
+        publicConfigCacheAt = 0L;
     }
 
     /** 上传管理员图片（logo / 登录背景） */

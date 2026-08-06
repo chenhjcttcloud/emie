@@ -70,8 +70,9 @@ public class ProjectService {
         return projectRepository.findAll();
     }
 
+    @Transactional(readOnly = true)
     public Optional<Project> getProjectById(Long id) {
-        return projectRepository.findById(id);
+        return projectRepository.findByIdWithTasks(id);
     }
 
     /** 保存项目群状态等系统级字段。 */

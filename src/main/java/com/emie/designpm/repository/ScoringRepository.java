@@ -13,6 +13,10 @@ import java.time.LocalDateTime;
 
 public interface ScoringRepository extends JpaRepository<ScoringRecord, Long> {
 
+    /** 后台同步需要跨越评分、子任务、项目关系，显式一次性加载。 */
+    @Query("SELECT s FROM ScoringRecord s JOIN FETCH s.subTask t JOIN FETCH t.project WHERE s.id = :id")
+    Optional<ScoringRecord> findByIdWithTaskAndProject(@Param("id") Long id);
+
     @Query("SELECT s.id FROM ScoringRecord s WHERE s.id > :afterId ORDER BY s.id ASC")
     List<Long> findIdsAfter(@Param("afterId") Long afterId, Pageable pageable);
 

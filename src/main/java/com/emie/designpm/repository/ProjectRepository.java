@@ -17,6 +17,11 @@ import org.springframework.data.repository.query.Param;
 
 public interface ProjectRepository extends JpaRepository<Project, Long>, ProjectSearchRepository {
 
+    /** 项目详情/权限校验需要任务在同一事务内可用，避免请求序列化阶段触发懒加载。 */
+    @EntityGraph(attributePaths = {"tasks", "productCategory"})
+    @Query("SELECT p FROM Project p WHERE p.id = :id")
+    Optional<Project> findByIdWithTasks(@Param("id") Long id);
+
     long countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(LocalDateTime start, LocalDateTime end);
 
     /** 列表页查询：仅加载当前页项目，避免首页渲染时读取全表。 */

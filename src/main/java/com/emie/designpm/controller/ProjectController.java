@@ -305,6 +305,8 @@ public class ProjectController {
         if (!projectAccessService.canView(projectOpt.get(), session)) {
             return ResponseEntity.status(403).build();
         }
+        // 日志单独查询，避免项目详情同时 fetch 两个集合导致连接和结果集膨胀。
+        projectOpt.get().setLogs(activityLogRepository.findByProjectIdOrderByTimeAsc(id));
         // 仅记录成功访问，避免把未授权探测误记为正常查询。
         activityLogRepository.save(new ActivityLog(
             "查询项目 #" + id, session.name(), session.role()));

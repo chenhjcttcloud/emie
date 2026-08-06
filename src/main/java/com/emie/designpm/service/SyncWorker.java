@@ -260,7 +260,8 @@ public class SyncWorker {
     }
 
     private void syncProject(Long projectId) throws Exception {
-        Project p = projectRepository.findById(projectId)
+        Project p = projectRepository.findByIdWithTasks(projectId)
+                .or(() -> projectRepository.findById(projectId))
                 .orElseThrow(() -> new Exception("项目不存在: " + projectId));
 
         int taskCount = p.getTasks() != null ? p.getTasks().size() : 0;
@@ -295,7 +296,8 @@ public class SyncWorker {
     }
 
     private void syncSubTask(Long taskId) throws Exception {
-        SubTask t = subTaskRepository.findById(taskId)
+        SubTask t = subTaskRepository.findByIdWithProject(taskId)
+                .or(() -> subTaskRepository.findById(taskId))
                 .orElseThrow(() -> new Exception("子任务不存在: " + taskId));
 
         List<ScoringRecord> reviews = scoringRepository.findBySubTaskId(taskId);
@@ -317,7 +319,8 @@ public class SyncWorker {
     }
 
     private void syncScoring(Long recordId) throws Exception {
-        ScoringRecord r = scoringRepository.findById(recordId)
+        ScoringRecord r = scoringRepository.findByIdWithTaskAndProject(recordId)
+                .or(() -> scoringRepository.findById(recordId))
                 .orElseThrow(() -> new Exception("评分记录不存在: " + recordId));
 
         SubTask task = r.getSubTask();
