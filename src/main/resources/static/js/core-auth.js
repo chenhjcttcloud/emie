@@ -42,8 +42,18 @@ async function forceRefreshForVersion() {
   } catch (e) {
     console.warn('清理页面缓存失败，继续强制刷新:', e);
   }
+  let refreshVersion = String(Date.now());
+  try {
+    const response = await fetch('/api/admin/public-config?versionCheck=' + Date.now(), { cache: 'no-store' });
+    if (response.ok) {
+      const currentVersion = (await response.json())['system.version'];
+      if (currentVersion) refreshVersion = currentVersion;
+    }
+  } catch (e) {
+    console.warn('读取最新系统版本失败，使用时间戳刷新:', e);
+  }
   const url = new URL(window.location.href);
-  url.searchParams.set('__emie_version', sessionStorage.getItem('emie_system_version_seen') || String(Date.now()));
+  url.searchParams.set('__emie_version', refreshVersion);
   window.location.replace(url.toString());
 }
 
