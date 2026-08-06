@@ -60,9 +60,12 @@ public class AdminController {
     /** 已打开页面的轻量版本通道；服务重启后客户端自动重连并立即拿到新版本。 */
     @GetMapping(value = "/version/stream", produces = "text/event-stream")
     public SseEmitter versionStream() {
-        SseEmitter emitter = new SseEmitter(0L);
+        // 版本通道不能查询数据库：SSE 长连接配合 OpenEntityManagerInView 会长期占用连接。
+        // 生产版本由发布脚本注入 APP_VERSION，客户端收到后会按既有策略重连/刷新。
+        SseEmitter emitter = new SseEmitter(15_000L);
         try {
-            emitter.send(SseEmitter.event().name("version").data(adminService.getPublicConfig().get("system.version")));
+            String version = System.getenv("APP_VERSION");
+            emitter.send(SseEmitter.event().name("version").data(version == null ? "" : version));
         } catch (IOException e) { emitter.completeWithError(e); }
         return emitter;
     }
