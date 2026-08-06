@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 /** 生成并缓存图片缩略图，原图只在用户点击预览时读取。 */
 @Service
@@ -40,7 +41,9 @@ public class FileThumbnailService {
         }
         boolean acquired = false;
         try {
-            THUMBNAIL_SLOTS.acquire();
+            if (!THUMBNAIL_SLOTS.tryAcquire(5, TimeUnit.SECONDS)) {
+                throw new IOException("缩略图生成任务繁忙，请稍后重试");
+            }
             acquired = true;
             if (Files.exists(target) && Files.getLastModifiedTime(target).toMillis() >= Files.getLastModifiedTime(source).toMillis()) {
                 return target;

@@ -22,7 +22,14 @@ function connectVersionStream() {
   if (!window.EventSource || EMIE.state.versionStream) return;
   const stream = new EventSource('/api/admin/version/stream');
   stream.addEventListener('version', event => notifySystemVersion(event.data));
-  stream.onerror = () => { stream.close(); EMIE.state.versionStream = null; setTimeout(connectVersionStream, 3000); };
+  stream.onerror = () => {
+    stream.close();
+    EMIE.state.versionStream = null;
+    const retryDelay = Math.min(60_000, Math.max(10_000, (EMIE.state.versionStreamRetry || 0) * 2 || 10_000));
+    EMIE.state.versionStreamRetry = retryDelay;
+    setTimeout(connectVersionStream, retryDelay);
+  };
+  stream.onopen = () => { EMIE.state.versionStreamRetry = 0; };
   EMIE.state.versionStream = stream;
 }
 

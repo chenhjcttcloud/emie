@@ -62,7 +62,7 @@ public class AdminController {
     public SseEmitter versionStream() {
         // 版本通道不能查询数据库：SSE 长连接配合 OpenEntityManagerInView 会长期占用连接。
         // 生产版本由发布脚本注入 APP_VERSION，客户端收到后会按既有策略重连/刷新。
-        SseEmitter emitter = new SseEmitter(15_000L);
+        SseEmitter emitter = new SseEmitter(60_000L);
         try {
             String version = System.getenv("APP_VERSION");
             emitter.send(SseEmitter.event().name("version").data(version == null ? "" : version));
