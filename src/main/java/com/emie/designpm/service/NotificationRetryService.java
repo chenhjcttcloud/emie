@@ -21,7 +21,7 @@ import java.util.HashMap;
 
 /** 失败的飞书投递按退避时间重试，超过上限进入死信并保留审计。 */
 @Service
-public class NotificationRetryService {
+public class NotificationRetryService implements NotificationRetryOperations {
     private static final int MAX_RETRIES = 5;
     private final NotificationDeliveryRepository deliveries;
     private final NotificationRepository notifications;
