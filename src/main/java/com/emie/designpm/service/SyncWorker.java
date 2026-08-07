@@ -87,8 +87,9 @@ public class SyncWorker {
 
     private void processQueueLocked() {
         recoverStuckItems();
-        List<SyncQueue> items = syncQueueRepository.findTop20ByStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
-                "pending", LocalDateTime.now());
+        List<SyncQueue> items = syncQueueRepository
+                .findTop20ByStatusAndNextRetryAtIsNullOrStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
+                        "pending", "pending", LocalDateTime.now());
         if (items.isEmpty()) return;
 
         log.info("飞书同步队列: {} 条待处理", items.size());

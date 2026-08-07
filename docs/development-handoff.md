@@ -1144,3 +1144,10 @@
 - 已在主渲染、项目列表渲染和运行时状态中加入递增 `renderId` 校验；只有最后一次导航渲染允许写入页面。
 - 已更新 `core-runtime.js?v=159`、`dashboard-projects.js?v=161`、`dashboard-lists.js?v=203`；全部前端 JavaScript 语法检查和 `git diff --check` 通过。
 - 本地测试容器可正常启动，应用日志显示 Spring Boot 已在 8080 启动；提交 `b98e0a86785a5029f9dea93870055f241657818a` 已推送并部署生产，公网检查 HTTP 200，备份目录为 `/home/emie/emie-deploy-backups/20260807_102330`。
+
+# 2026-08-07 飞书同步待处理队列修复（待发布）
+
+- 根因：新同步任务的 `nextRetryAt` 默认为 `null`，原 Spring Data 查询仅匹配 `nextRetryAt <= now`；SQL 对 `NULL` 的比较不成立，导致新任务长期停留在 `pending`。
+- 修复：主队列与后台队列共用的 `SyncQueueOperations` 查询改为同时领取 `nextRetryAt IS NULL` 的新任务和退避时间已到的重试任务；`SyncWorker` 与 `SyncQueueService` 已切换到新查询。
+- 验证：Java 21 `clean package` 成功，121 项测试通过，`git diff --check` 通过；尚未推送或部署。
+- 说明：Worker 当前在一个事务中依次写入 `processing` 和最终状态，因此管理概览可能观察不到短暂的处理中数量；这不再影响任务领取和实际同步。

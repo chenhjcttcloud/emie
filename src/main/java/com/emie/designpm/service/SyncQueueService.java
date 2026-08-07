@@ -138,8 +138,9 @@ public class SyncQueueService {
 
     /** 获取待处理队列 */
     public List<SyncQueue> getPending() {
-        return syncQueueRepository.findTop20ByStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
-                "pending", LocalDateTime.now());
+        return syncQueueRepository
+                .findTop20ByStatusAndNextRetryAtIsNullOrStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
+                        "pending", "pending", LocalDateTime.now());
     }
 
     /** 统计 */

@@ -32,7 +32,8 @@ class SyncWorkerReviewSummaryTest {
                 .status("pending")
                 .retryCount(0)
                 .build();
-        when(queueRepository.findTop20ByStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(eq("pending"), any())).thenReturn(List.of(item));
+        when(queueRepository.findTop20ByStatusAndNextRetryAtIsNullOrStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
+                eq("pending"), eq("pending"), any())).thenReturn(List.of(item));
 
         Project project = new Project();
         project.setId(1L);
