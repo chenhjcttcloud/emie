@@ -211,7 +211,7 @@ async function submitDesignRequirementScore(id, selfScore) {
   } catch (e) { alert('评分失败：' + e.message); }
 }
 
-async function renderOrderList(main, type, role, uid, titleOverride = '', endpoint = '/projects/page') {
+async function renderOrderList(main, type, role, uid, titleOverride = '', endpoint = '/projects/page', renderId = EMIE.state.renderId) {
   let title = '全部项目';
   if (type === 'channel_custom') title = '📦 渠道定制单';
   else if (type === 'regular') title = '🏭 公司常规品';
@@ -219,9 +219,10 @@ async function renderOrderList(main, type, role, uid, titleOverride = '', endpoi
   if (titleOverride) title = titleOverride;
 
   const participating = role === 'designer' || role === 'supplychain';
-  const state = EMIE.projectListState = { type, role, uid, endpoint, page: 0, total: 0, totalPages: 0, filters: {}, loading: false };
+  const state = EMIE.projectListState = { type, role, uid, endpoint, renderId, page: 0, total: 0, totalPages: 0, filters: {}, loading: false };
   main.innerHTML = `<div class="project-query-loading"><span class="project-query-spinner"></span>正在查询项目…</div>`;
   const result = await loadProjectListPage(0);
+  if (EMIE.state.renderId !== renderId) return;
 
   main.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -281,6 +282,7 @@ async function loadProjectListPage(page) {
     if (value) params.set(key, value);
   });
   const result = await apiGet(`${state.endpoint}?${params}`);
+  if (state.renderId !== EMIE.state.renderId) return { items: [], total: 0, totalPages: 0, page };
   state.total = result.total || 0;
   state.totalPages = result.totalPages || 0;
   return result;

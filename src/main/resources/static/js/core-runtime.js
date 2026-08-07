@@ -43,6 +43,7 @@ EMIE.state = Object.assign({
   currentRole: '',
   currentUserId: '',
   currentView: 'dashboard',
+  renderId: 0,
   taskBucket: localStorage.getItem('design_pm_taskBucket') || 'all',
   users: {},
   categories: [],

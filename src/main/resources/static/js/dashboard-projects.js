@@ -166,6 +166,9 @@ function renderProjectRow(o, compact = false, showType = true) {
 
 async function render() {
   const main = document.getElementById('mainContent');
+  const renderId = (EMIE.state.renderId || 0) + 1;
+  EMIE.state.renderId = renderId;
+  const view = EMIE.state.currentView;
   showLoading(main);
 
   // 页面导航时不清空缓存（依赖 mutation 操作清空），导航切换无需重新拉取
@@ -176,7 +179,7 @@ async function render() {
     const uid = getCurrentUserId();
 
     // 三个项目列表使用服务端分页；进入时不再预加载全量项目。
-    const isPagedProjectList = ['orders', 'channel', 'regular', 'design-needs'].includes(EMIE.state.currentView);
+    const isPagedProjectList = ['orders', 'channel', 'regular', 'design-needs'].includes(view);
     let orders = EMIE.state.cache.orders;
     if (!isPagedProjectList && (!orders || !orders.length)) {
       try { orders = await apiGet(`/projects?role=${role}&userId=${uid}`); } catch(e) {}
@@ -184,28 +187,29 @@ async function render() {
     }
     orders = orders || [];
 
-    if (EMIE.state.currentView === 'dashboard') {
+    if (EMIE.state.renderId !== renderId) return;
+    if (view === 'dashboard') {
       await renderDashboard(main, role, uid);
-    } else if (EMIE.state.currentView === 'orders') {
-      await renderOrderList(main, null, role, uid);
-    } else if (EMIE.state.currentView === 'channel') {
-      await renderOrderList(main, 'channel_custom', role, uid);
-    } else if (EMIE.state.currentView === 'regular') {
-      await renderOrderList(main, 'regular', role, uid);
-    } else if (EMIE.state.currentView === 'design-needs') {
-      await renderOrderList(main, 'design_requirement', role, uid, '🎨 设计/送审需求', '/design-requirements/page');
-    } else if (EMIE.state.currentView === 'tasks') {
+    } else if (view === 'orders') {
+      await renderOrderList(main, null, role, uid, '', '/projects/page', renderId);
+    } else if (view === 'channel') {
+      await renderOrderList(main, 'channel_custom', role, uid, '', '/projects/page', renderId);
+    } else if (view === 'regular') {
+      await renderOrderList(main, 'regular', role, uid, '', '/projects/page', renderId);
+    } else if (view === 'design-needs') {
+      await renderOrderList(main, 'design_requirement', role, uid, '🎨 设计/送审需求', '/design-requirements/page', renderId);
+    } else if (view === 'tasks') {
       await renderMyTasks(main, role, uid, EMIE.state.taskBucket || 'all');
-    } else if (EMIE.state.currentView === 'other-tasks') {
+    } else if (view === 'other-tasks') {
       await renderDepartmentTasks(main, role, uid, EMIE.state.taskBucket || 'all');
-    } else if (EMIE.state.currentView === 'scoring') {
+    } else if (view === 'scoring') {
       await renderScoringView(main, role, uid);
-    } else if (EMIE.state.currentView === 'admin' || EMIE.state.currentView === 'logs') {
+    } else if (view === 'admin' || view === 'logs') {
       await renderAdmin(main, role, uid);
     }
 
     // 侧栏每次重建后重新请求唯一统计源，页面缓存不得参与徽章计算。
-    await refreshNavigationBadges();
+    if (EMIE.state.renderId === renderId) await refreshNavigationBadges();
   } catch (e) {
     console.error('渲染错误:', e);
     main.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${e.message}</p></div>`;
