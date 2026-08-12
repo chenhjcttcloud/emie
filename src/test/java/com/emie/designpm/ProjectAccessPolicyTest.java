@@ -14,6 +14,7 @@ class ProjectAccessPolicyTest {
     @Test
     void supplyChainCannotSeeUnassignedDesignerTask() {
         Project project = projectWithPendingTask("designer");
+        project.getTasks().getFirst().setAllocationStatus("market_open");
 
         assertFalse(ProjectAccessPolicy.canView(project,
                 new AuthController.AuthSession("supply-1", "supplychain", "供应链")));
@@ -27,7 +28,7 @@ class ProjectAccessPolicyTest {
 
         assertFalse(ProjectAccessPolicy.canView(project,
                 new AuthController.AuthSession("designer-1", "designer", "设计师")));
-        assertTrue(ProjectAccessPolicy.canView(project,
+        assertFalse(ProjectAccessPolicy.canView(project,
                 new AuthController.AuthSession("supply-1", "supplychain", "供应链")));
     }
 
@@ -35,7 +36,7 @@ class ProjectAccessPolicyTest {
     void legacyTaskWithoutRoleIsVisibleOnlyToDesigners() {
         Project project = projectWithPendingTask(null);
 
-        assertTrue(ProjectAccessPolicy.canView(project,
+        assertFalse(ProjectAccessPolicy.canView(project,
                 new AuthController.AuthSession("designer-1", "designer", "设计师")));
         assertFalse(ProjectAccessPolicy.canView(project,
                 new AuthController.AuthSession("supply-1", "supplychain", "供应链")));

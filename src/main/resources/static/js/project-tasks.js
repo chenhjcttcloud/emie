@@ -27,6 +27,30 @@ const renderFileList = (...args) => EMIE.actions.renderFileList(...args);
 const handleDeliverImages = (...args) => EMIE.actions.handleDeliverImages(...args);
 const handleDeliverAttachments = (...args) => EMIE.actions.handleDeliverAttachments(...args);
 
+const POINT_DIFFICULTIES = [
+  { code: 'STANDARD', label: '标准', description: '常规工作量与复杂度' },
+  { code: 'COMPLEX', label: '复杂', description: '跨模块或高复杂度任务' },
+  { code: 'MAJOR', label: '重大', description: '重大项目或高影响任务' },
+];
+
+function enabledPointRules(rules) {
+  return (Array.isArray(rules) ? rules : []).filter(rule => rule.enabled !== false);
+}
+
+function renderPointRuleOptions(rules, selectedCode) {
+  const active = enabledPointRules(rules);
+  const selected = String(selectedCode || 'TASK_APPROVED');
+  const missingSelected = selected && !active.some(rule => String(rule.ruleCode || '') === selected)
+    ? `<option value="${escHtml(selected)}" selected>${escHtml(selected)}（已停用，仅保留当前任务）</option>` : '';
+  return missingSelected + active.map(rule => `<option value="${escHtml(rule.ruleCode || '')}" ${String(rule.ruleCode || '') === selected ? 'selected' : ''}>${escHtml(rule.category ? rule.category + ' · ' : '')}${escHtml(rule.ruleCode || '')}（${Number(rule.points || 0)} 分）</option>`).join('');
+}
+
+function renderDifficultyOptions(difficulties, selectedCode) {
+  const configured = (Array.isArray(difficulties) ? difficulties : []).filter(item => item.enabled !== false);
+  const items = configured.length ? configured.map(item => ({ code: item.difficultyCode, label: item.difficultyCode, description: `${item.description || ''} ×${Number(item.multiplier || 1)}` })) : POINT_DIFFICULTIES;
+  return items.map(item => `<option value="${item.code}" ${item.code === String(selectedCode || 'STANDARD').toUpperCase() ? 'selected' : ''}>${escHtml(item.label)} · ${escHtml(item.description)}</option>`).join('');
+}
+
 // ==================== 添加 / 编辑子任务 ====================
 
 function handleSubTaskRefImages(input) {
@@ -36,7 +60,7 @@ function handleSubTaskAttachments(input) {
   handleFileUpload(input, EMIE.projectState.subTaskAttachments, 9, '附件', false);
 }
 
-function addSubTask(pid) {
+async function addSubTask(pid) {
   if (document.getElementById('addSubTaskModal')) return;
   if (!EMIE.actions.hasPermission('subtask.create')) {
     alert('当前账号没有新建子任务的权限');
@@ -48,6 +72,19 @@ function addSubTask(pid) {
   });
   EMIE.projectState.subTaskRefImages = [];
   EMIE.projectState.subTaskAttachments = [];
+  let pointRules = [];
+  let pointDifficulties = [];
+  try {
+    [pointRules, pointDifficulties] = await Promise.all([apiGet('/points/rules'), apiGet('/points/difficulties')]);
+    pointRules = enabledPointRules(pointRules);
+  } catch (error) {
+    alert('积分规则加载失败：' + (error.message || '请稍后重试'));
+    return;
+  }
+  if (!pointRules.length) {
+    alert('当前没有可用的积分规则，请联系管理员启用后再创建子任务');
+    return;
+  }
 
   const designerOpts = `<option value="">请选择设计师</option>` +
     EMIE.state.users.designer.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('');
@@ -87,6 +124,21 @@ function addSubTask(pid) {
             </div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 计划要求完成时间</label>${renderDatePicker('plannedDate', {required:true})}</div>
           </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">积分归属月份（跨月任务）</label><input class="form-input" type="month" name="milestoneMonth"><div style="font-size:12px;color:var(--gray-500);margin-top:5px;">留空则按实际入账月份；长周期任务可拆成多个里程碑子任务。</div></div>
+            <div class="form-group"><label class="form-label">合作积分分配（可选）</label><input class="form-input" name="collaboratorAllocationsText" placeholder="用户ID:比例，如 designer02:30"><div style="font-size:12px;color:var(--gray-500);margin-top:5px;">多个成员用逗号分隔，剩余比例归主负责人，开始后锁定。</div></div>
+          </div>
+          <div class="form-group"><label class="form-label">接单能力要求（可选）</label><input class="form-input" name="requiredSkillTagsText" placeholder="如：包装、3D、AI（使用逗号分隔）"><div style="font-size:12px;color:var(--gray-500);margin-top:5px;">发布到接单市场后，仅能力标签匹配的设计师可领取。</div></div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 积分规则</label>
+              <select class="form-select" name="pointRuleCode" required>${renderPointRuleOptions(pointRules, 'TASK_APPROVED')}</select>
+              <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">创建时锁定基础分，后续调整规则不会影响该任务。</div>
+            </div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 难度档位</label>
+              <select class="form-select" name="difficultyCode" required>${renderDifficultyOptions(pointDifficulties, 'STANDARD')}</select>
+              <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">任务开始执行后不可修改。</div>
+            </div>
+          </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 负责人类型</label>
             <div style="display:flex;gap:16px;">
               <label class="checkbox-item checked" style="cursor:pointer;" data-emie-onclick="switchAssigneeType('add', 'designer', this)">
@@ -107,9 +159,16 @@ function addSubTask(pid) {
             </div>
           </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 指派子任务负责人</label>
-            <select class="form-select" name="designerId" id="addSubTaskDesignerId" required data-emie-onchange="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor=''">${designerOpts}</select>
+            <div id="addSubTaskAssignmentMode" style="display:flex;gap:12px;margin-bottom:10px;">
+              <label class="checkbox-item checked"><input type="radio" name="assignmentMode" value="direct" checked data-emie-onchange="toggleSubTaskMarketMode(false)"> 指定设计师</label>
+              <label class="checkbox-item"><input type="radio" name="assignmentMode" value="market" data-emie-onchange="toggleSubTaskMarketMode(true)"> 发布到接单市场</label>
+            </div>
+            <select class="form-select" name="designerId" id="addSubTaskDesignerId" data-emie-onchange="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor=''">${designerOpts}</select>
+            <div id="addSubTaskMarketHint" style="display:none;margin-top:8px;font-size:12px;color:var(--gray-500);">发布后所有设计师均可查看，先抢先得。</div>
             <input type="hidden" name="assigneeRole" id="addSubTaskAssigneeRole" value="designer">
           </div>
+          <div class="form-group"><label class="form-label">指派/立项说明</label><input class="form-input" name="assignmentReason" maxlength="500" placeholder="说明指派原因；自主提案请填写立项依据"></div>
+          <label class="checkbox-item"><input type="checkbox" name="selfInitiated" value="true"> 自主提案任务（由企划创建即视为确认立项）</label>
           <div class="form-group"><label class="form-label">细节要求说明</label><textarea class="form-textarea" name="details" placeholder="子任务的具体要求说明..." data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor=''"></textarea></div>
         </form>
         <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
@@ -138,11 +197,35 @@ function addSubTask(pid) {
   enhanceDateInputs(modal);
   try {
     const draft = JSON.parse(sessionStorage.getItem(`design_pm_subtask_draft_${pid}`) || 'null');
-    if (draft) Object.entries(draft).forEach(([name, value]) => {
-      const field = document.querySelector(`#addSubTaskForm [name="${name}"]`);
-      if (field && typeof value === 'string') field.value = value;
-    });
+    if (draft) {
+      Object.entries(draft).forEach(([name, value]) => {
+        const fields = [...document.querySelectorAll(`#addSubTaskForm [name="${name}"]`)];
+        if (fields[0]?.type === 'radio') {
+          fields.forEach(field => { field.checked = field.value === value; });
+        } else if (fields[0] && typeof value === 'string') {
+          fields[0].value = value;
+        }
+      });
+      const market = document.querySelector('#addSubTaskForm [name="assignmentMode"]:checked')?.value === 'market';
+      toggleSubTaskMarketMode(market);
+    }
   } catch (e) { console.warn('恢复子任务草稿失败', e); }
+}
+
+function toggleSubTaskMarketMode(market) {
+  const form = document.getElementById('addSubTaskForm');
+  const select = document.getElementById('addSubTaskDesignerId');
+  const hint = document.getElementById('addSubTaskMarketHint');
+  if (form) form.dataset.assignmentMode = market ? 'market' : 'direct';
+  if (select) {
+    select.disabled = market;
+    select.style.display = market ? 'none' : '';
+    if (market) select.value = '';
+  }
+  if (hint) hint.style.display = market ? '' : 'none';
+  document.querySelectorAll('#addSubTaskAssignmentMode .checkbox-item').forEach(label => {
+    label.classList.toggle('checked', label.querySelector('input')?.checked === true);
+  });
 }
 
 function saveSubTaskDraft(pid) {
@@ -176,10 +259,27 @@ async function submitAddSubTask(pid) {
 
   const fd = new FormData(document.getElementById('addSubTaskForm'));
   const data = Object.fromEntries(fd.entries());
+  // 直接从当前选中的 radio 读取，避免事件代理或同名字段导致模式丢失。
+  const form = document.getElementById('addSubTaskForm');
+  data.publishToMarket = form?.dataset.assignmentMode === 'market'
+    || document.querySelector('#addSubTaskForm [name="assignmentMode"]:checked')?.value === 'market';
+  delete data.assignmentMode;
+  data.requiredSkillTags = JSON.stringify(String(data.requiredSkillTagsText || '').split(/[,，]/).map(value => value.trim()).filter(Boolean));
+  delete data.requiredSkillTagsText;
+  try {
+    data.collaboratorAllocations = JSON.stringify(String(data.collaboratorAllocationsText || '').split(/[,，]/).map(item => item.trim()).filter(Boolean).map(item => {
+      const [userId, ratio] = item.split(/[:：]/); if (!userId || !ratio) throw new Error();
+      return { userId: userId.trim(), ratio: Number(ratio) };
+    }));
+  } catch (_) { showError('collaboratorAllocationsText', '格式应为 用户ID:比例，多个用逗号分隔'); return; }
+  delete data.collaboratorAllocationsText;
+  data.selfInitiated = data.selfInitiated === 'true';
   let hasErr = false;
 
   if (!data.name) { showError('name', '请填写子任务名称'); hasErr = true; }
   if (!data.workflowStage) { showError('workflowStage', '请选择子任务所属阶段'); hasErr = true; }
+  if (!data.pointRuleCode) { showError('pointRuleCode', '请选择积分规则'); hasErr = true; }
+  if (!data.difficultyCode) { showError('difficultyCode', '请选择难度档位'); hasErr = true; }
   if (!data.plannedDate) { showError('plannedDate', '请选择计划完成时间'); hasErr = true; }
   else if (!/^\d{4}-\d{2}-\d{2}$/.test(data.plannedDate) || isNaN(new Date(data.plannedDate).getTime())) {
     showError('plannedDate', '日期格式不正确（yyyy-mm-dd）');
@@ -204,8 +304,8 @@ async function submitAddSubTask(pid) {
 
   // 子任务负责人：未指定可以提交，但"请选择子任务负责人"不允许
   const designerSel = document.querySelector('#addSubTaskForm [name="designerId"]');
-  if (designerSel && designerSel.selectedIndex === 0) {
-    showError('designerId', '请选择子任务负责人或未指定');
+  if (!data.publishToMarket && designerSel && designerSel.selectedIndex === 0) {
+    showError('designerId', '请选择子任务负责人');
     hasErr = true;
   }
   if (hasErr) return;
@@ -232,9 +332,13 @@ async function submitAddSubTask(pid) {
 
 function editTask(pid, tid) {
   if (!tryOpenModal('editTaskModal')) return;
-  apiGet(`/projects/${pid}`).then(detail => {
+  Promise.all([apiGet(`/projects/${pid}`), apiGet('/points/rules'), apiGet('/points/difficulties')]).then(([detail, rules, difficulties]) => {
     const task = detail.tasks.find(t => t.id === tid);
     if (!task) { doneOpenModal('editTaskModal'); return; }
+    let requiredSkillTagsText = '';
+    try { requiredSkillTagsText = (JSON.parse(task.requiredSkillTagsJson || '[]') || []).join('、'); } catch (e) {}
+    let collaboratorAllocationsText = '';
+    try { collaboratorAllocationsText = (JSON.parse(task.collaboratorAllocationsJson || '[]') || []).map(item => `${item.userId}:${item.ratio}`).join('、'); } catch (e) {}
     // 加载现有图片和附件
     EMIE.projectState.editTaskRefImages = [];
     EMIE.projectState.editTaskAttachments = [];
@@ -290,6 +394,22 @@ function editTask(pid, tid) {
                 </select>
               </div>
               <div class="form-group"><label class="form-label">计划完成时间</label>${renderDatePicker('plannedDate', {value: task.plannedDate || ''})}</div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">积分归属月份</label><input class="form-input" type="month" name="milestoneMonth" value="${escHtml(task.milestoneMonth || '')}" ${task.status !== 'pending' ? 'disabled' : ''}></div>
+              <div class="form-group"><label class="form-label">合作积分分配</label><input class="form-input" name="collaboratorAllocationsText" value="${escHtml(collaboratorAllocationsText)}" placeholder="designer02:30" ${task.status !== 'pending' ? 'disabled' : ''}></div>
+            </div>
+            <div class="form-group"><label class="form-label">指派/立项说明</label><input class="form-input" name="assignmentReason" maxlength="500" value="${escHtml(task.assignmentReason || '')}"></div>
+            <div class="form-group"><label class="form-label">接单能力要求（可选）</label><input class="form-input" name="requiredSkillTagsText" value="${escHtml(requiredSkillTagsText)}" placeholder="如：包装、3D、AI（使用逗号分隔）" ${task.status !== 'pending' ? 'disabled' : ''}></div>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">积分规则</label>
+                <select class="form-select" name="pointRuleCode" ${task.status !== 'pending' ? 'disabled' : ''}>${renderPointRuleOptions(rules, task.pointRuleCode)}</select>
+                ${task.status !== 'pending' ? '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">任务已开始，积分规则快照不可修改。</div>' : ''}
+              </div>
+              <div class="form-group"><label class="form-label">难度档位</label>
+                <select class="form-select" name="difficultyCode" ${task.status !== 'pending' ? 'disabled' : ''}>${renderDifficultyOptions(difficulties, task.difficultyCode)}</select>
+                ${task.status !== 'pending' ? '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">任务已开始，难度档位不可修改。</div>' : ''}
+              </div>
             </div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 负责人类型</label>
               <div style="display:flex;gap:16px;">
@@ -350,6 +470,19 @@ async function submitEditTask(pid, tid) {
   if (EMIE.projectState.uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
   const fd = new FormData(document.getElementById('editTaskForm'));
   const data = Object.fromEntries(fd.entries());
+  if (Object.prototype.hasOwnProperty.call(data, 'requiredSkillTagsText')) {
+    data.requiredSkillTags = JSON.stringify(String(data.requiredSkillTagsText || '').split(/[,，、]/).map(value => value.trim()).filter(Boolean));
+    delete data.requiredSkillTagsText;
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'collaboratorAllocationsText')) {
+    try {
+      data.collaboratorAllocations = JSON.stringify(String(data.collaboratorAllocationsText || '').split(/[,，、]/).map(item => item.trim()).filter(Boolean).map(item => {
+        const [userId, ratio] = item.split(/[:：]/); if (!userId || !ratio) throw new Error();
+        return { userId: userId.trim(), ratio: Number(ratio) };
+      }));
+    } catch (_) { alert('合作积分分配格式应为 用户ID:比例'); return; }
+    delete data.collaboratorAllocationsText;
+  }
 
   // 验证计划时间不能早于今天
   const today = new Date();
@@ -388,12 +521,27 @@ async function deleteTask(pid, tid) {
   }
 }
 
-// ==================== 任务工作流 ====================
-async function taskAccept(pid, tid) {
-  if (document.getElementById('taskAcceptModal')) return;
+async function withdrawMarketTask(pid, tid) {
+  if (!confirm('确认将该任务撤出接单市场？撤回后设计师将无法抢单。')) return;
   try {
-    const detail = await apiGet(`/projects/${pid}`);
-    const task = detail.tasks.find(t => t.id === tid);
+    await apiPost(`/projects/${pid}/tasks/${tid}/withdraw-market`, {});
+    await refreshAfterMutation(pid);
+  } catch (e) {
+    alert('撤回失败: ' + e.message);
+  }
+}
+
+// ==================== 任务工作流 ====================
+async function taskAccept(pid, tid, marketTask = null) {
+  if (!tryOpenModal('taskAcceptModal')) return;
+  try {
+    // 接单市场只返回当前可接任务；设计师可能没有项目详情权限，不能为了打开确认框再请求项目详情。
+    // 优先使用市场列表中的任务快照，旧入口未传快照时再兼容读取项目详情。
+    let task = marketTask;
+    if (!task) {
+      const detail = await apiGet(`/projects/${pid}`);
+      task = detail.tasks.find(t => t.id === tid);
+    }
     if (!task) return;
 
     const modal = document.createElement('div');
@@ -404,7 +552,7 @@ async function taskAccept(pid, tid) {
       <div class="modal">
         <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✅ 接单：${task.name}</div></div></div>
         <div class="modal-body">
-          <p style="margin-bottom:12px;color:var(--gray-500);">负责人：<strong>${task.designerName || '未指定'}</strong></p>
+          ${marketTask ? '' : `<p style="margin-bottom:12px;color:var(--gray-500);">负责人：<strong>${task.designerName || '未指定'}</strong></p>`}
           <form id="taskAcceptForm">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 计划完成时间</label>${renderDatePicker('plannedDate', {required:true, value: task.plannedDate || ''})}</div>
           </form>
@@ -412,9 +560,9 @@ async function taskAccept(pid, tid) {
         <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskAcceptModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitTaskAccept(${pid},${tid}))">确认接单</button></div>
       </div>`;
     document.body.appendChild(modal);
-    doneOpenModal('taskDeliverModal');
+    doneOpenModal('taskAcceptModal');
   } catch (e) {
-    doneOpenModal('taskDeliverModal');
+    doneOpenModal('taskAcceptModal');
     alert('加载失败: ' + e.message);
   }
 }
@@ -443,6 +591,7 @@ async function submitTaskAccept(pid, tid) {
     closeM('taskAcceptModal');
     await refreshAfterMutation(pid);
   } catch (e) {
+    await refreshAfterMutation(pid);
     alert('操作失败: ' + e.message);
   }
 }
@@ -890,6 +1039,7 @@ EMIE.registerActions({
   handleEditAttachments,
   submitEditTask,
   deleteTask,
+  withdrawMarketTask,
   taskAccept,
   submitTaskAccept,
   taskDeliver,
@@ -908,6 +1058,7 @@ EMIE.registerActions({
   submitTaskReject,
   openScoring,
   submitScoring,
+  toggleSubTaskMarketMode,
   validateScoreInput,
 });
 
@@ -918,6 +1069,7 @@ EMIE.registerModule('projectTasks', {
   editTask,
   submitEditTask,
   deleteTask,
+  withdrawMarketTask,
   handleSubTaskRefImages,
   handleSubTaskAttachments,
   handleEditRefImages,
@@ -940,5 +1092,6 @@ EMIE.registerModule('projectTasks', {
   submitTaskReject,
   openScoring,
   submitScoring,
+  toggleSubTaskMarketMode,
   validateScoreInput,
 });

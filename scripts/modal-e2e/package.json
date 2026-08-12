@@ -1,0 +1,10 @@
+{
+  "name": "emie-modal-e2e",
+  "private": true,
+  "scripts": {
+    "test": "node modal-regression.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.62.0"
+  }
+}

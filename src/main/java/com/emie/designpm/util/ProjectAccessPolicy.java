@@ -55,7 +55,8 @@ public final class ProjectAccessPolicy {
         if (!matchesAssigneeRole(task, role)) return false;
         if (Objects.equals(userId, task.getDesignerId())) return true;
         return (task.getDesignerId() == null || task.getDesignerId().isBlank())
-                && "pending".equals(task.getStatus());
+                && "pending".equals(task.getStatus())
+                && "market_open".equals(task.getAllocationStatus());
     }
 
     static boolean matchesAssigneeRole(SubTask task, String role) {

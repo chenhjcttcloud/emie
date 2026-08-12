@@ -6,6 +6,16 @@ server:
     mime-types: application/json,application/javascript,text/javascript,text/css,text/html,text/xml,application/xml
     min-response-size: 512
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-components: never
+      show-details: never
+
 spring:
   flyway:
     enabled: ${SPRING_FLYWAY_ENABLED:true}
@@ -20,6 +30,9 @@ spring:
       password: ${SPRING_DATA_REDIS_PASSWORD:}
       connect-timeout: ${SPRING_DATA_REDIS_CONNECT_TIMEOUT:2s}
       timeout: ${SPRING_DATA_REDIS_TIMEOUT:2s}
+      # 本项目只使用 StringRedisTemplate，不使用 Spring Data Redis Repository。
+      repositories:
+        enabled: false
   threads:
     virtual:
       enabled: ${SPRING_THREADS_VIRTUAL_ENABLED:true}
@@ -94,12 +107,11 @@ spring:
     show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
         format_sql: true
         jdbc.batch_size: 50
         order_inserts: true
         order_updates: true
-    open-in-view: true
+    open-in-view: false
 
 app:
   feishu:
@@ -131,12 +143,11 @@ spring:
     show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
         format_sql: true
         jdbc.batch_size: 50
         order_inserts: true
         order_updates: true
-    open-in-view: true
+    open-in-view: false
 
 ---
 # === 生产环境：必须显式提供全部 DESIGNPM_DB_* 变量 ===
@@ -163,11 +174,10 @@ spring:
       ddl-auto: validate
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
         jdbc.batch_size: 50
         order_inserts: true
         order_updates: true
-    open-in-view: true
+    open-in-view: false
 
 server:
   address: ${SERVER_ADDRESS:0.0.0.0}
@@ -212,7 +222,7 @@ spring:
         jdbc.batch_size: 50
         order_inserts: true
         order_updates: true
-    open-in-view: true
+    open-in-view: false
 
 server:
   address: ${SERVER_ADDRESS:0.0.0.0}

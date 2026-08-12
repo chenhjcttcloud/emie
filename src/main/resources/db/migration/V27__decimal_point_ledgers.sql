@@ -1,0 +1,1 @@
+ALTER TABLE point_ledgers MODIFY COLUMN points DECIMAL(12,2) NOT NULL;

@@ -73,6 +73,7 @@ public final class PermissionCatalog {
         LinkedHashSet<String> permissions = new LinkedHashSet<>(COMMON_PAGES);
         switch (role) {
             case "admin" -> {
+                permissions.add("page.points.view");
                 permissions.add("page.subtasks.department.view");
                 permissions.add("page.admin.view");
                 // 身份切换是管理员验证各角色权限的恢复入口；兼容模式避免新测试库
@@ -92,6 +93,7 @@ public final class PermissionCatalog {
                 permissions.add("design_requirement.score.review");
             }
             case "planner" -> {
+                permissions.add("page.points.view");
                 permissions.add("page.subtasks.department.view");
                 permissions.add("project.regular.create");
                 permissions.add("project.channel.edit");
@@ -115,6 +117,7 @@ public final class PermissionCatalog {
                 permissions.add("subtask.redeliver");
             }
             case "designer" -> {
+                permissions.add("page.points.view");
                 permissions.add("subtask.accept");
                 permissions.add("subtask.deliver");
                 permissions.add("subtask.redeliver");

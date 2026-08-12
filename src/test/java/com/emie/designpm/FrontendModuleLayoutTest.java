@@ -167,6 +167,17 @@ class FrontendModuleLayoutTest {
     }
 
     @Test
+    void projectChatEntryUsesChatIdAsAuthoritativeState() throws IOException {
+        String projectDetail = readResource("/static/js/project-detail.js");
+
+        assertTrue(projectDetail.contains("const hasProjectChat = !!String(detail.feishuChatId || '').trim()"),
+                "已有群 ID 时，即使成员同步状态失败也必须保留进入群聊入口");
+        assertTrue(projectDetail.contains("if (hasProjectChat)"));
+        assertTrue(projectDetail.contains("else if (canCreateProjectChat"),
+                "确实没有群 ID 时应继续提供补建群入口");
+    }
+
+    @Test
     void adminOrganizationUsesDynamicRoles() throws IOException {
         String adminOrg = readResource("/static/js/admin-org.js");
 

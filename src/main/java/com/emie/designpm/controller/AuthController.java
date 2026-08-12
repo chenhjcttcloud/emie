@@ -25,8 +25,8 @@ import org.slf4j.LoggerFactory;
 public class AuthController {
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
-    /** 按产品要求，会话不因时间自动失效；主动退出或管理员撤销时结束。 */
-    private static final long SESSION_TTL_MS = Long.MAX_VALUE;
+    /** 按产品要求，会话不因时间自动失效；0 明确表示永久有效。 */
+    private static final long PERMANENT_SESSION_EXPIRES_AT = 0L;
     private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
 
     private final UserRepository userRepository;
@@ -283,13 +283,13 @@ public class AuthController {
     public record AuthSession(String userId, String role, String name, String originalUserId,
                               String originalRole, long expiresAt) {
         public AuthSession(String userId, String role, String name) {
-            this(userId, role, name, userId, role, System.currentTimeMillis() + SESSION_TTL_MS);
+            this(userId, role, name, userId, role, PERMANENT_SESSION_EXPIRES_AT);
         }
 
         public AuthSession(String userId, String role, String name,
                            String originalUserId, String originalRole) {
             this(userId, role, name, originalUserId, originalRole,
-                    System.currentTimeMillis() + SESSION_TTL_MS);
+                    PERMANENT_SESSION_EXPIRES_AT);
         }
     }
 

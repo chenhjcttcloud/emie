@@ -1,0 +1,4 @@
+package com.emie.designpm.entity;
+import jakarta.persistence.*; import lombok.Data; import lombok.NoArgsConstructor; import java.time.LocalDateTime;
+@Data @NoArgsConstructor @Entity @Table(name="monthly_performance_configs", uniqueConstraints=@UniqueConstraint(name="uk_perf_month",columnNames="month_key"))
+public class MonthlyPerformanceConfig { @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id; @Column(name="month_key",nullable=false,length=7) private String monthKey; @Column(nullable=false) private Integer targetPoints=0; @Column(nullable=false) private Double multiplier=1d; private Double salesAmount; @Column(nullable=false) private boolean supplyShortage=false; @Column(nullable=false) private LocalDateTime createdAt; @Column(nullable=false) private LocalDateTime updatedAt; @PrePersist void c(){createdAt=updatedAt=LocalDateTime.now();} @PreUpdate void u(){updatedAt=LocalDateTime.now();} }

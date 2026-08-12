@@ -12,10 +12,29 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import java.util.List;
 import java.util.Optional;
 import java.time.LocalDateTime;
-import java.time.LocalDateTime;
 import org.springframework.data.repository.query.Param;
 
 public interface ProjectRepository extends JpaRepository<Project, Long>, ProjectSearchRepository {
+
+    interface IntegrityProjectProjection {
+        Long getId();
+        String getReferenceImagesJson();
+        String getAttachmentsJson();
+    }
+
+    interface DashboardProjectProjection {
+        Long getId();
+        String getType();
+        String getStatus();
+    }
+
+    @Query("SELECT p.id AS id, p.type AS type, p.status AS status FROM Project p WHERE p.id IN :ids")
+    List<DashboardProjectProjection> findDashboardProjectsByIdIn(@Param("ids") List<Long> ids);
+
+    @Query("SELECT p.id AS id, p.referenceImagesJson AS referenceImagesJson, " +
+            "p.attachmentsJson AS attachmentsJson FROM Project p " +
+            "WHERE p.id > :afterId ORDER BY p.id ASC")
+    List<IntegrityProjectProjection> findIntegrityProjectsAfter(@Param("afterId") Long afterId, Pageable pageable);
 
     /** 项目详情/权限校验需要任务在同一事务内可用，避免请求序列化阶段触发懒加载。 */
     @EntityGraph(attributePaths = {"tasks", "productCategory"})
@@ -128,6 +147,13 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, Project
     /** 全部项目（管理员/上级），预加载子任务 */
     @Query("SELECT DISTINCT p FROM Project p LEFT JOIN FETCH p.tasks ORDER BY p.createdAt DESC")
     List<Project> findAllWithTasks();
+
+    /** 批量状态计算专用：仅为当前列表页项目加载子任务，避免依赖 OSIV。 */
+    @Query("SELECT DISTINCT p FROM Project p LEFT JOIN FETCH p.tasks WHERE p.id IN :ids")
+    List<Project> findAllWithTasksByIdIn(@Param("ids") List<Long> ids);
+
+    @Query("SELECT p.id FROM Project p WHERE p.id IN :ids ORDER BY p.updatedAt DESC")
+    List<Long> findRecentIdsByIdIn(@Param("ids") List<Long> ids, Pageable pageable);
 
     /** 对账只需要业务 ID，按主键分页读取，避免把整张项目表实体加载进内存。 */
     @Query("SELECT p.id FROM Project p WHERE p.id > :afterId ORDER BY p.id ASC")

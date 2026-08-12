@@ -91,31 +91,160 @@ function enhanceDateInputs(root = document) {
   });
 }
 
-// 旧弹窗模板把关闭按钮放在 modal 外部，容易因弹窗高度变化而漂移。
-// 动态插入时统一移动到标题栏，由标题栏定位规则负责布局。
-function normalizeModalCloseButtons(root = document) {
-  root.querySelectorAll?.('.modal-overlay > .modal-close-float').forEach(button => {
-    const overlay = button.parentElement;
-    const modal = overlay?.querySelector(':scope > .modal');
-    const header = modal?.querySelector(':scope > .modal-header');
-    if (!header || header.querySelector('.modal-close')) return;
-    button.classList.remove('modal-close-float');
-    button.classList.add('modal-close');
-    header.appendChild(button);
+// 弹窗基础设施：旧模板、新模板都在插入 DOM 时统一收敛。
+// 这里只处理容器、关闭和可访问性，不改写任何业务按钮的原有函数。
+const DETAIL_DRAWER_MODAL_IDS = new Set([
+  'projectDetailModal',
+  'projectSubTaskDetailModal',
+  'publishedSubTaskDetailModal',
+  'taskRejectionRecordModal',
+  'userTasksPopup',
+  'designRequirementDetailModal',
+]);
+const modalFocusOrigins = new WeakMap();
+
+function getTopModalOverlay() {
+  const overlays = [...document.querySelectorAll('.modal-overlay')]
+    .filter(overlay => getComputedStyle(overlay).display !== 'none');
+  return overlays[overlays.length - 1] || null;
+}
+
+function getModalDialog(overlay) {
+  return overlay?.querySelector(':scope > .modal, :scope > .file-preview-dialog') || null;
+}
+
+function requestModalClose(overlay) {
+  if (!overlay) return;
+  if (overlay.id === 'filePreviewOverlay' && EMIE.actions.closeFilePreview) {
+    EMIE.actions.closeFilePreview();
+    return;
+  }
+  if (overlay.id && typeof closeM === 'function') closeM(overlay.id);
+  else overlay.remove();
+}
+
+function normalizeModalStructure(root = document) {
+  const overlays = [];
+  if (root.matches?.('.modal-overlay')) overlays.push(root);
+  root.querySelectorAll?.('.modal-overlay').forEach(overlay => overlays.push(overlay));
+
+  overlays.forEach(overlay => {
+    const modal = getModalDialog(overlay);
+    if (!modal) return;
+    const header = modal.querySelector(':scope > .modal-header, :scope > .file-preview-header');
+    const body = modal.querySelector(':scope > .modal-body, :scope > .file-preview-body');
+    const footer = modal.querySelector(':scope > .modal-footer, :scope > .file-preview-footer');
+
+    overlay.classList.toggle('modal-detail-drawer', DETAIL_DRAWER_MODAL_IDS.has(overlay.id));
+    overlay.setAttribute('role', 'presentation');
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('tabindex', '-1');
+    if (body) body.setAttribute('tabindex', '0');
+    if (footer) footer.setAttribute('role', 'group');
+
+    const title = header?.querySelector('.modal-title, .file-preview-title');
+    if (title) {
+      if (!title.id) title.id = `${overlay.id || 'modal'}Title`;
+      modal.setAttribute('aria-labelledby', title.id);
+    }
+
+    const floatingClose = overlay.querySelector(':scope > .modal-close-float');
+    let closeButton = header?.querySelector('.modal-close, .file-preview-close');
+    if (!closeButton && floatingClose && header) {
+      floatingClose.classList.remove('modal-close-float');
+      floatingClose.classList.add('modal-close');
+      header.appendChild(floatingClose);
+      closeButton = floatingClose;
+    }
+    if (!closeButton && header && overlay.id) {
+      closeButton = document.createElement('button');
+      closeButton.type = 'button';
+      closeButton.className = 'modal-close';
+      closeButton.textContent = '✕';
+      closeButton.addEventListener('click', () => requestModalClose(overlay));
+      header.appendChild(closeButton);
+    }
+    if (closeButton) {
+      closeButton.type = 'button';
+      closeButton.setAttribute('aria-label', modal.classList.contains('file-preview-dialog') ? '关闭预览' : '关闭弹窗');
+      closeButton.setAttribute('title', '关闭 (Esc)');
+    }
+
+    if (overlay.dataset.modalReady !== '1') {
+      overlay.dataset.modalReady = '1';
+      modalFocusOrigins.set(overlay, document.activeElement);
+      requestAnimationFrame(() => {
+        if (!overlay.isConnected || getTopModalOverlay() !== overlay) return;
+        (closeButton || modal).focus({ preventScroll: true });
+      });
+    }
   });
+  document.body.classList.toggle('has-open-modal', Boolean(document.querySelector('.modal-overlay')));
+}
+
+function restoreModalFocus(overlay) {
+  const origin = modalFocusOrigins.get(overlay);
+  if (origin?.isConnected) requestAnimationFrame(() => origin.focus({ preventScroll: true }));
 }
 
 // 页面大部分表单由模块按需动态渲染，统一监听新增节点，避免遗漏任何日期控件。
 if (document.body) {
   enhanceDateInputs(document);
-  normalizeModalCloseButtons(document);
-  new MutationObserver(mutations => mutations.forEach(mutation => mutation.addedNodes.forEach(node => {
-    if (node.nodeType === 1) {
-      enhanceDateInputs(node);
-      normalizeModalCloseButtons(node);
-    }
-  }))).observe(document.body, { childList: true, subtree: true });
+  normalizeModalStructure(document);
+  new MutationObserver(mutations => {
+    mutations.forEach(mutation => {
+      mutation.addedNodes.forEach(node => {
+        if (node.nodeType !== 1) return;
+        enhanceDateInputs(node);
+        normalizeModalStructure(node);
+      });
+      mutation.removedNodes.forEach(node => {
+        if (node.nodeType !== 1) return;
+        if (node.matches?.('.modal-overlay')) restoreModalFocus(node);
+        node.querySelectorAll?.('.modal-overlay').forEach(restoreModalFocus);
+      });
+    });
+    document.body.classList.toggle('has-open-modal', Boolean(document.querySelector('.modal-overlay')));
+  }).observe(document.body, { childList: true, subtree: true });
 }
+
+document.addEventListener('keydown', event => {
+  const overlay = getTopModalOverlay();
+  if (!overlay) return;
+  const modal = getModalDialog(overlay);
+  if (!modal) return;
+
+  if (event.key === 'Escape') {
+    // 登录超时等强制流程没有关闭按钮，Esc 不应绕过必选操作。
+    if (!modal.querySelector('.modal-close, .file-preview-close')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    requestModalClose(overlay);
+    return;
+  }
+  if (event.key !== 'Tab') return;
+
+  const focusable = [...modal.querySelectorAll('button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+    .filter(element => element.offsetParent !== null);
+  if (!focusable.length) {
+    event.preventDefault();
+    modal.focus();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (!modal.contains(document.activeElement)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  } else if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}, true);
 
 function triggerDatePicker(btn) {
   const dateInput = btn.closest('.date-picker')?.querySelector('input[type="date"]');

@@ -108,9 +108,10 @@ public class ProjectController {
         Map<Long, int[]> taskCountMap = projectService.getTaskCountMap(projects);
         // 批量计算项目评分（1次SQL替代N×M次）
         Map<Long, Double> scoreMap = projectService.computeProjectScoresBatch(projects);
+        Map<Long, String> statusMap = projectService.computeProjectStatusMap(projects);
 
         List<ProjectSummaryDTO> result = projects.stream()
-                .map(p -> toSummary(p, taskCountMap, scoreMap))
+                .map(p -> toSummary(p, taskCountMap, scoreMap, statusMap))
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(result);
@@ -148,7 +149,9 @@ public class ProjectController {
             List<Project> projects = projectPage.getContent();
             Map<Long, int[]> taskCountMap = projectService.getTaskCountMap(projects);
             Map<Long, Double> scoreMap = projectService.computeProjectScoresBatch(projects);
-            List<ProjectSummaryDTO> items = projects.stream().map(p -> toSummary(p, taskCountMap, scoreMap)).toList();
+            Map<Long, String> statusMap = projectService.computeProjectStatusMap(projects);
+            List<ProjectSummaryDTO> items = projects.stream()
+                    .map(p -> toSummary(p, taskCountMap, scoreMap, statusMap)).toList();
             return ResponseEntity.ok(new PageResponse<>(items, projectPage.getNumber(), projectPage.getSize(),
                     projectPage.getTotalElements(), projectPage.getTotalPages()));
         } catch (IllegalArgumentException e) {
@@ -226,8 +229,11 @@ public class ProjectController {
         if (session == null) return ResponseEntity.status(401).build();
         List<SubTask> tasks = subTaskRepository.findMySubTasks(session.userId());
         Map<Long, List<Map<String, Object>>> scoringByTask = loadScoringDetails(tasks.stream().map(SubTask::getId).toList());
+        Map<Long, List<ActivityLog>> logsByProject = new HashMap<>();
         List<Map<String, Object>> result = tasks.stream().map(task -> {
             Project project = task.getProject();
+            List<ActivityLog> projectLogs = logsByProject.computeIfAbsent(project.getId(),
+                    id -> activityLogRepository.findTop200ByProjectIdOrderByTimeDesc(id));
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("id", task.getId());
             item.put("name", task.getName());
@@ -236,6 +242,9 @@ public class ProjectController {
             item.put("actualDate", task.getActualDate());
             item.put("designerId", task.getDesignerId());
             item.put("designerName", task.getDesignerName());
+            item.put("allocationStatus", task.getAllocationStatus());
+            item.put("marketPublishedAt", task.getMarketPublishedAt());
+            item.put("claimedAt", task.getClaimedAt());
             item.put("publisherId", task.getPublisherId());
             item.put("publisherName", task.getPublisherName());
             item.put("publisherRole", task.getPublisherRole());
@@ -253,9 +262,35 @@ public class ProjectController {
             item.put("projectStatus", project.getStatus());
             item.put("projectName", projectDisplayName(project));
             item.put("scoringRecords", scoringByTask.getOrDefault(task.getId(), List.of()));
-            item.put("rejectionRecords", rejectionRecords(project, task));
+            item.put("rejectionRecords", rejectionRecords(project, task, projectLogs));
             item.put("deliveryVersions", projectService.getDeliveryVersions(task.getId()));
             item.put("relation", session.userId().equals(task.getDesignerId()) ? "assignee" : "publisher");
+            return item;
+        }).toList();
+        return ResponseEntity.ok(result);
+    }
+
+    /** 设计师接单市场：仅返回仍开放、未指定负责人的设计师子任务。 */
+    @GetMapping("/task-market")
+    public ResponseEntity<?> getTaskMarket(HttpServletRequest request) {
+        AuthController.AuthSession session = getSession(request);
+        if (session == null) return ResponseEntity.status(401).build();
+        if (!List.of("designer", "planner", "admin").contains(session.role())) {
+            return ResponseEntity.status(403).body(Map.of("error", "当前角色无权查看接单市场"));
+        }
+        List<Map<String, Object>> result = subTaskRepository.findOpenDesignerMarketTasks().stream().map(task -> {
+            Project project = task.getProject();
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", task.getId()); item.put("name", task.getName()); item.put("status", task.getStatus());
+            item.put("plannedDate", task.getPlannedDate()); item.put("designerId", task.getDesignerId());
+            item.put("designerName", task.getDesignerName()); item.put("publisherId", task.getPublisherId());
+            item.put("publisherName", task.getPublisherName()); item.put("publisherRole", task.getPublisherRole());
+            item.put("assigneeRole", task.getAssigneeRole()); item.put("allocationStatus", task.getAllocationStatus());
+            item.put("marketPublishedAt", task.getMarketPublishedAt()); item.put("details", task.getDetails());
+            item.put("referenceImagesJson", task.getReferenceImagesJson()); item.put("attachmentsJson", task.getAttachmentsJson());
+            item.put("projectId", project.getId()); item.put("projectType", project.getType());
+            item.put("projectStatus", project.getStatus()); item.put("projectName", projectDisplayName(project));
+            item.put("relation", "market");
             return item;
         }).toList();
         return ResponseEntity.ok(result);
@@ -271,8 +306,11 @@ public class ProjectController {
         // 真正的部门范围仍由 departmentTaskUserIds 在服务端严格计算，不会扩大可见数据。
         if (userIds.isEmpty()) return ResponseEntity.ok(List.of());
         List<SubTask> tasks = subTaskRepository.findDepartmentSubTasks(userIds);
+        Map<Long, List<ActivityLog>> logsByProject = new HashMap<>();
         return ResponseEntity.ok(tasks.stream().map(task -> {
             Project project = task.getProject();
+            List<ActivityLog> projectLogs = logsByProject.computeIfAbsent(project.getId(),
+                    id -> activityLogRepository.findTop200ByProjectIdOrderByTimeDesc(id));
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("id", task.getId()); item.put("name", task.getName()); item.put("status", task.getStatus());
             item.put("plannedDate", task.getPlannedDate()); item.put("actualDate", task.getActualDate());
@@ -285,7 +323,7 @@ public class ProjectController {
             item.put("reviewComments", task.getReviewComments());
             item.put("projectId", project.getId()); item.put("projectType", project.getType());
             item.put("projectName", projectDisplayName(project)); item.put("readOnly", true);
-            item.put("rejectionRecords", rejectionRecords(project, task));
+            item.put("rejectionRecords", rejectionRecords(project, task, projectLogs));
             item.put("deliveryVersions", projectService.getDeliveryVersions(task.getId()));
             String uid = session.userId();
             item.put("relation", uid.equals(task.getPublisherId()) ? "publisher" : "department_member");
@@ -349,7 +387,7 @@ public class ProjectController {
         try {
             AuthController.AuthSession session = getSession(request);
             Project p = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
-            if (!canManageProjectChat(p, session)) return ResponseEntity.status(403).body(Map.of("error", "无权管理该项目群"));
+            if (!canCreateProjectChat(p, session)) return ResponseEntity.status(403).body(Map.of("error", "无权创建该项目群"));
             if (feishuChatService == null || !feishuChatService.enabled()) return ResponseEntity.badRequest().body(Map.of("error", "飞书应用配置未完成"));
             if (p.getFeishuChatId() != null && !p.getFeishuChatId().isBlank()) return ResponseEntity.ok(toDetail(p));
             String owner = "channel_custom".equals(p.getType()) ? (p.getSalesName() + "（销售）") : (p.getPlannerName() + "（产品企划）");
@@ -378,6 +416,12 @@ public class ProjectController {
     private boolean canManageProjectChat(Project p, AuthController.AuthSession s) {
         if (s == null) return false;
         return "admin".equals(s.role()) || ("channel_custom".equals(p.getType()) ? Objects.equals(p.getSalesId(), s.userId()) : Objects.equals(p.getPlannerId(), s.userId()));
+    }
+
+    /** 产品企划可为任意渠道定制或公司常规品项目补建群；原项目负责人权限保持不变。 */
+    private boolean canCreateProjectChat(Project p, AuthController.AuthSession s) {
+        if (s == null || p == null || !List.of("channel_custom", "regular").contains(p.getType())) return false;
+        return "planner".equals(s.role()) || canManageProjectChat(p, s);
     }
 
     /** 编辑已创建项目的基础资料。权限不复用通用管理权限，严格限制为项目归属创建人。 */
@@ -562,6 +606,23 @@ public class ProjectController {
             if (denied != null) return denied;
             Project p = projectService.taskAccept(projectId, taskId, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(p));
+        } catch (RuntimeException e) {
+            if (e.getMessage() != null && (e.getMessage().contains("已被接单") || e.getMessage().contains("已处理"))) {
+                return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** 企划在无人接单时将任务撤出接单市场。 */
+    @PostMapping("/{projectId}/tasks/{taskId}/withdraw-market")
+    public ResponseEntity<?> withdrawMarketTask(@PathVariable Long projectId, @PathVariable Long taskId,
+                                                 HttpServletRequest request) {
+        try {
+            ResponseEntity<?> denied = denyUnless(request, "subtask.edit");
+            if (denied != null) return denied;
+            return ResponseEntity.ok(toDetail(projectService.withdrawMarketTask(
+                    projectId, taskId, withSessionContext(new LinkedHashMap<>(), request))));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -854,12 +915,13 @@ public class ProjectController {
 
     // ==================== DTO Mappers ====================
 
-    private ProjectSummaryDTO toSummary(Project p, Map<Long, int[]> taskCountMap, Map<Long, Double> scoreMap) {
+    private ProjectSummaryDTO toSummary(Project p, Map<Long, int[]> taskCountMap, Map<Long, Double> scoreMap,
+                                        Map<Long, String> statusMap) {
         ProjectSummaryDTO dto = new ProjectSummaryDTO();
         dto.setId(p.getId());
         dto.setProjectCode(p.getProjectCode());
         dto.setType(p.getType());
-        String computedStatus = projectService.computeProjectStatus(p);
+        String computedStatus = statusMap != null ? statusMap.getOrDefault(p.getId(), p.getStatus()) : p.getStatus();
         dto.setStatus(computedStatus);
         Map<String, String> statusInfo = ProjectService.getProjectStatusInfo(computedStatus);
         dto.setStatusLabel(statusInfo.get("label"));
@@ -890,7 +952,10 @@ public class ProjectController {
     }
 
     private ProjectDetailDTO toDetail(Project p) {
-        return toDetail(p, null, true);
+        Project loaded = p.getId() == null ? p : projectService.getProjectById(p.getId()).orElse(p);
+        List<ActivityLog> logs = loaded.getId() == null ? List.of()
+                : activityLogRepository.findTop200ByProjectIdOrderByTimeDesc(loaded.getId());
+        return toDetail(loaded, null, logs);
     }
 
     private ProjectDetailDTO toDetailWithLogs(Project p, List<ActivityLog> logs) {
@@ -914,6 +979,9 @@ public class ProjectController {
     private ProjectDetailDTO toDetail(Project p, Map<Long, List<Map<String, Object>>> preloadedScoring,
                                       boolean includeLogs, List<ActivityLog> preloadedLogs) {
         ProjectDetailDTO dto = new ProjectDetailDTO();
+        List<ActivityLog> effectiveLogs = preloadedLogs != null ? preloadedLogs
+                : (p.getId() == null ? List.of()
+                : activityLogRepository.findTop200ByProjectIdOrderByTimeDesc(p.getId()));
         dto.setId(p.getId());
         dto.setProjectCode(p.getProjectCode());
         dto.setType(p.getType());
@@ -942,7 +1010,7 @@ public class ProjectController {
         dto.setProductArchiveJson(p.getProductArchiveJson());
 
         // 详情页需要日志；工作台聚合接口不加载日志，避免历史日志膨胀拖慢响应。
-        if (includeLogs) dto.setLogs((preloadedLogs != null ? preloadedLogs : p.getLogs()).stream().map(l -> {
+        if (includeLogs) dto.setLogs(effectiveLogs.stream().map(l -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("time", l.getTime().format(DTF));
             m.put("action", l.getAction());
@@ -984,7 +1052,7 @@ public class ProjectController {
         dto.setTasks(taskList.stream().map(t -> {
             TaskDetailDTO tDto = toTaskDetail(t);
             tDto.setScoringRecords(scoringMap.getOrDefault(t.getId(), List.of()));
-            tDto.setRejectionRecords(rejectionRecords(p, t));
+            tDto.setRejectionRecords(rejectionRecords(p, t, effectiveLogs));
             tDto.setDeliveryVersions(projectService.getDeliveryVersions(t.getId()));
             return tDto;
         }).collect(Collectors.toList()));
@@ -1005,9 +1073,10 @@ public class ProjectController {
         return dto;
     }
 
-    private List<Map<String, Object>> rejectionRecords(Project project, SubTask task) {
+    private List<Map<String, Object>> rejectionRecords(Project project, SubTask task,
+                                                        List<ActivityLog> preloadedLogs) {
         String legacyPrefix = "子任务驳回：" + task.getName() + "（意见：";
-        List<ActivityLog> logs = project.getLogs().stream()
+        List<ActivityLog> logs = (preloadedLogs != null ? preloadedLogs : project.getLogs()).stream()
                 .filter(log -> log.getAction() != null && log.getAction().startsWith("子任务驳回："))
                 .filter(log -> ("sub_task".equals(log.getEntityType()) && Objects.equals(log.getEntityId(), task.getId()))
                         || (!"sub_task".equals(log.getEntityType()) && log.getAction().startsWith(legacyPrefix)))
@@ -1098,6 +1167,25 @@ public class ProjectController {
         dto.setActualDate(t.getActualDate());
         dto.setDesignerId(t.getDesignerId());
         dto.setDesignerName(t.getDesignerName());
+        dto.setPointRuleCode(t.getPointRuleCode());
+        dto.setDifficultyCode(t.getDifficultyCode());
+        dto.setDifficultyMultiplierSnapshot(t.getDifficultyMultiplierSnapshot());
+        dto.setBasePointSnapshot(t.getBasePointSnapshot());
+        dto.setQualityBonusThresholdSnapshot(t.getQualityBonusThresholdSnapshot());
+        dto.setQualityBonusRatioSnapshot(t.getQualityBonusRatioSnapshot());
+        dto.setQualityTopThresholdSnapshot(t.getQualityTopThresholdSnapshot());
+        dto.setQualityTopRatioSnapshot(t.getQualityTopRatioSnapshot());
+        dto.setMaxTotalMultiplierSnapshot(t.getMaxTotalMultiplierSnapshot());
+        dto.setCollaboratorAllocationsJson(t.getCollaboratorAllocationsJson());
+        dto.setMilestoneMonth(t.getMilestoneMonth());
+        dto.setAssignmentReason(t.getAssignmentReason());
+        dto.setSelfInitiated(t.isSelfInitiated());
+        dto.setSelfInitiatedApproved(t.isSelfInitiatedApproved());
+        dto.setCountInPerformanceSnapshot(t.getCountInPerformanceSnapshot());
+        dto.setRequiredSkillTagsJson(t.getRequiredSkillTagsJson());
+        dto.setAllocationStatus(t.getAllocationStatus());
+        dto.setMarketPublishedAt(t.getMarketPublishedAt() == null ? null : t.getMarketPublishedAt().format(DTF));
+        dto.setClaimedAt(t.getClaimedAt() == null ? null : t.getClaimedAt().format(DTF));
         dto.setAssigneeRole(t.getAssigneeRole());
         dto.setDetails(t.getDetails());
         dto.setDeliverables(t.getDeliverables());

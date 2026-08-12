@@ -9,14 +9,18 @@ const NAV_DEFINITIONS = [
   { view: 'regular', icon: '🏭', label: '公司常规品', permission: 'page.projects.regular.view' },
   { view: 'design-needs', icon: '🎨', label: '设计/送审需求', permission: 'page.design_requirements.view' },
   { view: 'tasks', icon: '📌', label: '我的子任务', permission: 'page.subtasks.mine.view' },
+  { view: 'task-market', icon: '⚡', label: '接单市场', permission: 'page.subtasks.mine.view' },
   { view: 'other-tasks', icon: '🧭', label: '其他子任务', permission: 'page.subtasks.department.view' },
   { view: 'scoring', icon: '⭐', label: '评分', permission: 'page.scoring.view' },
+  { view: 'points', icon: '🏅', label: '积分', permission: 'page.points.view' },
   { view: 'admin', icon: '⚙️', label: '系统管理', permission: 'page.admin.view' },
 ];
 
 function canNavigateTo(view) {
   const nav = NAV_DEFINITIONS.find(item => item.view === view);
   if (!nav || !hasPermission(nav.permission)) return false;
+  if (view === 'points' && !['planner', 'designer', 'admin'].includes(EMIE.state.currentRole)) return false;
+  if (view === 'task-market' && !['designer', 'planner', 'admin'].includes(EMIE.state.currentRole)) return false;
   return view !== 'other-tasks' || canViewOtherTasksNav();
 }
 

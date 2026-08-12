@@ -8,6 +8,7 @@ const renderAdminPriceRanges = (...args) => EMIE.actions.renderAdminPriceRanges(
 const renderAdminOrg = (...args) => EMIE.actions.renderAdminOrg(...args);
 const renderAdminRoles = (...args) => EMIE.actions.renderAdminRoles(...args);
 const renderAdminScoring = (...args) => EMIE.actions.renderAdminScoring(...args);
+const renderAdminPoints = (...args) => EMIE.actions.renderAdminPoints(...args);
 const renderAdminFileStorage = (...args) => EMIE.actions.renderAdminFileStorage(...args);
 const renderAdminUsers = (...args) => EMIE.actions.renderAdminUsers(...args);
 const showAdminToast = (...args) => EMIE.actions.showAdminToast(...args);
@@ -24,34 +25,42 @@ async function renderAdmin(main, role, uid) {
   main.innerHTML = `
     <div class="admin-page">
       <div class="admin-header">
-        <h2>⚙️ 系统管理</h2>
-        <p>管理系统配置、外观、用户权限等</p>
+        <div class="admin-header-icon">⚙</div>
+        <div><span class="admin-header-eyebrow">SYSTEM CONTROL CENTER</span><h2>系统管理</h2>
+        <p>集中管理系统配置、组织权限、业务规则与运行状态</p></div>
+        <span class="admin-header-status"><i></i> 管理服务正常</span>
       </div>
       <div class="admin-layout"><aside class="admin-tabs" id="adminTabs">
         <div class="admin-tab-group"><div class="admin-tab-group-title">总览</div><button class="admin-tab ${EMIE.adminState.currentTab === 'dashboard' ? 'active' : ''}" data-emie-onclick="switchAdminTab('dashboard')">📊 概览</button></div>
         <div class="admin-tab-group"><div class="admin-tab-group-title">系统与外观</div><button class="admin-tab ${EMIE.adminState.currentTab === 'config' ? 'active' : ''}" data-emie-onclick="switchAdminTab('config')">🔧 系统配置</button><button class="admin-tab ${EMIE.adminState.currentTab === 'appearance' ? 'active' : ''}" data-emie-onclick="switchAdminTab('appearance')">🎨 外观</button><button class="admin-tab ${EMIE.adminState.currentTab === 'filestorage' ? 'active' : ''}" data-emie-onclick="switchAdminTab('filestorage')">📦 文件与存储</button></div>
         <div class="admin-tab-group"><div class="admin-tab-group-title">用户与权限</div><button class="admin-tab ${EMIE.adminState.currentTab === 'users' ? 'active' : ''}" data-emie-onclick="switchAdminTab('users')">👥 用户管理</button><button class="admin-tab ${EMIE.adminState.currentTab === 'roles' ? 'active' : ''}" data-emie-onclick="switchAdminTab('roles')">🔐 角色与权限</button><button class="admin-tab ${EMIE.adminState.currentTab === 'org' ? 'active' : ''}" data-emie-onclick="switchAdminTab('org')">🏢 组织架构</button></div>
-        <div class="admin-tab-group"><div class="admin-tab-group-title">业务配置</div><button class="admin-tab ${EMIE.adminState.currentTab === 'categories' ? 'active' : ''}" data-emie-onclick="switchAdminTab('categories')">📂 产品类目</button><button class="admin-tab ${EMIE.adminState.currentTab === 'ipOptions' ? 'active' : ''}" data-emie-onclick="switchAdminTab('ipOptions')">🏷️ IP配置</button><button class="admin-tab ${EMIE.adminState.currentTab === 'compliance' ? 'active' : ''}" data-emie-onclick="switchAdminTab('compliance')">⚖️ 合规处罚</button><button class="admin-tab ${EMIE.adminState.currentTab === 'priceRanges' ? 'active' : ''}" data-emie-onclick="switchAdminTab('priceRanges')">💰 参考零售价</button><button class="admin-tab ${EMIE.adminState.currentTab === 'scoring' ? 'active' : ''}" data-emie-onclick="switchAdminTab('scoring')">⭐ 评分管理</button></div>
+        <div class="admin-tab-group"><div class="admin-tab-group-title">业务配置</div><button class="admin-tab ${EMIE.adminState.currentTab === 'categories' ? 'active' : ''}" data-emie-onclick="switchAdminTab('categories')">📂 产品类目</button><button class="admin-tab ${EMIE.adminState.currentTab === 'ipOptions' ? 'active' : ''}" data-emie-onclick="switchAdminTab('ipOptions')">🏷️ IP配置</button><button class="admin-tab ${EMIE.adminState.currentTab === 'compliance' ? 'active' : ''}" data-emie-onclick="switchAdminTab('compliance')">⚖️ 合规处罚</button><button class="admin-tab ${EMIE.adminState.currentTab === 'priceRanges' ? 'active' : ''}" data-emie-onclick="switchAdminTab('priceRanges')">💰 参考零售价</button><button class="admin-tab ${EMIE.adminState.currentTab === 'scoring' ? 'active' : ''}" data-emie-onclick="switchAdminTab('scoring')">⭐ 评分管理</button><button class="admin-tab ${EMIE.adminState.currentTab === 'points' ? 'active' : ''}" data-emie-onclick="switchAdminTab('points')">🏅 积分规则</button></div>
         <div class="admin-tab-group"><div class="admin-tab-group-title">通知中心</div><button class="admin-tab ${EMIE.adminState.currentTab === 'notificationCenter' ? 'active' : ''}" data-emie-onclick="switchAdminTab('notificationCenter')">🔔 通知设置与发送记录</button><button class="admin-tab ${EMIE.adminState.currentTab === 'notificationTemplates' ? 'active' : ''}" data-emie-onclick="switchAdminTab('notificationTemplates')">💬 通知文案</button></div>
         <div class="admin-tab-group"><div class="admin-tab-group-title">运维与审计</div><button class="admin-tab ${EMIE.adminState.currentTab === 'logs' ? 'active' : ''}" data-emie-onclick="switchAdminTab('logs')">📜 日志</button><button class="admin-tab ${EMIE.adminState.currentTab === 'shares' ? 'active' : ''}" data-emie-onclick="switchAdminTab('shares')">🔗 分享管理</button><button class="admin-tab ${EMIE.adminState.currentTab === 'workload' ? 'active' : ''}" data-emie-onclick="switchAdminTab('workload')">📊 工作量</button></div>
-      </aside><main id="adminContent"></main></div>
+      </aside><section class="admin-content-shell"><div id="adminSectionHeader"></div><main id="adminContent"></main></section></div>
     </div>`;
   await renderAdminContent();
 }
 
 async function switchAdminTab(tab) {
+  const adminNav = document.getElementById('adminTabs');
+  const navScrollTop = adminNav?.scrollTop || 0;
   EMIE.adminState.currentTab = tab;
   localStorage.setItem('design_pm_lastAdminTab', tab);
   const tabs = document.querySelectorAll('.admin-tab');
   tabs.forEach(t => t.classList.remove('active'));
-  const activeTab = document.querySelector(`.admin-tab[onclick*="${tab}"]`);
+  const activeTab = document.querySelector(`.admin-tab[data-emie-onclick*="'${tab}'"]`);
   if (activeTab) activeTab.classList.add('active');
   await renderAdminContent();
+  if (adminNav) adminNav.scrollTop = navScrollTop;
+  const contentShell = document.querySelector('.admin-content-shell');
+  if (contentShell) contentShell.scrollTop = 0;
 }
 
 async function renderAdminContent() {
   const container = document.getElementById('adminContent');
   if (!container) return;
+  renderAdminSectionHeader();
   try {
     if (EMIE.adminState.currentTab === 'dashboard') {
       await renderAdminDashboard(container);
@@ -79,6 +88,8 @@ async function renderAdminContent() {
       await renderAdminOrg(container);
     } else if (EMIE.adminState.currentTab === 'scoring') {
       await renderAdminScoring(container);
+    } else if (EMIE.adminState.currentTab === 'points') {
+      await renderAdminPoints(container);
     } else if (EMIE.adminState.currentTab === 'logs') {
       await renderAdminLogs(container);
     } else if (EMIE.adminState.currentTab === 'shares') {
@@ -91,6 +102,32 @@ async function renderAdminContent() {
   } catch (e) {
     container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${e.message}</p></div>`;
   }
+}
+
+function renderAdminSectionHeader() {
+  const header = document.getElementById('adminSectionHeader');
+  if (!header) return;
+  const meta = {
+    dashboard: ['管理概览', '快速掌握系统配置、成员规模与服务运行状态', '⌂'],
+    config: ['系统配置', '维护系统基础参数与外部服务连接配置', '⚙'],
+    appearance: ['外观设置', '统一系统名称、品牌标识与界面展示', '◐'],
+    filestorage: ['文件与存储', '查看文件存储使用情况并维护归档策略', '▣'],
+    users: ['用户管理', '维护成员账号、角色、状态与登录信息', '♙'],
+    roles: ['角色与权限', '配置角色能力边界与数据访问范围', '◇'],
+    org: ['组织架构', '维护部门、岗位及成员组织关系', '▦'],
+    categories: ['产品类目', '维护项目使用的产品分类基础数据', '◫'],
+    ipOptions: ['IP 配置', '维护产品项目可选择的 IP 基础选项', '◆'],
+    compliance: ['合规处罚', '维护合规检查项与处罚规则', '⚖'],
+    priceRanges: ['参考零售价', '维护产品项目使用的价格区间', '¥'],
+    scoring: ['评分管理', '配置设计需求评分标准与评审流程', '★'],
+    points: ['积分规则', '管理积分、绩效、异议、归档和接单治理', '✦'],
+    notificationCenter: ['通知设置与发送记录', '配置通知渠道并查看后台投递情况', '●'],
+    notificationTemplates: ['通知文案', '维护业务节点使用的通知模板', '✉'],
+    logs: ['操作日志', '查询关键业务操作与账号活动记录', '≡'],
+    shares: ['分享管理', '查看并维护系统生成的外部分享链接', '↗'],
+    workload: ['工作量分析', '按成员和时间范围查看任务工作量', '▥'],
+  }[EMIE.adminState.currentTab] || ['系统管理', '维护系统配置与管理数据', '⚙'];
+  header.innerHTML = `<div class="admin-section-heading"><span>${meta[2]}</span><div><h3>${meta[0]}</h3><p>${meta[1]}</p></div><small>系统管理 / ${meta[0]}</small></div>`;
 }
 
 async function renderAdminNotificationCenter(container) {
@@ -124,46 +161,46 @@ async function renderAdminDashboard(container) {
   ];
 
   container.innerHTML = `
+    <div class="admin-dashboard-intro"><div><span>ADMIN OVERVIEW</span><h3>管理概览</h3><p>快速掌握系统配置、成员规模和关键服务状态</p></div><div class="admin-dashboard-date">${new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}</div></div>
     <div class="admin-stats-grid">
       ${stats.map(s => `
         <div class="admin-stat-card">
           <div class="admin-stat-icon">${s.icon}</div>
-          <div class="admin-stat-value">${s.value}</div>
-          <div class="admin-stat-label">${s.label}</div>
+          <div class="admin-stat-copy"><div class="admin-stat-label">${s.label}</div><div class="admin-stat-value">${s.value}</div></div>
         </div>
       `).join('')}
     </div>
-    <div style="background:#fff;border-radius:12px;box-shadow:var(--shadow);padding:20px;margin-top:16px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-        <div style="display:flex;align-items:center;gap:10px;"><h3 style="font-size:15px;font-weight:600;margin:0;">📊 飞书同步状态</h3><button class="btn btn-outline btn-sm" data-emie-onclick="triggerFeishuSync(this)">立即同步</button></div>
-        <span style="font-size:12px;color:${sync.fail > 0 ? 'var(--danger)' : 'var(--success)'};">${sync.fail > 0 ? '存在失败任务' : '运行正常'}</span>
+    <div class="admin-overview-grid">
+    <section class="admin-overview-card admin-sync-card">
+      <div class="admin-overview-card-head">
+        <div><span class="admin-card-icon blue">↻</span><div><h3>飞书同步状态</h3><p>业务数据同步队列运行情况</p></div></div>
+        <span class="admin-service-state ${sync.fail > 0 ? 'is-warning' : ''}"><i></i>${sync.fail > 0 ? '存在失败任务' : '运行正常'}</span>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;">
-        ${[['待处理', sync.pending], ['处理中', sync.processing], ['失败', sync.fail], ['已完成', sync.done]].map(([label, value]) => `<div style="padding:12px;background:var(--gray-50);border-radius:8px;"><div style="font-size:22px;font-weight:700;">${value ?? 0}</div><div style="font-size:12px;color:var(--gray-500);">${label}</div></div>`).join('')}
+      <div class="admin-sync-metrics">
+        ${[['待处理', sync.pending], ['处理中', sync.processing], ['失败', sync.fail], ['已完成', sync.done]].map(([label, value], index) => `<div class="tone-${index}"><span>${label}</span><strong>${value ?? 0}</strong></div>`).join('')}
       </div>
-      <div style="margin-top:12px;font-size:12px;color:var(--gray-500);">最近成功：${sync.lastSuccessAt || '暂无'}　最近失败：${sync.lastFailureAt || '暂无'}</div>
+      <div class="admin-sync-footer"><span>最近成功：${sync.lastSuccessAt || '暂无'}</span><button class="btn btn-outline btn-sm" data-emie-onclick="triggerFeishuSync(this)">立即同步</button></div>
       ${sync.lastFailure ? `<div style="margin-top:8px;padding:10px;background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;font-size:12px;color:#9f1239;">最近失败：${escHtml(sync.lastFailure.entityType || '')} #${sync.lastFailure.entityId || '-'} · ${escHtml(sync.lastFailure.error || '未知错误')}</div>` : ''}
       <div id="feishuSyncResult" style="margin-top:8px;font-size:12px;color:var(--gray-500);"></div>
-    </div>
-    <div style="background:#fff;border-radius:12px;box-shadow:var(--shadow);padding:20px;margin-top:16px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
-        <div><h3 style="font-size:15px;font-weight:600;">🧪 数据完整性检查</h3><div style="font-size:12px;color:var(--gray-500);margin-top:5px;">只读扫描文件引用，不会修改或删除数据。</div></div>
+    </section>
+    <section class="admin-overview-card admin-integrity-card">
+      <div class="admin-overview-card-head">
+        <div><span class="admin-card-icon green">✓</span><div><h3>数据完整性检查</h3><p>只读扫描文件引用，不修改任何数据</p></div></div>
         <button class="btn btn-outline btn-sm" data-emie-onclick="runDataIntegrityScan(this)">开始扫描</button>
       </div>
-      <div id="dataIntegrityResult" style="margin-top:12px;"></div>
-    </div>
-    <div style="background:#fff;border-radius:12px;box-shadow:var(--shadow);padding:20px;">
-      <h3 style="font-size:15px;font-weight:600;margin-bottom:16px;">📋 配置分组概览</h3>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;">
+      <div class="admin-integrity-placeholder"><strong>系统文件引用检查</strong><span>建议在数据迁移或批量导入后执行</span></div>
+      <div id="dataIntegrityResult"></div>
+    </section></div>
+    <section class="admin-overview-card admin-config-overview">
+      <div class="admin-overview-card-head"><div><span class="admin-card-icon purple">⌘</span><div><h3>配置分组概览</h3><p>按模块查看当前生效的系统配置数量</p></div></div></div>
+      <div class="admin-config-group-grid">
         ${Object.entries(configs).map(([group, items]) => `
-          <div style="padding:14px;background:var(--gray-50);border-radius:8px;border:1px solid var(--gray-200);">
-            <div style="font-size:13px;font-weight:600;color:var(--gray-700);">${groupLabel(group)}</div>
-            <div style="font-size:24px;font-weight:700;color:var(--primary);margin-top:4px;">${items.length}</div>
-            <div style="font-size:11px;color:var(--gray-400);">个配置项</div>
+          <div class="admin-config-group-card">
+            <div>${groupLabel(group)}</div><strong>${items.length}</strong><span>个配置项</span>
           </div>
         `).join('')}
       </div>
-    </div>`;
+    </section>`;
 }
 
 async function triggerFeishuSync(button) {

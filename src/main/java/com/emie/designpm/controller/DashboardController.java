@@ -109,9 +109,10 @@ public class DashboardController {
 
     private List<Project> dashboardProjects(String role, String userId, List<Long> ids) {
         if (ids.isEmpty()) return List.of();
-        return projectRepository.findAllById(ids).stream()
+        List<Long> recentIds = projectRepository.findRecentIdsByIdIn(ids, PageRequest.of(0, 15));
+        return projectRepository.findAllWithTasksByIdIn(recentIds).stream()
                 .sorted(Comparator.comparing(Project::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
-                .limit(15).toList();
+                .toList();
     }
 
     @GetMapping("/role-status")
@@ -182,14 +183,29 @@ public class DashboardController {
 
     private Map<String, Object> computeStatsByIds(List<Long> projectIds, String role, String userId) {
         Map<String, Object> stats = new LinkedHashMap<>();
-        List<Project> visibleProjects = projectIds.isEmpty() ? List.of() : projectRepository.findAllById(projectIds);
+        List<ProjectRepository.DashboardProjectProjection> visibleProjects = projectIds.isEmpty() ? List.of()
+                : projectRepository.findDashboardProjectsByIdIn(projectIds);
+        List<SubTaskRepository.DashboardTaskProjection> taskFacts = projectIds.isEmpty() ? List.of()
+                : subTaskRepository.findDashboardTasksByProjectIds(projectIds);
+        Map<Long, List<SubTaskRepository.DashboardTaskProjection>> tasksByProject = taskFacts.stream()
+                .collect(Collectors.groupingBy(SubTaskRepository.DashboardTaskProjection::getProjectId));
+        List<Long> approvedTaskIds = taskFacts.stream()
+                .filter(t -> List.of("completed", "approved").contains(t.getStatus()))
+                .map(SubTaskRepository.DashboardTaskProjection::getId).toList();
+        Map<Long, Set<String>> completedScoringRoles = new HashMap<>();
+        if (!approvedTaskIds.isEmpty()) {
+            scoringRepository.findDashboardScoringByTaskIds(approvedTaskIds).stream()
+                    .filter(this::isCompletedScore)
+                    .forEach(score -> completedScoringRoles
+                            .computeIfAbsent(score.getTaskId(), ignored -> new HashSet<>()).add(score.getRole()));
+        }
         stats.put("totalProjects", visibleProjects.size());
-        stats.put("channelProjects", visibleProjects.stream().filter(p -> "channel_custom".equals(p.getType())).count());
+        stats.put("channelProjects", visibleProjects.stream()
+                .filter(p -> "channel_custom".equals(p.getType())).count());
         stats.put("regularProjects", visibleProjects.stream().filter(p -> "regular".equals(p.getType())).count());
-        stats.put("inProgress", visibleProjects.stream().filter(p -> {
-            String s = projectService.computeProjectStatus(p);
-            return "in_progress".equals(s) || "planner_accepted".equals(s) || "completed_pending_score".equals(s);
-        }).count());
+        stats.put("inProgress", visibleProjects.stream()
+                .filter(p -> isDashboardInProgress(p, tasksByProject.getOrDefault(p.getId(), List.of()),
+                        completedScoringRoles)).count());
         long allTasks = 0, approvedTasks = 0, pendingTasks = 0, pendingScore = 0;
         long channelTasks = 0;
         if (!projectIds.isEmpty()) {
@@ -210,6 +226,35 @@ public class DashboardController {
         stats.put("allTasks", allTasks); stats.put("channelTasks", channelTasks); stats.put("approvedTasks", approvedTasks);
         stats.put("pendingTasks", pendingTasks); stats.put("pendingScore", pendingScore);
         return stats;
+    }
+
+    private boolean isDashboardInProgress(ProjectRepository.DashboardProjectProjection project,
+                                          List<SubTaskRepository.DashboardTaskProjection> tasks,
+                                          Map<Long, Set<String>> completedScoringRoles) {
+        String status = project.getStatus();
+        if ("completed".equals(status)) return false;
+        if (List.of("draft", "pending_planner", "paused", "pending_terminate", "terminated").contains(status)) {
+            return false;
+        }
+        if ("planner_accepted".equals(status)) return true;
+        if (tasks.isEmpty()) return "in_progress".equals(status) || "completed_pending_score".equals(status);
+        List<SubTaskRepository.DashboardTaskProjection> bulkTasks = tasks.stream()
+                .filter(task -> "bulk".equals(task.getWorkflowStage())).toList();
+        boolean bulkStageDone = !bulkTasks.isEmpty()
+                && bulkTasks.stream().allMatch(task -> "completed".equals(task.getStatus()));
+        boolean allApproved = tasks.stream()
+                .allMatch(task -> List.of("completed", "approved").contains(task.getStatus()));
+        if (!allApproved || !bulkStageDone) return true;
+        Set<String> requiredRoles = "channel_custom".equals(project.getType())
+                ? Set.of("planner", "sales") : Set.of("planner", "admin");
+        return tasks.stream().anyMatch(task -> !completedScoringRoles
+                .getOrDefault(task.getId(), Set.of()).containsAll(requiredRoles));
+    }
+
+    private boolean isCompletedScore(ScoringRepository.DashboardScoringProjection score) {
+        if (score.getReviewStatus() != null) return "approved".equals(score.getReviewStatus());
+        return score.getScore() != null
+                || (score.getAesthetics() != null && score.getInnovation() != null);
     }
 
     private ProjectSummaryDTO toSummary(Project p, Map<Long, int[]> taskCountMap, Map<Long, Double> scoreMap) {

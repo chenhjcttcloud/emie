@@ -76,6 +76,60 @@ public class FeishuBaseService {
         return m;
     }
 
+    /** Read the configured sales table for automated performance aggregation. */
+    public List<Map<String, String>> readSalesRecords() throws Exception {
+        String appToken = getCfg("feishu.sales.appToken");
+        String tableId = getCfg("feishu.sales.tableId");
+        if (appToken.isBlank() || tableId.isBlank()) return List.of();
+        String token = getToken();
+        List<Map<String, String>> result = new ArrayList<>();
+        for (RecordSnapshot record : listRecordSnapshots(token, appToken, tableId)) {
+            Map<String, String> row = new LinkedHashMap<>();
+            row.put("recordId", record.recordId());
+            row.put("orderId", fieldText(record.fields(), getCfgOrDefault("feishu.sales.orderField", "订单号")));
+            row.put("date", fieldText(record.fields(), getCfgOrDefault("feishu.sales.dateField", "订单日期")));
+            row.put("amount", fieldText(record.fields(), getCfgOrDefault("feishu.sales.amountField", "销售额")));
+            row.put("refund", fieldText(record.fields(), getCfgOrDefault("feishu.sales.refundField", "退款金额")));
+            row.put("status", fieldText(record.fields(), getCfgOrDefault("feishu.sales.statusField", "订单状态")));
+            result.add(row);
+        }
+        return result;
+    }
+
+    /** Update a configured sales row. Disabled unless explicitly enabled by an administrator. */
+    public Map<String, Object> updateSalesRecord(String orderId, Map<String, Object> changes) throws Exception {
+        if (!"true".equalsIgnoreCase(getCfg("feishu.sales.writeEnabled"))) {
+            throw new IllegalStateException("飞书销售表写入未启用");
+        }
+        if (orderId == null || orderId.isBlank() || changes == null || changes.isEmpty()) {
+            throw new IllegalArgumentException("订单号和至少一个修改字段不能为空");
+        }
+        String appToken = getCfg("feishu.sales.appToken"), tableId = getCfg("feishu.sales.tableId");
+        String token = getToken();
+        String orderField = getCfgOrDefault("feishu.sales.orderField", "订单号");
+        RecordSnapshot found = listRecordSnapshots(token, appToken, tableId).stream()
+                .filter(r -> orderId.equals(fieldText(r.fields(), orderField))).findFirst().orElse(null);
+        if (found == null) throw new IllegalArgumentException("未找到订单: " + orderId);
+        Set<String> allowed = Set.of(getCfgOrDefault("feishu.sales.dateField", "订单日期"),
+                getCfgOrDefault("feishu.sales.amountField", "销售额"),
+                getCfgOrDefault("feishu.sales.refundField", "退款金额"),
+                getCfgOrDefault("feishu.sales.statusField", "订单状态"));
+        ObjectNode fields = json.createObjectNode();
+        for (Map.Entry<String, Object> entry : changes.entrySet()) {
+            if (!allowed.contains(entry.getKey())) throw new IllegalArgumentException("不允许修改字段: " + entry.getKey());
+            Object value = entry.getValue();
+            if (value instanceof Number n) fields.put(entry.getKey(), n.doubleValue());
+            else fields.put(entry.getKey(), Objects.toString(value, ""));
+        }
+        updateRecord(token, appToken, tableId, found.recordId(), fields.toString());
+        return Map.of("updated", true, "orderId", orderId, "fields", changes.keySet());
+    }
+
+    private String getCfgOrDefault(String key, String fallback) {
+        String value = getCfg(key);
+        return value.isBlank() ? fallback : value;
+    }
+
     /**
      * 只读确认已配置的备份表可由当前 appToken 与企业自建应用访问。
      * 备份表为可选项；未填写时不会阻断主表同步。

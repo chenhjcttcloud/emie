@@ -24,6 +24,7 @@ const shareProject = (...args) => EMIE.actions.shareProject(...args);
 const addSubTask = (...args) => EMIE.actions.addSubTask(...args);
 const editTask = (...args) => EMIE.actions.editTask(...args);
 const deleteTask = (...args) => EMIE.actions.deleteTask(...args);
+const withdrawMarketTask = (...args) => EMIE.actions.withdrawMarketTask(...args);
 const taskAccept = (...args) => EMIE.actions.taskAccept(...args);
 const taskDeliver = (...args) => EMIE.actions.taskDeliver(...args);
 const taskRedeliver = (...args) => EMIE.actions.taskRedeliver(...args);
@@ -42,6 +43,27 @@ function formatProjectIp(ipName, ipSubOptions) {
   } catch (e) {
     return ipName;
   }
+}
+
+function pointDifficultyLabel(code) {
+  return { STANDARD: '标准', COMPLEX: '复杂', MAJOR: '重大' }[String(code || 'STANDARD').toUpperCase()] || String(code || '标准');
+}
+
+function taskPointSummary(task) {
+  if (!task?.pointRuleCode) return '';
+  const base = Number(task.basePointSnapshot || 0);
+  const multiplier = Number(task.difficultyMultiplierSnapshot || 1);
+  const estimated = Math.round(base * multiplier * 100) / 100;
+  return `${task.pointRuleCode} · ${pointDifficultyLabel(task.difficultyCode)} · ${estimated} 分`;
+}
+
+function taskCollaborationSummary(task) {
+  try {
+    const rows = JSON.parse(task?.collaboratorAllocationsJson || '[]');
+    if (!Array.isArray(rows) || !rows.length) return '主负责人 100%';
+    const used = rows.reduce((sum, item) => sum + Number(item.ratio || 0), 0);
+    return [`主负责人 ${100 - used}%`, ...rows.map(item => `${item.name || item.userId} ${Number(item.ratio || 0)}%`)].join(' · ');
+  } catch (_) { return '比例快照异常'; }
 }
 
 function renderProjectRelatedRoles(detail) {
@@ -238,6 +260,7 @@ function renderSubTaskCard(detail, task, idx) {
       <div class="subtask-meta-item">👤 负责人：<strong>${escHtml(task.designerName || '待分配')}</strong>${task.assigneeRole ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;${task.assigneeRole === 'supplychain' ? 'background:#F0FDFA;color:#0D9488;' : task.assigneeRole === 'planner' ? 'background:#EFF6FF;color:#1D4ED8;' : task.assigneeRole === 'promotion' ? 'background:#F5F3FF;color:#7C3AED;' : 'background:#FEF2F2;color:#DC2626;'}">${task.assigneeRole === 'supplychain' ? '供应链' : task.assigneeRole === 'planner' ? '企划' : task.assigneeRole === 'promotion' ? '产品推广' : task.assigneeRole === 'sales' ? '销售' : '设计师'}</span>` : ''}</div>
       <div class="subtask-meta-item">📅 ${task.status === 'rejected' && latestRejection?.requiredCompletionDate ? '驳回后要求完成' : '计划完成'}：<strong>${formatDate(visibleDeadline)}</strong></div>
       ${task.actualDate ? `<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(task.actualDate)}</strong></div>` : ''}
+      ${task.pointRuleCode ? `<div class="subtask-meta-item">🏅 积分：<strong>${escHtml(taskPointSummary(task))}</strong></div>` : ''}
     </div>
     ${task.details ? `<div style="font-size:13px;color:var(--gray-600);margin-top:6px;white-space:pre-wrap;">📝 ${escHtml(task.details)}</div>` : ''}
     ${task.referenceImagesJson ? renderSubTaskImages(task.referenceImagesJson) : ''}
@@ -276,6 +299,7 @@ function renderSubTaskCard(detail, task, idx) {
       ${myTask && task.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-onclick="taskConfirmRevision(${detail.id},${task.id})">🛠️ 确认修改</button>` : ''}
       ${myTask && ['delivered', 'planner_approved', 'sales_approved', 'admin_approved'].includes(task.status) ? `<button class="btn btn-outline btn-sm" data-emie-onclick="taskCorrectDelivery(${detail.id},${task.id})">📝 修正交付</button>` : ''}
       ${isPlanner && detail.status !== 'paused' && (task.status === 'pending' || task.status === 'accepted') ? `
+        ${task.allocationStatus === 'market_open' ? `<button class="btn btn-warning btn-sm" data-emie-onclick="withdrawMarketTask(${detail.id},${task.id})">撤回市场</button>` : ''}
         <button class="btn btn-outline btn-sm" data-emie-onclick="editTask(${detail.id},${task.id})">✏️ 编辑</button>
         <button class="btn btn-outline btn-sm" data-emie-onclick="deleteTask(${detail.id},${task.id})" style="color:var(--danger);border-color:var(--danger);">🗑️ 删除</button>
       ` : ''}
@@ -316,6 +340,7 @@ function openProjectSubTaskDetail(event, taskId) {
           <div class="detail-item"><div class="detail-label">计划完成</div><div class="detail-value">${formatDate(task.plannedDate)}</div></div>
           <div class="detail-item"><div class="detail-label">实际完成</div><div class="detail-value">${task.actualDate ? formatDate(task.actualDate) : '-'}</div></div>
           <div class="detail-item"><div class="detail-label">修改要求次数</div><div class="detail-value">${records.length} 次</div></div>
+          ${task.pointRuleCode ? `<div class="detail-item"><div class="detail-label">积分规则</div><div class="detail-value">${escHtml(task.pointRuleCode)}</div></div><div class="detail-item"><div class="detail-label">难度与积分快照</div><div class="detail-value">${escHtml(pointDifficultyLabel(task.difficultyCode))} · ${Number(task.basePointSnapshot || 0)} × ${Number(task.difficultyMultiplierSnapshot || 1)}</div></div><div class="detail-item"><div class="detail-label">合作分配快照</div><div class="detail-value">${escHtml(taskCollaborationSummary(task))}</div></div><div class="detail-item"><div class="detail-label">积分归属月份</div><div class="detail-value">${escHtml(task.milestoneMonth || '按实际入账月份')}</div></div><div class="detail-item"><div class="detail-label">指派/立项说明</div><div class="detail-value">${escHtml(task.assignmentReason || '-')}</div></div>` : ''}
         </div>
         <div class="detail-item" style="margin-top:12px;">
           <div class="detail-label">任务要求</div>
@@ -411,7 +436,23 @@ function openTaskRejectionRecord(taskId, attemptNo) {
 
 function renderProjectActions(detail) {
   let actions = '';
-  const canManageProject = EMIE.state.currentRole === 'planner' || EMIE.state.currentRole === 'sales' || EMIE.state.currentRole === 'admin';
+  // 与 ProjectAccessPolicy.canManage 保持一致：角色本身不代表拥有当前项目的操作权。
+  // 产品企划只能管理自己负责的常规品项目，销售只能管理自己负责的渠道定制项目；管理员可管理全部项目。
+  const currentUserId = getCurrentUserId();
+  const canManageProject = EMIE.state.currentRole === 'admin'
+    || (EMIE.state.currentRole === 'planner'
+      && ((detail.type !== 'channel_custom'
+        && detail.plannerId != null
+        && String(detail.plannerId) === String(currentUserId))
+        || (detail.type === 'channel_custom'
+          && detail.status === 'pending_planner'
+          && !detail.plannerId)))
+    || (EMIE.state.currentRole === 'sales'
+      && detail.type === 'channel_custom'
+      && detail.salesId != null
+      && String(detail.salesId) === String(currentUserId));
+  const canCreateProjectChat = ['admin', 'planner'].includes(EMIE.state.currentRole)
+    || canManageProject;
 
   if (EMIE.state.currentRole === 'planner' && detail.status === 'pending_planner' && detail.type === 'channel_custom') {
     actions += `<button class="btn btn-primary" data-emie-onclick="plannerAcceptProject(${detail.id})">✅ 接单</button>`;
@@ -442,13 +483,16 @@ function renderProjectActions(detail) {
   if (detail.status === 'terminated') {
     actions += `<span style="color:var(--danger);font-size:13px;font-weight:600;">⛔ 该项目已终止，无法进行任何操作</span>`;
   }
-  if (detail.feishuChatStatus === 'created' && detail.feishuChatId) {
+  // 群 ID 才是群聊是否已创建的权威依据。成员同步失败会把状态记为 failed，
+  // 但群本身仍然存在，此时必须继续保留“进入项目群”入口。
+  const hasProjectChat = !!String(detail.feishuChatId || '').trim();
+  if (hasProjectChat) {
     actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="openProjectFeishuChat('${escJsString(detail.feishuChatId)}')">💬 进入项目群</button>`;
-  } else if (!['terminated', 'pending_terminate'].includes(detail.status)
+  } else if (canCreateProjectChat && !['terminated', 'pending_terminate'].includes(detail.status)
       && (!detail.feishuChatStatus || ['not_created', 'failed', 'dissolved'].includes(detail.feishuChatStatus))) {
     actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="createProjectFeishuChat(${detail.id})">💬 创建项目群</button>`;
   }
-  if (detail.feishuChatStatus === 'created' && ['completed', 'terminated', 'pending_terminate'].includes(detail.status)) {
+  if (hasProjectChat && ['completed', 'terminated', 'pending_terminate'].includes(detail.status)) {
     actions += `<button class="btn btn-danger btn-sm" data-emie-onclick="dissolveProjectFeishuChat(${detail.id})">解散项目群</button>`;
   }
   // 管理员可永久删除项目

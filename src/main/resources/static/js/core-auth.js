@@ -132,6 +132,7 @@ function showLogin() {
   document.getElementById('loginPage').style.display = '';
   document.getElementById('appContainer').style.display = 'none';
   document.getElementById('loginError').style.display = 'none';
+  document.documentElement.dataset.appReady = 'login';
   // 加载公开配置（如登录页背景）
   loadPublicConfig();
 }
@@ -259,6 +260,7 @@ async function showApp() {
     renderSidebar();
     render();
     openNotificationDeepLink();
+    document.documentElement.dataset.appReady = 'authenticated';
   } finally {
     EMIE.state.showAppInProgress = false;
   }
@@ -303,6 +305,7 @@ function showPendingApproval() {
         <button class="btn btn-primary" data-emie-onclick="refreshPendingAccess()">重新登录检查权限</button>
       </div>`;
   }
+  document.documentElement.dataset.appReady = 'pending';
 }
 
 async function refreshPendingAccess() {

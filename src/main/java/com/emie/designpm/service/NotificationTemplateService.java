@@ -39,11 +39,16 @@ public class NotificationTemplateService {
         return switch (eventType) {
             case "PROJECT_ASSIGNED" -> create(eventType, "有新的项目待接单", "“{{projectName}}”已由{{actorName}}指定给你，请及时接单并安排任务。", "high", true, projectLink(context), project, "项目待接单", deadline, actor, context);
             case "DESIGN_REQUIREMENT_ASSIGNED" -> create(eventType, "有新的设计/送审需求", "“{{projectName}}”已由{{actorName}}创建并指定给你，请及时查看并跟进。", "high", true, projectLink(context), project, "设计/送审需求待跟进", deadline, actor, context);
+            case "DESIGN_REQUIREMENT_DESIGNER_ASSIGNED" -> create(eventType, "有新的设计需求待交付", "“{{projectName}}”已由{{actorName}}指派给你，请在{{deadline}}前完成设计交付。", "high", true, projectLink(context), project, "设计需求待交付", deadline, actor, context);
             case "TASK_ASSIGNED", "TASK_REASSIGNED" -> create(eventType, "有新的子任务待处理", "子任务“{{taskName}}”已指派给你，所属项目：{{projectName}}；计划完成：{{deadline}}。", "high", true, taskLink(context), project, "子任务待处理：" + task, deadline, actor, context);
             case "TASK_ACCEPTED" -> create(eventType, "子任务已接单", "{{actorName}}已接单子任务“{{taskName}}”。", "normal", false, taskLink(context), project, "子任务已接单：" + task, deadline, actor, context);
             case "TASK_DELIVERED" -> create(eventType, "子任务待审核", "{{actorName}}已交付子任务“{{taskName}}”，请查看成果并完成审核。", "high", true, taskLink(context), project, "待审核：" + task, deadline, actor, context);
             case "TASK_SUBMITTED_FOR_REVIEW" -> create(eventType, "子任务已送审", "子任务“{{taskName}}”已送审，请进行通过并评分或驳回。", "high", true, taskLink(context), project, "已送审：" + task, deadline, actor, context);
             case "DESIGN_REQUIREMENT_DELIVERED" -> create(eventType, "设计需求已交付", "设计师已提交“{{projectName}}”的交付成果，请及时查看。", "high", true, projectLink(context), project, "设计需求已交付：" + project, deadline, actor, context);
+            case "DESIGN_REQUIREMENT_REVIEW_PENDING" -> create(eventType, "设计需求待复评", "“{{projectName}}”已完成设计师自评，请及时完成复评。", "high", true, projectLink(context), project, "设计需求待复评", deadline, actor, context);
+            case "DESIGN_REQUIREMENT_REJECTED" -> create(eventType, "设计需求已驳回", "“{{projectName}}”已被驳回，原因：{{reason}}。请在{{deadline}}前修改并重新交付。", "high", true, projectLink(context), project, "设计需求驳回修改", deadline, actor, context);
+            case "DESIGN_REQUIREMENT_COMPLETED" -> create(eventType, "设计需求已完成", "“{{projectName}}”已完成全部评分流程。", "normal", false, projectLink(context), project, "设计需求已完成", deadline, actor, context);
+            case "DESIGN_REQUIREMENT_TERMINATED" -> create(eventType, "设计需求已终止", "“{{projectName}}”已由{{actorName}}终止。", "high", true, projectLink(context), project, "设计需求已终止", deadline, actor, context);
             case "TASK_REJECTED" -> create(eventType, "子任务已驳回", "子任务“{{taskName}}”被驳回，原因：{{reason}}。请修改后重新交付。", "high", true, taskLink(context), project, "已驳回：" + task, deadline, actor, context);
             case "TASK_REDELIVERED" -> create(eventType, "子任务再次交付待审核", "{{actorName}}已第{{deliveryCount}}次交付“{{taskName}}”。上次驳回原因：{{reason}}。", "high", true, taskLink(context), project, "再次交付待审核：" + task, deadline, actor, context);
             case "REVIEW_PENDING" -> create(eventType, "有审核待办", "项目“{{projectName}}”的子任务“{{taskName}}”等待{{reviewRole}}审核。", "high", true, reviewLink(context), project, "审核待办：" + task, deadline, actor, context);

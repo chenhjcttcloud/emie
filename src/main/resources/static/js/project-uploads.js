@@ -114,8 +114,14 @@ function showImageCopyFeedback(image, text) {
 // EMIE 项目域：上传、项目详情、子任务工作流、评分与分享
 // ==================== 图片预览（Lightbox + 滚轮缩放 + 拖拽平移）====================
 function previewImage(src, name) {
+  const focusOrigin = document.activeElement;
+  let cleanedUp = false;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', name ? `图片预览：${name}` : '图片预览');
+  overlay.setAttribute('tabindex', '-1');
   overlay.style.cssText = 'z-index:300;background:rgba(0,0,0,.85);overflow:hidden;';
   overlay.onclick = (e) => { if (e.target === overlay) { cleanup(); overlay.remove(); } };
 
@@ -182,21 +188,50 @@ function previewImage(src, name) {
   }
 
   const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.setAttribute('aria-label', '关闭图片预览');
   closeBtn.innerHTML = '✕';
   closeBtn.onclick = function() { cleanup(); overlay.remove(); };
   closeBtn.style.cssText = 'position:fixed;top:20px;left:20px;width:40px;height:40px;border-radius:12px;border:none;background:rgba(255,255,255,.9);color:#333;font-size:20px;cursor:pointer;z-index:310;box-shadow:0 2px 12px rgba(0,0,0,.3);';
 
 
   function cleanup() {
+    if (cleanedUp) return;
+    cleanedUp = true;
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('keydown', onPreviewKeydown, true);
+    removalObserver.disconnect();
     if (activePreviewImage === img) activePreviewImage = null;
+    if (focusOrigin?.isConnected) requestAnimationFrame(() => focusOrigin.focus({ preventScroll: true }));
   }
+
+  function onPreviewKeydown(e) {
+    if (!overlay.isConnected) return;
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      closeBtn.focus();
+      return;
+    }
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    cleanup();
+    overlay.remove();
+  }
+
+  document.addEventListener('keydown', onPreviewKeydown, true);
+  const removalObserver = new MutationObserver(() => {
+    if (!overlay.isConnected) cleanup();
+  });
 
   overlay.appendChild(closeBtn);
   overlay.appendChild(imgWrap);
   overlay.appendChild(zoomLabel);
   document.body.appendChild(overlay);
+  removalObserver.observe(document.body, { childList: true });
+  requestAnimationFrame(() => closeBtn.focus({ preventScroll: true }));
   preparePresentationImageDrag(img);
 }
 

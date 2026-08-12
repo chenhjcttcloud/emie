@@ -17,10 +17,17 @@ const isDateInRange = (...args) => EMIE.actions.isDateInRange(...args);
 
 async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.currentRole,
                                    endpoint = '/projects/my-subtasks', readOnly = false) {
-  let myTasks = (await apiGet(endpoint)).map(task => ({
+  const marketView = endpoint === '/projects/task-market';
+  let rows = await apiGet(endpoint);
+  if (!readOnly && role === 'designer' && endpoint === '/projects/my-subtasks') {
+    const marketRows = await apiGet('/projects/task-market');
+    const known = new Set(rows.map(task => Number(task.id)));
+    rows = rows.concat(marketRows.filter(task => !known.has(Number(task.id))));
+  }
+  let myTasks = rows.map(task => ({
     ...task,
     projectName: (task.projectName || '').substring(0, 30),
-    _unassigned: !task.designerId
+    _unassigned: task.allocationStatus === 'market_open'
   }));
 
   if (bucket === 'pending') myTasks = myTasks.filter(t => !['approved', 'completed'].includes(t.status));
@@ -35,9 +42,9 @@ async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.
   EMIE.dashboardState.designerTasksReadOnly = readOnly;
   const taskEmoji = role === 'promotion' ? '📣' : role === 'supplychain' ? '🛒' : role === 'planner' ? '📋' : '🎨';
   main.innerHTML = `
-    <h2 style="font-size:22px;margin-bottom:20px;">${taskEmoji} ${bucket === 'pending' ? '待处理子任务' : bucket === 'completed' ? '已完成子任务' : '我的子任务'} <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${myTasks.length})</span></h2>
+    <h2 style="font-size:22px;margin-bottom:20px;">${taskEmoji} ${marketView ? '接单市场' : bucket === 'pending' ? '待处理子任务' : bucket === 'completed' ? '已完成子任务' : '我的子任务'} <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${myTasks.length})</span></h2>
     <div class="filter-bar">
-      ${bucket !== 'completed' ? `<select class="form-select" data-emie-onchange="filterDesignerTasks()" style="min-width:120px;" id="designerTaskFilter" aria-label="任务归属">
+      ${!marketView && bucket !== 'completed' ? `<select class="form-select" data-emie-onchange="filterDesignerTasks()" style="min-width:120px;" id="designerTaskFilter" aria-label="任务归属">
         <option value="all">全部任务</option>
         <option value="unassigned">待认领</option>
         <option value="mine">我的任务</option>
@@ -68,6 +75,11 @@ async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.
     <div id="designerTaskContainer">${renderDesignerTaskCards(myTasks, readOnly)}</div>
   `;
   EMIE.dashboardState.designerTaskCache = myTasks;
+}
+
+async function renderTaskMarket(main, role, uid) {
+  const readOnly = role !== 'designer';
+  await renderDesignerTasks(main, uid, 'all', role, '/projects/task-market', readOnly);
 }
 
 function filterDesignerTasks() {
@@ -128,7 +140,7 @@ function renderDesignerTaskCards(tasks, readOnly = false) {
           </div>
           <div class="subtask-meta">
             <div class="subtask-meta-item">👤 负责人：<strong>${t.designerName || '<span style="color:var(--warning);">待认领</span>'}</strong>${t.assigneeRole ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;${t.assigneeRole === 'supplychain' ? 'background:#F0FDFA;color:#0D9488;' : t.assigneeRole === 'planner' ? 'background:#EFF6FF;color:#1D4ED8;' : t.assigneeRole === 'promotion' ? 'background:#F5F3FF;color:#7C3AED;' : t.assigneeRole === 'sales' ? 'background:#FFF7ED;color:#C2410C;' : 'background:#FEF2F2;color:#DC2626;'}">${t.assigneeRole === 'supplychain' ? '供应链' : t.assigneeRole === 'planner' ? '企划' : t.assigneeRole === 'promotion' ? '产品推广' : t.assigneeRole === 'sales' ? '销售' : '设计师'}</span>` : ''}</div>
-            ${t.relation ? `<div class="subtask-meta-item">🔗 我的关系：<strong>${t.relation === 'publisher' ? '我发布的任务' : '我负责的任务'}</strong></div>` : ''}
+            ${t.relation ? `<div class="subtask-meta-item">🔗 我的关系：<strong>${t.relation === 'publisher' ? '我发布的任务' : t.relation === 'market' ? '接单市场' : '我负责的任务'}</strong></div>` : ''}
             <div class="subtask-meta-item">📅 ${t.status === 'rejected' && t.rejectionRecords?.length && t.rejectionRecords[t.rejectionRecords.length - 1]?.requiredCompletionDate ? '驳回后要求完成' : '计划完成'}：<strong>${formatDate(t.status === 'rejected' && t.rejectionRecords?.length ? (t.rejectionRecords[t.rejectionRecords.length - 1].requiredCompletionDate || t.plannedDate) : t.plannedDate)}</strong></div>
             ${t.actualDate ? `<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(t.actualDate)}</strong></div>` : ''}
           </div>
@@ -138,7 +150,7 @@ function renderDesignerTaskCards(tasks, readOnly = false) {
           ${deliveryVersions.length ? `<div style="margin-top:12px;"><div style="font-size:13px;font-weight:700;margin-bottom:6px;">交付版本 <span style="color:var(--gray-400);font-weight:400;">(${deliveryVersions.length})</span></div>${deliveryVersions.map(version => { const rejection = rejectionRecords.find(record => Number(record.attemptNo) === Number(version.versionNo)); return `<details style="border:1px solid var(--gray-200);border-radius:8px;margin-bottom:5px;overflow:hidden;background:var(--gray-50);"><summary style="display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;list-style:none;font-size:12px;"><strong>V${version.versionNo}</strong><span class="badge ${version.submissionType === 'redelivery' ? 'badge-rejected' : version.submissionType === 'correction' ? 'badge-pending' : 'badge-completed'}">${version.submissionType === 'redelivery' ? '驳回后重交' : version.submissionType === 'correction' ? '主动修正' : '首次交付'}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray-600);">${escHtml(version.changeSummary || '')}</span><span style="color:var(--gray-400);white-space:nowrap;">${version.submittedAt ? fmtDT(version.submittedAt) : ''}</span><span style="color:var(--gray-400);">⌄</span></summary><div style="padding:10px 12px;border-top:1px solid var(--gray-200);background:#fff;"><div style="font-size:12px;color:var(--gray-700);white-space:pre-wrap;">${escHtml(version.deliverables || '未填写文字交付内容')}</div>${rejection ? `<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#FFF8F8;color:#A32D2D;font-size:12px;"><strong>驳回意见：</strong>${escHtml(rejection.reason || '未填写驳回意见')}</div>` : ''}${taskDetailFiles(version.referenceImagesJson, true)}${taskDetailFiles(version.attachmentsJson, false)}</div></details>`; }).join('')}</div>` : ''}
           <div class="subtask-actions">
             ${!readOnly && t.status === 'pending' && !t._unassigned ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskAccept(${t.projectId},${t.id})">✅ 接单</button>` : ''}
-            ${!readOnly && t._unassigned ? `<button class="btn btn-success btn-sm" data-emie-onclick="taskAccept(${t.projectId},${t.id})">📋 认领并接单</button>` : ''}
+            ${!readOnly && t._unassigned ? `<button class="btn btn-success btn-sm" data-emie-onclick='taskAccept(${t.projectId},${t.id},${JSON.stringify(t).replace(/'/g, '&#39;')})'>⚡ 抢单</button>` : ''}
             ${!readOnly && t.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskDeliver(${t.projectId},${t.id})">📤 交付成果</button>` : ''}
             ${!readOnly && t.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-onclick="taskConfirmRevision(${t.projectId},${t.id})">🛠️ 确认修改</button>` : ''}
             ${!readOnly && ['delivered', 'planner_approved', 'sales_approved', 'admin_approved'].includes(t.status) && t.designerId === getCurrentUserId() ? `<button class="btn btn-outline btn-sm" data-emie-onclick="taskCorrectDelivery(${t.projectId},${t.id})">📝 修正交付</button>` : ''}
@@ -270,6 +282,7 @@ function renderScoringMini(task, isDone) {
 
 EMIE.registerActions({
   renderDesignerTasks,
+  renderTaskMarket,
   filterDesignerTasks,
   applyFilterDesignerTasks,
   resetDesignerTaskFilters,
@@ -280,6 +293,7 @@ EMIE.registerActions({
 
 EMIE.registerModule('dashboardDesigner', {
   renderDesignerTasks,
+  renderTaskMarket,
   filterDesignerTasks,
   resetDesignerTaskFilters,
   renderDesignerTaskCards,

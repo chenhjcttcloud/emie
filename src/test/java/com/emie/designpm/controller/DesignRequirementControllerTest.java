@@ -144,7 +144,7 @@ class DesignRequirementControllerTest {
     }
 
     @Test
-    void creationNotifiesAssignedPlannerAfterBusinessSave() {
+    void creationNotifiesAssignedPlannerAndDesignerAfterBusinessSave() {
         DesignRequirementRepository repository = mock(DesignRequirementRepository.class);
         DesignRequirementScoringService scoringService = mock(DesignRequirementScoringService.class);
         UserService userService = mock(UserService.class);
@@ -174,6 +174,48 @@ class DesignRequirementControllerTest {
         verify(notifications).notifyUserAfterCommit(
                 eq("DESIGN_REQUIREMENT_ASSIGNED"), eq("planner-1"),
                 eq("design_requirement"), eq(66L), eq("sales-1"), anyMap());
+        verify(notifications).notifyUserAfterCommit(
+                eq("DESIGN_REQUIREMENT_DESIGNER_ASSIGNED"), eq("designer-1"),
+                eq("design_requirement"), eq(66L), eq("sales-1"), anyMap());
+    }
+
+    @Test
+    void dashboardReturnsActionableRequirementsVisibleToCurrentUser() {
+        DesignRequirementRepository repository = mock(DesignRequirementRepository.class);
+        DesignRequirement requirement = new DesignRequirement();
+        requirement.setId(77L);
+        requirement.setName("包装设计");
+        requirement.setDeadline("2026-08-20");
+        requirement.setDesignerId("designer-1");
+        when(repository.findDashboardItems("designer-1")).thenReturn(List.of(requirement));
+        DesignRequirementController controller = new DesignRequirementController(repository);
+
+        var response = controller.dashboard(authenticated("designer-1", "designer", "设计师"));
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        verify(repository).findDashboardItems("designer-1");
+    }
+
+    @Test
+    void ownerCanTerminateRequirementAndPendingScoresAreDeactivated() {
+        DesignRequirementRepository repository = mock(DesignRequirementRepository.class);
+        DesignRequirementScoreRepository scoreRepository = mock(DesignRequirementScoreRepository.class);
+        DesignRequirement requirement = new DesignRequirement();
+        requirement.setId(88L);
+        requirement.setName("终止测试");
+        requirement.setStatus("in_progress");
+        requirement.setOwnerId("sales-1");
+        when(repository.findById(88L)).thenReturn(Optional.of(requirement));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scoreRepository.findByRequirementIdOrderByIdAsc(88L)).thenReturn(List.of());
+        DesignRequirementController controller = new DesignRequirementController(
+                repository, scoreRepository, mock(DesignRequirementScoringService.class), mock(UserService.class));
+
+        var response = controller.terminate(88L, authenticated("sales-1", "sales", "销售一"));
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("terminated", requirement.getStatus());
+        verify(scoreRepository).saveAll(List.of());
     }
 
     private MockHttpServletRequest authenticated(String userId, String role, String name) {

@@ -1,0 +1,256 @@
+package com.emie.designpm.service;
+
+import com.emie.designpm.entity.PointLedger;
+import com.emie.designpm.entity.PointAdjustmentLedger;
+import com.emie.designpm.entity.PointDifficultyConfig;
+import com.emie.designpm.entity.PointRule;
+import com.emie.designpm.entity.SubTask;
+import com.emie.designpm.repository.PointLedgerRepository;
+import com.emie.designpm.repository.PointAdjustmentLedgerRepository;
+import com.emie.designpm.repository.PointDifficultyConfigRepository;
+import com.emie.designpm.repository.PointRuleRepository;
+import com.emie.designpm.repository.ScoringRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.Map;
+import java.time.YearMonth;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+@Service
+@Transactional
+public class PointsService {
+    public static final String TASK_APPROVED = "TASK_APPROVED";
+    private final PointRuleRepository rules;
+    private final PointLedgerRepository ledgers;
+    private final ScoringRepository scoring;
+    private final PointAdjustmentLedgerRepository adjustments;
+    private final PointDifficultyConfigRepository difficulties;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Autowired
+    public PointsService(PointRuleRepository rules, PointLedgerRepository ledgers, ScoringRepository scoring,
+                         PointAdjustmentLedgerRepository adjustments, PointDifficultyConfigRepository difficulties) {
+        this.rules = rules; this.ledgers = ledgers; this.scoring = scoring;
+        this.adjustments = adjustments; this.difficulties = difficulties;
+    }
+
+    /** Compatibility constructor for focused unit tests. */
+    public PointsService(PointRuleRepository rules, PointLedgerRepository ledgers, ScoringRepository scoring) {
+        this.rules = rules; this.ledgers = ledgers; this.scoring = scoring;
+        this.adjustments = null; this.difficulties = null;
+    }
+
+    /** Focused-test constructor for configurable difficulty behavior. */
+    public PointsService(PointRuleRepository rules, PointLedgerRepository ledgers, ScoringRepository scoring,
+                         PointDifficultyConfigRepository difficulties) {
+        this.rules = rules; this.ledgers = ledgers; this.scoring = scoring;
+        this.adjustments = null; this.difficulties = difficulties;
+    }
+
+    /** 企划确认送审时立即发放基础积分。 */
+    public void awardBaseSubmission(SubTask task) {
+        if (task == null || task.getId() == null || task.getDesignerId() == null || task.getDesignerId().isBlank()) return;
+        String ruleCode = normalizedRuleCode(task.getPointRuleCode());
+        String ledgerCode = ruleCode + ":BASE";
+        if (ledgers.existsByUserIdAndSubTaskIdAndRuleCode(task.getDesignerId(), task.getId(), ledgerCode)) return;
+        ensureSnapshot(task, ruleCode);
+        saveAward(task, ledgerCode, task.getBasePointSnapshot() * task.getDifficultyMultiplierSnapshot());
+    }
+
+    /** 最终验收后为 A/B 类按评分另发质量加分。 */
+    public void awardQualityCompletion(SubTask task) {
+        if (task == null || task.getId() == null || task.getDesignerId() == null || task.getDesignerId().isBlank()) return;
+        String ruleCode = normalizedRuleCode(task.getPointRuleCode());
+        awardBaseSubmission(task);
+        if (!(ruleCode.startsWith("A") || ruleCode.startsWith("B"))) return;
+        String ledgerCode = ruleCode + ":QUALITY";
+        if (ledgers.existsByUserIdAndSubTaskIdAndRuleCode(task.getDesignerId(), task.getId(), ledgerCode)) return;
+        ensureSnapshot(task, ruleCode);
+        double averageScore = scoring.findBySubTaskId(task.getId()).stream()
+                .filter(record -> record.getScore() != null).mapToInt(record -> record.getScore()).average().orElse(0d);
+        double ratio = averageScore >= task.getQualityTopThresholdSnapshot()
+                ? task.getQualityTopRatioSnapshot()
+                : averageScore >= task.getQualityBonusThresholdSnapshot() ? task.getQualityBonusRatioSnapshot() : 0d;
+        if (ratio <= 0) return;
+        double base = task.getBasePointSnapshot() * task.getDifficultyMultiplierSnapshot();
+        double cap = task.getBasePointSnapshot() * task.getMaxTotalMultiplierSnapshot();
+        saveAward(task, ledgerCode, Math.min(base * ratio, Math.max(0d, cap - base)));
+    }
+
+    /** 兼容旧调用方；新流程实际在送审、最终验收两个节点分别调用。 */
+    public void awardTaskApproval(SubTask task) { awardQualityCompletion(task); }
+
+    private void ensureSnapshot(SubTask task, String ruleCode) {
+        if (task.getBasePointSnapshot() == null || task.getDifficultyMultiplierSnapshot() == null
+                || task.getQualityBonusThresholdSnapshot() == null
+                || task.getQualityBonusRatioSnapshot() == null
+                || task.getQualityTopThresholdSnapshot() == null
+                || task.getQualityTopRatioSnapshot() == null
+                || task.getMaxTotalMultiplierSnapshot() == null
+                || task.getCountInPerformanceSnapshot() == null) {
+            bindRuleSnapshot(task, ruleCode, task.getDifficultyCode());
+        }
+        if (task.getBasePointSnapshot() == null || task.getBasePointSnapshot() <= 0
+                || task.getDifficultyMultiplierSnapshot() == null || task.getDifficultyMultiplierSnapshot() <= 0) {
+            throw new IllegalStateException("任务积分快照无效");
+        }
+    }
+
+    private void saveAward(SubTask task, String ledgerCode, double rawPoints) {
+        List<Map<String, Object>> collaborators = collaboratorAllocations(task.getCollaboratorAllocationsJson());
+        int collaboratorRatio = collaborators.stream().mapToInt(item -> ((Number) item.get("ratio")).intValue()).sum();
+        double total = roundedPoints(rawPoints);
+        double collaboratorTotal = 0d;
+        for (Map<String, Object> collaborator : collaborators) {
+            double share = roundedPoints(total * ((Number) collaborator.get("ratio")).intValue() / 100d);
+            collaboratorTotal += share;
+            saveRecipientAward(task, ledgerCode, String.valueOf(collaborator.get("userId")), share);
+        }
+        saveRecipientAward(task, ledgerCode, task.getDesignerId(), roundedPoints(total - collaboratorTotal));
+    }
+
+    private void saveRecipientAward(SubTask task, String ledgerCode, String userId, double rawPoints) {
+        double awarded = roundedPoints(rawPoints);
+        if (awarded <= 0 || userId == null || userId.isBlank()
+                || ledgers.existsByUserIdAndSubTaskIdAndRuleCode(userId, task.getId(), ledgerCode)) return;
+        PointLedger ledger = new PointLedger();
+        ledger.setUserId(userId);
+        ledger.setSubTaskId(task.getId());
+        ledger.setRuleCode(ledgerCode);
+        ledger.setCountInPerformance(Boolean.TRUE.equals(task.getCountInPerformanceSnapshot()));
+        ledger.setAccountingMonth(task.getMilestoneMonth() == null || task.getMilestoneMonth().isBlank()
+                ? YearMonth.now().toString() : task.getMilestoneMonth());
+        ledger.setPoints(awarded);
+        ledgers.save(ledger);
+    }
+
+    private double roundedPoints(double value) {
+        return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).doubleValue();
+    }
+
+    private List<Map<String, Object>> collaboratorAllocations(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try { return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {}); }
+        catch (Exception e) { throw new IllegalStateException("合作积分比例快照无效"); }
+    }
+
+    /** Validate an enabled rule and freeze its point/multiplier values onto a task. */
+    public void bindRuleSnapshot(SubTask task, String requestedRuleCode, String difficultyCode) {
+        if (task == null) throw new IllegalArgumentException("子任务不能为空");
+        String ruleCode = normalizedRuleCode(requestedRuleCode);
+        PointRule rule = rules.findByRuleCode(ruleCode)
+                .orElseThrow(() -> new IllegalArgumentException("积分规则不存在或已删除"));
+        if (!rule.isEnabled()) throw new IllegalArgumentException("积分规则已停用，请重新选择");
+        if (rule.getPoints() == null || rule.getPoints() < 0) throw new IllegalArgumentException("积分规则基础分无效");
+        String normalizedDifficulty = "B1".equals(ruleCode) ? "COMPLEX" : normalizeDifficultyCode(difficultyCode);
+        if (difficulties == null) throw new IllegalStateException("难度配置服务暂不可用");
+        PointDifficultyConfig difficulty = difficulties.findByDifficultyCode(normalizedDifficulty)
+                .orElseThrow(() -> new IllegalArgumentException("难度配置不存在或已删除"));
+        if (!difficulty.isEnabled()) throw new IllegalArgumentException("难度配置已停用，请重新选择");
+        double multiplier = difficulty.getMultiplier() == null ? 0d : difficulty.getMultiplier();
+        if (!Double.isFinite(multiplier) || multiplier <= 0) throw new IllegalArgumentException("积分规则难度系数无效");
+        task.setPointRuleCode(ruleCode);
+        task.setDifficultyCode(normalizedDifficulty);
+        task.setBasePointSnapshot(rule.getPoints());
+        task.setDifficultyMultiplierSnapshot(multiplier);
+        task.setQualityBonusThresholdSnapshot(rule.getQualityBonusThreshold() == null ? 0 : rule.getQualityBonusThreshold());
+        task.setQualityBonusRatioSnapshot(rule.getQualityBonusRatio() == null ? 0d : rule.getQualityBonusRatio());
+        task.setQualityTopThresholdSnapshot(rule.getQualityTopThreshold() == null ? 97 : rule.getQualityTopThreshold());
+        task.setQualityTopRatioSnapshot(rule.getQualityTopRatio() == null ? 0.60d : rule.getQualityTopRatio());
+        task.setMaxTotalMultiplierSnapshot(rule.getMaxTotalMultiplier() == null ? 3d : rule.getMaxTotalMultiplier());
+        task.setCountInPerformanceSnapshot(rule.isCountInPerformance());
+    }
+
+    private String normalizedRuleCode(String ruleCode) {
+        return ruleCode == null || ruleCode.isBlank() ? TASK_APPROVED : ruleCode.trim().toUpperCase();
+    }
+
+    private String normalizeDifficultyCode(String difficultyCode) {
+        return difficultyCode == null || difficultyCode.isBlank() ? "STANDARD" : difficultyCode.trim().toUpperCase();
+    }
+
+    @Transactional(readOnly = true)
+    public double balance(String userId) { return ledgers.sumPointsByUserId(userId) + (adjustments == null ? 0 : adjustments.sumPointsByUserId(userId)); }
+
+    @Transactional(readOnly = true)
+    public List<PointLedger> ledger(String userId) { return ledgers.findByUserIdOrderByCreatedAtDescIdDesc(userId); }
+
+    @Transactional(readOnly = true)
+    public List<PointAdjustmentLedger> adjustmentLedger(String userId) { return adjustments == null ? List.of() : adjustments.findByUserIdOrderByCreatedAtDescIdDesc(userId); }
+
+    @Transactional(readOnly = true)
+    public List<PointRule> rules() { return rules.findAllByOrderByRuleCodeAsc(); }
+
+    @Transactional(readOnly = true)
+    public List<PointDifficultyConfig> difficulties() {
+        return difficulties == null ? List.of() : difficulties.findAllByOrderByMultiplierAscDifficultyCodeAsc();
+    }
+
+    public PointDifficultyConfig updateDifficulty(String difficultyCode, Double multiplier,
+                                                  Boolean enabled, String description) {
+        if (difficulties == null) throw new IllegalStateException("难度配置服务暂不可用");
+        String code = normalizeDifficultyCode(difficultyCode);
+        PointDifficultyConfig difficulty = difficulties.findByDifficultyCode(code)
+                .orElseThrow(() -> new IllegalArgumentException("难度配置不存在"));
+        if (multiplier != null) {
+            if (!Double.isFinite(multiplier) || multiplier <= 0 || multiplier > 10) {
+                throw new IllegalArgumentException("难度系数必须大于0且不超过10");
+            }
+            difficulty.setMultiplier(multiplier);
+        }
+        if (enabled != null) difficulty.setEnabled(enabled);
+        if (description != null) {
+            String value = description.trim();
+            difficulty.setDescription(value.substring(0, Math.min(value.length(), 255)));
+        }
+        return difficulties.save(difficulty);
+    }
+
+    public PointRule updateRule(String ruleCode, Integer points, Boolean enabled, String description,
+                                String category, Double difficultyMultiplier, Integer qualityThreshold,
+                                Double qualityRatio, Integer qualityTopThreshold, Double qualityTopRatio,
+                                Double maxTotalMultiplier, Boolean countInPerformance) {
+        PointRule rule = rules.findByRuleCode(ruleCode).orElseThrow(() -> new IllegalArgumentException("积分规则不存在"));
+        if (points != null) {
+            if (points < 0) throw new IllegalArgumentException("积分不能小于 0");
+            rule.setPoints(points);
+        }
+        if (enabled != null) rule.setEnabled(enabled);
+        if (description != null) rule.setDescription(description.trim().substring(0, Math.min(description.trim().length(), 255)));
+        if (category != null) rule.setCategory(category.trim());
+        if (difficultyMultiplier != null) { if (difficultyMultiplier < 0) throw new IllegalArgumentException("难度系数不能小于 0"); rule.setDifficultyMultiplier(difficultyMultiplier); }
+        if (qualityThreshold != null) { if (qualityThreshold < 0) throw new IllegalArgumentException("质量阈值不能小于 0"); rule.setQualityBonusThreshold(qualityThreshold); }
+        if (qualityRatio != null) { if (qualityRatio < 0) throw new IllegalArgumentException("质量加分比例不能小于 0"); rule.setQualityBonusRatio(qualityRatio); }
+        if (qualityTopThreshold != null) { if (qualityTopThreshold < 0) throw new IllegalArgumentException("卓越质量阈值不能小于0"); rule.setQualityTopThreshold(qualityTopThreshold); }
+        if (qualityTopRatio != null) { if (qualityTopRatio < 0) throw new IllegalArgumentException("卓越质量比例不能小于0"); rule.setQualityTopRatio(qualityTopRatio); }
+        if (maxTotalMultiplier != null) { if (maxTotalMultiplier < 1) throw new IllegalArgumentException("总积分封顶倍数不能小于1"); rule.setMaxTotalMultiplier(maxTotalMultiplier); }
+        if (countInPerformance != null) rule.setCountInPerformance(countInPerformance);
+        return rules.save(rule);
+    }
+
+    public PointRule createRule(PointRule rule) {
+        String code = normalizedRuleCode(rule == null ? null : rule.getRuleCode());
+        if (TASK_APPROVED.equals(code) && (rule == null || rule.getRuleCode() == null || rule.getRuleCode().isBlank())) {
+            throw new IllegalArgumentException("规则编号不能为空");
+        }
+        if (!code.matches("[A-Z0-9_-]{1,80}")) throw new IllegalArgumentException("规则编号仅支持字母、数字、下划线和短横线");
+        if (rules.findByRuleCode(code).isPresent()) throw new IllegalArgumentException("积分规则编号已存在");
+        if (rule.getPoints() == null || rule.getPoints() < 0) throw new IllegalArgumentException("积分不能小于0");
+        rule.setId(null); rule.setRuleCode(code); rule.setEnabled(true);
+        if (rule.getCategory() == null || rule.getCategory().isBlank()) rule.setCategory("GENERAL");
+        return rules.save(rule);
+    }
+
+    public void deleteRule(String ruleCode) {
+        PointRule rule = rules.findByRuleCode(normalizedRuleCode(ruleCode))
+                .orElseThrow(() -> new IllegalArgumentException("积分规则不存在"));
+        rules.delete(rule);
+    }
+}

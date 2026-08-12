@@ -14,6 +14,28 @@ import java.util.Optional;
 
 public interface SubTaskRepository extends JpaRepository<SubTask, Long> {
 
+    interface IntegritySubTaskProjection {
+        Long getId();
+        String getReferenceImagesJson();
+        String getAttachmentsJson();
+    }
+
+    interface DashboardTaskProjection {
+        Long getId();
+        Long getProjectId();
+        String getStatus();
+        String getWorkflowStage();
+    }
+
+    @Query("SELECT t.id AS id, t.project.id AS projectId, t.status AS status, " +
+            "t.workflowStage AS workflowStage FROM SubTask t WHERE t.project.id IN :projectIds")
+    List<DashboardTaskProjection> findDashboardTasksByProjectIds(@Param("projectIds") List<Long> projectIds);
+
+    @Query("SELECT t.id AS id, t.referenceImagesJson AS referenceImagesJson, " +
+            "t.attachmentsJson AS attachmentsJson FROM SubTask t " +
+            "WHERE t.id > :afterId ORDER BY t.id ASC")
+    List<IntegritySubTaskProjection> findIntegritySubTasksAfter(@Param("afterId") Long afterId, Pageable pageable);
+
     /** 后台飞书同步只需要子任务及所属项目基础字段，显式预加载项目关系。 */
     @Query("SELECT t FROM SubTask t JOIN FETCH t.project WHERE t.id = :id")
     Optional<SubTask> findByIdWithProject(@Param("id") Long id);
@@ -31,6 +53,13 @@ public interface SubTaskRepository extends JpaRepository<SubTask, Long> {
     List<SubTask> findByDesignerIdOrderByCreatedAtDesc(String designerId);
 
     List<SubTask> findByProjectIdOrderByCreatedAtAsc(Long projectId);
+
+    @Query("SELECT t FROM SubTask t JOIN FETCH t.project p " +
+           "WHERE t.allocationStatus = 'market_open' AND t.status = 'pending' " +
+           "AND t.designerId IS NULL AND t.assigneeRole = 'designer' " +
+           "AND p.status NOT IN ('terminated', 'paused', 'pending_terminate') " +
+           "ORDER BY t.marketPublishedAt DESC, t.id DESC")
+    List<SubTask> findOpenDesignerMarketTasks();
 
     List<SubTask> findByStatusAndDesignerId(String status, String designerId);
 
@@ -56,6 +85,13 @@ public interface SubTaskRepository extends JpaRepository<SubTask, Long> {
 
     @Query("SELECT COUNT(t) FROM SubTask t WHERE t.designerId = ?1 AND t.status IN ('pending', 'accepted', 'rejected')")
     long countByDesignerIdAndStatusIn(String designerId);
+
+    /** 抢单额度仅统计仍在执行的 A/B 类主任务。 */
+    @Query("SELECT COUNT(t) FROM SubTask t WHERE t.designerId = :designerId " +
+           "AND t.status IN ('accepted', 'delivered', 'submitted_for_review', 'planner_approved', 'sales_approved', 'admin_approved', 'rejected') " +
+           "AND UPPER(COALESCE(t.pointRuleCode, '')) LIKE CONCAT(UPPER(:categoryPrefix), '%')")
+    long countActiveMainTasksByCategory(@Param("designerId") String designerId,
+                                        @Param("categoryPrefix") String categoryPrefix);
 
     /** 左侧“我的子任务”徽章：按当前执行角色隔离，兼容历史未填写角色的设计任务。 */
     @Query("SELECT COUNT(t) FROM SubTask t WHERE t.designerId = ?1 AND t.status IN ('pending', 'accepted', 'rejected') " +

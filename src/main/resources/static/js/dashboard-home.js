@@ -14,6 +14,7 @@ const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const displayText = (...args) => EMIE.actions.displayText(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
 const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
+const openDesignRequirementDetail = (...args) => EMIE.actions.openDesignRequirementDetail(...args);
 const refreshNavigationBadges = (...args) => EMIE.actions.refreshNavigationBadges(...args);
 let plannerBoardScope = 'mine';
 let plannerScopeUserId = '';
@@ -67,6 +68,7 @@ async function renderDashboard(main, role, uid) {
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigate('scoring')"><div class="stat-icon yellow">⭐</div><div><div class="stat-value">${stats.pendingScore}</div><div class="stat-label">待评分</div></div></div>
     </div>` : ''}
     ${rolePanelsHtml}
+    <div id="dashboardDesignRequirements"><div class="empty" style="padding:20px;"><p>正在加载设计/送审需求…</p></div></div>
     ${!executionRole && orders.length === 0 ? `<div class="empty"><div class="empty-icon">📭</div><p>暂无您负责的项目</p></div>` : ''}
     ${role === 'planner' ? '<div id="dashboardPlannerTasks"><div class="empty" style="padding:24px;"><p>正在加载子任务面板…</p></div></div>' + renderProjectSummary(channel, '📦 渠道定制单') + renderProjectSummary(regular, '🏭 公司常规品') : executionRole ? '<div id="dashboardExecutionTasks"><div class="empty" style="padding:24px;"><p>正在加载关联子任务…</p></div></div>' : renderProjectSummary(channel, '📦 渠道定制单') + renderProjectSummary(regular, '🏭 公司常规品')}
     <div id="dashboardWorkloadSection"></div>
@@ -78,8 +80,46 @@ async function renderDashboard(main, role, uid) {
     loadDashboardWorkloadSection();
   }
   loadDashboardRoleStatus(role, uid, myDept);
+  loadDashboardDesignRequirements(uid, role);
   if (role === 'planner') loadDashboardPlannerTasks(uid);
   if (executionRole) loadDashboardExecutionTasks(uid, EMIE.state.currentRole);
+}
+
+async function loadDashboardDesignRequirements(uid, role) {
+  const container = document.getElementById('dashboardDesignRequirements');
+  if (!container) return;
+  try {
+    const rows = await apiGet('/design-requirements/dashboard');
+    const actionable = (rows || []).filter(item => {
+      if (role === 'designer') return item.designerId === uid
+        && ['draft', 'in_progress', 'rejected', 'pending_self_score'].includes(item.status);
+      if (role === 'planner') return item.plannerId === uid;
+      if (role === 'sales' || role === 'promotion') return item.ownerId === uid || item.responsibleId === uid;
+      return role === 'admin';
+    });
+    if (!actionable.length) {
+      container.innerHTML = '';
+      return;
+    }
+    const labels = {
+      draft: '待设计交付', in_progress: '设计中', rejected: '驳回修改',
+      pending_self_score: '待设计师自评', pending_review: '待复评', terminated: '已终止'
+    };
+    container.innerHTML = `<div class="type-section"><div class="card" style="padding:0;">
+      <div style="padding:20px 20px 0;"><div class="type-section-title">🎨 设计/送审需求 <span class="count">共 ${actionable.length} 个</span></div></div>
+      <div style="padding:0 20px 20px;"><div class="table-wrap"><table>
+        <thead><tr><th>需求</th><th>设计师</th><th>产品企划</th><th>要求完成</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody>${actionable.slice(0, 8).map(item => `<tr style="cursor:pointer" data-emie-onclick="openDesignRequirementDetail(${item.id})">
+          <td><strong>${escHtml(item.productName || '-')}</strong><div style="font-size:11px;color:var(--gray-400)">${escHtml(item.projectCode || ('#' + item.id))}</div></td>
+          <td>${escHtml(item.designerName || '-')}</td><td>${escHtml(item.plannerName || '-')}</td>
+          <td>${formatDate(item.deadline)}</td><td><span class="badge ${item.status === 'rejected' ? 'badge-rejected' : 'badge-progress'}">${escHtml(labels[item.status] || item.status)}</span></td>
+          <td><button class="btn btn-outline btn-sm" data-emie-onclick="event.stopPropagation();openDesignRequirementDetail(${item.id})">查看并处理</button></td>
+        </tr>`).join('')}</tbody></table></div>
+        ${actionable.length > 8 ? '<div style="text-align:center;margin-top:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="navigate(\'design-needs\')">查看全部设计需求 →</button></div>' : ''}
+      </div></div></div>`;
+  } catch (error) {
+    container.innerHTML = `<div class="empty"><p>设计需求加载失败：${escHtml(error.message)}</p></div>`;
+  }
 }
 
 async function loadDashboardPlannerTasks(uid) {

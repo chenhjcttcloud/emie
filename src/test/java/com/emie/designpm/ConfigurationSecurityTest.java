@@ -24,5 +24,10 @@ class ConfigurationSecurityTest {
         assertFalse(config.matches("(?s).*\\$\\{DESIGNPM_DB_PASSWORD:[^}]+}.*"));
         assertFalse(config.matches("(?s).*\\$\\{DESIGNPM_TEST_DB_PASSWORD:[^}]+}.*"));
         assertFalse(config.contains("createDatabaseIfNotExist=true"));
+        assertFalse(config.contains("open-in-view: true"));
+        assertTrue(config.split("open-in-view: false", -1).length - 1 == 4,
+                "所有运行 profile 都必须显式关闭 OSIV");
+        assertTrue(config.contains("repositories:\n        enabled: false"),
+                "未使用 Redis Repository 时应关闭自动扫描，避免将 JPA 仓储误判为 Redis 仓储");
     }
 }

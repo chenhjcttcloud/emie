@@ -20,7 +20,9 @@
 
     <properties>
         <java.version>21</java.version>
-        <flyway.version>11.8.1</flyway.version>
+        <flyway.version>11.20.3</flyway.version>
+        <mockito.version>5.14.2</mockito.version>
+        <argLine></argLine>
     </properties>
 
     <dependencies>
@@ -28,6 +30,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- 标准健康检查（自动汇总数据库与 Redis 状态） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
         <!-- Spring Boot Data JPA -->
@@ -106,6 +114,13 @@
             <groupId>com.larksuite.oapi</groupId>
             <artifactId>oapi-sdk</artifactId>
             <version>2.7.3</version>
+            <exclusions>
+                <!-- Spring supplies the Commons Logging bridge via spring-jcl. -->
+                <exclusion>
+                    <groupId>commons-logging</groupId>
+                    <artifactId>commons-logging</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- SFTP (NAS 归档/恢复) -->
@@ -161,6 +176,14 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Mockito inline mocking uses instrumentation; attach explicitly for Java 21+. -->
+                    <argLine>@{argLine} -Xshare:off -javaagent:"${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar"</argLine>
                 </configuration>
             </plugin>
         </plugins>

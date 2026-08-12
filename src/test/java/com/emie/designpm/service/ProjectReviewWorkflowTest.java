@@ -7,6 +7,7 @@ import com.emie.designpm.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 
 import java.util.List;
 import java.util.Map;
@@ -125,7 +126,7 @@ class ProjectReviewWorkflowTest {
         when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(scoring.findBySubTaskIdAndRole(11L, "planner")).thenReturn(Optional.of(planner));
         when(scoring.findBySubTaskIdAndRole(11L, "sales")).thenReturn(Optional.empty());
-        when(deliveryVersions.countBySubTaskId(11L)).thenReturn(1L);
+        when(deliveryVersions.findMaxVersionNoBySubTaskId(11L)).thenReturn(1);
 
         Map<String, Object> body = new java.util.HashMap<>(deliveryBody());
         body.put("changeSummary", "补充源文件并移除错误附件");
@@ -154,7 +155,7 @@ class ProjectReviewWorkflowTest {
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(scoring.findBySubTaskIdAndRole(11L, "planner")).thenReturn(Optional.of(planner));
         when(scoring.findBySubTaskIdAndRole(11L, "sales")).thenReturn(Optional.of(sales));
-        when(deliveryVersions.countBySubTaskId(11L)).thenReturn(1L);
+        when(deliveryVersions.findMaxVersionNoBySubTaskId(11L)).thenReturn(1);
 
         Map<String, Object> body = new java.util.HashMap<>(deliveryBody());
         body.put("changeSummary", "补交源文件");
@@ -265,6 +266,26 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
+    void deliveryLocksProjectBeforeTaskAndRejectsTaskFromAnotherProject() {
+        Project project = projectWithTask("regular", "accepted");
+        Project otherProject = new Project();
+        otherProject.setId(2L);
+        SubTask foreignTask = project.getTasks().get(0);
+        foreignTask.setProject(otherProject);
+        when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
+        when(subTasks.findByIdForUpdate(11L)).thenReturn(Optional.of(foreignTask));
+
+        RuntimeException error = assertThrows(RuntimeException.class,
+                () -> service.taskDeliver(1L, 11L, deliveryBody()));
+
+        assertEquals("子任务不属于当前项目", error.getMessage());
+        InOrder lockOrder = inOrder(projects, subTasks);
+        lockOrder.verify(projects).findByIdForUpdate(1L);
+        lockOrder.verify(subTasks).findByIdForUpdate(11L);
+        verify(deliveryVersions, never()).save(any());
+    }
+
+    @Test
     void scoringCenterExcludesRejectedTasks() {
         Project project = projectWithTask("regular", "rejected");
         SubTask rejected = project.getTasks().get(0);
@@ -309,6 +330,8 @@ class ProjectReviewWorkflowTest {
         task.setPlannedDate("2026-07-20");
         task.setProject(project);
         project.getTasks().add(task);
+        when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
+        when(subTasks.findByIdForUpdate(11L)).thenReturn(Optional.of(task));
         return project;
     }
 

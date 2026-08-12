@@ -25,7 +25,10 @@ class NotificationTemplateServiceTest {
 
     @Test
     void mandatoryWorkflowEventsHaveConcreteTemplates() {
-        for (String event : new String[]{"PROJECT_ASSIGNED", "TASK_ASSIGNED", "TASK_DELIVERED", "TASK_REJECTED", "TASK_REDELIVERED", "REVIEW_PENDING", "PROJECT_REMINDER", "TASK_OVERDUE"}) {
+        for (String event : new String[]{"PROJECT_ASSIGNED", "TASK_ASSIGNED", "TASK_DELIVERED", "TASK_REJECTED", "TASK_REDELIVERED", "REVIEW_PENDING", "PROJECT_REMINDER", "TASK_OVERDUE",
+                "DESIGN_REQUIREMENT_ASSIGNED", "DESIGN_REQUIREMENT_DESIGNER_ASSIGNED",
+                "DESIGN_REQUIREMENT_DELIVERED", "DESIGN_REQUIREMENT_REVIEW_PENDING", "DESIGN_REQUIREMENT_REJECTED",
+                "DESIGN_REQUIREMENT_TERMINATED"}) {
             var result = service.render(event, Map.of());
             assertTrue(result.mandatory(), event + " 必须为必达通知");
             assertFalse(result.feishuCardJson().isBlank());

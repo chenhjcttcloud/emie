@@ -35,6 +35,7 @@ public class ShareLinkService {
     private final SubTaskRepository subTaskRepository;
     private final UserRepository userRepository;
     private final TransactionTemplate accessTransaction;
+    private final TransactionTemplate readTransaction;
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -49,6 +50,8 @@ public class ShareLinkService {
         this.subTaskRepository = subTaskRepository;
         this.userRepository = userRepository;
         this.accessTransaction = transactionManager == null ? null : new TransactionTemplate(transactionManager);
+        this.readTransaction = transactionManager == null ? null : new TransactionTemplate(transactionManager);
+        if (this.readTransaction != null) this.readTransaction.setReadOnly(true);
     }
 
     /** 保留测试/嵌入式调用方的构造器。 */
@@ -107,7 +110,9 @@ public class ShareLinkService {
                 : accessTransaction.execute(status -> prepareShareAccess(token, password));
         if (access == null) throw new IllegalArgumentException("分享链接不存在");
         if (access.targetType() == null) return access.meta();
-        Map<String, Object> data = fetchTargetData(access.targetType(), access.targetId());
+        Map<String, Object> data = readTransaction == null
+                ? fetchTargetData(access.targetType(), access.targetId())
+                : readTransaction.execute(status -> fetchTargetData(access.targetType(), access.targetId()));
         data.put("_shareMeta", access.meta());
         return data;
     }
@@ -306,7 +311,7 @@ public class ShareLinkService {
 
     /** 获取项目详情（脱敏后） */
     private Map<String, Object> fetchProjectData(Long projectId) {
-        Project project = projectRepository.findById(projectId)
+        Project project = projectRepository.findByIdWithTasks(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("项目不存在"));
 
         Map<String, Object> data = new LinkedHashMap<>();
@@ -355,7 +360,7 @@ public class ShareLinkService {
 
     /** 获取子任务详情（脱敏后） */
     private Map<String, Object> fetchSubTaskData(Long subTaskId) {
-        SubTask task = subTaskRepository.findById(subTaskId)
+        SubTask task = subTaskRepository.findByIdWithProject(subTaskId)
                 .orElseThrow(() -> new IllegalArgumentException("子任务不存在"));
 
         Map<String, Object> data = new LinkedHashMap<>();

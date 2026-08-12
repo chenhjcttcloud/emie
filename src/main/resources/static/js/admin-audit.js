@@ -8,17 +8,30 @@ const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 
 async function renderAdminLogs(container) {
   container.innerHTML = `
-    <div class="filter-bar" style="margin-bottom:16px;">
-      <input type="date" class="form-input" id="logStartDate" style="min-width:140px;" title="开始日期">
-      <span style="color:var(--gray-400);font-size:13px;">~</span>
-      <input type="date" class="form-input" id="logEndDate" style="min-width:140px;" title="结束日期">
-      <button class="btn btn-primary btn-sm" data-emie-onclick="loadAdminLogs()">🔍 查询</button>
-      <button class="btn btn-outline btn-sm" data-emie-onclick="document.getElementById('logStartDate').value='';document.getElementById('logEndDate').value='';loadAdminLogs()">重置</button>
-    </div>
+    <div class="admin-log-filter-panel"><div class="admin-log-filter-title"><span>⌕</span><div><strong>日志筛选</strong><small>选择日期范围查询系统操作记录</small></div></div><div class="admin-log-filter-fields">
+      <label><span>开始日期</span><input type="date" class="form-input" id="logStartDate" title="开始日期"></label>
+      <i>至</i>
+      <label><span>结束日期</span><input type="date" class="form-input" id="logEndDate" title="结束日期"></label>
+      <button class="btn btn-primary btn-sm" data-emie-onclick="queryAdminLogs()">查询日志</button>
+      <button class="btn btn-outline btn-sm" data-emie-onclick="resetAdminLogs()">重置</button>
+    </div></div>
     <div id="logContainer"><div class="loading">加载中</div></div>
   `;
   EMIE.adminState.logPage = 0;
   await loadAdminLogs();
+}
+
+async function queryAdminLogs() {
+  EMIE.adminState.logPage = 0;
+  await loadAdminLogs();
+}
+
+async function resetAdminLogs() {
+  const start = document.getElementById('logStartDate');
+  const end = document.getElementById('logEndDate');
+  if (start) start.value = '';
+  if (end) end.value = '';
+  await queryAdminLogs();
 }
 
 async function loadAdminLogs() {
@@ -41,8 +54,8 @@ async function loadAdminLogs() {
       container.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><p>暂无日志记录</p></div>';
       return;
     }
-    container.innerHTML = '<div style="font-size:13px;color:var(--gray-400);margin-bottom:8px;">共 ' + pageResult.total + ' 条记录</div>' +
-      '<div class="card admin-log-table-wrap" style="padding:0;overflow:auto;max-height:calc(100vh - 260px);"><table><thead><tr>' +
+    container.innerHTML = '<div class="card admin-log-card"><div class="admin-log-card-head"><div><strong>操作记录</strong><span>共 ' + pageResult.total + ' 条记录</span></div><small>第 ' + (pageResult.page + 1) + ' 页</small></div>' +
+      '<div class="admin-log-table-wrap"><table><thead><tr>' +
       '<th style="width:60px;">#</th><th style="width:150px;">时间</th><th style="width:60px;">角色</th>' +
       '<th style="width:80px;">操作人</th><th>操作内容</th><th style="width:80px;">关联项目</th></tr></thead><tbody>' +
       logs.map(l => {
@@ -50,9 +63,9 @@ async function loadAdminLogs() {
         const rn = rl[l.role] || l.role;
         const pl = l.projectId ? '<a href="javascript:void(0)" data-emie-onclick="openProjectDetail(' + l.projectId + ')" style="color:var(--primary);text-decoration:none;">#' + l.projectId + '</a>' : '-';
         return '<tr><td style="color:var(--gray-400);">' + l.id + '</td><td style="white-space:nowrap;font-size:12px;">' +
-          l.time + '</td><td><span class="badge badge-progress" style="font-size:11px;">' + rn + '</span></td><td><strong>' +
-          l.username + '</strong></td><td style="font-size:13px;">' + l.action + '</td><td>' + pl + '</td></tr>';
-      }).join('') + '</tbody></table></div>' + (pageResult.totalPages > 1 ? `<div class="project-pagination"><span>第 ${pageResult.page + 1} / ${pageResult.totalPages} 页</span><div><button class="btn btn-outline btn-sm" ${pageResult.page <= 0 ? 'disabled' : ''} data-emie-onclick="changeAdminLogPage(${pageResult.page - 1})">上一页</button><button class="btn btn-outline btn-sm" ${pageResult.page >= pageResult.totalPages - 1 ? 'disabled' : ''} data-emie-onclick="changeAdminLogPage(${pageResult.page + 1})">下一页</button></div></div>` : '');
+          escHtml(l.time || '-') + '</td><td><span class="admin-log-role role-' + escHtml(l.role || '') + '">' + escHtml(rn || '-') + '</span></td><td><strong>' +
+          escHtml(l.username || '-') + '</strong></td><td class="admin-log-action">' + escHtml(l.action || '-') + '</td><td>' + pl + '</td></tr>';
+      }).join('') + '</tbody></table></div>' + (pageResult.totalPages > 1 ? `<div class="admin-log-pagination"><span>第 ${pageResult.page + 1} / ${pageResult.totalPages} 页</span><div><button class="btn btn-outline btn-sm" ${pageResult.page <= 0 ? 'disabled' : ''} data-emie-onclick="changeAdminLogPage(${pageResult.page - 1})">上一页</button><button class="btn btn-outline btn-sm" ${pageResult.page >= pageResult.totalPages - 1 ? 'disabled' : ''} data-emie-onclick="changeAdminLogPage(${pageResult.page + 1})">下一页</button></div></div>` : '') + '</div>';
   } catch (e) {
     container.innerHTML = '<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ' + escHtml(e.message || '未知错误') + '</p></div>';
   }
@@ -197,6 +210,8 @@ async function adminRevokeShare(id) {
 EMIE.registerActions({
   renderAdminLogs,
   loadAdminLogs,
+  queryAdminLogs,
+  resetAdminLogs,
   changeAdminLogPage,
   renderAdminShares,
   adminEditShare,
@@ -207,6 +222,8 @@ EMIE.registerActions({
 EMIE.registerModule('adminAudit', {
   renderAdminLogs,
   loadAdminLogs,
+  queryAdminLogs,
+  resetAdminLogs,
   changeAdminLogPage,
   renderAdminShares,
   adminEditShare,

@@ -6,5 +6,7 @@ EMIE.registerModule('dashboard', {
   renderDashboard: EMIE.modules.dashboardHome.renderDashboard,
   renderOrderList: EMIE.modules.dashboardLists.renderOrderList,
   renderMyTasks: EMIE.modules.dashboardLists.renderMyTasks,
+  renderTaskMarket: EMIE.modules.dashboardDesigner.renderTaskMarket,
   renderScoringView: EMIE.modules.dashboardScoring.renderScoringView,
+  renderPointsView: EMIE.modules.dashboardPoints.renderPointsView,
 });

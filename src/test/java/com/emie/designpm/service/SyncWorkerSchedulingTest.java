@@ -1,16 +1,22 @@
 package com.emie.designpm.service;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.emie.designpm.repository.ProjectRepository;
 import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.repository.ScoringRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.repository.SyncQueueRepository;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Set;
 
 import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SyncWorkerSchedulingTest {
 
@@ -79,10 +85,24 @@ class SyncWorkerSchedulingTest {
         doThrow(new IllegalStateException("mirror unavailable"))
                 .when(feishu).reconcileMirrors(Set.of(), Set.of(), Set.of(), Set.of());
 
-        new SyncWorker(queue, projects, tasks, scorings, logs, feishu, queueService)
-                .reconcileCurrentData();
+        Logger logger = (Logger) LoggerFactory.getLogger(SyncWorker.class);
+        ListAppender<ILoggingEvent> captured = new ListAppender<>();
+        captured.start();
+        boolean originalAdditive = logger.isAdditive();
+        logger.setAdditive(false);
+        logger.addAppender(captured);
+        try {
+            new SyncWorker(queue, projects, tasks, scorings, logs, feishu, queueService)
+                    .reconcileCurrentData();
+        } finally {
+            logger.detachAppender(captured);
+            logger.setAdditive(originalAdditive);
+            captured.stop();
+        }
 
         verifyNoInteractions(queueService);
+        assertTrue(captured.list.stream().anyMatch(event -> event.getLevel() == Level.ERROR
+                && event.getFormattedMessage().contains("mirror unavailable")));
     }
 
     private SyncWorker worker(SyncQueueRepository queue, SyncQueueService queueService) {

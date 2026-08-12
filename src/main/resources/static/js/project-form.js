@@ -159,6 +159,16 @@ const switchAssigneeType = function(prefix, role, el) {
   // 更新 hidden input
   const hidden = document.getElementById(prefix + 'SubTaskAssigneeRole');
   if (hidden) hidden.value = role;
+  if (prefix === 'add') {
+    const modeWrap = document.getElementById('addSubTaskAssignmentMode');
+    const marketLabel = modeWrap?.querySelector('input[value="market"]')?.closest('label');
+    if (marketLabel) marketLabel.style.display = role === 'designer' ? '' : 'none';
+    if (role !== 'designer') {
+      const direct = modeWrap?.querySelector('input[value="direct"]');
+      if (direct) direct.checked = true;
+      EMIE.actions.toggleSubTaskMarketMode?.(false);
+    }
+  }
   // 切换负责人下拉选项
   const sel = document.getElementById(prefix + 'SubTaskDesignerId');
   if (!sel) return;

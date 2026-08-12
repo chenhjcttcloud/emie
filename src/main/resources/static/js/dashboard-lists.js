@@ -51,6 +51,9 @@ async function openDesignRequirementDetail(id) {
     const myScore = (detail.scoringRecords || []).find(s =>
       s.reviewerId === EMIE.state.currentUserId || (!s.reviewerId && s.role === myRole));
     const canDeliver = myRole === 'designer' && detail.designerId === EMIE.state.currentUserId;
+    const canTerminate = detail.status !== 'completed' && detail.status !== 'terminated'
+      && (myRole === 'admin' || detail.ownerId === EMIE.state.currentUserId
+        || detail.responsibleId === EMIE.state.currentUserId);
     const canConfirmRevision = canDeliver && detail.status === 'rejected';
     const canReject = myRole === 'planner' && detail.plannerId === EMIE.state.currentUserId && ['pending_review', 'pending_self_score'].includes(detail.status);
     const requirementMaterials = renderDesignRequirementMaterials(
@@ -103,6 +106,7 @@ async function openDesignRequirementDetail(id) {
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline" data-emie-onclick="closeM('designRequirementDetailModal')">关闭</button>
+          ${canTerminate ? `<button class="btn btn-danger" data-emie-onclick="terminateDesignRequirement(${id})">终止需求</button>` : ''}
           ${canConfirmRevision ? `<button class="btn btn-warning" data-emie-onclick="confirmDesignRequirementRevision(${id})">🛠️ 确认修改</button>` : ''}
           ${canReject ? `<button class="btn btn-danger" data-emie-onclick="openDesignRequirementReject(${id})">↩️ 驳回</button>` : ''}
           ${canDeliver && ['draft', 'in_progress'].includes(detail.status) ? `<button class="btn btn-primary" data-emie-onclick="openDesignRequirementDelivery(${id})">📦 提交交付成果</button>` : ''}
@@ -114,6 +118,15 @@ async function openDesignRequirementDetail(id) {
   } catch (error) {
     alert('加载详情失败：' + error.message);
   }
+}
+
+async function terminateDesignRequirement(id) {
+  if (!confirm('确定终止该设计/送审需求吗？终止后将不能继续交付或评分。')) return;
+  try {
+    await apiPost(`/design-requirements/${id}/terminate`, {});
+    closeM('designRequirementDetailModal');
+    await openDesignRequirementDetail(id);
+  } catch (e) { alert('终止失败：' + e.message); }
 }
 
 function openDesignRequirementReject(id) {
@@ -593,6 +606,7 @@ EMIE.registerActions({
   renderOrderList,
   openListItemDetail,
   openDesignRequirementDetail,
+  terminateDesignRequirement,
   openDesignRequirementDelivery,
   confirmDesignRequirementRevision,
   openDesignRequirementReject,
@@ -623,6 +637,7 @@ EMIE.registerModule('dashboardLists', {
   renderOrderList,
   openListItemDetail,
   openDesignRequirementDetail,
+  terminateDesignRequirement,
   openDesignRequirementDelivery,
   confirmDesignRequirementRevision,
   openDesignRequirementReject,

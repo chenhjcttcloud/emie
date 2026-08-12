@@ -12,8 +12,10 @@ const renderDashboard = (...args) => EMIE.actions.renderDashboard(...args);
 const renderOrderList = (...args) => EMIE.actions.renderOrderList(...args);
 const renderProjectTable = (...args) => EMIE.actions.renderProjectTable(...args);
 const renderMyTasks = (...args) => EMIE.actions.renderMyTasks(...args);
+const renderTaskMarket = (...args) => EMIE.actions.renderTaskMarket(...args);
 const renderDepartmentTasks = (...args) => EMIE.actions.renderDepartmentTasks(...args);
 const renderScoringView = (...args) => EMIE.actions.renderScoringView(...args);
+const renderPointsView = (...args) => EMIE.actions.renderPointsView(...args);
 const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const renderProjectDetailContent = (...args) => EMIE.actions.renderProjectDetailContent(...args);
 const renderProjectActions = (...args) => EMIE.actions.renderProjectActions(...args);
@@ -52,7 +54,7 @@ async function refreshAfterMutation(pid) {
 
     // 按当前视图刷新
     (async () => {
-      if (['orders', 'channel', 'regular', 'design-needs', 'tasks', 'scoring'].includes(EMIE.state.currentView)) {
+      if (['orders', 'channel', 'regular', 'design-needs', 'tasks', 'task-market', 'scoring', 'points'].includes(EMIE.state.currentView)) {
         await render();
       } else if (pid) {
         try {
@@ -200,10 +202,14 @@ async function render() {
       await renderOrderList(main, 'design_requirement', role, uid, '🎨 设计/送审需求', '/design-requirements/page', renderId);
     } else if (view === 'tasks') {
       await renderMyTasks(main, role, uid, EMIE.state.taskBucket || 'all');
+    } else if (view === 'task-market') {
+      await renderTaskMarket(main, role, uid);
     } else if (view === 'other-tasks') {
       await renderDepartmentTasks(main, role, uid, EMIE.state.taskBucket || 'all');
     } else if (view === 'scoring') {
       await renderScoringView(main, role, uid);
+    } else if (view === 'points') {
+      await renderPointsView(main);
     } else if (view === 'admin' || view === 'logs') {
       await renderAdmin(main, role, uid);
     }

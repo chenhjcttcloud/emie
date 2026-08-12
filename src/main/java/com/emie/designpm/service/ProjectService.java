@@ -9,6 +9,7 @@ import com.emie.designpm.controller.AuthController;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +38,8 @@ public class ProjectService {
     private final FileArchiveService fileArchiveService;
     private final ProjectAccessService projectAccessService;
     private final NotificationWorkflowService notificationWorkflowService;
+    private PointsService pointsService;
+    private DesignerMarketEligibilityRepository marketEligibilityRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ProjectService(ProjectRepository projectRepository,
@@ -63,6 +66,14 @@ public class ProjectService {
         this.projectAccessService = projectAccessService;
         this.notificationWorkflowService = notificationWorkflowService;
     }
+
+    /** Optional setter keeps existing lightweight unit-test construction compatible. */
+    @Autowired(required = false)
+    void setPointsService(PointsService pointsService) {
+        this.pointsService = pointsService;
+    }
+    @Autowired(required = false)
+    void setMarketEligibilityRepository(DesignerMarketEligibilityRepository repository) { this.marketEligibilityRepository = repository; }
 
     // ==================== Query ====================
 
@@ -158,6 +169,22 @@ public class ProjectService {
             map.putIfAbsent(p.getId(), new int[]{0, 0, 0});
         }
         return map;
+    }
+
+    /**
+     * 在明确的只读事务中完成动态状态计算，列表 DTO 不再触发懒加载。
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, String> computeProjectStatusMap(List<Project> projects) {
+        if (projects == null || projects.isEmpty()) return Collections.emptyMap();
+        List<Long> ids = projects.stream().map(Project::getId).filter(Objects::nonNull).toList();
+        if (ids.isEmpty()) return Collections.emptyMap();
+        Map<Long, String> result = projectRepository.findAllWithTasksByIdIn(ids).stream()
+                .collect(Collectors.toMap(Project::getId, this::computeProjectStatus));
+        for (Project project : projects) {
+            result.putIfAbsent(project.getId(), project.getStatus());
+        }
+        return result;
     }
 
     public List<Project> getProjectsByType(String type) {
@@ -459,6 +486,8 @@ public class ProjectService {
         String name = SecurityUtil.sanitizeText((String) body.get("name"), 200);
         String plannedDate = (String) body.get("plannedDate");
         String designerId = SecurityUtil.sanitizeText((String) body.get("designerId"), 100);
+        boolean publishToMarket = Boolean.TRUE.equals(body.get("publishToMarket"))
+                || "true".equalsIgnoreCase(String.valueOf(body.get("publishToMarket")));
         String details = SecurityUtil.sanitizeText((String) body.getOrDefault("details", ""), 2000);
         String workflowStage = SecurityUtil.sanitizeText((String) body.get("workflowStage"), 30);
         if (!ProjectWorkflowService.STAGES.contains(workflowStage)) {
@@ -475,10 +504,36 @@ public class ProjectService {
         task.setPublisherId((String) body.get("currentUserId"));
         task.setPublisherName((String) body.getOrDefault("currentUser", ""));
         task.setPublisherRole(role);
+        if (pointsService != null && !Boolean.TRUE.equals(body.get("selfInitiated"))) {
+            pointsService.bindRuleSnapshot(task, (String) body.get("pointRuleCode"),
+                    (String) body.get("difficultyCode"));
+        }
+        task.setRequiredSkillTagsJson(validateSkillTags(body.get("requiredSkillTags")));
+        task.setCollaboratorAllocationsJson(validateCollaboratorAllocations(body.get("collaboratorAllocations"), designerId));
+        task.setMilestoneMonth(validateMilestoneMonth(body.get("milestoneMonth")));
+        task.setAssignmentReason(SecurityUtil.sanitizeText((String) body.get("assignmentReason"), 500));
+        task.setSelfInitiated(Boolean.TRUE.equals(body.get("selfInitiated")));
+        task.setSelfInitiatedApproved(task.isSelfInitiated());
         // 设置负责人角色类型（designer / supplychain / planner / sales），默认 designer
         String assigneeRole = (String) body.get("assigneeRole");
         task.setAssigneeRole(assigneeRole != null && !assigneeRole.isBlank() ? assigneeRole : "designer");
+        if (publishToMarket) {
+            if (!"designer".equals(task.getAssigneeRole())) {
+                throw new RuntimeException("只有设计师子任务可以发布到接单市场");
+            }
+            if (designerId != null && !designerId.isBlank()) {
+                throw new RuntimeException("发布到接单市场时不能指定设计师");
+            }
+            task.setAllocationStatus("market_open");
+            task.setMarketPublishedAt(LocalDateTime.now());
+        } else {
+            if (designerId == null || designerId.isBlank()) {
+                throw new RuntimeException("请选择子任务负责人或发布到接单市场");
+            }
+            task.setAllocationStatus("direct_assigned");
+        }
         validateSubTaskAssignee(designerId, task.getAssigneeRole());
+        if (!publishToMarket && "designer".equals(task.getAssigneeRole())) validateDesignCategoryEligibility(task, designerId);
         task.setDetails(details);
         task.setReferenceImagesJson(validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true));
         task.setAttachmentsJson(validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
@@ -506,14 +561,17 @@ public class ProjectService {
         }
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
-        p.getLogs().add(new ActivityLog("添加子任务：" + name, currentUser, role, p));
+        p.getLogs().add(new ActivityLog((publishToMarket ? "发布接单市场子任务：" : "添加子任务：") + name,
+                currentUser, role, p));
 
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
         // 统一按负责人 ID 通知，designerId 兼容设计、供应链、销售、产品推广等负责人类型。
-        safeNotifyAfterCommit("TASK_ASSIGNED", task.getDesignerId(), "sub_task", task.getId(),
-                (String) body.getOrDefault("currentUserId", ""), notificationContext(saved, task, currentUser, ""));
+        if (task.getDesignerId() != null && !task.getDesignerId().isBlank()) {
+            safeNotifyAfterCommit("TASK_ASSIGNED", task.getDesignerId(), "sub_task", task.getId(),
+                    (String) body.getOrDefault("currentUserId", ""), notificationContext(saved, task, currentUser, ""));
+        }
         return saved;
     }
 
@@ -537,7 +595,8 @@ public class ProjectService {
     }
 
     public Project updateSubTask(Long projectId, Long taskId, Map<String, Object> body) {
-        Project p = projectRepository.findById(projectId)
+        // 与抢单、撤回保持相同的 project -> subtask 锁序，避免编辑覆盖并发抢单结果。
+        Project p = projectRepository.findByIdForUpdate(projectId)
                 .orElseThrow(() -> new RuntimeException("项目不存在"));
 
         if (List.of("terminated", "paused", "pending_terminate").contains(p.getStatus())) {
@@ -553,9 +612,11 @@ public class ProjectService {
             throw new RuntimeException("仅项目负责人企划可编辑子任务");
         }
 
-        SubTask task = p.getTasks().stream()
-                .filter(t -> t.getId().equals(taskId))
-                .findFirst().orElseThrow(() -> new RuntimeException("子任务不存在"));
+        SubTask task = subTaskRepository.findByIdForUpdate(taskId)
+                .orElseThrow(() -> new RuntimeException("子任务不存在"));
+        if (task.getProject() == null || !Objects.equals(task.getProject().getId(), projectId)) {
+            throw new RuntimeException("子任务不属于当前项目");
+        }
 
         Map<String, Object> before = snapshotSubTask(task);
 
@@ -570,11 +631,52 @@ public class ProjectService {
         if (body.containsKey("plannedDate")) task.setPlannedDate((String) body.get("plannedDate"));
         if (body.containsKey("designerId")) {
             String did = SecurityUtil.sanitizeText((String) body.get("designerId"), 100);
+            if ((did == null || did.isBlank())
+                    && !("pending".equals(task.getStatus())
+                    && List.of("market_open", "withdrawn").contains(task.getAllocationStatus()))) {
+                throw new RuntimeException("已指派或已领取的子任务不能清空负责人");
+            }
+            if (!"pending".equals(task.getStatus()) && !Objects.equals(did, task.getDesignerId())) {
+                throw new RuntimeException("子任务开始执行后不能更换负责人");
+            }
             task.setDesignerId(did);
             task.setDesignerName(userService.getUserName(did));
+            if (did != null && !did.isBlank()) {
+                task.setAllocationStatus("direct_assigned");
+            }
         }
         if (body.containsKey("assigneeRole")) {
             task.setAssigneeRole((String) body.get("assigneeRole"));
+        }
+        if (body.containsKey("pointRuleCode") || body.containsKey("difficultyCode")) {
+            if (!"pending".equals(task.getStatus())) {
+                throw new RuntimeException("子任务开始执行后不能修改积分规则或难度");
+            }
+            if (pointsService == null) throw new RuntimeException("积分规则服务暂不可用，请稍后重试");
+            String ruleCode = body.containsKey("pointRuleCode")
+                    ? (String) body.get("pointRuleCode") : task.getPointRuleCode();
+            String difficultyCode = body.containsKey("difficultyCode")
+                    ? (String) body.get("difficultyCode") : task.getDifficultyCode();
+            pointsService.bindRuleSnapshot(task, ruleCode, difficultyCode);
+        }
+        if (body.containsKey("requiredSkillTags")) {
+            if (!"pending".equals(task.getStatus())) {
+                throw new RuntimeException("子任务开始执行后不能修改能力要求");
+            }
+            task.setRequiredSkillTagsJson(validateSkillTags(body.get("requiredSkillTags")));
+        }
+        if (body.containsKey("collaboratorAllocations") || body.containsKey("milestoneMonth")) {
+            if (!"pending".equals(task.getStatus())) throw new RuntimeException("任务开始后不能修改合作比例或里程碑月份");
+            if (body.containsKey("collaboratorAllocations")) {
+                task.setCollaboratorAllocationsJson(validateCollaboratorAllocations(body.get("collaboratorAllocations"), task.getDesignerId()));
+            }
+            if (body.containsKey("milestoneMonth")) task.setMilestoneMonth(validateMilestoneMonth(body.get("milestoneMonth")));
+        }
+        if (body.containsKey("assignmentReason")) task.setAssignmentReason(SecurityUtil.sanitizeText((String) body.get("assignmentReason"), 500));
+        if ("market_open".equals(task.getAllocationStatus())
+                && (!"designer".equals(task.getAssigneeRole())
+                || (task.getDesignerId() != null && !task.getDesignerId().isBlank()))) {
+            throw new RuntimeException("开放市场任务必须保持设计师类型且不能指定负责人");
         }
         validateSubTaskAssignee(task.getDesignerId(), task.getAssigneeRole() == null ? "designer" : task.getAssigneeRole());
         if (body.containsKey("details")) task.setDetails(SecurityUtil.sanitizeText((String) body.get("details"), 2000));
@@ -600,6 +702,22 @@ public class ProjectService {
         data.put("plannedDate", task.getPlannedDate());
         data.put("designerId", task.getDesignerId());
         data.put("designerName", task.getDesignerName());
+        data.put("allocationStatus", task.getAllocationStatus());
+        data.put("pointRuleCode", task.getPointRuleCode());
+        data.put("difficultyCode", task.getDifficultyCode());
+        data.put("difficultyMultiplierSnapshot", task.getDifficultyMultiplierSnapshot());
+        data.put("basePointSnapshot", task.getBasePointSnapshot());
+        data.put("qualityBonusThresholdSnapshot", task.getQualityBonusThresholdSnapshot());
+        data.put("qualityBonusRatioSnapshot", task.getQualityBonusRatioSnapshot());
+        data.put("qualityTopThresholdSnapshot", task.getQualityTopThresholdSnapshot());
+        data.put("qualityTopRatioSnapshot", task.getQualityTopRatioSnapshot());
+        data.put("maxTotalMultiplierSnapshot", task.getMaxTotalMultiplierSnapshot());
+        data.put("collaboratorAllocationsJson", task.getCollaboratorAllocationsJson());
+        data.put("milestoneMonth", task.getMilestoneMonth());
+        data.put("assignmentReason", task.getAssignmentReason());
+        data.put("selfInitiated", task.isSelfInitiated());
+        data.put("countInPerformanceSnapshot", task.getCountInPerformanceSnapshot());
+        data.put("requiredSkillTagsJson", task.getRequiredSkillTagsJson());
         data.put("assigneeRole", task.getAssigneeRole());
         data.put("details", task.getDetails());
         return data;
@@ -697,6 +815,21 @@ public class ProjectService {
 
     // ==================== Task Workflow ====================
 
+    private Project lockProject(Long projectId) {
+        return projectRepository.findByIdForUpdate(projectId)
+                .orElseThrow(() -> new RuntimeException("项目不存在"));
+    }
+
+    /** All task workflow mutations must acquire locks in project -> subtask order. */
+    private SubTask lockSubTask(Long projectId, Long taskId) {
+        SubTask task = subTaskRepository.findByIdForUpdate(taskId)
+                .orElseThrow(() -> new RuntimeException("子任务不存在"));
+        if (task.getProject() == null || !Objects.equals(task.getProject().getId(), projectId)) {
+            throw new RuntimeException("子任务不属于当前项目");
+        }
+        return task;
+    }
+
     @Transactional
     public Project taskAccept(Long projectId, Long taskId, Map<String, Object> body) {
         // 锁定项目行
@@ -732,11 +865,20 @@ public class ProjectService {
             throw new RuntimeException("该子任务已被接单或已处理");
         }
 
+        if (task.getDesignerId() == null || task.getDesignerId().isBlank()) {
+            validateMarketClaimConstraints(task, designerUserId);
+        }
+
         // 如果子任务未指定设计师，自动绑定接单的设计师（防并发）
         if (task.getDesignerId() == null || task.getDesignerId().isBlank()) {
+            if (!"market_open".equals(task.getAllocationStatus())) {
+                throw new RuntimeException("该子任务未开放接单");
+            }
             if (designerUserId != null && !designerUserId.isBlank()) {
                 task.setDesignerId(designerUserId);
                 task.setDesignerName(userService.getUserName(designerUserId));
+                task.setAllocationStatus("claimed");
+                task.setClaimedAt(LocalDateTime.now());
                 p.getLogs().add(new ActivityLog("设计师接单：" + task.getName() + "（自动绑定" + task.getDesignerName() + "）", currentUser, currentRole, p));
             }
         } else if (!task.getDesignerId().equals(designerUserId)) {
@@ -753,20 +895,164 @@ public class ProjectService {
 
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
+        safeNotifyAfterCommit("TASK_ASSIGNED", task.getDesignerId(), "sub_task", task.getId(),
+                (String) body.getOrDefault("currentUserId", ""), notificationContext(saved, task, currentUser, ""));
         return saved;
     }
 
-    public Project taskDeliver(Long projectId, Long taskId, Map<String, Object> body) {
-        Project p = projectRepository.findById(projectId)
+    private void validateMarketClaimConstraints(SubTask task, String designerUserId) {
+        if (!"market_open".equals(task.getAllocationStatus())) return;
+        if (marketEligibilityRepository != null) marketEligibilityRepository.findByUserId(designerUserId).ifPresent(eligibility -> {
+            if (eligibility.isSuspended()) throw new RuntimeException("开放接单资格已暂停至" + eligibility.getSuspendedUntil() + "，原因：" + Optional.ofNullable(eligibility.getReason()).orElse("违规处理"));
+        });
+        String code = Optional.ofNullable(task.getPointRuleCode()).orElse("").trim().toUpperCase();
+        if (code.startsWith("A") || code.startsWith("B")) {
+            long activeMainTasks = subTaskRepository.countActiveMainTasksByCategory(designerUserId, "A")
+                    + subTaskRepository.countActiveMainTasksByCategory(designerUserId, "B");
+            int maxMainTasks = positiveIntConfig("points.claim.max_main_tasks", 5);
+            if (activeMainTasks >= maxMainTasks) {
+                throw new RuntimeException("当前A/B类主任务已达上限（" + maxMainTasks + "个），请完成现有任务后再接单");
+            }
+        }
+
+        Set<String> required = parseSkillTags(task.getRequiredSkillTagsJson());
+        String configured = systemConfigRepository.findByConfigKey("points.user.skills." + designerUserId)
+                .map(SystemConfig::getConfigValue).orElse("[]");
+        Set<String> actual = parseSkillTags(configured);
+        validateDesignCategoryEligibility(task, designerUserId, actual);
+        if (required.isEmpty()) return;
+        if (!actual.containsAll(required)) {
+            Set<String> missing = new LinkedHashSet<>(required);
+            missing.removeAll(actual);
+            throw new RuntimeException("能力标签不匹配，缺少：" + String.join("、", missing));
+        }
+    }
+
+    private void validateDesignCategoryEligibility(SubTask task, String designerUserId) {
+        String configured = systemConfigRepository.findByConfigKey("points.user.skills." + designerUserId)
+                .map(SystemConfig::getConfigValue).orElse("[]");
+        validateDesignCategoryEligibility(task, designerUserId, parseSkillTags(configured));
+    }
+
+    private void validateDesignCategoryEligibility(SubTask task, String designerUserId, Set<String> actual) {
+        String ruleCode = Optional.ofNullable(task.getPointRuleCode()).orElse("").toUpperCase(Locale.ROOT);
+        if ("B1".equals(ruleCode) && !actual.contains("ID")) throw new RuntimeException("B1原创任务仅具备ID能力标签的设计师可接");
+        if (ruleCode.startsWith("B") && !"B1".equals(ruleCode) && actual.stream().noneMatch(tag -> Set.of("ID", "视觉").contains(tag))) {
+            throw new RuntimeException("产品设计类任务仅具备ID或视觉能力标签的设计师可接");
+        }
+    }
+
+    private int positiveIntConfig(String key, int fallback) {
+        return systemConfigRepository.findByConfigKey(key).map(SystemConfig::getConfigValue)
+                .map(String::trim).filter(value -> !value.isEmpty())
+                .map(value -> {
+                    try { return Integer.parseInt(value); } catch (NumberFormatException ignored) { return fallback; }
+                }).filter(value -> value > 0).orElse(fallback);
+    }
+
+    private String validateSkillTags(Object raw) {
+        if (raw == null) return null;
+        Collection<?> values;
+        if (raw instanceof Collection<?> collection) {
+            values = collection;
+        } else if (raw instanceof String json && !json.isBlank()) {
+            try { values = objectMapper.readValue(json, new TypeReference<List<Object>>() {}); }
+            catch (Exception e) { throw new RuntimeException("能力标签格式无效"); }
+        } else if (raw instanceof String) {
+            return null;
+        } else {
+            throw new RuntimeException("能力标签格式无效");
+        }
+        List<String> normalized = values.stream()
+                .filter(Objects::nonNull)
+                .map(String::valueOf)
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(value -> SecurityUtil.sanitizeText(value, 40))
+                .filter(Objects::nonNull)
+                .distinct().limit(20).toList();
+        try { return normalized.isEmpty() ? null : objectMapper.writeValueAsString(normalized); }
+        catch (Exception e) { throw new RuntimeException("能力标签保存失败"); }
+    }
+
+    private Set<String> parseSkillTags(String json) {
+        if (json == null || json.isBlank()) return Collections.emptySet();
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<String>>() {}).stream()
+                    .filter(Objects::nonNull).map(String::trim).filter(value -> !value.isBlank())
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+        } catch (Exception e) {
+            log.warn("忽略格式错误的能力标签配置");
+            return Collections.emptySet();
+        }
+    }
+
+    private String validateMilestoneMonth(Object raw) {
+        if (raw == null || String.valueOf(raw).isBlank()) return null;
+        String month = String.valueOf(raw).trim();
+        try { java.time.YearMonth.parse(month); return month; }
+        catch (Exception e) { throw new RuntimeException("里程碑月份格式应为YYYY-MM"); }
+    }
+
+    private String validateCollaboratorAllocations(Object raw, String primaryUserId) {
+        if (raw == null || String.valueOf(raw).isBlank() || "[]".equals(String.valueOf(raw).trim())) return null;
+        List<Map<String, Object>> rows;
+        try {
+            rows = raw instanceof Collection<?> collection
+                    ? objectMapper.convertValue(collection, new TypeReference<List<Map<String, Object>>>() {})
+                    : objectMapper.readValue(String.valueOf(raw), new TypeReference<List<Map<String, Object>>>() {});
+        } catch (Exception e) { throw new RuntimeException("合作成员比例格式无效"); }
+        Set<String> users = new LinkedHashSet<>();
+        int total = 0;
+        List<Map<String, Object>> normalized = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            String userId = SecurityUtil.sanitizeText(String.valueOf(row.getOrDefault("userId", "")), 100);
+            int ratio;
+            try { ratio = Integer.parseInt(String.valueOf(row.get("ratio"))); }
+            catch (Exception e) { throw new RuntimeException("合作比例必须是整数百分比"); }
+            if (userId == null || userId.isBlank() || userId.equals(primaryUserId) || !users.add(userId)) {
+                throw new RuntimeException("合作成员不能重复或与主负责人相同");
+            }
+            if (ratio <= 0 || ratio >= 100) throw new RuntimeException("单个合作比例必须在1%到99%之间");
+            User collaborator = userService.getUserByUserId(userId);
+            if (collaborator == null || !"designer".equals(normalizeAssigneeRole(collaborator.getRole()))) {
+                throw new RuntimeException("合作成员必须是有效设计师");
+            }
+            total += ratio;
+            normalized.add(Map.of("userId", userId, "name", collaborator.getName(), "ratio", ratio));
+        }
+        if (total >= 100) throw new RuntimeException("合作成员比例合计必须小于100%，剩余比例归主负责人");
+        try { return objectMapper.writeValueAsString(normalized); }
+        catch (Exception e) { throw new RuntimeException("合作比例保存失败"); }
+    }
+
+    @Transactional
+    public Project withdrawMarketTask(Long projectId, Long taskId, Map<String, Object> body) {
+        Project p = projectRepository.findByIdForUpdate(projectId)
                 .orElseThrow(() -> new RuntimeException("项目不存在"));
+        String role = (String) body.getOrDefault("currentRole", "");
+        if (!List.of("planner", "admin").contains(role)) throw new RuntimeException("仅企划或管理员可撤回市场任务");
+        if ("planner".equals(role) && !isProjectPlanner(p, body)) throw new RuntimeException("仅项目负责人企划可撤回市场任务");
+        SubTask task = subTaskRepository.findByIdForUpdate(taskId)
+                .orElseThrow(() -> new RuntimeException("子任务不存在"));
+        if (task.getProject() == null || !Objects.equals(task.getProject().getId(), projectId)) throw new RuntimeException("子任务不属于当前项目");
+        if (!"market_open".equals(task.getAllocationStatus()) || !"pending".equals(task.getStatus())) {
+            throw new RuntimeException("该任务已被领取或不在接单市场");
+        }
+        task.setAllocationStatus("withdrawn");
+        p.getLogs().add(new ActivityLog("撤回接单市场子任务：" + task.getName(),
+                (String) body.getOrDefault("currentUser", ""), role, p));
+        return projectRepository.saveAndFlush(p);
+    }
+
+    public Project taskDeliver(Long projectId, Long taskId, Map<String, Object> body) {
+        Project p = lockProject(projectId);
 
         if (List.of("terminated", "paused", "pending_terminate").contains(p.getStatus())) {
             throw new RuntimeException("项目已" + ("terminated".equals(p.getStatus()) ? "终止" : "暂停") + "，无法操作");
         }
 
-        SubTask task = p.getTasks().stream()
-                .filter(t -> t.getId().equals(taskId))
-                .findFirst().orElseThrow(() -> new RuntimeException("子任务不存在"));
+        SubTask task = lockSubTask(projectId, taskId);
 
         String currentUserId = (String) body.getOrDefault("currentUserId", "");
         if (currentUserId.isBlank() || !currentUserId.equals(task.getDesignerId())) {
@@ -808,15 +1094,15 @@ public class ProjectService {
 
     /** 负责人将已交付成果正式送审；仅设计师和供应链任务需要此一步。 */
     public Project taskSubmitReview(Long projectId, Long taskId, Map<String, Object> body) {
-        Project p = projectRepository.findById(projectId).orElseThrow(() -> new RuntimeException("项目不存在"));
-        SubTask task = p.getTasks().stream().filter(t -> t.getId().equals(taskId)).findFirst()
-                .orElseThrow(() -> new RuntimeException("子任务不存在"));
+        Project p = lockProject(projectId);
+        SubTask task = lockSubTask(projectId, taskId);
         String currentUserId = (String) body.getOrDefault("currentUserId", "");
         String role = (String) body.getOrDefault("currentRole", "");
         if (!"planner".equals(role)) throw new RuntimeException("仅产品企划可送审");
         if (!List.of("designer", "supplychain").contains(task.getAssigneeRole())) throw new RuntimeException("仅设计师和供应链子任务需要送审");
         if (!"delivered".equals(task.getStatus())) throw new RuntimeException("当前子任务不在待送审状态");
         task.setStatus("submitted_for_review");
+        if (pointsService != null && !task.isSelfInitiated()) pointsService.awardBaseSubmission(task);
         String user = (String) body.getOrDefault("currentUser", "");
         p.getLogs().add(new ActivityLog("子任务送审：" + task.getName(), user, role, p));
         Project saved = projectRepository.saveAndFlush(p);
@@ -826,16 +1112,13 @@ public class ProjectService {
     }
 
     public Project taskRedeliver(Long projectId, Long taskId, Map<String, Object> body) {
-        Project p = projectRepository.findById(projectId)
-                .orElseThrow(() -> new RuntimeException("项目不存在"));
+        Project p = lockProject(projectId);
 
         if (List.of("terminated", "paused", "pending_terminate").contains(p.getStatus())) {
             throw new RuntimeException("项目已" + ("terminated".equals(p.getStatus()) ? "终止" : "暂停") + "，无法操作");
         }
 
-        SubTask task = p.getTasks().stream()
-                .filter(t -> t.getId().equals(taskId))
-                .findFirst().orElseThrow(() -> new RuntimeException("子任务不存在"));
+        SubTask task = lockSubTask(projectId, taskId);
 
         String currentUserId = (String) body.getOrDefault("currentUserId", "");
         if (currentUserId.isBlank() || !currentUserId.equals(task.getDesignerId())) {
@@ -881,9 +1164,8 @@ public class ProjectService {
 
     /** 被驳回负责人确认开始修改，任务回到执行中。 */
     public Project taskConfirmRevision(Long projectId, Long taskId, Map<String, Object> body) {
-        Project p = projectRepository.findById(projectId).orElseThrow(() -> new RuntimeException("项目不存在"));
-        SubTask task = p.getTasks().stream().filter(t -> t.getId().equals(taskId)).findFirst()
-                .orElseThrow(() -> new RuntimeException("子任务不存在"));
+        Project p = lockProject(projectId);
+        SubTask task = lockSubTask(projectId, taskId);
         String userId = (String) body.getOrDefault("currentUserId", "");
         if (!userId.equals(task.getDesignerId())) throw new RuntimeException("仅当前子任务负责人可确认修改");
         if (!"rejected".equals(task.getStatus())) throw new RuntimeException("当前子任务不是已驳回状态");
@@ -895,14 +1177,11 @@ public class ProjectService {
     }
 
     public Project taskCorrectDelivery(Long projectId, Long taskId, Map<String, Object> body) {
-        Project p = projectRepository.findById(projectId)
-                .orElseThrow(() -> new RuntimeException("项目不存在"));
+        Project p = lockProject(projectId);
         if (List.of("terminated", "paused", "pending_terminate").contains(p.getStatus())) {
             throw new RuntimeException("当前项目状态不允许修正交付");
         }
-        SubTask task = p.getTasks().stream()
-                .filter(t -> t.getId().equals(taskId))
-                .findFirst().orElseThrow(() -> new RuntimeException("子任务不存在"));
+        SubTask task = lockSubTask(projectId, taskId);
         String currentUserId = (String) body.getOrDefault("currentUserId", "");
         if (currentUserId.isBlank() || !currentUserId.equals(task.getDesignerId())) {
             throw new RuntimeException("仅当前子任务负责人可修正交付");
@@ -951,7 +1230,7 @@ public class ProjectService {
                                      String submittedActualDate, String userId, String userName, String role) {
         SubTaskDeliveryVersion version = new SubTaskDeliveryVersion();
         version.setSubTask(task);
-        version.setVersionNo((int) deliveryVersionRepository.countBySubTaskId(task.getId()) + 1);
+        version.setVersionNo(deliveryVersionRepository.findMaxVersionNoBySubTaskId(task.getId()) + 1);
         version.setSubmissionType(submissionType);
         version.setChangeSummary(changeSummary);
         version.setDeliverables(task.getDeliverables());
@@ -986,16 +1265,13 @@ public class ProjectService {
     }
 
     public Project taskApprove(Long projectId, Long taskId, Map<String, Object> body) {
-        Project p = projectRepository.findById(projectId)
-                .orElseThrow(() -> new RuntimeException("项目不存在"));
+        Project p = lockProject(projectId);
 
         if (List.of("terminated", "paused", "pending_terminate").contains(p.getStatus())) {
             throw new RuntimeException("项目已" + ("terminated".equals(p.getStatus()) ? "终止" : "暂停") + "，无法操作");
         }
 
-        SubTask task = p.getTasks().stream()
-                .filter(t -> t.getId().equals(taskId))
-                .findFirst().orElseThrow(() -> new RuntimeException("子任务不存在"));
+        SubTask task = lockSubTask(projectId, taskId);
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
@@ -1035,6 +1311,9 @@ public class ProjectService {
 
         // 检查是否所有评分已完成
         checkTaskCompletion(task, p);
+        if ("completed".equals(task.getStatus()) && pointsService != null && !task.isSelfInitiated()) {
+            pointsService.awardQualityCompletion(task);
+        }
         Project saved = projectRepository.save(p);
         Map<String, String> notifyContext = notificationContext(saved, task, currentUser, comments);
         notifyContext.put("reviewRole", "planner".equals(currentRole) ? "产品企划" : ("admin".equals(currentRole) ? "管理员" : "销售"));
@@ -1200,16 +1479,13 @@ public class ProjectService {
     }
 
     public Project taskReject(Long projectId, Long taskId, Map<String, Object> body) {
-        Project p = projectRepository.findById(projectId)
-                .orElseThrow(() -> new RuntimeException("项目不存在"));
+        Project p = lockProject(projectId);
 
         if (List.of("terminated", "paused", "pending_terminate").contains(p.getStatus())) {
             throw new RuntimeException("项目已" + ("terminated".equals(p.getStatus()) ? "终止" : "暂停") + "，无法操作");
         }
 
-        SubTask task = p.getTasks().stream()
-                .filter(t -> t.getId().equals(taskId))
-                .findFirst().orElseThrow(() -> new RuntimeException("子任务不存在"));
+        SubTask task = lockSubTask(projectId, taskId);
 
         String comments = SecurityUtil.sanitizeText((String) body.get("comments"), 500);
         String requiredCompletionDate = SecurityUtil.sanitizeText((String) body.get("requiredCompletionDate"), 20);
@@ -1285,16 +1561,13 @@ public class ProjectService {
     // ==================== Scoring ====================
 
     public Project submitScoring(Long projectId, Long taskId, Map<String, Object> body) {
-        Project p = projectRepository.findById(projectId)
-                .orElseThrow(() -> new RuntimeException("项目不存在"));
+        Project p = lockProject(projectId);
 
         if (List.of("terminated", "paused", "pending_terminate").contains(p.getStatus())) {
             throw new RuntimeException("项目已" + ("terminated".equals(p.getStatus()) ? "终止" : "暂停") + "，无法操作");
         }
 
-        SubTask task = p.getTasks().stream()
-                .filter(t -> t.getId().equals(taskId))
-                .findFirst().orElseThrow(() -> new RuntimeException("子任务不存在"));
+        SubTask task = lockSubTask(projectId, taskId);
 
         String role = (String) body.get("role");
         String currentRole = (String) body.getOrDefault("currentRole", "");
