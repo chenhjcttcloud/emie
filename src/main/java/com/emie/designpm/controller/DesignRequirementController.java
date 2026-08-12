@@ -8,6 +8,7 @@ import com.emie.designpm.service.DesignRequirementScoringService;
 import com.emie.designpm.service.UserService;
 import com.emie.designpm.service.PermissionService;
 import com.emie.designpm.service.NotificationWorkflowService;
+import com.emie.designpm.service.FeishuChatService;
 import com.emie.designpm.entity.User;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.PageRequest;
@@ -27,6 +28,7 @@ public class DesignRequirementController {
     private final UserService userService;
     private final PermissionService permissionService;
     private final NotificationWorkflowService notificationWorkflowService;
+    private final FeishuChatService feishuChatService;
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     @Autowired
@@ -35,25 +37,27 @@ public class DesignRequirementController {
                                        DesignRequirementScoringService scoringService,
                                        UserService userService,
                                        PermissionService permissionService,
-                                       NotificationWorkflowService notificationWorkflowService) {
+                                       NotificationWorkflowService notificationWorkflowService,
+                                       FeishuChatService feishuChatService) {
         this.repository = repository;
         this.scoreRepository = scoreRepository;
         this.scoringService = scoringService;
         this.userService = userService;
         this.permissionService = permissionService;
         this.notificationWorkflowService = notificationWorkflowService;
+        this.feishuChatService = feishuChatService;
     }
 
     /** 保留给轻量单元测试；生产运行始终使用完整依赖构造器。 */
     DesignRequirementController(DesignRequirementRepository repository) {
-        this(repository, null, null, null, null, null);
+        this(repository, null, null, null, null, null, null);
     }
 
     DesignRequirementController(DesignRequirementRepository repository,
                                 DesignRequirementScoreRepository scoreRepository,
                                 DesignRequirementScoringService scoringService,
                                 UserService userService) {
-        this(repository, scoreRepository, scoringService, userService, null, null);
+        this(repository, scoreRepository, scoringService, userService, null, null, null);
     }
 
     DesignRequirementController(DesignRequirementRepository repository,
@@ -61,7 +65,16 @@ public class DesignRequirementController {
                                 DesignRequirementScoringService scoringService,
                                 UserService userService,
                                 PermissionService permissionService) {
-        this(repository, scoreRepository, scoringService, userService, permissionService, null);
+        this(repository, scoreRepository, scoringService, userService, permissionService, null, null);
+    }
+
+    DesignRequirementController(DesignRequirementRepository repository,
+                                DesignRequirementScoreRepository scoreRepository,
+                                DesignRequirementScoringService scoringService,
+                                UserService userService,
+                                PermissionService permissionService,
+                                NotificationWorkflowService notificationWorkflowService) {
+        this(repository, scoreRepository, scoringService, userService, permissionService, notificationWorkflowService, null);
     }
 
     @GetMapping("/page")
@@ -402,6 +415,39 @@ public class DesignRequirementController {
         return row;
     }
 
+    @PostMapping("/{id}/feishu-chat/create")
+    @Transactional
+    public ResponseEntity<?> createChat(@PathVariable Long id, HttpServletRequest request) {
+        try {
+            AuthController.AuthSession s = session(request);
+            DesignRequirement d = repository.findById(id).orElseThrow(() -> new IllegalArgumentException("设计需求不存在"));
+            if (!canManageChat(d, s)) return ResponseEntity.status(403).body(java.util.Map.of("error", "仅管理员或相关产品企划可创建设计需求群"));
+            if (feishuChatService == null || !feishuChatService.enabled()) return ResponseEntity.badRequest().body(java.util.Map.of("error", "飞书应用配置未完成"));
+            if (d.getFeishuChatId() != null && !d.getFeishuChatId().isBlank()) return ResponseEntity.ok(toDetail(d));
+            String name = "设计需求-#" + d.getId() + "-" + (d.getPlannerName() == null ? "" : d.getPlannerName());
+            String chatId = feishuChatService.createChat(name, java.util.List.of());
+            d.setFeishuChatId(chatId); d.setFeishuChatStatus("created"); d.setFeishuChatError(null); d.setFeishuChatCreatedAt(java.time.LocalDateTime.now());
+            return ResponseEntity.ok(toDetail(repository.save(d)));
+        } catch (Exception e) { return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage())); }
+    }
+
+    @PostMapping("/{id}/feishu-chat/dissolve")
+    @Transactional
+    public ResponseEntity<?> dissolveChat(@PathVariable Long id, HttpServletRequest request) {
+        try {
+            AuthController.AuthSession s = session(request);
+            DesignRequirement d = repository.findById(id).orElseThrow(() -> new IllegalArgumentException("设计需求不存在"));
+            if (!canManageChat(d, s)) return ResponseEntity.status(403).body(java.util.Map.of("error", "无权解散该设计需求群"));
+            if (!java.util.Set.of("completed", "terminated").contains(d.getStatus())) return ResponseEntity.badRequest().body(java.util.Map.of("error", "设计需求未完成或终止，不能解散群聊"));
+            feishuChatService.dissolve(d.getFeishuChatId()); d.setFeishuChatStatus("dissolved"); d.setFeishuChatDissolvedAt(java.time.LocalDateTime.now());
+            return ResponseEntity.ok(toDetail(repository.save(d)));
+        } catch (Exception e) { return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage())); }
+    }
+
+    private boolean canManageChat(DesignRequirement d, AuthController.AuthSession s) {
+        return s != null && ("admin".equals(s.role()) || ("planner".equals(s.role()) && java.util.Objects.equals(s.userId(), d.getPlannerId())));
+    }
+
     private java.util.Map<String, Object> toDetail(DesignRequirement d) {
         var detail = new java.util.LinkedHashMap<>(toRow(d));
         detail.put("description", d.getDescription());
@@ -418,6 +464,8 @@ public class DesignRequirementController {
         detail.put("designerName", d.getDesignerName());
         detail.put("ownerId", d.getOwnerId());
         detail.put("ownerName", d.getOwnerName());
+        detail.put("feishuChatId", d.getFeishuChatId());
+        detail.put("feishuChatStatus", d.getFeishuChatStatus());
         detail.put("deliveryContent", d.getDeliveryContent());
         detail.put("deliveryAttachmentsJson", d.getDeliveryAttachmentsJson());
         detail.put("deliveryReferenceImagesJson", d.getDeliveryReferenceImagesJson());

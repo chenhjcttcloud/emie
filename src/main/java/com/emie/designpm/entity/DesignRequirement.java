@@ -43,6 +43,15 @@ public class DesignRequirement {
     private String designerName;
     private String deadline;
 
+    @Column(length = 120)
+    private String feishuChatId;
+    @Column(length = 30)
+    private String feishuChatStatus = "not_created";
+    @Column(columnDefinition = "TEXT")
+    private String feishuChatError;
+    private LocalDateTime feishuChatCreatedAt;
+    private LocalDateTime feishuChatDissolvedAt;
+
     @Column(columnDefinition = "TEXT")
     private String requirements;
 

@@ -56,6 +56,8 @@ async function openDesignRequirementDetail(id) {
         || detail.responsibleId === EMIE.state.currentUserId);
     const canConfirmRevision = canDeliver && detail.status === 'rejected';
     const canReject = myRole === 'planner' && detail.plannerId === EMIE.state.currentUserId && ['pending_review', 'pending_self_score'].includes(detail.status);
+    const canManageChat = myRole === 'admin' || (myRole === 'planner' && detail.plannerId === EMIE.state.currentUserId);
+    const hasChat = !!String(detail.feishuChatId || '').trim();
     const requirementMaterials = renderDesignRequirementMaterials(
       detail.referenceImagesJson, detail.attachmentsJson);
     const deliveryMaterials = renderDesignRequirementMaterials(
@@ -112,6 +114,8 @@ async function openDesignRequirementDetail(id) {
           ${canDeliver && ['draft', 'in_progress'].includes(detail.status) ? `<button class="btn btn-primary" data-emie-onclick="openDesignRequirementDelivery(${id})">📦 提交交付成果</button>` : ''}
           ${myScore?.status === 'pending' && myScore.stage === 'self' ? `<button class="btn btn-warning" data-emie-onclick="openDesignRequirementScore(${id},true)">⭐ 完成自评</button>` : ''}
           ${myScore?.status === 'pending' && myScore.stage === 'review' ? `<button class="btn btn-primary" data-emie-onclick="openDesignRequirementScore(${id},false)">⭐ 立即评分</button>` : ''}
+          ${hasChat ? `<button class="btn btn-outline" data-emie-onclick="openDesignRequirementChat('${escHtml(detail.feishuChatId)}')">💬 进入项目群</button>` : (canManageChat && detail.status !== 'terminated' ? `<button class="btn btn-outline" data-emie-onclick="createDesignRequirementChat(${id})">💬 创建项目群</button>` : '')}
+          ${hasChat && ['completed', 'terminated'].includes(detail.status) && canManageChat ? `<button class="btn btn-danger" data-emie-onclick="dissolveDesignRequirementChat(${id})">解散项目群</button>` : ''}
         </div>
       </div>`;
     document.body.appendChild(modal);
@@ -127,6 +131,20 @@ async function terminateDesignRequirement(id) {
     closeM('designRequirementDetailModal');
     await openDesignRequirementDetail(id);
   } catch (e) { alert('终止失败：' + e.message); }
+}
+
+async function createDesignRequirementChat(id) {
+  try { await apiPost(`/design-requirements/${id}/feishu-chat/create`, {}); alert('项目群创建成功'); closeM('designRequirementDetailModal'); await openDesignRequirementDetail(id); }
+  catch (e) { alert('创建项目群失败：' + e.message); }
+}
+async function dissolveDesignRequirementChat(id) {
+  if (!confirm('确认解散项目群？解散后无法恢复。')) return;
+  try { await apiPost(`/design-requirements/${id}/feishu-chat/dissolve`, {}); alert('项目群已解散'); closeM('designRequirementDetailModal'); await openDesignRequirementDetail(id); }
+  catch (e) { alert('解散项目群失败：' + e.message); }
+}
+function openDesignRequirementChat(chatId) {
+  const opened = window.open(`https://applink.feishu.cn/client/chat/open?openChatId=${encodeURIComponent(chatId)}`, '_blank');
+  if (!opened) alert('浏览器拦截了新窗口，请允许本站弹窗后重试。');
 }
 
 function openDesignRequirementReject(id) {
@@ -614,6 +632,9 @@ EMIE.registerActions({
   submitDesignRequirementDelivery,
   openDesignRequirementScore,
   submitDesignRequirementScore,
+  createDesignRequirementChat,
+  dissolveDesignRequirementChat,
+  openDesignRequirementChat,
   renderProjectTable,
   changeProjectListPage,
   jumpProjectListPage,
@@ -642,6 +663,10 @@ EMIE.registerModule('dashboardLists', {
   confirmDesignRequirementRevision,
   openDesignRequirementReject,
   submitDesignRequirementReject,
+  submitDesignRequirementDelivery,
+  createDesignRequirementChat,
+  dissolveDesignRequirementChat,
+  openDesignRequirementChat,
   openDesignRequirementScore,
   changeProjectListPage,
   jumpProjectListPage,
