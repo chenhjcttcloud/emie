@@ -24,7 +24,7 @@ public class PointLedger {
     @Column(name = "rule_code", nullable = false, length = 80)
     private String ruleCode;
 
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "DECIMAL(12,2)")
     private Double points;
 
     /** 入账时锁定，供绩效汇总排除仅展示、不参与绩效的积分。 */
