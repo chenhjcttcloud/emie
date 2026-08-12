@@ -5,6 +5,7 @@ const apiPost = (...args) => EMIE.actions.apiPost(...args);
 const apiPut = (...args) => EMIE.actions.apiPut(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
 const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
+const escHtml = (...args) => EMIE.actions.escHtml(...args);
 
 async function renderAdminLogs(container) {
   container.innerHTML = `

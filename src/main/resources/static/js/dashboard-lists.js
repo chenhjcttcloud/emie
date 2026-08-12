@@ -250,7 +250,9 @@ async function renderOrderList(main, type, role, uid, titleOverride = '', endpoi
   if (titleOverride) title = titleOverride;
 
   const participating = role === 'designer' || role === 'supplychain';
-  const state = EMIE.projectListState = { type, role, uid, endpoint, renderId, page: 0, total: 0, totalPages: 0, filters: {}, loading: false };
+  const preset = endpoint === '/projects/page' ? (EMIE.projectListPreset || {}) : {};
+  EMIE.projectListPreset = null;
+  const state = EMIE.projectListState = { type, role, uid, endpoint, renderId, page: 0, total: 0, totalPages: 0, filters: { ...preset }, loading: false };
   main.innerHTML = `<div class="project-query-loading"><span class="project-query-spinner"></span>正在查询项目…</div>`;
   const result = await loadProjectListPage(0);
   if (EMIE.state.renderId !== renderId) return;
@@ -301,6 +303,19 @@ async function renderOrderList(main, type, role, uid, titleOverride = '', endpoi
     </div>
     <div class="card project-list-card" id="projectListContainer">${renderProjectTable(result.items, { compact: true, showType: !type })}</div>
   `;
+  if (state.filters.status) {
+    const statusEl = document.getElementById('projectStatusFilter');
+    if (statusEl) statusEl.value = state.filters.status;
+  }
+  if (state.filters.ownerRole && state.filters.ownerId) {
+    const ownerRoleEl = document.getElementById('projectOwnerRoleFilter');
+    if (ownerRoleEl) {
+      ownerRoleEl.value = state.filters.ownerRole;
+      changeProjectOwnerRole(state.filters.ownerRole);
+      const ownerEl = document.getElementById('projectOwnerFilter');
+      if (ownerEl) ownerEl.value = state.filters.ownerId;
+    }
+  }
 }
 
 async function loadProjectListPage(page) {

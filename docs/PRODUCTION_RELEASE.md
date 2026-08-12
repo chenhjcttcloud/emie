@@ -1,5 +1,7 @@
 # 生产发布稳定流程
 
+> 历史摘要。当前发布授权和实际操作以 [`deployment.md`](deployment.md)、[`release-runbook.md`](release-runbook.md) 及 [`release-records.md`](release-records.md) 为准。默认不自动推送或发布，必须获得用户对当前变更的明确授权。
+
 生产发布采用候选容器 + 健康检查 + 原子切换：
 
 1. 代码必须提交并推送到 `project_manager_system`，工作区保持干净。

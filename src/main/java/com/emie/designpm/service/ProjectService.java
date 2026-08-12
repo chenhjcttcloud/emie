@@ -40,6 +40,7 @@ public class ProjectService {
     private final NotificationWorkflowService notificationWorkflowService;
     private PointsService pointsService;
     private DesignerMarketEligibilityRepository marketEligibilityRepository;
+    private DesignRequirementScoringService designRequirementScoringService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ProjectService(ProjectRepository projectRepository,
@@ -74,6 +75,8 @@ public class ProjectService {
     }
     @Autowired(required = false)
     void setMarketEligibilityRepository(DesignerMarketEligibilityRepository repository) { this.marketEligibilityRepository = repository; }
+    @Autowired(required = false)
+    void setDesignRequirementScoringService(DesignRequirementScoringService service) { this.designRequirementScoringService = service; }
 
     // ==================== Query ====================
 
@@ -130,7 +133,7 @@ public class ProjectService {
         long myTaskCount = List.of("designer", "supplychain", "sales").contains(role)
                 ? subTaskRepository.countByDesignerIdAndRoleAndActionableStatus(userId, role)
                 : 0;
-        long pendingScoreCount = countPendingScoresForBadge(role, userId);
+        long pendingScoreCount = countPendingScoresForUser(role, userId);
 
         Map<String, Long> stats = new LinkedHashMap<>();
         stats.put("totalCount", totalCount);
@@ -141,14 +144,17 @@ public class ProjectService {
         return stats;
     }
 
-    private long countPendingScoresForBadge(String role, String userId) {
+    /** 工作台首页、导航徽章和评分中心共用的待评分条目数量。 */
+    public long countPendingScoresForUser(String role, String userId) {
         if (!List.of("admin", "planner", "sales").contains(role)) return 0L;
-        List<String> visibleUserIds = projectAccessService.visibleUserIds(role, userId, role);
-        if ("admin".equals(role)) return scoringRepository.countPendingForRole(role);
-        if (visibleUserIds.isEmpty()) return 0L;
-        return "sales".equals(role)
-                ? scoringRepository.countPendingForSales(role, visibleUserIds)
-                : scoringRepository.countPendingForPlanners(role, visibleUserIds);
+        // 工作台徽章必须和评分中心使用同一批聚合条目，避免旧的 SQL 口径
+        // 只统计部分任务状态、漏掉设计需求或把评分记录重复计数。
+        long projectPending = getPendingScoringTasks(role, userId).stream()
+                .filter(item -> Boolean.TRUE.equals(item.get("isPending"))).count();
+        long requirementPending = designRequirementScoringService == null ? 0L
+                : designRequirementScoringService.pendingItems(role, userId).stream()
+                .filter(item -> Boolean.TRUE.equals(item.get("isPending"))).count();
+        return projectPending + requirementPending;
     }
 
     /** 批量获取子任务统计（projectId → {taskCount, approvedCount}） */

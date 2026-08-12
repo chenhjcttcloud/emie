@@ -95,6 +95,7 @@ async function renderScoringView(main, role, uid) {
 
 function filterScoringView() {
   clearTimeout(filterScoringView._timer);
+  EMIE.dashboardState.scoringPage = 1;
   filterScoringView._timer = setTimeout(applyFilterScoringView, 100);
 }
 
@@ -136,13 +137,36 @@ function resetScoringFilters() {
   if (searchEl) searchEl.value = '';
   if (dateStartEl) dateStartEl.value = '';
   if (dateEndEl) dateEndEl.value = '';
+  EMIE.dashboardState.scoringPage = 1;
   filterScoringView();
+}
+
+function changeScoringPage(page) {
+  EMIE.dashboardState.scoringPage = Math.max(1, Number(page) || 1);
+  applyFilterScoringView();
+}
+
+function renderScoringPager(total, page, pageSize) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  if (total <= pageSize) return '';
+  const current = Math.min(page, pages);
+  return `<div class="pagination" style="display:flex;justify-content:center;align-items:center;gap:6px;margin:12px 0;">
+    <button class="btn btn-outline btn-sm" ${current <= 1 ? 'disabled' : ''} data-emie-onclick="changeScoringPage(${current - 1})">上一页</button>
+    <span style="font-size:12px;color:var(--gray-600);min-width:42px;text-align:center;">${current} / ${pages}</span>
+    <button class="btn btn-outline btn-sm" ${current >= pages ? 'disabled' : ''} data-emie-onclick="changeScoringPage(${current + 1})">下一页</button>
+  </div>`;
 }
 
 function renderScoringCards(tasks) {
   if (!tasks.length) return `<div class="empty"><div class="empty-icon">🎉</div><p>暂无需要评分的任务</p></div>`;
+  const pageSize = 10;
+  const page = Math.max(1, Number(EMIE.dashboardState.scoringPage) || 1);
+  const pages = Math.max(1, Math.ceil(tasks.length / pageSize));
+  const current = Math.min(page, pages);
+  EMIE.dashboardState.scoringPage = current;
+  const visibleTasks = tasks.slice((current - 1) * pageSize, current * pageSize);
   return `<div class="card">
-    ${tasks.map(t => {
+    ${visibleTasks.map(t => {
       const isPending = t.isPending;
       const statusIcon = isPending ? '⏳' : '✅';
       const statusText = isPending ? '待评分' : '已评分';
@@ -178,7 +202,7 @@ function renderScoringCards(tasks) {
         </div>
       </div>`;
     }).join('')}
-  </div>`;
+  </div>${renderScoringPager(tasks.length, current, pageSize)}`;
 }
 
 // 设计师视角: 展示分配给自己的子任务卡片
@@ -189,6 +213,7 @@ EMIE.registerActions({
   applyFilterScoringView,
   resetScoringFilters,
   renderScoringCards,
+  changeScoringPage,
 });
 
 EMIE.registerModule('dashboardScoring', {
@@ -196,4 +221,5 @@ EMIE.registerModule('dashboardScoring', {
   filterScoringView,
   resetScoringFilters,
   renderScoringCards,
+  changeScoringPage,
 });

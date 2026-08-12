@@ -6,6 +6,17 @@
 
 本目录集中保存项目业务、集成、架构、部署和发布文档。运行时数据、临时检查结果和工具输出不放入本目录。
 
+## 阅读顺序与文档状态
+
+日常开发先读 [RTK](../RTK.md)、[协作与贡献说明](../CONTRIBUTING.md) 和 [开发指南](development.md)；涉及发布时再读 [部署信息](deployment.md) 与 [发布操作手册](release-runbook.md)。
+
+- **当前规范**：`业务流程.md`、`development.md`、`deployment.md`、`release-runbook.md`、`notification-system-design.md`、`permission-inventory.md`。
+- **实际记录**：`release-records.md` 只追加已经发生的发布；`development-handoff.md` 和 `device-migration-handoff.md` 是交接/历史记录，不作为当前操作规范。
+- **方案与规划**：文件名含 `plan`、`roadmap`、`sop`、`standards` 的文档用于设计参考；若与当前代码或部署手册冲突，以代码、迁移脚本和当前规范为准。
+- **发布授权**：默认只在本地修改和验证，不自动 commit、push 或发布生产；必须获得用户对当前变更的明确授权。
+
+数据库迁移以 `src/main/resources/db/migration/` 中的 Flyway `V__` 脚本为准；根目录 `db/migrations/` 仅保留历史导入/一次性脚本，新增实体变更不得只写在那里。
+
 ## 业务与产品
 
 - [业务流程](业务流程.md)：角色权限、项目状态和主要业务流程。

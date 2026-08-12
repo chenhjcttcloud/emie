@@ -11,7 +11,7 @@
 5. 执行与改动范围匹配的检查；
 6. 更新 `CHANGELOG.md` 和 `docs/release-records.md`；
 7. 逐个暂存确认过的文件；
-8. 经确认后再提交、推送和部署。
+8. 默认只保留在本地：未经用户明确授权，不提交、推送远程仓库或部署生产；只有获得当前事项的明确授权后，才执行相应发布动作。
 
 ## 分支
 
@@ -71,7 +71,7 @@ for file in src/main/resources/static/js/*.js; do node --input-type=module --che
 
 ## 数据库变更
 
-实体、字段、表或索引变化必须提供 `db/migrations/` 下的迁移脚本。生产使用 `ddl-auto=validate`，迁移必须在应用部署前执行。
+实体、字段、表或索引变化必须提供 `src/main/resources/db/migration/` 下的 Flyway `V__` 迁移脚本。根目录 `db/migrations/` 仅为历史导入/一次性脚本目录。生产使用 `ddl-auto=validate`，迁移必须在应用部署前执行。
 
 迁移不得包含未评审的破坏性操作。执行生产迁移前必须备份数据库，并在发布记录中填写备份、迁移和验证结果。
 

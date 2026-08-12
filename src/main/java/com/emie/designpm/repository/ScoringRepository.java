@@ -66,7 +66,7 @@ public interface ScoringRepository extends JpaRepository<ScoringRecord, Long> {
     @Query("SELECT COUNT(s) FROM ScoringRecord s WHERE s.reviewStatus = 'pending'")
     long countAllPendingScores();
 
-    /** 待评分徽章：只返回数量，不加载项目、子任务和评分明细。 */
+    /* legacy pending-score count queries removed; ProjectService now counts canonical aggregate items */
     @Query("SELECT COUNT(s) FROM ScoringRecord s JOIN s.subTask t JOIN t.project p " +
            "WHERE s.role = :role AND (s.reviewStatus = 'pending' OR " +
            "(s.reviewStatus IS NULL AND s.score IS NULL AND (s.aesthetics IS NULL OR s.innovation IS NULL))) " +

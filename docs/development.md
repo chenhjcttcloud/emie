@@ -148,7 +148,7 @@ git diff --check
 ## 7. 数据库开发
 
 - 初始化脚本：`db/init.sql`、`db/init-clean.sql`
-- 增量迁移：`db/migrations/`
+- 应用数据库迁移：`src/main/resources/db/migration/`（Flyway `V__` 脚本）；`db/migrations/` 仅为历史导入/一次性脚本。
 
 生产迁移文件使用唯一、可排序的名称。实体结构改变后应先准备迁移，再验证 `prod` profile 的结构兼容性。
 

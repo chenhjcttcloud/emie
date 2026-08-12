@@ -98,6 +98,7 @@ public class AdminController {
             @RequestHeader("X-Auth-Token") String token) {
         AuthController.AuthSession session = AuthController.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
+        if (!"admin".equals(session.role())) return ResponseEntity.status(403).build();
         try {
             return ResponseEntity.ok(notificationTestService.sendTest(session.userId()));
         } catch (IllegalArgumentException e) {
@@ -110,6 +111,7 @@ public class AdminController {
                                                      @RequestHeader("X-Auth-Token") String token) {
         AuthController.AuthSession session = AuthController.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
+        if (!"admin".equals(session.role())) return ResponseEntity.status(403).build();
         try {
             return ResponseEntity.accepted().body(notificationBroadcastJobService.start(
                     body.get("title"), body.get("content"), session.userId()));
@@ -422,6 +424,7 @@ public class AdminController {
             @RequestHeader("X-Auth-Token") String token) {
         AuthController.AuthSession session = AuthController.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
+        if (!"admin".equals(session.role())) return ResponseEntity.status(403).build();
         return ResponseEntity.ok(adminService.getWorkloadStats());
     }
 
@@ -431,6 +434,7 @@ public class AdminController {
             @RequestHeader("X-Auth-Token") String token) {
         AuthController.AuthSession session = AuthController.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
+        if (!"admin".equals(session.role())) return ResponseEntity.status(403).build();
         return ResponseEntity.ok(adminService.getWorkloadTimeline(range));
     }
 

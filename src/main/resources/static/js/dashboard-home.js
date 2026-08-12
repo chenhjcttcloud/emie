@@ -5,6 +5,7 @@ const getCurrentUserId = (...args) => EMIE.actions.getCurrentUserId(...args);
 const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const swrFetch = (...args) => EMIE.actions.swrFetch(...args);
 const navigate = (...args) => EMIE.actions.navigate(...args);
+const navigateProjectList = (...args) => EMIE.actions.navigateProjectList(...args);
 const navigateTaskBucket = (...args) => EMIE.actions.navigateTaskBucket(...args);
 const getProjectStatusInfo = (...args) => EMIE.actions.getProjectStatusInfo(...args);
 const getTaskStatusInfo = (...args) => EMIE.actions.getTaskStatusInfo(...args);
@@ -18,6 +19,27 @@ const openDesignRequirementDetail = (...args) => EMIE.actions.openDesignRequirem
 const refreshNavigationBadges = (...args) => EMIE.actions.refreshNavigationBadges(...args);
 let plannerBoardScope = 'mine';
 let plannerScopeUserId = '';
+
+function navigateMyProjects() {
+  const role = EMIE.state.currentRole;
+  const uid = EMIE.state.currentUserId;
+  if (role === 'admin') return navigateProjectList('orders', {});
+  if (role === 'planner' && plannerBoardScope === 'all') {
+    return navigateProjectList('orders', {});
+  }
+  if (['planner', 'sales'].includes(role) && uid) {
+    return navigateProjectList('orders', { ownerRole: role, ownerId: uid });
+  }
+  return navigateProjectList('orders', {});
+}
+
+function projectCardFilters(extra = {}) {
+  const role = EMIE.state.currentRole;
+  const uid = EMIE.state.currentUserId;
+  if (role === 'planner' && plannerBoardScope === 'all') return { ...extra };
+  if (['planner', 'sales'].includes(role) && uid) return { ownerRole: role, ownerId: uid, ...extra };
+  return { ...extra };
+}
 
 async function updateBadges(role, uid) {
   return refreshNavigationBadges();
@@ -56,10 +78,10 @@ async function renderDashboard(main, role, uid) {
   main.innerHTML = `
     <h2 style="font-size:22px;margin-bottom:20px;">📊 工作台 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">— ${EMIE.state.currentRole === 'planner' ? `<select class="form-input" style="display:inline-block;width:auto;min-width:130px;padding:4px 28px 4px 8px;font-size:13px;vertical-align:middle;"><option value="mine" ${plannerBoardScope === 'mine' ? 'selected' : ''}>${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}</option><option value="all" ${plannerBoardScope === 'all' ? 'selected' : ''}>全部产品企划</option></select>` : `${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}（${roleLabel(EMIE.state.currentRole)}）`}</span></h2>
     ${!executionRole ? `<div class="stats-grid dashboard-stats-row">
-      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigate('orders')"><div class="stat-icon blue">📁</div><div><div class="stat-value">${stats.totalProjects}</div><div class="stat-label">${EMIE.state.currentRole === 'admin' ? '全部项目' : '我的项目'}</div></div></div>
-      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigate('channel')"><div class="stat-icon blue">📦</div><div><div class="stat-value">${stats.channelProjects}</div><div class="stat-label">渠道定制单</div></div></div>
-      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigate('regular')"><div class="stat-icon green">🏭</div><div><div class="stat-value">${stats.regularProjects}</div><div class="stat-label">公司常规品</div></div></div>
-      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigate('orders')"><div class="stat-icon yellow">🔄</div><div><div class="stat-value">${stats.inProgress}</div><div class="stat-label">进行中项目</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateMyProjects()"><div class="stat-icon blue">📁</div><div><div class="stat-value">${stats.totalProjects}</div><div class="stat-label">${EMIE.state.currentRole === 'admin' ? '全部项目' : (plannerBoardScope === 'all' ? '全部企划项目' : '我的项目')}</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateProjectList('channel',projectCardFilters({}))"><div class="stat-icon blue">📦</div><div><div class="stat-value">${stats.channelProjects}</div><div class="stat-label">渠道定制单</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateProjectList('regular',projectCardFilters({}))"><div class="stat-icon green">🏭</div><div><div class="stat-value">${stats.regularProjects}</div><div class="stat-label">公司常规品</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateProjectList('orders',projectCardFilters({status:'in_progress'}))"><div class="stat-icon yellow">🔄</div><div><div class="stat-value">${stats.inProgress}</div><div class="stat-label">进行中项目</div></div></div>
     </div>
     <div class="stats-grid dashboard-stats-row">
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateTaskBucket('all')"><div class="stat-icon blue">📌</div><div><div class="stat-value">${stats.allTasks ?? 0}</div><div class="stat-label">子任务总数</div></div></div>
@@ -248,6 +270,7 @@ async function changePlannerBoardScope(scope) {
   const nextScope = scope === 'all' ? 'all' : 'mine';
   if (nextScope === plannerBoardScope && document.querySelector('#dashboardRoleStatus')) return;
   plannerBoardScope = nextScope;
+  EMIE.projectListPreset = null;
   const main = document.querySelector('main');
   if (main) {
     main.innerHTML = '<div class="loading">正在更新企划范围…</div>';
@@ -633,6 +656,7 @@ EMIE.registerActions({
   showUserTasksPopup,
   loadUserTasksPopup,
   renderProjectSummary,
+  navigateMyProjects,
 });
 
 EMIE.registerModule('dashboardHome', {
@@ -646,4 +670,5 @@ EMIE.registerModule('dashboardHome', {
   showUserTasksPopup,
   loadUserTasksPopup,
   renderProjectSummary,
+  navigateMyProjects,
 });

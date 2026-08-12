@@ -1,5 +1,9 @@
 # EMIE 部署信息
 
+## 发布授权规则
+
+后续代码修改默认只在本地完成和验证，不自动提交、推送远程仓库或发布生产。测试、容器重建和本地浏览器检查不等于获得发布授权。只有用户对当前变更明确授权后，才允许执行 commit、push、生产迁移或生产发布；没有明确授权时，应报告本地验证结果并保留工作区改动。
+
 生产发布的完整检查、推送、迁移、验证和回滚流程见 [`release-runbook.md`](release-runbook.md)，每次实际操作必须追加到 [`release-records.md`](release-records.md)。本文件只维护相对稳定的环境与服务信息，不记录任何真实密码。
 
 生产应用必须显式启用 `prod` profile，并提供 `DESIGNPM_DB_HOST`、`DESIGNPM_DB_NAME`、`DESIGNPM_DB_USER`、`DESIGNPM_DB_PASSWORD`。仓库不再为这些变量提供可连接数据库的默认值；缺少任意变量时应让部署失败，不得回退到其他数据库。`DESIGNPM_DB_USE_SSL` 默认建议保持为 `true`，只有已确认的受保护内网环境才可按实际情况调整。

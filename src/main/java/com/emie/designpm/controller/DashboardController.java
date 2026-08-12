@@ -96,7 +96,9 @@ public class DashboardController {
 
     private List<Long> visibleProjectIds(String role, String userId, boolean allPlanners) {
         if ("planner".equals(role)) {
-            if (!allPlanners) return projectRepository.findByPlannerViewLight(userId).stream().map(Project::getId).toList();
+            if (!allPlanners) return projectRepository.findByPlannerViewLight(userId).stream()
+                    .filter(p -> Objects.equals(p.getPlannerId(), userId))
+                    .map(Project::getId).toList();
             return userRepository.findByRole("planner").stream()
                     .flatMap(u -> projectRepository.findByPlannerViewLight(u.getUserId()).stream())
                     .map(Project::getId).distinct().toList();
@@ -166,7 +168,7 @@ public class DashboardController {
                 if ("approved".equals(status) || "completed".equals(status)) approvedTasks += count;
                 if ("pending".equals(status) || "delivered".equals(status)) pendingTasks += count;
             }
-            pendingScore = subTaskRepository.countPendingScoresByProjectIds(projectIds);
+            pendingScore = projectService.countPendingScoresForUser(role, userId);
         }
 
         Map<String, Object> stats = new LinkedHashMap<>();
@@ -221,7 +223,7 @@ public class DashboardController {
                 channelTasks = subTaskRepository.countTasksByProjectIds(new ArrayList<>(channelProjectIds)).stream()
                         .mapToLong(row -> ((Number) row[1]).longValue()).sum();
             }
-            pendingScore = subTaskRepository.countPendingScoresByProjectIds(projectIds);
+            pendingScore = projectService.countPendingScoresForUser(role, userId);
         }
         stats.put("allTasks", allTasks); stats.put("channelTasks", channelTasks); stats.put("approvedTasks", approvedTasks);
         stats.put("pendingTasks", pendingTasks); stats.put("pendingScore", pendingScore);

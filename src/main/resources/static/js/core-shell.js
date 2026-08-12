@@ -76,6 +76,11 @@ function navigate(view) {
   }, 50);
 }
 
+function navigateProjectList(view, filters = {}) {
+  EMIE.projectListPreset = { ...filters };
+  navigate(view);
+}
+
 function navigateTaskBucket(bucket) {
   EMIE.state.currentView = 'tasks';
   EMIE.state.taskBucket = ['pending', 'completed'].includes(bucket) ? bucket : 'all';
@@ -116,6 +121,7 @@ document.addEventListener('keydown', function(event) {
 EMIE.registerActions({
   renderSidebar,
   navigate,
+  navigateProjectList,
   navigateTaskBucket,
   toggleMobileSidebar,
   closeMobileSidebar,
@@ -125,6 +131,7 @@ EMIE.registerActions({
 EMIE.registerModule('coreShell', {
   renderSidebar,
   navigate,
+  navigateProjectList,
   toggleMobileSidebar,
   closeMobileSidebar,
 });
