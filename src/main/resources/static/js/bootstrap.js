@@ -1,6 +1,6 @@
 import './core-runtime.js?v=159';
 import './event-runtime.js?v=155';
-import './core-auth.js?v=238';
+import './core-auth.js?v=239';
 import './core-identity.js?v=205';
 import './core-shell.js?v=254';
 import './core-ui.js?v=245';
@@ -15,7 +15,7 @@ import './dashboard.js?v=219';
 import './project-uploads.js?v=230';
 import './project-form.js?v=260';
 import './project-detail.js?v=301';
-import './project-tasks.js?v=304';
+import './project-tasks.js?v=306';
 import './project-sharing.js?v=147';
 import './projects.js?v=148';
 import './admin-shell.js?v=247';

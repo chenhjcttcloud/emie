@@ -171,7 +171,6 @@ async function addSubTask(pid) {
             <div id="addSubTaskMarketHint" style="display:none;margin-top:8px;font-size:12px;color:var(--gray-500);">发布后所有设计师均可查看，先抢先得。</div>
             <input type="hidden" name="assigneeRole" id="addSubTaskAssigneeRole" value="designer">
           </div>
-          <div class="form-group"><label class="form-label">指派/立项说明</label><input class="form-input" name="assignmentReason" maxlength="500" placeholder="说明指派原因；自主提案请填写立项依据"></div>
           <div class="form-group"><label class="form-label">细节要求说明</label><textarea class="form-textarea" name="details" placeholder="子任务的具体要求说明..." data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor=''"></textarea></div>
         </form>
         <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
@@ -399,7 +398,6 @@ function editTask(pid, tid) {
             <div class="form-row">
               <div class="form-group"><label class="form-label">合作积分分配</label><input class="form-input" name="collaboratorAllocationsText" value="${escHtml(collaboratorAllocationsText)}" placeholder="designer02:30" ${task.status !== 'pending' ? 'disabled' : ''}></div>
             </div>
-            <div class="form-group"><label class="form-label">指派/立项说明</label><input class="form-input" name="assignmentReason" maxlength="500" value="${escHtml(task.assignmentReason || '')}"></div>
             <div class="form-group"><label class="form-label">接单能力要求（可选）</label><input class="form-input" name="requiredSkillTagsText" value="${escHtml(requiredSkillTagsText)}" placeholder="如：包装、3D、AI（使用逗号分隔）" ${task.status !== 'pending' ? 'disabled' : ''}></div>
             <div class="form-row">
               <div class="form-group"><label class="form-label">积分规则</label>

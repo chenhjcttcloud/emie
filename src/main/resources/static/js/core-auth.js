@@ -168,7 +168,8 @@ async function loadPublicConfig() {
       const logoEl = document.querySelector('.login-logo');
       if (logoEl) {
         if (cfg['app.logo']) {
-          logoEl.innerHTML = `<img src="${cfg['app.logo']}" style="height:48px;width:auto;" alt="logo">`;
+          const logoSrc = String(cfg['app.logo']).startsWith('/api/files/download/admin/') ? '/favicon.ico' : cfg['app.logo'];
+          logoEl.innerHTML = `<img src="${logoSrc}" style="height:48px;width:auto;" alt="logo">`;
         } else if (cfg['app.logoEmoji']) {
           logoEl.textContent = cfg['app.logoEmoji'];
         }
@@ -211,7 +212,8 @@ async function showApp() {
         const logoEl = document.querySelector('.logo');
         if (logoEl) {
           if (cfg['app.logo']) {
-            logoEl.innerHTML = `<img src="${cfg['app.logo']}" style="height:32px;width:auto;vertical-align:middle;margin-right:8px;" alt="logo"><span>${cfg['app.title'] || '产品管理系统'}</span><small class="app-version">v${cfg['system.version'] || '—'}</small>`;
+            const logoSrc = String(cfg['app.logo']).startsWith('/api/files/download/admin/') ? '/favicon.ico' : cfg['app.logo'];
+            logoEl.innerHTML = `<img src="${logoSrc}" style="height:32px;width:auto;vertical-align:middle;margin-right:8px;" alt="logo"><span>${cfg['app.title'] || '产品管理系统'}</span><small class="app-version">v${cfg['system.version'] || '—'}</small>`;
           } else if (cfg['app.logoEmoji']) {
             logoEl.innerHTML = `${cfg['app.logoEmoji']} ${cfg['app.title'] || '产品管理系统'}<small class="app-version">v${cfg['system.version'] || '—'}</small><span>${cfg['app.subtitle'] || 'Product Management'}</span>`;
           } else {
