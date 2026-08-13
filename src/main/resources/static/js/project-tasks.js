@@ -172,7 +172,6 @@ async function addSubTask(pid) {
             <input type="hidden" name="assigneeRole" id="addSubTaskAssigneeRole" value="designer">
           </div>
           <div class="form-group"><label class="form-label">指派/立项说明</label><input class="form-input" name="assignmentReason" maxlength="500" placeholder="说明指派原因；自主提案请填写立项依据"></div>
-          <label class="checkbox-item"><input type="checkbox" name="selfInitiated" value="true"> 自主提案任务（由企划创建即视为确认立项）</label>
           <div class="form-group"><label class="form-label">细节要求说明</label><textarea class="form-textarea" name="details" placeholder="子任务的具体要求说明..." data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor=''"></textarea></div>
         </form>
         <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
