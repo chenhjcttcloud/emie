@@ -162,7 +162,9 @@ function renderUserList(users) {
 }
 
 async function switchToUser(targetUserId) {
-  if (!targetUserId || targetUserId === EMIE.state.currentUserId) return;
+  // 初始化期间 currentUserId 可能尚未写入，以 authUser 作为第二重保护。
+  if (!targetUserId || targetUserId === EMIE.state.currentUserId
+    || targetUserId === EMIE.state.authUser?.userId) return;
   closeIdentityPanel();
   try {
     const viewBeforeSwitch = EMIE.state.currentView || 'dashboard';

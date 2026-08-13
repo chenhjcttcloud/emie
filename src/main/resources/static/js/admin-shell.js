@@ -240,9 +240,10 @@ async function runDataIntegrityScan(button) {
   if (!result) return;
   button.disabled = true;
   button.textContent = '扫描中…';
+  result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   const startedAt = Date.now();
   let progress = 8;
-  result.innerHTML = '<div style="font-size:12px;color:var(--gray-600);">正在检查项目、子任务和设计需求文件引用… <span id="dataIntegrityElapsed">0 秒</span></div><div style="height:8px;background:var(--gray-100);border-radius:999px;overflow:hidden;margin-top:8px;"><div id="dataIntegrityProgress" style="height:100%;width:8%;background:var(--primary);border-radius:999px;transition:width .4s ease;"></div></div><div style="font-size:11px;color:var(--gray-400);margin-top:5px;">扫描过程中页面仍可正常使用，请耐心等待。</div>';
+  result.innerHTML = '<div style="padding:10px 12px;border:1px solid #C7D2FE;border-radius:10px;background:#F5F7FF;font-size:12px;color:var(--gray-700);"><strong>正在扫描数据完整性…</strong> <span id="dataIntegrityElapsed">0 秒</span><div style="height:9px;background:#E5E7EB;border-radius:999px;overflow:hidden;margin-top:9px;"><div id="dataIntegrityProgress" style="height:100%;width:8%;background:var(--primary);border-radius:999px;transition:width .4s ease;"></div></div><div style="font-size:11px;color:var(--gray-500);margin-top:6px;">正在检查项目、子任务和设计需求文件引用，请稍候。</div></div>';
   const ticker = setInterval(() => {
     progress = Math.min(92, progress + (progress < 60 ? 7 : 2));
     const bar = document.getElementById('dataIntegrityProgress');
@@ -267,7 +268,7 @@ async function runDataIntegrityScan(button) {
 }
 
 function groupLabel(group) {
-  return { appearance: '🎨 外观设置', security: '🔒 安全设置', system: '💻 系统信息', feishu: '💬 飞书 SSO 登录', nas: '🗄️ NAS 归档', feishu_base: '📊 飞书多维表格', notification: '🔔 通知中心', notification_templates: '💬 飞书通知模板' }[group] || group;
+  return { appearance: '🎨 外观设置', security: '🔒 安全设置', system: '💻 系统信息', feishu: '💬 飞书 SSO 登录', nas: '🗄️ NAS 归档', feishu_base: '📊 飞书多维表格', notification: '🔔 通知中心', notification_templates: '💬 飞书通知模板', points: '🏅 积分设置' }[group] || group;
 }
 
 function configLabel(key) {
@@ -291,7 +292,7 @@ async function renderAdminConfig(container) {
 
   let html = '';
   for (const [group, items] of Object.entries(configs)) {
-    if (group === 'appearance' || group === 'notification_templates' || (group === 'notification' && EMIE.adminState.currentTab === 'config')) continue; // 独立页面管理
+    if (group === 'appearance' || group === 'security' || group === 'notification_templates' || (group === 'notification' && EMIE.adminState.currentTab === 'config')) continue; // 独立页面管理；登录统一由飞书 SSO 负责
     html += `
       <div class="config-card" data-group="${group}">
         <div class="config-card-header">
@@ -644,6 +645,7 @@ EMIE.registerActions({
   switchAdminTab,
   renderAdminContent,
   renderAdminDashboard,
+  runDataIntegrityScan,
   groupLabel,
   renderAdminConfig,
   saveConfigGroup,
@@ -665,6 +667,7 @@ EMIE.registerModule('adminShell', {
   switchAdminTab,
   renderAdminContent,
   renderAdminDashboard,
+  runDataIntegrityScan,
   renderAdminConfig,
   saveConfigGroup,
   sendNotificationTest,

@@ -45,7 +45,7 @@ async function renderAdminWorkload(container) {
         <div class="admin-stat-card">
           <div class="admin-stat-icon">📝</div>
           <div class="admin-stat-value">${summary.totalTasksAssigned || 0}</div>
-          <div class="admin-stat-label">新分子任务</div>
+          <div class="admin-stat-label">新分配子任务</div>
         </div>
         <div class="admin-stat-card">
           <div class="admin-stat-icon">✅</div>
@@ -60,21 +60,25 @@ async function renderAdminWorkload(container) {
       const r = data[role];
       if (!r || !r.users || r.users.length === 0) continue;
 
-      let html = '<div class="card" style="margin-bottom:16px;">';
+      let html = '<div class="card workload-role-card" style="margin-bottom:16px;">';
       html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--gray-200);">
         <div><span style="font-size:16px;margin-right:6px;">${r.icon || '👤'}</span><strong style="font-size:15px;">${r.label || role}</strong>
         <span style="font-size:12px;color:var(--gray-500);margin-left:8px;">${r.totalUsers} 人</span></div></div>`;
 
       // 表头
       const isWorker = (role === 'designer' || role === 'supplychain');
-      html += `<div style="display:flex;padding:8px 16px;font-size:11px;color:var(--gray-500);border-bottom:1px solid var(--gray-100);">
+      const createdLabel = isWorker ? '分配子任务' : '新建项目';
+      const completedLabel = isWorker ? '完成子任务' : '完成项目';
+      html += `<div class="workload-table-scroll"><div style="display:flex;padding:8px 16px;font-size:11px;color:var(--gray-500);border-bottom:1px solid var(--gray-100);min-width:680px;">
         <div style="min-width:140px;">姓名</div>
-        <div style="flex:1;display:flex;gap:16px;">
-          <span style="width:60px;">${isWorker ? '新分配' : '新建'}</span>
-          <span style="width:60px;">完成</span>
+        <div style="flex:0 0 280px;display:flex;gap:16px;">
+          <span style="width:60px;">${createdLabel}</span>
+          <span style="width:60px;">${completedLabel}</span>
           <span style="width:60px;">完成率</span>
         </div>
       </div>`;
+
+      html += '<div class="workload-user-list">';
 
       for (const u of r.users) {
         const created = u.created || u.assigned || 0;
@@ -85,17 +89,18 @@ async function renderAdminWorkload(container) {
           <div style="min-width:140px;flex-shrink:0;">
             <div style="font-size:13px;font-weight:500;color:#1f2937;">${escHtml(u.name)}</div>
           </div>
-          <div style="flex:1;display:flex;gap:16px;align-items:center;">
+          <div style="flex:0 0 280px;display:flex;gap:16px;align-items:center;">
             <span style="width:60px;font-size:13px;font-weight:600;color:#374151;">${created}</span>
             <span style="width:60px;font-size:13px;font-weight:600;color:#065F46;">${completed}</span>
             <span style="width:60px;font-size:12px;color:${rate === '-' ? 'var(--gray-400)' : '#374151'};">${rate}</span>
           </div>
           <!-- 进度条 -->
-          <div style="flex:1;max-width:120px;background:var(--gray-200);border-radius:6px;height:8px;overflow:hidden;">
+          <div style="flex:0 0 180px;margin-left:auto;background:var(--gray-200);border-radius:6px;height:8px;overflow:hidden;">
             <div style="background:${created > 0 ? '#639922' : '#e5e7eb'};width:${created > 0 ? Math.min(100, (completed / created) * 100) : 0}%;height:100%;border-radius:6px;transition:width 0.3s;"></div>
           </div>
         </div>`;
       }
+      html += '</div></div>';
       html += '</div>';
       container.innerHTML += html;
     }

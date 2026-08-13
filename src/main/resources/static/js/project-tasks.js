@@ -39,10 +39,17 @@ function enabledPointRules(rules) {
 
 function renderPointRuleOptions(rules, selectedCode) {
   const active = enabledPointRules(rules);
-  const selected = String(selectedCode || 'TASK_APPROVED');
+  const selected = String(selectedCode || '');
   const missingSelected = selected && !active.some(rule => String(rule.ruleCode || '') === selected)
     ? `<option value="${escHtml(selected)}" selected>${escHtml(selected)}（已停用，仅保留当前任务）</option>` : '';
-  return missingSelected + active.map(rule => `<option value="${escHtml(rule.ruleCode || '')}" ${String(rule.ruleCode || '') === selected ? 'selected' : ''}>${escHtml(rule.category ? rule.category + ' · ' : '')}${escHtml(rule.ruleCode || '')}（${Number(rule.points || 0)} 分）</option>`).join('');
+  const groups = new Map();
+  active.forEach(rule => { const key = String(rule.category || '其他').toUpperCase(); if (!groups.has(key)) groups.set(key, []); groups.get(key).push(rule); });
+  const order = { A: 1, B: 2, E: 3, S: 4, 其他: 9 };
+  return `<option value="" ${selected ? '' : 'selected'} disabled>请选择积分规则</option>` + missingSelected + [...groups.entries()].sort((a, b) => (order[a[0]] || 8) - (order[b[0]] || 8)).map(([category, items]) => `<optgroup label="${escHtml(category)}">${items.sort((a, b) => { const na = Number(String(a.ruleCode || '').match(/\d+/)?.[0] || 0); const nb = Number(String(b.ruleCode || '').match(/\d+/)?.[0] || 0); return na - nb; }).map(rule => `<option value="${escHtml(rule.ruleCode || '')}" ${String(rule.ruleCode || '') === selected ? 'selected' : ''}>${escHtml(rule.ruleCode || '')}（${Number(rule.points || 0)} 分）${rule.description ? ' · ' + escHtml(rule.description) : ''}</option>`).join('')}</optgroup>`).join('');
+}
+
+function pointRuleCategoryHint(category) {
+  return ({ A: '常规设计执行类任务', B: '复杂/重点设计任务', E: '简单辅助类任务', S: '特殊或专项任务' }[String(category || '').toUpperCase()] || '按管理员配置的积分规则执行');
 }
 
 function renderDifficultyOptions(difficulties, selectedCode) {
@@ -126,13 +133,11 @@ async function addSubTask(pid) {
           </div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">积分归属月份（跨月任务）</label><input class="form-input" type="month" name="milestoneMonth"><div style="font-size:12px;color:var(--gray-500);margin-top:5px;">留空则按实际入账月份；长周期任务可拆成多个里程碑子任务。</div></div>
-            <div class="form-group"><label class="form-label">合作积分分配（可选）</label><input class="form-input" name="collaboratorAllocationsText" placeholder="用户ID:比例，如 designer02:30"><div style="font-size:12px;color:var(--gray-500);margin-top:5px;">多个成员用逗号分隔，剩余比例归主负责人，开始后锁定。</div></div>
           </div>
-          <div class="form-group"><label class="form-label">接单能力要求（可选）</label><input class="form-input" name="requiredSkillTagsText" placeholder="如：包装、3D、AI（使用逗号分隔）"><div style="font-size:12px;color:var(--gray-500);margin-top:5px;">发布到接单市场后，仅能力标签匹配的设计师可领取。</div></div>
           <div class="form-row">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 积分规则</label>
-              <select class="form-select" name="pointRuleCode" required>${renderPointRuleOptions(pointRules, 'TASK_APPROVED')}</select>
-              <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">创建时锁定基础分，后续调整规则不会影响该任务。</div>
+              <select class="form-select" name="pointRuleCode" required>${renderPointRuleOptions(pointRules, '')}</select>
+              <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">A：常规设计；B：复杂/重点设计；E：简单辅助；S：特殊专项。创建时锁定基础分，后续调整规则不会影响该任务。</div>
             </div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 难度档位</label>
               <select class="form-select" name="difficultyCode" required>${renderDifficultyOptions(pointDifficulties, 'STANDARD')}</select>

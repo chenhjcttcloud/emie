@@ -6,6 +6,7 @@ const apiDelete = (...args) => EMIE.actions.apiDelete(...args);
 const escJsString = (...args) => EMIE.actions.escJsString(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
+const showAdminToast = (...args) => EMIE.actions.showAdminToast(...args);
 
 // ==================== 评分权重管理 ====================
 async function renderAdminScoring(container) {
@@ -21,11 +22,6 @@ async function renderAdminScoring(container) {
             <p style="font-size:13px;color:var(--gray-400);margin:0;">按项目类型分别设置各角色评分权重（百分比）</p>
           </div>
           <button class="btn btn-outline btn-sm" data-emie-onclick="resetScoringWeights()" style="color:var(--gray-500);">↺ 重置默认</button>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px;">
-          <label class="form-label">卓越阈值<input class="form-input" type="number" min="0" id="pr_top_threshold_${index}" value="${Number(rule.qualityTopThreshold ?? 97)}"></label>
-          <label class="form-label">卓越加分比例<input class="form-input" type="number" min="0" step="0.05" id="pr_top_ratio_${index}" value="${Number(rule.qualityTopRatio ?? 0.6)}"></label>
-          <label class="form-label">总积分封顶倍数<input class="form-input" type="number" min="1" step="0.1" id="pr_cap_${index}" value="${Number(rule.maxTotalMultiplier ?? 3)}"></label>
         </div>
         ${types.map((t, ti) => `
           <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:20px;margin-bottom:16px;">
@@ -125,7 +121,7 @@ async function renderAdminPoints(container) {
     const monthList = Array.isArray(months) ? months : [];
     const designerTargetList = Array.isArray(designerTargets) ? designerTargets : [];
     const configuredStandardIds = new Set(standardList.map(item => String(item.configCode || '')));
-    const availableDesigners = designerTargetList.filter(user => !configuredStandardIds.has(String(user.userId || '')));
+    const availableDesigners = designerTargetList;
     const appealList = Array.isArray(appeals) ? appeals : [];
     const poProgressList = Array.isArray(poProgress) ? poProgress : [];
     const archiveList = Array.isArray(archives) ? archives : [];
@@ -156,13 +152,13 @@ async function renderAdminPoints(container) {
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>设计师个人绩效配置</h3></div>
         <p style="font-size:12px;color:var(--gray-500);">仅支持设计师，用于配置个人标准积分与绩效基数。</p>
         <div style="display:grid;grid-template-columns:1.4fr .8fr .8fr 1.2fr auto;gap:8px;align-items:end;margin:14px 0 18px;">
-          <label class="form-label">选择设计师<select class="form-select" id="sp_new_user"><option value="">请选择设计师</option>${availableDesigners.map(user => `<option value="${escHtml(user.userId)}">${escHtml(user.userName || user.userId)}</option>`).join('')}</select></label>
+          <label class="form-label">选择设计师<select class="form-select" id="sp_new_user"><option value="">请选择设计师</option>${availableDesigners.map(user => `<option value="${escHtml(user.userId)}">${escHtml(user.userName || '未命名')}（${escHtml(user.userId)}）</option>`).join('')}</select></label>
           <label class="form-label">标准积分<input class="form-input" type="number" min="0" id="sp_new_points" value="100"></label>
           <label class="form-label">绩效基数<input class="form-input" type="number" min="0" step="0.01" id="sp_new_base" value="0"></label>
           <label class="form-label">说明<input class="form-input" id="sp_new_desc" value="个人绩效配置"></label>
           <button class="btn btn-primary btn-sm" data-emie-onclick="saveStandardPointConfig(-1)" ${availableDesigners.length ? '' : 'disabled'}>添加</button>
         </div>
-        <div class="table-wrap"><table><thead><tr><th>用户 ID</th><th>标准积分</th><th>绩效基数</th><th>说明</th><th>状态</th><th>操作</th></tr></thead><tbody>${standardList.length ? standardList.map((item, index) => `<tr><td><input class="form-input" id="sp_code_${index}" value="${escHtml(item.configCode || '')}" ${item.id ? 'disabled' : ''}></td><td><input class="form-input" type="number" min="0" id="sp_points_${index}" value="${Number(item.points || 0)}"></td><td><input class="form-input" type="number" min="0" step="0.01" id="sp_base_${index}" value="${Number(item.performanceBase || 0)}"></td><td><input class="form-input" id="sp_desc_${index}" value="${escHtml(item.description || '')}"></td><td><label class="checkbox-item ${item.enabled === false ? '' : 'checked'}"><input type="checkbox" id="sp_enabled_${index}" ${item.enabled === false ? '' : 'checked'}> 启用</label></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="saveStandardPointConfig(${index})">保存</button></td></tr>`).join('') : '<tr><td colspan="6"><div class="empty-state">暂无个人标准积分配置，可点击上方添加</div></td></tr>'}</tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>设计师</th><th>用户 ID</th><th>标准积分</th><th>绩效基数</th><th>说明</th><th>状态</th><th>操作</th></tr></thead><tbody>${standardList.length ? standardList.map((item, index) => { const matched = availableDesigners.find(u => String(u.userId || '') === String(item.configCode || '')); return `<tr><td><strong>${escHtml(matched?.userName || '未命名')}</strong></td><td><input class="form-input" id="sp_code_${index}" value="${escHtml(item.configCode || '')}" ${item.id ? 'disabled' : ''}></td><td><input class="form-input" type="number" min="0" id="sp_points_${index}" value="${Number(item.points || 0)}"></td><td><input class="form-input" type="number" min="0" step="0.01" id="sp_base_${index}" value="${Number(item.performanceBase || 0)}"></td><td><input class="form-input" id="sp_desc_${index}" value="${escHtml(item.description || '')}"></td><td><label class="checkbox-item ${item.enabled === false ? '' : 'checked'}"><input type="checkbox" id="sp_enabled_${index}" ${item.enabled === false ? '' : 'checked'}> 启用</label></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="saveStandardPointConfig(${index})">保存</button></td></tr>`; }).join('') : '<tr><td colspan="7"><div class="empty-state">暂无个人标准积分配置，可点击上方添加</div></td></tr>'}</tbody></table></div>
       </div>
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>月度绩效配置</h3><div id="feishuSalesSyncResult" class="points-sync-result">销售额自动同步已开启，每小时更新</div></div><div style="display:flex;gap:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="syncFeishuSalesPerformance(this)">↻ 同步销售额</button><button class="btn btn-outline btn-sm" data-emie-onclick="saveMonthlyPerformanceConfig(-1)">＋ 配置当前月</button></div></div>
         <p style="font-size:12px;color:var(--gray-500);">月度目标与系数用于排行榜及个人绩效预览，最终结果以月度归档为准。</p>
@@ -176,6 +172,9 @@ async function renderAdminPoints(container) {
       <div class="card" style="padding:16px;"><div class="card-header"><h3>月度积分归档</h3><div style="display:flex;gap:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="preparePointArchive()">自动生成草稿</button><button class="btn btn-outline btn-sm" data-emie-onclick="savePointArchiveDraft()">手工调整草稿</button><button class="btn btn-primary btn-sm" data-emie-onclick="archivePointMonth()">归档指定月份</button></div></div>${archiveList.length ? `<div class="table-wrap"><table><thead><tr><th>月份</th><th>用户</th><th>获得 / 目标 / 供单</th><th>保护</th><th>季度均值</th><th>状态</th></tr></thead><tbody>${archiveList.map(item => `<tr><td>${escHtml(item.monthKey || '-')}</td><td>${escHtml(item.userId || '-')}</td><td>${Number(item.earnedPoints || 0)} / ${Number(item.targetPoints || 0)} / ${Number(item.suppliedPoints || 0)}</td><td>${item.insufficientSupplyProtection ? '已启用' : '否'}</td><td>${Number(item.quarterlyAveragePoints || 0)}</td><td>${item.status === 'ARCHIVED' ? '已归档' : '草稿'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无月度归档草稿，可自动生成后统一归档。</div>'}</div>
     </div>`;
     EMIE.adminState.pointStandards = standardList;
+    document.querySelectorAll('[id^="sp_enabled_"]').forEach((checkbox, index) => {
+      checkbox.addEventListener('change', () => saveStandardPointConfig(index));
+    });
     EMIE.adminState.pointMonths = monthList;
     EMIE.adminState.designerTargets = designerTargetList;
   } catch (e) { container.innerHTML = `<div class="empty">积分规则加载失败：${escHtml(e.message || '')}</div>`; }
@@ -191,7 +190,9 @@ function renderProposalDesignFiles(value) {
   if (!Array.isArray(files) || !files.length) return '';
   return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${files.map(file => {
     const storedName = String(file.storedName || '').replace(/[^a-zA-Z0-9._-]/g, '');
-    return storedName ? `<a class="btn btn-outline btn-sm" href="/api/files/download/${encodeURIComponent(storedName)}" target="_blank" rel="noopener">查看设计图 · ${escHtml(file.name || '附件')}</a>` : '';
+    const url = storedName ? `/api/files/download/${encodeURIComponent(storedName)}?download=true` : '';
+    const authenticatedUrl = url ? (EMIE.actions.authenticatedFileUrl ? EMIE.actions.authenticatedFileUrl(url) : url) : '';
+    return storedName ? `<a class="btn btn-outline btn-sm" href="${escHtml(authenticatedUrl)}" download="${escHtml(file.name || storedName)}" rel="noopener">下载设计图 · ${escHtml(file.name || '附件')}</a>` : '';
   }).join('')}</div>`;
 }
 
@@ -247,7 +248,15 @@ async function savePointDifficulty(code, index) {
   } catch (e) { alert('保存失败：' + e.message); }
 }
 
+async function deleteStandardPointConfig(id) {
+  if (!id || !confirm('确定删除这条设计师个人绩效配置吗？')) return;
+  const scrollTop = document.getElementById('adminContent')?.scrollTop || 0;
+  try { await apiDelete('/performance/standard/' + id); await renderAdminPoints(document.getElementById('adminContent')); requestAnimationFrame(() => { const el = document.getElementById('adminContent'); if (el) el.scrollTop = scrollTop; }); }
+  catch (e) { alert('删除失败：' + e.message); }
+}
+
 async function saveStandardPointConfig(index) {
+  const scrollTop = document.getElementById('adminContent')?.scrollTop || 0;
   const current = index >= 0 ? (EMIE.adminState.pointStandards || [])[index] : null;
   const configCode = current ? document.getElementById('sp_code_' + index)?.value.trim() : document.getElementById('sp_new_user')?.value;
   if (!configCode) return;
@@ -258,9 +267,10 @@ async function saveStandardPointConfig(index) {
   const departmentType = current?.departmentType || 'SUPPORT';
   try {
     await apiPut('/performance/standard', { id: current?.id || null, configCode, points, performanceBase, departmentType, description, enabled });
-    alert('标准积分配置已保存');
+    showAdminToast('标准积分配置已保存', 'success');
     await renderAdminPoints(document.getElementById('adminContent'));
-  } catch (e) { alert('保存失败：' + e.message); }
+    requestAnimationFrame(() => { const el = document.getElementById('adminContent'); if (el) el.scrollTop = scrollTop; });
+  } catch (e) { showAdminToast('保存失败：' + e.message, 'error'); }
 }
 
 async function saveMonthlyPerformanceConfig(index) {
@@ -427,6 +437,7 @@ EMIE.registerActions({
   createPointRule, deletePointRule, loadDesignerTargetMonth, saveDesignerTarget,
   savePointDifficulty,
   saveStandardPointConfig,
+  deleteStandardPointConfig,
   saveMonthlyPerformanceConfig,
   syncFeishuSalesPerformance,
   reviewPointAppeal,
@@ -452,6 +463,7 @@ EMIE.registerModule('adminScoring', {
   createPointRule, deletePointRule, loadDesignerTargetMonth, saveDesignerTarget,
   savePointDifficulty,
   saveStandardPointConfig,
+  deleteStandardPointConfig,
   saveMonthlyPerformanceConfig,
   syncFeishuSalesPerformance,
   reviewPointAppeal,

@@ -31,6 +31,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.FileNotFoundException;
 import java.net.URLConnection;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -225,11 +227,11 @@ public class FileController {
         try {
             Path filePath = uploadPath.resolve(subDir).resolve(fileName).normalize();
             if (filePath.startsWith(uploadPath) && Files.exists(filePath)) {
-                return serveFile(filePath, fileName, forceDownload);
+                return serveFile(filePath, downloadName(subDir + "/" + fileName), forceDownload);
             }
             try {
                 filePath = fileArchiveService.resolveFile(subDir + "/" + fileName);
-                return serveFile(filePath, fileName, forceDownload);
+                return serveFile(filePath, downloadName(subDir + "/" + fileName), forceDownload);
             } catch (Exception e) {
                 return ResponseEntity.notFound().build();
             }
@@ -250,11 +252,11 @@ public class FileController {
         try {
             Path filePath = uploadPath.resolve(fileName).normalize();
             if (filePath.startsWith(uploadPath) && Files.exists(filePath)) {
-                return serveFile(filePath, fileName, forceDownload);
+                return serveFile(filePath, downloadName(fileName), forceDownload);
             }
             try {
                 filePath = fileArchiveService.resolveFile(fileName);
-                return serveFile(filePath, fileName, forceDownload);
+                return serveFile(filePath, downloadName(fileName), forceDownload);
             } catch (Exception e) {
                 return ResponseEntity.notFound().build();
             }
@@ -268,13 +270,21 @@ public class FileController {
         String mimeType = URLConnection.guessContentTypeFromName(fileName);
         if (mimeType == null) mimeType = "application/octet-stream";
         Resource resource = new UrlResource(filePath.toUri());
-        String disposition = forceDownload
-                ? "attachment; filename=\"" + fileName + "\""
-                : "inline; filename=\"" + fileName + "\"";
+        String asciiName = fileName.replaceAll("[^A-Za-z0-9._-]", "_");
+        String encodedName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replace("+", "%20");
+        String disposition = (forceDownload ? "attachment" : "inline")
+                + "; filename=\"" + asciiName + "\"; filename*=UTF-8''" + encodedName;
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(mimeType))
                 .header("Content-Disposition", disposition)
                 .body(resource);
+    }
+
+    private String downloadName(String storedName) {
+        return fileRecordRepository.findByStoredName(storedName)
+                .map(record -> record.getOriginalName())
+                .filter(name -> name != null && !name.isBlank())
+                .orElseGet(() -> storedName.substring(storedName.lastIndexOf('/') + 1));
     }
 
     /** 查询或启动文件预览生成。PDF 直接就绪，PPT/PPTX 在后台转换。 */

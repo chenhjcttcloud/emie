@@ -38,6 +38,8 @@ async function resetAdminLogs() {
 async function loadAdminLogs() {
   const container = document.getElementById('logContainer');
   if (!container) return;
+  const requestId = (EMIE.adminState.logRequestId || 0) + 1;
+  EMIE.adminState.logRequestId = requestId;
   container.innerHTML = '<div class="loading">加载中</div>';
   try {
     const startDate = document.getElementById('logStartDate')?.value || '';
@@ -47,9 +49,11 @@ async function loadAdminLogs() {
     if (startDate) params.push('startDate=' + startDate);
     if (endDate) params.push('endDate=' + endDate);
     params.push('page=' + (EMIE.adminState.logPage || 0));
-    params.push('size=15');
+    // 每页少量展示，避免日志表格内部滚动时把页面内容顶出视口。
+    params.push('size=8');
     if (params.length) url += '?' + params.join('&');
     const pageResult = await apiGet(url);
+    if (requestId !== EMIE.adminState.logRequestId) return;
     const logs = pageResult.items || [];
     if (!logs.length) {
       container.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><p>暂无日志记录</p></div>';
@@ -66,14 +70,25 @@ async function loadAdminLogs() {
         return '<tr><td style="color:var(--gray-400);">' + l.id + '</td><td style="white-space:nowrap;font-size:12px;">' +
           escHtml(l.time || '-') + '</td><td><span class="admin-log-role role-' + escHtml(l.role || '') + '">' + escHtml(rn || '-') + '</span></td><td><strong>' +
           escHtml(l.username || '-') + '</strong></td><td class="admin-log-action">' + escHtml(l.action || '-') + '</td><td>' + pl + '</td></tr>';
-      }).join('') + '</tbody></table></div>' + (pageResult.totalPages > 1 ? `<div class="admin-log-pagination"><span>第 ${pageResult.page + 1} / ${pageResult.totalPages} 页</span><div><button class="btn btn-outline btn-sm" ${pageResult.page <= 0 ? 'disabled' : ''} data-emie-onclick="changeAdminLogPage(${pageResult.page - 1})">上一页</button><button class="btn btn-outline btn-sm" ${pageResult.page >= pageResult.totalPages - 1 ? 'disabled' : ''} data-emie-onclick="changeAdminLogPage(${pageResult.page + 1})">下一页</button></div></div>` : '') + '</div>';
+      }).join('') + '</tbody></table></div>' + (pageResult.totalPages > 1 ? `<div class="admin-log-pagination"><span>第 ${pageResult.page + 1} / ${pageResult.totalPages} 页</span><div><button class="btn btn-outline btn-sm" ${pageResult.page <= 0 ? 'disabled' : ''} data-emie-onclick="changeAdminLogPage(${pageResult.page - 1})">上一页</button><span class="admin-log-jump">跳至 <input id="adminLogPageJump" type="number" min="1" max="${pageResult.totalPages}" value="${pageResult.page + 1}" aria-label="日志页码"> 页</span><button class="btn btn-outline btn-sm" data-emie-onclick="jumpAdminLogPage()">跳转</button><button class="btn btn-outline btn-sm" ${pageResult.page >= pageResult.totalPages - 1 ? 'disabled' : ''} data-emie-onclick="changeAdminLogPage(${pageResult.page + 1})">下一页</button></div></div>` : '') + '</div>';
   } catch (e) {
+    if (requestId !== EMIE.adminState.logRequestId) return;
     container.innerHTML = '<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ' + escHtml(e.message || '未知错误') + '</p></div>';
   }
 }
 
 async function changeAdminLogPage(page) {
   if (page < 0) return;
+  EMIE.adminState.logPage = page;
+  await loadAdminLogs();
+}
+
+async function jumpAdminLogPage() {
+  const input = document.getElementById('adminLogPageJump');
+  const totalPages = Number(input?.max || 1);
+  const requested = Number.parseInt(input?.value, 10);
+  if (!Number.isFinite(requested)) return;
+  const page = Math.min(Math.max(requested, 1), totalPages) - 1;
   EMIE.adminState.logPage = page;
   await loadAdminLogs();
 }

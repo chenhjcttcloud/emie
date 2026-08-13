@@ -63,7 +63,6 @@ public class AuthFilter implements Filter {
             path.equals("/favicon.ico") ||
             path.startsWith("/css/") ||
             path.startsWith("/js/") ||
-            path.startsWith("/api/files/download/admin/") ||
             path.equals("/") ||
             path.equals("/index.html")) {
             chain.doFilter(request, response);

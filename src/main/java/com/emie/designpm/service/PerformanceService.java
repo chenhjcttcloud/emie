@@ -112,6 +112,8 @@ public class PerformanceService {
         String type = Optional.ofNullable(config.getDepartmentType()).orElse("SUPPORT").toUpperCase(Locale.ROOT);
         if (!List.of("SUPPORT", "BUSINESS").contains(type)) throw new IllegalArgumentException("岗位类型仅支持SUPPORT或BUSINESS");
         config.setDepartmentType(type);
+        if (config.getCreatedAt() == null) config.setCreatedAt(LocalDateTime.now());
+        if (config.getUpdatedAt() == null) config.setUpdatedAt(LocalDateTime.now());
         return standards.save(config);
     }
 
@@ -122,7 +124,20 @@ public class PerformanceService {
         return months.save(config);
     }
 
-    public List<StandardPointConfig> standards() { return standards.findAll(); }
+    public List<StandardPointConfig> standards() {
+        Map<String, StandardPointConfig> existing = standards.findAll().stream()
+                .collect(Collectors.toMap(StandardPointConfig::getConfigCode, item -> item, (a, b) -> a, LinkedHashMap::new));
+        users.findByRole("designer").stream()
+                .filter(user -> user.getStatus() == null || "active".equalsIgnoreCase(user.getStatus()))
+                .forEach(user -> existing.computeIfAbsent(user.getUserId(), id -> {
+                    StandardPointConfig config = new StandardPointConfig();
+                    config.setConfigCode(id); config.setPoints(100); config.setPerformanceBase(0d);
+                    config.setDepartmentType("SUPPORT"); config.setEnabled(true); config.setDescription("自动生成的设计师个人绩效配置");
+                    return standards.save(config);
+                }));
+        return new ArrayList<>(existing.values());
+    }
+    public void deleteStandard(Long id) { if (id == null || !standards.existsById(id)) throw new IllegalArgumentException("配置不存在"); standards.deleteById(id); }
     public List<MonthlyPerformanceConfig> months() { return months.findAll(); }
 
     @Transactional(readOnly = true)

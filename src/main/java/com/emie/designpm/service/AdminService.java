@@ -125,6 +125,10 @@ public class AdminService {
                 .description("飞书应用 App ID").valueType("text").sortOrder(1).build(),
             SystemConfig.builder().configKey("feishu.appSecret").configValue("").configGroup("feishu")
                 .description("飞书应用 App Secret").valueType("password").sortOrder(2).build(),
+            SystemConfig.builder().configKey("feishu.ssoAppId").configValue("").configGroup("feishu")
+                .description("飞书 SSO 应用 App ID").valueType("text").sortOrder(4).build(),
+            SystemConfig.builder().configKey("feishu.ssoAppSecret").configValue("").configGroup("feishu")
+                .description("飞书 SSO 应用 App Secret").valueType("password").sortOrder(5).build(),
             SystemConfig.builder().configKey("feishu.enabled").configValue("false").configGroup("feishu")
                 .description("启用飞书 SSO 登录").valueType("boolean").sortOrder(3).build(),
 
@@ -943,7 +947,9 @@ public class AdminService {
         Map<String, Map<String, Long>> projectCountsByPlanner = workloadCounts(
                 "SELECT planner_id, status, COUNT(*) FROM projects GROUP BY planner_id, status");
         Map<String, Map<String, Long>> taskCountsByDesigner = workloadCounts(
-                "SELECT designer_id, status, COUNT(*) FROM sub_tasks GROUP BY designer_id, status");
+                "SELECT designer_id, status, COUNT(*) FROM sub_tasks WHERE assignee_role = 'designer' OR assignee_role IS NULL GROUP BY designer_id, status");
+        Map<String, Map<String, Long>> taskCountsBySupplychain = workloadCounts(
+                "SELECT designer_id, status, COUNT(*) FROM sub_tasks WHERE assignee_role = 'supplychain' GROUP BY designer_id, status");
 
         for (Map.Entry<String, List<User>> entry : byRole.entrySet()) {
             String role = entry.getKey();
@@ -971,7 +977,8 @@ public class AdminService {
                         us.put("projectCounts", counts);
                     }
                     case "designer", "supplychain" -> {
-                        Map<String, Long> counts = taskCountsByDesigner.getOrDefault(u.getUserId(), Map.of());
+                        Map<String, Long> counts = ("supplychain".equals(role) ? taskCountsBySupplychain : taskCountsByDesigner)
+                                .getOrDefault(u.getUserId(), Map.of());
                         long total = counts.values().stream().mapToLong(Long::longValue).sum();
                         us.put("totalTasks", total);
                         us.put("taskCounts", counts);
@@ -1065,7 +1072,10 @@ public class AdminService {
                         + "FROM projects WHERE created_at >= ?1 OR updated_at >= ?1 GROUP BY planner_id", cutoff);
         Map<String, long[]> taskTimelineByDesigner = workloadTimelineCounts(
                 "SELECT designer_id, COUNT(*), SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) "
-                        + "FROM sub_tasks WHERE created_at >= ?1 GROUP BY designer_id", cutoff);
+                        + "FROM sub_tasks WHERE created_at >= ?1 AND (assignee_role = 'designer' OR assignee_role IS NULL) GROUP BY designer_id", cutoff);
+        Map<String, long[]> taskTimelineBySupplychain = workloadTimelineCounts(
+                "SELECT designer_id, COUNT(*), SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) "
+                        + "FROM sub_tasks WHERE created_at >= ?1 AND assignee_role = 'supplychain' GROUP BY designer_id", cutoff);
 
         for (Map.Entry<String, List<User>> entry : byRole.entrySet()) {
             String role = entry.getKey();
@@ -1094,7 +1104,8 @@ public class AdminService {
                         us.put("completed", completed);
                     }
                     case "designer", "supplychain" -> {
-                        long[] counts = taskTimelineByDesigner.getOrDefault(u.getUserId(), new long[2]);
+                        long[] counts = ("supplychain".equals(role) ? taskTimelineBySupplychain : taskTimelineByDesigner)
+                                .getOrDefault(u.getUserId(), new long[2]);
                         long assigned = counts[0];
                         long completed = counts[1];
                         us.put("assigned", assigned);

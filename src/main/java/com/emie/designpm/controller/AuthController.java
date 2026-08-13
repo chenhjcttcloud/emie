@@ -220,6 +220,20 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("error", "目标用户不存在"));
         }
 
+        // 防止初始化/重复点击时把当前用户“切换到自己”记录成身份切换日志。
+        // 直接返回当前会话，不改写会话，也不写操作日志。
+        if (target.getUserId().equals(session.userId())) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("token", token);
+            result.put("userId", target.getUserId());
+            result.put("name", target.getName());
+            result.put("role", target.getRole());
+            result.put("title", target.getTitle());
+            result.put("roleLevel", target.getRoleLevel());
+            result.put("noop", true);
+            return ResponseEntity.ok(result);
+        }
+
         // 替换当前会话为目标用户信息，保留原始登录用户信息
         putSession(token, new AuthSession(
             target.getUserId(), target.getRole(), target.getName(),

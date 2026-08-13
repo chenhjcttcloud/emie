@@ -38,7 +38,7 @@ public class FeishuAuthController {
     /** 获取飞书 App ID（供前端跳转用） */
     @GetMapping("/config")
     public ResponseEntity<Map<String, String>> getFeishuConfig(HttpServletRequest request) {
-        String appId = configRepository.findByConfigKey("feishu.appId")
+        String appId = configRepository.findByConfigKey("feishu.ssoAppId")
                 .map(SystemConfig::getConfigValue).orElse("");
         String enabled = configRepository.findByConfigKey("feishu.enabled")
                 .map(SystemConfig::getConfigValue).orElse("false");
@@ -136,9 +136,9 @@ public class FeishuAuthController {
 
     /** 提取公共方法：用飞书 code 换取用户身份并登录/注册 */
     private User processFeishuCode(String code) throws Exception {
-        String appId = configRepository.findByConfigKey("feishu.appId")
+        String appId = configRepository.findByConfigKey("feishu.ssoAppId")
                 .map(SystemConfig::getConfigValue).orElse("");
-        String appSecret = configRepository.findByConfigKey("feishu.appSecret")
+        String appSecret = configRepository.findByConfigKey("feishu.ssoAppSecret")
                 .map(SystemConfig::getConfigValue).orElse("");
 
         if (appId.isEmpty() || appSecret.isEmpty()) return null;
