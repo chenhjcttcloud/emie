@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Map;
 import java.time.YearMonth;
+import java.time.LocalDate;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -68,6 +69,12 @@ public class PointsService {
     public void awardQualityCompletion(SubTask task) {
         if (task == null || task.getId() == null || task.getDesignerId() == null || task.getDesignerId().isBlank()) return;
         String ruleCode = normalizedRuleCode(task.getPointRuleCode());
+        // 积分归属以子任务实际完成节点为准；基础分可能在送审时已入账，
+        // 这里将同一子任务的既有流水统一校正到完成月份，避免跨月错记。
+        String completionMonth = completionMonth(task);
+        if (completionMonth != null) {
+            ledgers.findBySubTaskId(task.getId()).forEach(ledger -> ledger.setAccountingMonth(completionMonth));
+        }
         awardBaseSubmission(task);
         if (!(ruleCode.startsWith("A") || ruleCode.startsWith("B"))) return;
         String ledgerCode = ruleCode + ":QUALITY";
@@ -82,6 +89,15 @@ public class PointsService {
         double base = task.getBasePointSnapshot() * task.getDifficultyMultiplierSnapshot();
         double cap = task.getBasePointSnapshot() * task.getMaxTotalMultiplierSnapshot();
         saveAward(task, ledgerCode, Math.min(base * ratio, Math.max(0d, cap - base)));
+    }
+
+    private String completionMonth(SubTask task) {
+        try {
+            if (task.getActualDate() != null && !task.getActualDate().isBlank()) {
+                return YearMonth.from(LocalDate.parse(task.getActualDate())).toString();
+            }
+        } catch (Exception ignored) { }
+        return null;
     }
 
     /** 兼容旧调用方；新流程实际在送审、最终验收两个节点分别调用。 */
@@ -125,7 +141,9 @@ public class PointsService {
         ledger.setSubTaskId(task.getId());
         ledger.setRuleCode(ledgerCode);
         ledger.setCountInPerformance(Boolean.TRUE.equals(task.getCountInPerformanceSnapshot()));
-        ledger.setAccountingMonth(task.getMilestoneMonth() == null || task.getMilestoneMonth().isBlank()
+        String completionMonth = completionMonth(task);
+        ledger.setAccountingMonth(completionMonth != null ? completionMonth
+                : task.getMilestoneMonth() == null || task.getMilestoneMonth().isBlank()
                 ? YearMonth.now().toString() : task.getMilestoneMonth());
         ledger.setPoints(awarded);
         ledgers.save(ledger);

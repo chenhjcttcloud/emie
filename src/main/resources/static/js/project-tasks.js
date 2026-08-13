@@ -132,15 +132,14 @@ async function addSubTask(pid) {
             <div class="form-group"><label class="form-label"><span class="required">*</span> 计划要求完成时间</label>${renderDatePicker('plannedDate', {required:true})}</div>
           </div>
           <div class="form-row">
-            <div class="form-group"><label class="form-label">积分归属月份（跨月任务）</label><input class="form-input" type="month" name="milestoneMonth"><div style="font-size:12px;color:var(--gray-500);margin-top:5px;">留空则按实际入账月份；长周期任务可拆成多个里程碑子任务。</div></div>
           </div>
           <div class="form-row">
-            <div class="form-group"><label class="form-label"><span class="required">*</span> 积分规则</label>
-              <select class="form-select" name="pointRuleCode" required>${renderPointRuleOptions(pointRules, '')}</select>
+            <div class="form-group"><label class="form-label">积分规则（未启用时可留空）</label>
+              <select class="form-select" name="pointRuleCode"><option value="">暂不设置积分规则</option>${renderPointRuleOptions(pointRules, '').replace('<option value="" selected disabled>请选择积分规则</option>', '')}</select>
               <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">A：常规设计；B：复杂/重点设计；E：简单辅助；S：特殊专项。创建时锁定基础分，后续调整规则不会影响该任务。</div>
             </div>
-            <div class="form-group"><label class="form-label"><span class="required">*</span> 难度档位</label>
-              <select class="form-select" name="difficultyCode" required>${renderDifficultyOptions(pointDifficulties, 'STANDARD')}</select>
+            <div class="form-group"><label class="form-label">难度档位（未启用时可留空）</label>
+              <select class="form-select" name="difficultyCode"><option value="" selected>暂不设置难度</option>${renderDifficultyOptions(pointDifficulties, '').replace(/ selected/g, '')}</select>
               <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">任务开始执行后不可修改。</div>
             </div>
           </div>
@@ -283,8 +282,6 @@ async function submitAddSubTask(pid) {
 
   if (!data.name) { showError('name', '请填写子任务名称'); hasErr = true; }
   if (!data.workflowStage) { showError('workflowStage', '请选择子任务所属阶段'); hasErr = true; }
-  if (!data.pointRuleCode) { showError('pointRuleCode', '请选择积分规则'); hasErr = true; }
-  if (!data.difficultyCode) { showError('difficultyCode', '请选择难度档位'); hasErr = true; }
   if (!data.plannedDate) { showError('plannedDate', '请选择计划完成时间'); hasErr = true; }
   else if (!/^\d{4}-\d{2}-\d{2}$/.test(data.plannedDate) || isNaN(new Date(data.plannedDate).getTime())) {
     showError('plannedDate', '日期格式不正确（yyyy-mm-dd）');
@@ -401,7 +398,6 @@ function editTask(pid, tid) {
               <div class="form-group"><label class="form-label">计划完成时间</label>${renderDatePicker('plannedDate', {value: task.plannedDate || ''})}</div>
             </div>
             <div class="form-row">
-              <div class="form-group"><label class="form-label">积分归属月份</label><input class="form-input" type="month" name="milestoneMonth" value="${escHtml(task.milestoneMonth || '')}" ${task.status !== 'pending' ? 'disabled' : ''}></div>
               <div class="form-group"><label class="form-label">合作积分分配</label><input class="form-input" name="collaboratorAllocationsText" value="${escHtml(collaboratorAllocationsText)}" placeholder="designer02:30" ${task.status !== 'pending' ? 'disabled' : ''}></div>
             </div>
             <div class="form-group"><label class="form-label">指派/立项说明</label><input class="form-input" name="assignmentReason" maxlength="500" value="${escHtml(task.assignmentReason || '')}"></div>

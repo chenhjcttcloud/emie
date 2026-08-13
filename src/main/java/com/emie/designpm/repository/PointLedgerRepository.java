@@ -10,6 +10,7 @@ import java.util.List;
 public interface PointLedgerRepository extends JpaRepository<PointLedger, Long> {
     boolean existsByUserIdAndSubTaskIdAndRuleCode(String userId, Long subTaskId, String ruleCode);
     List<PointLedger> findByUserIdOrderByCreatedAtDescIdDesc(String userId);
+    List<PointLedger> findBySubTaskId(Long subTaskId);
 
     @Query("select coalesce(sum(l.points), 0) from PointLedger l where l.userId = :userId")
     double sumPointsByUserId(@Param("userId") String userId);
