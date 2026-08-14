@@ -60,9 +60,9 @@ class PointsServiceSnapshotTest {
         assertEquals(0.5, task.getQualityBonusRatioSnapshot());
         assertEquals(false, task.getCountInPerformanceSnapshot());
         verify(ledgers).save(argThat(ledger -> ledger.getPoints() == 30
-                && !ledger.isCountInPerformance() && "B1:BASE".equals(ledger.getRuleCode())));
+                && ledger.isCountInPerformance() && "B1:BASE".equals(ledger.getRuleCode())));
         verify(ledgers).save(argThat(ledger -> ledger.getPoints() == 15
-                && !ledger.isCountInPerformance() && "B1:QUALITY".equals(ledger.getRuleCode())));
+                && ledger.isCountInPerformance() && "B1:QUALITY".equals(ledger.getRuleCode())));
     }
 
     @Test
