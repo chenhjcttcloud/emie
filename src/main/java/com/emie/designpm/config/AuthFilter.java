@@ -72,10 +72,7 @@ public class AuthFilter implements Filter {
         // 对 /api/** 路径进行认证
         if (path.startsWith("/api/")) {
             String token = req.getHeader("X-Auth-Token");
-            // 仅文件读取接口兼容 query token，用于 <img> 等无法设置请求头的场景。
-            if ((token == null || token.isBlank()) && allowsQueryToken(req.getMethod(), path)) {
-                token = req.getParameter("token");
-            }
+            if (token == null || token.isBlank()) token = cookieToken(req);
             AuthController.AuthSession session = AuthController.validateToken(token);
             if (token == null || session == null) {
                 res.setStatus(401);
@@ -117,11 +114,12 @@ public class AuthFilter implements Filter {
         chain.doFilter(request, response);
     }
 
-    private boolean allowsQueryToken(String method, String path) {
-        if (!("GET".equals(method) || "HEAD".equals(method))) return false;
-        return path.startsWith("/api/files/thumbnail/")
-                || path.startsWith("/api/files/download/")
-                || path.startsWith("/api/files/preview/");
+    private String cookieToken(HttpServletRequest request) {
+        if (request.getCookies() == null) return null;
+        for (jakarta.servlet.http.Cookie cookie : request.getCookies()) {
+            if (AuthController.AUTH_COOKIE.equals(cookie.getName())) return cookie.getValue();
+        }
+        return null;
     }
 
     private boolean hasPermission(AuthController.AuthSession session, String permission) {

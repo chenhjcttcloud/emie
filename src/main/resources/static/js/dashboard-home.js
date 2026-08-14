@@ -41,6 +41,11 @@ function projectCardFilters(extra = {}) {
   return { ...extra };
 }
 
+function navigateChannelCard() { navigateProjectList('channel', projectCardFilters({})); }
+function navigateRegularCard() { navigateProjectList('regular', projectCardFilters({})); }
+function navigateInProgressCard() { navigateProjectList('orders', projectCardFilters({ status: 'in_progress' })); }
+function navigatePendingScoring() { EMIE.scoringFilterPreset = 'pending'; navigate('scoring'); }
+
 async function updateBadges(role, uid) {
   return refreshNavigationBadges();
 }
@@ -79,15 +84,15 @@ async function renderDashboard(main, role, uid) {
     <h2 style="font-size:22px;margin-bottom:20px;">📊 工作台 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">— ${EMIE.state.currentRole === 'planner' ? `<select class="form-input" style="display:inline-block;width:auto;min-width:130px;padding:4px 28px 4px 8px;font-size:13px;vertical-align:middle;"><option value="mine" ${plannerBoardScope === 'mine' ? 'selected' : ''}>${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}</option><option value="all" ${plannerBoardScope === 'all' ? 'selected' : ''}>全部产品企划</option></select>` : `${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}（${roleLabel(EMIE.state.currentRole)}）`}</span></h2>
     ${!executionRole ? `<div class="stats-grid dashboard-stats-row">
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateMyProjects()"><div class="stat-icon blue">📁</div><div><div class="stat-value">${stats.totalProjects}</div><div class="stat-label">${EMIE.state.currentRole === 'admin' ? '全部项目' : (plannerBoardScope === 'all' ? '全部企划项目' : '我的项目')}</div></div></div>
-      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateProjectList('channel',projectCardFilters({}))"><div class="stat-icon blue">📦</div><div><div class="stat-value">${stats.channelProjects}</div><div class="stat-label">渠道定制单</div></div></div>
-      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateProjectList('regular',projectCardFilters({}))"><div class="stat-icon green">🏭</div><div><div class="stat-value">${stats.regularProjects}</div><div class="stat-label">公司常规品</div></div></div>
-      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateProjectList('orders',projectCardFilters({status:'in_progress'}))"><div class="stat-icon yellow">🔄</div><div><div class="stat-value">${stats.inProgress}</div><div class="stat-label">进行中项目</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateChannelCard()"><div class="stat-icon blue">📦</div><div><div class="stat-value">${stats.channelProjects}</div><div class="stat-label">渠道定制单</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateRegularCard()"><div class="stat-icon green">🏭</div><div><div class="stat-value">${stats.regularProjects}</div><div class="stat-label">公司常规品</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateInProgressCard()"><div class="stat-icon yellow">🔄</div><div><div class="stat-value">${stats.inProgress}</div><div class="stat-label">进行中项目</div></div></div>
     </div>
     <div class="stats-grid dashboard-stats-row">
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateTaskBucket('all')"><div class="stat-icon blue">📌</div><div><div class="stat-value">${stats.allTasks ?? 0}</div><div class="stat-label">子任务总数</div></div></div>
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateTaskBucket('pending')"><div class="stat-icon yellow">⏳</div><div><div class="stat-value">${stats.pendingTasks}</div><div class="stat-label">待处理子任务</div></div></div>
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateTaskBucket('completed')"><div class="stat-icon green">✅</div><div><div class="stat-value">${stats.approvedTasks}</div><div class="stat-label">已完成子任务</div></div></div>
-      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigate('scoring')"><div class="stat-icon yellow">⭐</div><div><div class="stat-value">${stats.pendingScore}</div><div class="stat-label">待评分</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigatePendingScoring()"><div class="stat-icon yellow">⭐</div><div><div class="stat-value">${stats.pendingScore}</div><div class="stat-label">待评分</div></div></div>
     </div>` : ''}
     ${rolePanelsHtml}
     <div id="dashboardDesignRequirements"><div class="empty" style="padding:20px;"><p>正在加载设计/送审需求…</p></div></div>
@@ -655,6 +660,10 @@ EMIE.registerActions({
   loadUserTasksPopup,
   renderProjectSummary,
   navigateMyProjects,
+  navigateChannelCard,
+  navigateRegularCard,
+  navigateInProgressCard,
+  navigatePendingScoring,
 });
 
 EMIE.registerModule('dashboardHome', {
@@ -669,4 +678,8 @@ EMIE.registerModule('dashboardHome', {
   loadUserTasksPopup,
   renderProjectSummary,
   navigateMyProjects,
+  navigateChannelCard,
+  navigateRegularCard,
+  navigateInProgressCard,
+  navigatePendingScoring,
 });

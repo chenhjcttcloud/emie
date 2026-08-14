@@ -169,49 +169,51 @@ public class FileController {
         if (!acquired) {
             return ResponseEntity.status(429).body(Map.of("error", "当前上传任务较多，请稍后重试"));
         }
-        if (file.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "文件为空"));
-        }
-        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
-        long maxBytes = 200L * 1024 * 1024;
-        if (file.getSize() > maxBytes) {
-            return ResponseEntity.status(413).body(Map.of("error", "文件超过当前角色允许的大小限制"));
-        }
-
-        String originalName = file.getOriginalFilename();
-        if (originalName == null || !SecurityUtil.isValidAttachmentFile(originalName)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "不允许上传此类型文件"));
-        }
-
-        String ext = "";
-        int dot = originalName.lastIndexOf('.');
-        if (dot >= 0) ext = originalName.substring(dot).toLowerCase();
-        String storedName = UUID.randomUUID().toString() + ext;
-
         try {
+            if (file.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "文件为空"));
+            }
+            AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+            long maxBytes = 200L * 1024 * 1024;
+            if (file.getSize() > maxBytes) {
+                return ResponseEntity.status(413).body(Map.of("error", "文件超过当前角色允许的大小限制"));
+            }
+
+            String originalName = file.getOriginalFilename();
+            if (originalName == null || !SecurityUtil.isValidAttachmentFile(originalName)) {
+                return ResponseEntity.badRequest().body(Map.of("error", "不允许上传此类型文件"));
+            }
+
+            String ext = "";
+            int dot = originalName.lastIndexOf('.');
+            if (dot >= 0) ext = originalName.substring(dot).toLowerCase();
+            String storedName = UUID.randomUUID().toString() + ext;
+
             Path targetPath = uploadPath.resolve(storedName).normalize();
             if (!targetPath.startsWith(uploadPath)) {
                 return ResponseEntity.badRequest().body(Map.of("error", "文件名非法"));
             }
-            file.transferTo(targetPath.toFile());
+            try {
+                file.transferTo(targetPath.toFile());
 
-            String mimeType = URLConnection.guessContentTypeFromName(originalName);
-            fileArchiveService.recordUpload(storedName, originalName, file.getSize(),
-                    mimeType != null ? mimeType : "application/octet-stream",
-                    null, null,
-                            Optional.ofNullable(session)
-                            .map(AuthController.AuthSession::userId).orElse(null));
+                String mimeType = URLConnection.guessContentTypeFromName(originalName);
+                fileArchiveService.recordUpload(storedName, originalName, file.getSize(),
+                        mimeType != null ? mimeType : "application/octet-stream",
+                        null, null,
+                                Optional.ofNullable(session)
+                                .map(AuthController.AuthSession::userId).orElse(null));
 
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("name", originalName);
-            result.put("storedName", storedName);
-            result.put("size", file.getSize());
-            result.put("url", "/api/files/download/" + storedName);
-            return ResponseEntity.ok(result);
-        } catch (IOException e) {
-            return ResponseEntity.internalServerError().body(Map.of("error", "文件保存失败，请稍后重试"));
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("name", originalName);
+                result.put("storedName", storedName);
+                result.put("size", file.getSize());
+                result.put("url", "/api/files/download/" + storedName);
+                return ResponseEntity.ok(result);
+            } catch (IOException e) {
+                return ResponseEntity.internalServerError().body(Map.of("error", "文件保存失败，请稍后重试"));
+            }
         } finally {
-            if (acquired) UPLOAD_SLOTS.release();
+            UPLOAD_SLOTS.release();
         }
     }
 

@@ -88,11 +88,6 @@ async function addSubTask(pid) {
     window.EMIE.actions.showSystemAlert('积分规则加载失败：' + (error.message || '请稍后重试'));
     return;
   }
-  if (!pointRules.length) {
-    window.EMIE.actions.showSystemAlert('当前没有可用的积分规则，请联系管理员启用后再创建子任务');
-    return;
-  }
-
   const designerOpts = `<option value="">请选择设计师</option>` +
     EMIE.state.users.designer.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('');
   const supplychainOpts = EMIE.state.users.supplychain && EMIE.state.users.supplychain.length
@@ -134,7 +129,7 @@ async function addSubTask(pid) {
           <div class="form-row">
           </div>
           <div class="form-row">
-            <div class="form-group"><label class="form-label">积分规则（未启用时可留空）</label>
+            <div class="form-group"><label class="form-label">积分规则（正式运行后必填）</label>
               <select class="form-select" name="pointRuleCode"><option value="">暂不设置积分规则</option>${renderPointRuleOptions(pointRules, '').replace('<option value="" selected disabled>请选择积分规则</option>', '')}</select>
               <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">A：常规设计；B：复杂/重点设计；E：简单辅助；S：特殊专项。创建时锁定基础分，后续调整规则不会影响该任务。</div>
             </div>

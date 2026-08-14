@@ -545,7 +545,7 @@ public class ProjectService {
             task.setAllocationStatus("direct_assigned");
         }
         validateSubTaskAssignee(designerId, task.getAssigneeRole());
-        if (!publishToMarket && "designer".equals(task.getAssigneeRole())) validateDesignCategoryEligibility(task, designerId);
+        // 设计师不再按任务分类或能力标签限制；所有设计师均可承接设计师类子任务。
         task.setDetails(details);
         task.setReferenceImagesJson(validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true));
         task.setAttachmentsJson(validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));

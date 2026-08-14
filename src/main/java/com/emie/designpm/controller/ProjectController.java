@@ -44,6 +44,8 @@ public class ProjectController {
     @Autowired(required = false)
     private UserService userService;
     @Autowired(required = false)
+    private com.emie.designpm.repository.PointLedgerRepository pointLedgerRepository;
+    @Autowired(required = false)
     private com.emie.designpm.service.FeishuChatService feishuChatService;
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -261,10 +263,15 @@ public class ProjectController {
             item.put("projectType", project.getType());
             item.put("projectStatus", project.getStatus());
             item.put("projectName", projectDisplayName(project));
+            item.put("plannerId", project.getPlannerId());
+            item.put("plannerName", project.getPlannerName());
             item.put("scoringRecords", scoringByTask.getOrDefault(task.getId(), List.of()));
             item.put("rejectionRecords", rejectionRecords(project, task, projectLogs));
             item.put("deliveryVersions", projectService.getDeliveryVersions(task.getId()));
             item.put("relation", session.userId().equals(task.getDesignerId()) ? "assignee" : "publisher");
+            item.put("issuedPoints", pointLedgerRepository == null ? 0d : pointLedgerRepository.findBySubTaskId(task.getId()).stream()
+                    .map(PointLedger::getPoints).filter(Objects::nonNull).mapToDouble(Double::doubleValue).sum());
+            item.put("issuedLedgerCount", pointLedgerRepository == null ? 0 : pointLedgerRepository.findBySubTaskId(task.getId()).size());
             return item;
         }).toList();
         return ResponseEntity.ok(result);
@@ -323,6 +330,7 @@ public class ProjectController {
             item.put("reviewComments", task.getReviewComments());
             item.put("projectId", project.getId()); item.put("projectType", project.getType());
             item.put("projectName", projectDisplayName(project)); item.put("readOnly", true);
+            item.put("plannerId", project.getPlannerId()); item.put("plannerName", project.getPlannerName());
             item.put("rejectionRecords", rejectionRecords(project, task, projectLogs));
             item.put("deliveryVersions", projectService.getDeliveryVersions(task.getId()));
             String uid = session.userId();

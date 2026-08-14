@@ -281,7 +281,7 @@ public class FeishuBaseService {
             appToken = createBase();
             setCfg("feishu.base.appToken", appToken);
             result.put("appToken", appToken);
-            log.info("飞书 Base 已创建: {}", appToken);
+        log.info("飞书 Base 已创建");
         } else {
             result.put("appToken", appToken);
         }
@@ -1058,7 +1058,7 @@ public class FeishuBaseService {
     }
 
     private String bearerRequest(String method, String url, String token, String body) throws Exception {
-        log.debug("bearerRequest: {} {} body={}", method, url, body);
+        // URL 可能包含 appToken/tableToken，body 可能包含业务数据；禁止写入日志。
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .timeout(Duration.ofSeconds(20))
@@ -1075,7 +1075,8 @@ public class FeishuBaseService {
         HttpResponse<String> response = http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
         String responseBody = response.body();
         if (response.statusCode() / 100 != 2) {
-            throw new Exception("飞书 HTTP 请求失败: status=" + response.statusCode() + " body=" + responseBody);
+            log.warn("飞书 HTTP 请求失败: method={} status={}", method, response.statusCode());
+            throw new Exception("飞书 HTTP 请求失败: status=" + response.statusCode());
         }
         return responseBody;
     }

@@ -27,6 +27,7 @@ public class ShareLinkService {
 
     private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
     private static final int MAX_PASSWORD_ATTEMPTS = 10;
+    public static final long MAX_EXPIRY_SECONDS = 60L * 24 * 60 * 60;
     private static final long PASSWORD_WINDOW_MS = 60_000L;
     private final Map<String, AttemptWindow> passwordAttempts = new ConcurrentHashMap<>();
 
@@ -66,14 +67,13 @@ public class ShareLinkService {
     @Transactional
     public Map<String, Object> createShareLink(String targetType, Long targetId,
                                                String createdBy, Long expiresInSec, String rawPassword) {
+        validateExpiry(expiresInSec, true);
         User creator = userRepository.findByUserId(createdBy)
                 .orElseThrow(() -> new IllegalArgumentException("创建分享链接的用户不存在"));
         validateTarget(targetType, targetId, creator);
 
         String token = generateToken();
-        LocalDateTime expiresAt = expiresInSec != null && expiresInSec > 0
-                ? LocalDateTime.now().plusSeconds(expiresInSec)
-                : null;
+        LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(expiresInSec);
         String passwordHash = rawPassword != null && !rawPassword.isBlank()
                 ? PASSWORD_ENCODER.encode(rawPassword)
                 : null;
@@ -161,9 +161,11 @@ public class ShareLinkService {
             throw new IllegalArgumentException("分享链接已达到查看次数上限");
         }
 
-        // 增加查看次数
-        link.setViewCount(link.getViewCount() + 1);
-        shareLinkRepository.save(link);
+        // 原子递增，避免并发请求同时通过上限检查导致超额访问。
+        if (shareLinkRepository.incrementViewCountIfAvailable(link.getId()) != 1) {
+            throw new IllegalArgumentException("分享链接已达到查看次数上限");
+        }
+        link = shareLinkRepository.findById(link.getId()).orElseThrow(() -> new IllegalArgumentException("分享链接不存在"));
 
         return new ShareAccess(link.getTargetType(), link.getTargetId(), Map.of(
                 "token", token,
@@ -243,6 +245,7 @@ public class ShareLinkService {
         if ("revoked".equals(link.getStatus())) {
             throw new IllegalArgumentException("该链接已被收回，无法修改");
         }
+        validateExpiry(expiresInSec, false);
         if (expiresInSec != null && expiresInSec > 0) {
             link.setExpiresAt(LocalDateTime.now().plusSeconds(expiresInSec));
         } else if (expiresInSec != null && expiresInSec <= 0) {
@@ -257,6 +260,16 @@ public class ShareLinkService {
             }
         }
         shareLinkRepository.save(link);
+    }
+
+    private void validateExpiry(Long expiresInSec, boolean required) {
+        if (expiresInSec == null) {
+            if (required) throw new IllegalArgumentException("必须设置分享链接有效期");
+            return;
+        }
+        if (expiresInSec <= 0 || expiresInSec > MAX_EXPIRY_SECONDS) {
+            throw new IllegalArgumentException("分享链接有效期必须在1秒到60天之间");
+        }
     }
 
     // ==================== 内部方法 ====================

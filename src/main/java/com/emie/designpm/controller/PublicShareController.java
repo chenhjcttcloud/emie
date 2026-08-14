@@ -33,6 +33,7 @@ public class PublicShareController {
                             HttpServletResponse response) {
         response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
         response.setHeader("Pragma", "no-cache");
+        response.setHeader("Referrer-Policy", "no-referrer");
         try {
             Map<String, Object> data = shareLinkService.resolveShare(token, password);
 
@@ -48,7 +49,7 @@ public class PublicShareController {
             }
             return renderErrorPage("分享链接无效或已失效");
         } catch (Exception e) {
-            log.error("分享页渲染失败 token={}", token, e);
+            log.error("分享页渲染失败 reason={}", e.getClass().getSimpleName());
             return renderErrorPage("页面加载失败，请重试");
         }
     }

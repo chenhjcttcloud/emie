@@ -10,14 +10,24 @@ import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.FileArchiveService;
 import com.emie.designpm.service.FilePreviewService;
 import com.emie.designpm.service.ProjectAccessService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Semaphore;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -135,6 +145,80 @@ class FileAccessRegressionTest {
                 session, storedName, storedName);
 
         assertTrue(allowed);
+    }
+
+    private static void resetUploadSlots() {
+        Semaphore slots = (Semaphore) ReflectionTestUtils.getField(FileController.class, "UPLOAD_SLOTS");
+        assert slots != null;
+        slots.drainPermits();
+        slots.release(4);
+    }
+
+    private static FileController uploadController(Path tempDir) {
+        FileArchiveService archive = mock(FileArchiveService.class);
+        when(archive.recordUpload(any(), any(), any(Long.class), any(), any(), any(), any()))
+                .thenAnswer(invocation -> null);
+        FileController controller = new FileController(archive, mock(FileRecordRepository.class),
+                mock(ProjectAccessService.class), mock(SubTaskRepository.class), mock(FilePreviewService.class));
+        ReflectionTestUtils.setField(controller, "uploadPath", tempDir);
+        return controller;
+    }
+
+    @Test
+    void emptyUploadsReleasePermitForSubsequentUploads(@TempDir Path tempDir) {
+        resetUploadSlots();
+        FileController controller = uploadController(tempDir);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+
+        for (int i = 0; i < 4; i++) {
+            ResponseEntity<Map<String, Object>> response = controller.uploadFile(
+                    new MockMultipartFile("file", "empty.pdf", "application/pdf", new byte[0]), request);
+            assertEquals(400, response.getStatusCode().value());
+        }
+
+        ResponseEntity<Map<String, Object>> response = controller.uploadFile(
+                new MockMultipartFile("file", "valid.pdf", "application/pdf", "content".getBytes()), request);
+        assertEquals(200, response.getStatusCode().value());
+    }
+
+    @Test
+    void oversizedUploadsReleasePermitForSubsequentUploads(@TempDir Path tempDir) {
+        resetUploadSlots();
+        FileController controller = uploadController(tempDir);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        MultipartFile oversized = mock(MultipartFile.class);
+        when(oversized.isEmpty()).thenReturn(false);
+        when(oversized.getSize()).thenReturn(200L * 1024 * 1024 + 1);
+        when(oversized.getOriginalFilename()).thenReturn("oversized.pdf");
+
+        for (int i = 0; i < 4; i++) {
+            ResponseEntity<Map<String, Object>> response = controller.uploadFile(oversized, request);
+            assertEquals(413, response.getStatusCode().value());
+        }
+
+        ResponseEntity<Map<String, Object>> response = controller.uploadFile(
+                new MockMultipartFile("file", "valid.pdf", "application/pdf", "content".getBytes()), request);
+        assertEquals(200, response.getStatusCode().value());
+    }
+
+    @Test
+    void invalidExtensionUploadsReleasePermitForSubsequentUploads(@TempDir Path tempDir) {
+        resetUploadSlots();
+        FileController controller = uploadController(tempDir);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        MultipartFile invalid = mock(MultipartFile.class);
+        when(invalid.isEmpty()).thenReturn(false);
+        when(invalid.getSize()).thenReturn(10L);
+        when(invalid.getOriginalFilename()).thenReturn("malware.exe");
+
+        for (int i = 0; i < 4; i++) {
+            ResponseEntity<Map<String, Object>> response = controller.uploadFile(invalid, request);
+            assertEquals(400, response.getStatusCode().value());
+        }
+
+        ResponseEntity<Map<String, Object>> response = controller.uploadFile(
+                new MockMultipartFile("file", "valid.pdf", "application/pdf", "content".getBytes()), request);
+        assertEquals(200, response.getStatusCode().value());
     }
 
     @Test

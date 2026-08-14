@@ -8,6 +8,13 @@ const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
 const showAdminToast = (...args) => EMIE.actions.showAdminToast(...args);
 
+function compareRuleCodes(left, right) {
+  return String(left?.ruleCode || '').localeCompare(String(right?.ruleCode || ''), undefined, {
+    numeric: true,
+    sensitivity: 'base'
+  });
+}
+
 // ==================== 评分权重管理 ====================
 async function renderAdminScoring(container) {
   container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--gray-400);">加载中...</div>`;
@@ -114,7 +121,7 @@ async function renderAdminPoints(container) {
       apiGet('/point-governance/archives'),
       apiGet('/point-program/proposals'), apiGet('/admin/configs'),
     ]);
-    const ruleList = Array.isArray(rules) ? rules : [];
+    const ruleList = (Array.isArray(rules) ? rules : []).slice().sort(compareRuleCodes);
     const difficultyList = Array.isArray(difficulties) ? difficulties : [];
     const standardList = Array.isArray(standards) ? standards : [];
     const monthList = [];

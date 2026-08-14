@@ -278,7 +278,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 .nav-submenu { margin: -2px 0 8px 42px; padding-left: 10px; border-left: 1px solid var(--gray-200); display:flex; flex-direction:column; gap:2px; }
 .nav-subitem { border:0; background:transparent; color:var(--gray-500); text-align:left; padding:7px 10px; border-radius:6px; font-size:13px; cursor:pointer; }
 .nav-subitem:hover, .nav-subitem.active { color:var(--primary); background:var(--primary-light); }
-.main-content { flex:1; padding:24px; overflow-y:auto; }
+.main-content { flex:1; padding:24px; overflow-y:auto; scroll-behavior:smooth; }
+.main-content > * { animation:contentEnter .2s ease-out both; }
+@keyframes contentEnter { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
 
 /* Cards */
 .card { background:#fff; border-radius:var(--radius); box-shadow:var(--shadow); padding:20px; }
@@ -355,10 +357,10 @@ tr:hover td { background:var(--gray-50); }
 .password-toggle:hover { background:var(--gray-100); }
 .form-label { display:block; font-size:13px; font-weight:500; color:var(--gray-700); margin-bottom:6px; }
 .form-label .required { color:var(--danger); margin-left:2px; }
-.form-input,.form-select,.form-textarea { width:100%; padding:9px 12px; border:1px solid var(--gray-300); border-radius:6px; font-size:13px; color:var(--gray-800); background:#fff; transition:border-color .15s; font-family:inherit; }
+.form-input,.form-select,.form-textarea { width:100%; padding:9px 12px; border:1px solid var(--gray-300); border-radius:6px; font-size:13px; color:var(--gray-800); background:#fff; transition:border-color .18s, box-shadow .18s, transform .18s, background-color .18s; font-family:inherit; }
 /* 登录/注册表单 input 使用 16px 防止 iOS Safari 自动放大 */
 .login-card .form-input { font-size:16px; }
-.form-input:focus,.form-select:focus,.form-textarea:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(79,70,229,.1); }
+.form-input:focus,.form-select:focus,.form-textarea:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(79,70,229,.1); transform:translateY(-1px); }
 .form-input[type="date"] { cursor:pointer; }
 .form-textarea { min-height:80px; resize:vertical; }
 .form-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
@@ -443,7 +445,8 @@ select.form-select:disabled::-ms-expand { display: none; }
 
 /* Modals */
 .has-open-modal { overflow:hidden; }
-.modal-overlay { position:fixed; inset:0; background:rgba(15,23,42,.46); backdrop-filter:blur(2px); z-index:200; display:flex; align-items:center; justify-content:center; padding:24px; overscroll-behavior:contain; }
+.modal-overlay { position:fixed; inset:0; background:rgba(15,23,42,.46); backdrop-filter:blur(2px); z-index:200; display:flex; align-items:center; justify-content:center; padding:24px; overscroll-behavior:contain; animation:overlayEnter .18s ease-out; }
+.modal-overlay.is-closing { animation:overlayExit .18s ease-in forwards; pointer-events:none; }
 .modal { background:#fff; border-radius:16px; box-shadow:0 24px 80px rgba(15,23,42,.22); width:100%; max-width:680px; max-height:90vh; overflow:hidden; position:relative; display:flex; flex-direction:column; animation:modalEnter .18s ease-out; }
 .modal-lg { max-width:880px; }
 .modal-header { position:relative; display:flex; align-items:center; flex:0 0 auto; min-height:68px; padding:16px 64px 16px 24px; border-bottom:1px solid var(--gray-200); gap:12px; background:#fff; z-index:2; }
@@ -464,13 +467,19 @@ select.form-select:disabled::-ms-expand { display: none; }
 /* 项目、子任务等长详情使用右侧抽屉，编辑/确认类仍保持居中弹窗。 */
 .modal-overlay.modal-detail-drawer { justify-content:flex-end; align-items:stretch; padding:0; background:rgba(15,23,42,.32); }
 .modal-detail-drawer > .modal { width:min(880px, calc(100vw - 48px)); max-width:none !important; max-height:none; height:100%; border-radius:16px 0 0 16px; animation:drawerEnter .22s ease-out; }
+.modal-detail-drawer.is-closing > .modal { animation:drawerExit .18s ease-in forwards; }
 .modal-detail-drawer .modal-header { min-height:72px; padding-left:28px; }
 .modal-detail-drawer .modal-body { padding:24px 28px 32px; }
 .modal-detail-drawer .modal-footer { padding:14px 28px; }
 
+@keyframes overlayEnter { from { opacity:0; } to { opacity:1; } }
+@keyframes overlayExit { from { opacity:1; } to { opacity:0; } }
 @keyframes modalEnter { from { opacity:0; transform:translateY(8px) scale(.985); } to { opacity:1; transform:none; } }
+@keyframes modalExit { from { opacity:1; transform:none; } to { opacity:0; transform:translateY(6px) scale(.985); } }
 @keyframes drawerEnter { from { transform:translateX(24px); opacity:.7; } to { transform:none; opacity:1; } }
-@media (prefers-reduced-motion:reduce) { .modal, .modal-detail-drawer > .modal { animation:none; } }
+@keyframes drawerExit { from { transform:none; opacity:1; } to { transform:translateX(24px); opacity:0; } }
+.modal-overlay.is-closing > .modal { animation:modalExit .18s ease-in forwards; }
+@media (prefers-reduced-motion:reduce) { .modal-overlay, .modal, .modal-detail-drawer > .modal, .main-content > *, .filter-bar, .filter-bar > * { animation:none; } }
 
 /* Detail sections */
 .detail-section { margin-bottom:24px; }
@@ -535,8 +544,17 @@ select.form-select:disabled::-ms-expand { display: none; }
 .empty-icon { font-size:48px; margin-bottom:12px; }
 
 /* Filter bar */
-.filter-bar { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
+.filter-bar { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; align-items:center; animation:filterBarEnter .22s ease-out both; }
 .filter-bar .form-select,.filter-bar .form-input { width:auto; min-width:140px; }
+.filter-bar > * { animation:filterItemEnter .22s ease-out both; }
+.filter-bar > *:nth-child(2) { animation-delay: .02s; }
+.filter-bar > *:nth-child(3) { animation-delay: .04s; }
+.filter-bar > *:nth-child(4) { animation-delay: .06s; }
+.filter-bar > *:nth-child(5) { animation-delay: .08s; }
+.filter-bar > *:nth-child(6) { animation-delay: .10s; }
+.filter-bar > *:nth-child(7) { animation-delay: .12s; }
+@keyframes filterBarEnter { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
+@keyframes filterItemEnter { from { opacity:0; transform:translateY(-3px); } to { opacity:1; transform:none; } }
 
 /* Upload */
 .upload-area { border:2px dashed var(--gray-300); border-radius:8px; padding:24px; text-align:center; cursor:pointer; color:var(--gray-400); transition:all .15s; }
@@ -1153,6 +1171,7 @@ html:has(.admin-page)::-webkit-scrollbar,body:has(.admin-page)::-webkit-scrollba
 .designer-config-form > .btn { height:32px; padding:0 10px; align-self:end; }
 @media (max-width:900px) { .designer-config-form { grid-template-columns:repeat(2,minmax(0,1fr)) !important; } .designer-config-form > button { width:100%; } }
 .points-dashboard-grid { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr); gap:18px; }
+.points-dashboard-grid:has(> .points-panel:only-child) { grid-template-columns:1fr; }
 .points-panel { overflow:hidden; background:#fff; border:1px solid #E8EAF2; border-radius:16px; box-shadow:0 4px 18px rgba(30,41,59,.045); }
 .points-section-head { min-height:74px; padding:16px 20px; border-bottom:1px solid #EEF0F5; display:flex; align-items:center; justify-content:space-between; gap:16px; }
 .points-section-head > div { display:flex; align-items:center; gap:11px; }

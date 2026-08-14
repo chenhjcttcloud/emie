@@ -31,21 +31,22 @@ async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.
     _unassigned: task.allocationStatus === 'market_open'
   }));
 
-  if (bucket === 'pending') myTasks = myTasks.filter(t => !['approved', 'completed'].includes(t.status));
+  if (bucket === 'pending') myTasks = myTasks.filter(t => ['pending', 'delivered'].includes(t.status));
   if (bucket === 'completed') myTasks = myTasks.filter(t => ['approved', 'completed'].includes(t.status));
   myTasks.sort(compareTaskPriority);
 
   EMIE.dashboardState.designerTasksReadOnly = readOnly;
   const taskEmoji = role === 'promotion' ? '📣' : role === 'supplychain' ? '🛒' : role === 'planner' ? '📋' : '🎨';
+  const pageTitle = marketView ? '接单市场' : endpoint === '/projects/department-subtasks' ? '其他子任务' : bucket === 'pending' ? '待处理子任务' : bucket === 'completed' ? '已完成子任务' : '我的子任务';
   main.innerHTML = `
-    <h2 style="font-size:22px;margin-bottom:20px;">${taskEmoji} ${marketView ? '接单市场' : bucket === 'pending' ? '待处理子任务' : bucket === 'completed' ? '已完成子任务' : '我的子任务'} <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${myTasks.length})</span></h2>
+    <h2 style="font-size:22px;margin-bottom:20px;">${taskEmoji} ${pageTitle} <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${myTasks.length})</span></h2>
     <div class="filter-bar">
       ${!marketView && bucket !== 'completed' ? `<select class="form-select" data-emie-onchange="filterDesignerTasks()" style="min-width:120px;" id="designerTaskFilter" aria-label="任务归属">
         <option value="all">全部任务</option>
         <option value="unassigned">待认领</option>
         <option value="mine">我的任务</option>
       </select>` : ''}
-      <select class="form-select" data-emie-onchange="filterDesignerTasks()" style="min-width:120px;" id="designerTaskStatusFilter">
+      ${bucket === 'all' ? `<select class="form-select" data-emie-onchange="filterDesignerTasks()" style="min-width:120px;" id="designerTaskStatusFilter">
         <option value="all">全部状态</option>
         <option value="pending">待接单</option>
         <option value="accepted">进行中</option>
@@ -56,7 +57,7 @@ async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.
         <option value="rejected">已驳回</option>
         <option value="completed">已完成</option>
         <option value="approved">已通过</option>
-      </select>
+      </select>` : ''}
       <select class="form-select" data-emie-onchange="filterDesignerTasks()" style="min-width:120px;" id="designerTaskTypeFilter">
         <option value="all">全部项目类型</option>
         <option value="channel_custom">渠道定制单</option>
@@ -122,6 +123,7 @@ function resetDesignerTaskFilters() {
 
 function renderDesignerTaskCards(tasks, readOnly = false) {
   if (!tasks.length) return `<div class="empty"><div class="empty-icon">🎉</div><p>暂无子任务</p></div>`;
+  const plannerView = EMIE.state.currentRole === 'planner';
   return `<div class="subtask-list">
       ${tasks.map(t => {
         const tsi = getTaskStatusInfo(t.status);
@@ -135,8 +137,8 @@ function renderDesignerTaskCards(tasks, readOnly = false) {
             <span class="badge ${t._unassigned ? 'badge-pending' : tsi.cls}">${t._unassigned ? '待接单' : tsi.label}</span>
           </div>
           <div class="subtask-meta">
-            <div class="subtask-meta-item">👤 负责人：<strong>${t.designerName || '<span style="color:var(--warning);">待认领</span>'}</strong>${t.assigneeRole ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;${t.assigneeRole === 'supplychain' ? 'background:#F0FDFA;color:#0D9488;' : t.assigneeRole === 'planner' ? 'background:#EFF6FF;color:#1D4ED8;' : t.assigneeRole === 'promotion' ? 'background:#F5F3FF;color:#7C3AED;' : t.assigneeRole === 'sales' ? 'background:#FFF7ED;color:#C2410C;' : 'background:#FEF2F2;color:#DC2626;'}">${t.assigneeRole === 'supplychain' ? '供应链' : t.assigneeRole === 'planner' ? '企划' : t.assigneeRole === 'promotion' ? '产品推广' : t.assigneeRole === 'sales' ? '销售' : '设计师'}</span>` : ''}</div>
-            ${t.relation ? `<div class="subtask-meta-item">🔗 我的关系：<strong>${t.relation === 'publisher' ? '我发布的任务' : t.relation === 'market' ? '接单市场' : '我负责的任务'}</strong></div>` : ''}
+            <div class="subtask-meta-item">👤 ${plannerView ? '产品企划' : '负责人'}：<strong>${plannerView ? (t.plannerName || '<span style="color:var(--warning);">待指定</span>') : (t.designerName || '<span style="color:var(--warning);">待认领</span>')}</strong>${!plannerView && t.assigneeRole ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;${t.assigneeRole === 'supplychain' ? 'background:#F0FDFA;color:#0D9488;' : t.assigneeRole === 'planner' ? 'background:#EFF6FF;color:#1D4ED8;' : t.assigneeRole === 'promotion' ? 'background:#F5F3FF;color:#7C3AED;' : t.assigneeRole === 'sales' ? 'background:#FFF7ED;color:#C2410C;' : 'background:#FEF2F2;color:#DC2626;'}">${t.assigneeRole === 'supplychain' ? '供应链' : t.assigneeRole === 'planner' ? '企划' : t.assigneeRole === 'promotion' ? '产品推广' : t.assigneeRole === 'sales' ? '销售' : '设计师'}</span>` : ''}</div>
+            ${t.relation ? `<div class="subtask-meta-item">🔗 我的关系：<strong>${t.relationLabel || (t.relation === 'publisher' ? '我发布的任务' : t.relation === 'market' ? '接单市场' : t.relation === 'department_member' ? '部门成员关联任务' : '我负责的任务')}</strong></div>` : ''}
             <div class="subtask-meta-item">📅 ${t.status === 'rejected' && t.rejectionRecords?.length && t.rejectionRecords[t.rejectionRecords.length - 1]?.requiredCompletionDate ? '驳回后要求完成' : '计划完成'}：<strong>${formatDate(t.status === 'rejected' && t.rejectionRecords?.length ? (t.rejectionRecords[t.rejectionRecords.length - 1].requiredCompletionDate || t.plannedDate) : t.plannedDate)}</strong></div>
             ${t.actualDate ? `<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(t.actualDate)}</strong></div>` : ''}
           </div>

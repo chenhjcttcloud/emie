@@ -413,6 +413,18 @@ function openCreateProject(type) {
       }
     }
   }
+  EMIE.projectState.createInitialSnapshot = createProjectFormSnapshot();
+}
+
+function createProjectFormSnapshot() {
+  const form = document.getElementById('createProjectForm');
+  if (!form) return '';
+  return JSON.stringify([...form.elements].map(el => ({ name: el.name || el.id, value: el.type === 'checkbox' ? el.checked : el.value, type: el.type })));
+}
+
+function isCreateProjectFormDirty() {
+  return EMIE.projectState.formModified === true
+    && EMIE.projectState.createInitialSnapshot !== createProjectFormSnapshot();
 }
 
 async function submitCreateProject(type) {
@@ -705,6 +717,7 @@ EMIE.registerActions({
   showDateError,
   switchAssigneeType,
   switchEditAssigneeType,
+  isCreateProjectFormDirty,
 });
 
 EMIE.registerModule('projectForm', {
@@ -716,6 +729,7 @@ EMIE.registerModule('projectForm', {
   toggleIpSubOption,
   switchAssigneeType,
   switchEditAssigneeType,
+  isCreateProjectFormDirty,
   openCreateProject,
   submitCreateProject,
   openEditProject,

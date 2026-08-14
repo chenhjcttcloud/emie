@@ -23,8 +23,11 @@ async function shareProject(projectId) {
               <option value="86400">24 小时后</option>
               <option value="604800" selected>7 天后</option>
               <option value="2592000">30 天后</option>
-              <option value="">永不过期</option>
+              <option value="5184000">60 天后</option>
+              <option value="custom">自定义时间</option>
             </select>
+            <input type="datetime-local" class="form-input" id="shareCustomExpires" style="display:none;margin-top:8px;">
+            <div style="font-size:12px;color:var(--gray-400);margin-top:5px;">最长有效期为60天</div>
           </div>
           <div class="form-group">
             <label class="form-label">访问密码（可选）</label>
@@ -52,6 +55,16 @@ async function shareProject(projectId) {
       </div>
     </div>`;
   document.body.appendChild(modal);
+  document.getElementById('shareExpires')?.addEventListener('change', (event) => {
+    const custom = document.getElementById('shareCustomExpires');
+    if (!custom) return;
+    custom.style.display = event.target.value === 'custom' ? '' : 'none';
+    if (event.target.value === 'custom') {
+      const max = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+      custom.min = new Date(Date.now() + 60 * 1000).toISOString().slice(0, 16);
+      custom.max = max.toISOString().slice(0, 16);
+    }
+  });
 }
 
 async function doCreateShareLink(targetType, targetId) {
@@ -71,7 +84,17 @@ async function doCreateShareLink(targetType, targetId) {
   resultArea.style.display = 'none';
 
   try {
-    const expiresIn = expiresEl.value ? parseInt(expiresEl.value) : null;
+    let expiresIn;
+    if (expiresEl.value === 'custom') {
+      const custom = document.getElementById('shareCustomExpires')?.value;
+      if (!custom) throw new Error('请选择自定义过期时间');
+      expiresIn = Math.floor((new Date(custom).getTime() - Date.now()) / 1000);
+    } else {
+      expiresIn = parseInt(expiresEl.value, 10);
+    }
+    if (!Number.isFinite(expiresIn) || expiresIn <= 0 || expiresIn > 60 * 24 * 60 * 60) {
+      throw new Error('分享链接有效期必须在1秒到60天之间');
+    }
     const password = passwordEl.value.trim() || null;
     const result = await apiPost('/share', { targetType, targetId, expiresIn, password });
     const fullUrl = window.location.origin + result.url;

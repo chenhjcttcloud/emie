@@ -10,6 +10,8 @@ import com.emie.designpm.repository.PointAdjustmentLedgerRepository;
 import com.emie.designpm.repository.PointDifficultyConfigRepository;
 import com.emie.designpm.repository.PointRuleRepository;
 import com.emie.designpm.repository.ScoringRepository;
+import com.emie.designpm.repository.SystemConfigRepository;
+import com.emie.designpm.entity.SystemConfig;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,6 +38,7 @@ public class PointsService {
     private final ScoringRepository scoring;
     private final PointAdjustmentLedgerRepository adjustments;
     private final PointDifficultyConfigRepository difficulties;
+    private final SystemConfigRepository configs;
     private final ObjectMapper objectMapper = new ObjectMapper();
     /** 积分制度生效时间；发布前通过 POINTS_EFFECTIVE_AT 覆盖为正式上线时间。 */
     @Value("${points.effective-at:2026-08-14T00:00:00}")
@@ -43,15 +46,17 @@ public class PointsService {
 
     @Autowired
     public PointsService(PointRuleRepository rules, PointLedgerRepository ledgers, ScoringRepository scoring,
-                         PointAdjustmentLedgerRepository adjustments, PointDifficultyConfigRepository difficulties) {
+                         PointAdjustmentLedgerRepository adjustments, PointDifficultyConfigRepository difficulties,
+                         SystemConfigRepository configs) {
         this.rules = rules; this.ledgers = ledgers; this.scoring = scoring;
-        this.adjustments = adjustments; this.difficulties = difficulties;
+        this.adjustments = adjustments; this.difficulties = difficulties; this.configs = configs;
     }
 
     /** Compatibility constructor for focused unit tests. */
     public PointsService(PointRuleRepository rules, PointLedgerRepository ledgers, ScoringRepository scoring) {
         this.rules = rules; this.ledgers = ledgers; this.scoring = scoring;
         this.adjustments = null; this.difficulties = null;
+        this.configs = null;
     }
 
     /** Focused-test constructor for configurable difficulty behavior. */
@@ -59,6 +64,7 @@ public class PointsService {
                          PointDifficultyConfigRepository difficulties) {
         this.rules = rules; this.ledgers = ledgers; this.scoring = scoring;
         this.adjustments = null; this.difficulties = difficulties;
+        this.configs = null;
     }
 
     /** 企划确认送审时立即发放基础积分。 */
@@ -181,6 +187,11 @@ public class PointsService {
     /** Validate an enabled rule and freeze its point/multiplier values onto a task. */
     public void bindRuleSnapshot(SubTask task, String requestedRuleCode, String difficultyCode) {
         if (task == null) throw new IllegalArgumentException("子任务不能为空");
+        // 试运行阶段兼容无积分历史/特殊任务；正式运行后新建或编辑任务必须绑定规则。
+        if (requestedRuleCode == null || requestedRuleCode.isBlank()) {
+            if (isPointRuleRequired()) throw new IllegalArgumentException("正式运行后必须选择积分规则");
+            return;
+        }
         String ruleCode = normalizedRuleCode(requestedRuleCode);
         PointRule rule = rules.findByRuleCode(ruleCode)
                 .orElseThrow(() -> new IllegalArgumentException("积分规则不存在或已删除"));
@@ -203,6 +214,18 @@ public class PointsService {
         task.setQualityTopRatioSnapshot(rule.getQualityTopRatio() == null ? 0.60d : rule.getQualityTopRatio());
         task.setMaxTotalMultiplierSnapshot(rule.getMaxTotalMultiplier() == null ? 3d : rule.getMaxTotalMultiplier());
         task.setCountInPerformanceSnapshot(rule.isCountInPerformance());
+    }
+
+    private boolean isPointRuleRequired() {
+        if (configs == null) return false;
+        String mode = configs.findByConfigKey("points.program.mode")
+                .map(SystemConfig::getConfigValue).orElse("TRIAL").trim().toUpperCase();
+        if ("ACTIVE".equals(mode)) return true;
+        if (!"AUTO".equals(mode)) return false;
+        String start = configs.findByConfigKey("points.program.active_start")
+                .map(SystemConfig::getConfigValue).orElse("9999-12-31");
+        try { return !LocalDate.now().isBefore(LocalDate.parse(start)); }
+        catch (Exception ignored) { return false; }
     }
 
     private String normalizedRuleCode(String ruleCode) {

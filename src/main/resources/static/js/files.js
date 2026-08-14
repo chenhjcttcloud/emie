@@ -24,8 +24,7 @@ function retryFilePreview() {
 }
 
 function authenticatedFileUrl(url) {
-  const token = localStorage.getItem('design_pm_token') || '';
-  return url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+  return url;
 }
 
 async function openFilePreview(fileUrl, fileName, fileSize, retry = false) {
@@ -140,9 +139,7 @@ function showDownloadOptions(fileUrl, fileName, fileSize) {
 
   const ext = fileName ? fileName.split('.').pop().toUpperCase() : '';
   const canPreview = isPreviewableFile(fileName);
-  const token = localStorage.getItem('design_pm_token') || '';
-  const fullUrl = (fileUrl.startsWith('http') ? fileUrl : window.location.origin + fileUrl)
-    + (fileUrl.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+  const fullUrl = fileUrl.startsWith('http') ? fileUrl : window.location.origin + fileUrl;
 
   const panel = document.createElement('div');
   panel.id = 'downloadOptionPanel';

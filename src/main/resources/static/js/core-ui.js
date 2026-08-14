@@ -111,6 +111,7 @@ const DETAIL_DRAWER_MODAL_IDS = new Set([
   'taskRejectionRecordModal',
   'userTasksPopup',
   'designRequirementDetailModal',
+  'createProjectModal',
 ]);
 const modalFocusOrigins = new WeakMap();
 
@@ -131,7 +132,14 @@ function requestModalClose(overlay) {
     return;
   }
   if (overlay.id && typeof closeM === 'function') closeM(overlay.id);
-  else overlay.remove();
+  else animateModalClose(overlay);
+}
+
+function animateModalClose(overlay) {
+  if (!overlay || !overlay.isConnected || overlay.dataset.modalClosing === '1') return;
+  overlay.dataset.modalClosing = '1';
+  overlay.classList.add('is-closing');
+  window.setTimeout(() => overlay.remove(), 180);
 }
 
 function normalizeModalStructure(root = document) {
@@ -257,6 +265,20 @@ document.addEventListener('keydown', event => {
   }
 }, true);
 
+
+// 普通弹窗支持点击遮罩关闭；没有关闭按钮的强制弹窗仍需完成当前操作。
+document.addEventListener('click', event => {
+  const overlay = event.target?.closest?.('.modal-overlay');
+  if (!overlay || event.target !== overlay) return;
+  // 测试/特殊弹窗可通过 data-test-backdrop-closes 明确控制；业务普通弹窗默认允许点击遮罩关闭。
+  if (overlay.dataset.testBackdropCloses === 'false') return;
+  const modal = getModalDialog(overlay);
+  if (!modal || !modal.querySelector('.modal-close, .file-preview-close')) return;
+  event.preventDefault();
+  event.stopPropagation();
+  requestModalClose(overlay);
+}, true);
+
 function triggerDatePicker(btn) {
   const dateInput = btn.closest('.date-picker')?.querySelector('input[type="date"]');
   if (!dateInput) return;
@@ -300,12 +322,12 @@ function closeM(id, force) {
   // 创建项目弹窗关闭前做草稿检查（提交成功后 force=true 跳过）
   if (id === 'createProjectModal' && !force) {
     // 只在实际修改了表单内容时才弹出保存提示
-    if (EMIE.projectState.formModified) {
+    if (EMIE.actions.isCreateProjectFormDirty ? EMIE.actions.isCreateProjectFormDirty() : EMIE.projectState.formModified) {
       showSaveConfirmModal();
       return;
     }
   }
-  document.getElementById(id)?.remove();
+  animateModalClose(document.getElementById(id));
   doneOpenModal(id);
 }
 

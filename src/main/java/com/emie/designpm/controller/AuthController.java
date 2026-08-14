@@ -6,6 +6,8 @@ import com.emie.designpm.repository.UserRepository;
 import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.service.PermissionService;
 import com.emie.designpm.service.RedisSessionStore;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,6 +25,7 @@ import org.slf4j.LoggerFactory;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+    public static final String AUTH_COOKIE = "designpm_auth";
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
     /** 按产品要求，会话不因时间自动失效；0 明确表示永久有效。 */
@@ -120,7 +123,9 @@ public class AuthController {
         result.put("status", user.getStatus() != null ? user.getStatus() : "active");
         result.put("title", user.getTitle());
         result.put("roleLevel", user.getRoleLevel());
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, authCookie(token, request, false).toString())
+                .body(result);
     }
 
     // ==================== 防爆破 ====================
@@ -149,7 +154,9 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Map<String, String>> logout(@RequestHeader("X-Auth-Token") String token) {
+    public ResponseEntity<Map<String, String>> logout(@RequestHeader(value = "X-Auth-Token", required = false) String token,
+                                                       HttpServletRequest request) {
+        if (token == null || token.isBlank()) token = readCookie(request);
         AuthSession session = getSession(token);
         if (session != null) {
             // 在删除 token 之前记录日志（需要用户信息）
@@ -169,7 +176,21 @@ public class AuthController {
         }
         TOKENS.remove(token);
         removeSession(token);
-        return ResponseEntity.ok(Map.of("message", "已退出登录"));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, authCookie("", request, true).toString())
+                .body(Map.of("message", "已退出登录"));
+    }
+
+    private static ResponseCookie authCookie(String token, HttpServletRequest request, boolean clear) {
+        return ResponseCookie.from(AUTH_COOKIE, token == null ? "" : token)
+                .httpOnly(true).secure(request != null && request.isSecure()).sameSite("Lax")
+                .path("/").maxAge(clear ? java.time.Duration.ZERO : java.time.Duration.ofDays(36500)).build();
+    }
+
+    private static String readCookie(HttpServletRequest request) {
+        if (request == null || request.getCookies() == null) return null;
+        return Arrays.stream(request.getCookies()).filter(c -> AUTH_COOKIE.equals(c.getName()))
+                .map(jakarta.servlet.http.Cookie::getValue).findFirst().orElse(null);
     }
 
     @GetMapping("/me")

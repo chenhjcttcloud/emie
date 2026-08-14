@@ -171,7 +171,7 @@ async function adminEditShare(id) {
             <option value="86400">24 小时后</option>
             <option value="604800" selected>7 天后</option>
             <option value="2592000">30 天后</option>
-            <option value="-1">永不过期</option>
+            <option value="5184000">60 天后</option>
           </select>
         </div>
         <div class="form-group">
@@ -196,7 +196,7 @@ async function doAdminUpdateShare(id) {
   errEl.style.display = 'none';
 
   const expiresVal = expiresEl.value;
-  const expiresIn = expiresVal === '-1' ? -1 : parseInt(expiresVal);
+  const expiresIn = parseInt(expiresVal, 10);
   // password：空字符串表示留空不传（不修改），有值表示修改
   const password = passwordEl.value;
 

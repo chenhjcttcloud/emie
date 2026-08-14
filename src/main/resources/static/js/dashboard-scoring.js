@@ -92,6 +92,13 @@ async function renderScoringView(main, role, uid) {
     <div id="scoringContainer">${renderScoringCards(pendingTasks)}</div>
   `;
   EMIE.dashboardState.scoringCache = pendingTasks;
+  if (EMIE.scoringFilterPreset) {
+    const preset = EMIE.scoringFilterPreset;
+    EMIE.scoringFilterPreset = null;
+    const filterEl = document.getElementById('scoringFilter');
+    if (filterEl) filterEl.value = preset;
+    applyFilterScoringView();
+  }
 }
 
 function filterScoringView() {

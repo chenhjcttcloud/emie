@@ -34,15 +34,16 @@ class AuthFilterTokenTransportTest {
     }
 
     @Test
-    void queryTokenIsAcceptedForGetAndHeadOnFileReadRoutes() throws Exception {
-        assertQueryTokenAccepted("GET", "/api/files/thumbnail/example.png");
-        assertQueryTokenAccepted("HEAD", "/api/files/download/example.pdf");
-        assertQueryTokenAccepted("GET", "/api/files/preview/example.pdf");
+    void httpOnlyCookieIsAcceptedForFileReadRoutes() throws Exception {
+        assertCookieAccepted("GET", "/api/files/thumbnail/example.png");
+        assertCookieAccepted("HEAD", "/api/files/download/example.pdf");
+        assertCookieAccepted("GET", "/api/files/preview/example.pdf");
     }
 
     @Test
-    void queryTokenIsRejectedOutsideAllowedFileReadRoutes() throws Exception {
+    void queryTokenIsRejectedForAllRoutes() throws Exception {
         assertQueryTokenRejected("GET", "/api/projects");
+        assertQueryTokenRejected("GET", "/api/files/thumbnail/example.png");
         assertQueryTokenRejected("GET", "/api/files/upload");
         assertQueryTokenRejected("POST", "/api/files/download/example.pdf");
         assertQueryTokenRejected("PUT", "/api/files/thumbnail/example.png");
@@ -60,11 +61,11 @@ class AuthFilterTokenTransportTest {
     }
 
     @Test
-    void invalidHeaderIsNotReplacedByValidQueryToken() throws Exception {
+    void invalidHeaderIsNotReplacedByValidCookie() throws Exception {
         String token = tokenFor("header-precedence-user");
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/files/preview/example.pdf");
         request.addHeader("X-Auth-Token", "invalid-token");
-        request.setParameter("token", token);
+        request.setCookies(new jakarta.servlet.http.Cookie(AuthController.AUTH_COOKIE, token));
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain();
 
@@ -74,10 +75,10 @@ class AuthFilterTokenTransportTest {
         assertNull(chain.getRequest());
     }
 
-    private void assertQueryTokenAccepted(String method, String path) throws Exception {
+    private void assertCookieAccepted(String method, String path) throws Exception {
         String token = tokenFor(method + path);
         MockHttpServletRequest request = new MockHttpServletRequest(method, path);
-        request.setParameter("token", token);
+        request.setCookies(new jakarta.servlet.http.Cookie(AuthController.AUTH_COOKIE, token));
         MockFilterChain chain = execute(request);
 
         assertNotNull(chain.getRequest());

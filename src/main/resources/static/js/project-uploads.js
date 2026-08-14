@@ -399,9 +399,8 @@ function renderFileList(list, typeLabel) {
   if (!c) return;
   if (!list.length) { c.innerHTML = ''; return; }
 
-  // 为图片 URL 追加 token（<img> 标签无法发送 X-Auth-Token 头）
-  const token = localStorage.getItem('design_pm_token');
-  const authUrl = u => u + (u.includes('?') ? '&' : '?') + 'token=' + token;
+  // 同源 HttpOnly Cookie 会随图片请求自动发送认证信息。
+  const authUrl = u => u;
   const canRenderAsImage = file => /\.(png|jpe?g|gif|webp|bmp)$/i.test(file?.name || file?.url || '');
 
   if (isImage) {
