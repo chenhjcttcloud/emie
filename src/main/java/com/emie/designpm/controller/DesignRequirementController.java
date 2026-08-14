@@ -281,7 +281,8 @@ public class DesignRequirementController {
         if (d == null) return ResponseEntity.notFound().build();
         boolean canTerminate = "admin".equals(normalizeRole(session.role()))
                 || session.userId().equals(d.getOwnerId())
-                || session.userId().equals(d.getResponsibleId());
+                || session.userId().equals(d.getResponsibleId())
+                || session.userId().equals(d.getPlannerId());
         if (!canTerminate) {
             return ResponseEntity.status(403).body(java.util.Map.of("error", "仅需求负责人或管理员可以终止"));
         }
@@ -404,7 +405,14 @@ public class DesignRequirementController {
             case "terminated" -> "已终止";
             default -> d.getStatus();
         });
-        row.put("statusCls", "completed".equals(d.getStatus()) ? "badge-completed" : "badge-progress");
+        row.put("statusCls", switch (d.getStatus()) {
+            case "draft" -> "badge-pending";
+            case "pending_self_score" -> "badge-self-score";
+            case "pending_review" -> "badge-review";
+            case "completed" -> "badge-completed";
+            case "terminated" -> "badge-rejected";
+            default -> "badge-progress";
+        });
         row.put("productName", d.getName()); row.put("salesName", d.getOwnerName());
         row.put("plannerName", d.getPlannerName());
         row.put("customerName", d.getCustomerName()); row.put("deadline", d.getDeadline());

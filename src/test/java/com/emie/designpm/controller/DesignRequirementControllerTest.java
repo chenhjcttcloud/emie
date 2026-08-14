@@ -218,6 +218,26 @@ class DesignRequirementControllerTest {
         verify(scoreRepository).saveAll(List.of());
     }
 
+    @Test
+    void plannerCanTerminateRequirement() {
+        DesignRequirementRepository repository = mock(DesignRequirementRepository.class);
+        DesignRequirementScoreRepository scoreRepository = mock(DesignRequirementScoreRepository.class);
+        DesignRequirement requirement = new DesignRequirement();
+        requirement.setId(89L);
+        requirement.setStatus("in_progress");
+        requirement.setPlannerId("planner-1");
+        when(repository.findById(89L)).thenReturn(Optional.of(requirement));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scoreRepository.findByRequirementIdOrderByIdAsc(89L)).thenReturn(List.of());
+        DesignRequirementController controller = new DesignRequirementController(
+                repository, scoreRepository, mock(DesignRequirementScoringService.class), mock(UserService.class));
+
+        var response = controller.terminate(89L, authenticated("planner-1", "planner", "企划一"));
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("terminated", requirement.getStatus());
+    }
+
     private MockHttpServletRequest authenticated(String userId, String role, String name) {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setAttribute("authSession", new AuthController.AuthSession(userId, role, name));

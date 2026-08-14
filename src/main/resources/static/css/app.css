@@ -344,6 +344,8 @@ tr:hover td { background:var(--gray-50); }
 .badge-progress { background:#DBEAFE; color:#1E40AF; }
 .badge-completed { background:#D1FAE5; color:#065F46; }
 .badge-rejected { background:#FEE2E2; color:#991B1B; }
+.badge-self-score { background:#F3E8FF; color:#7E22CE; }
+.badge-review { background:#E0E7FF; color:#4338CA; }
 .badge-busy { background:#FEE2E2; color:#991B1B; }
 .badge-idle { background:#D1FAE5; color:#065F46; }
 

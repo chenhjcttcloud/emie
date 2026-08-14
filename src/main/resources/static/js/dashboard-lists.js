@@ -53,7 +53,8 @@ async function openDesignRequirementDetail(id) {
     const canDeliver = myRole === 'designer' && detail.designerId === EMIE.state.currentUserId;
     const canTerminate = detail.status !== 'completed' && detail.status !== 'terminated'
       && (myRole === 'admin' || detail.ownerId === EMIE.state.currentUserId
-        || detail.responsibleId === EMIE.state.currentUserId);
+        || detail.responsibleId === EMIE.state.currentUserId
+        || detail.plannerId === EMIE.state.currentUserId);
     const canConfirmRevision = canDeliver && detail.status === 'rejected';
     const canReject = myRole === 'planner' && detail.plannerId === EMIE.state.currentUserId && ['pending_review', 'pending_self_score'].includes(detail.status);
     const canManageChat = myRole === 'admin' || (myRole === 'planner' && detail.plannerId === EMIE.state.currentUserId);
