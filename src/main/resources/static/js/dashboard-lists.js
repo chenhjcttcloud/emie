@@ -121,7 +121,7 @@ async function openDesignRequirementDetail(id) {
       </div>`;
     document.body.appendChild(modal);
   } catch (error) {
-    alert('加载详情失败：' + error.message);
+    window.EMIE.actions.showSystemAlert('加载详情失败：' + error.message);
   }
 }
 
@@ -131,21 +131,21 @@ async function terminateDesignRequirement(id) {
     await apiPost(`/design-requirements/${id}/terminate`, {});
     closeM('designRequirementDetailModal');
     await openDesignRequirementDetail(id);
-  } catch (e) { alert('终止失败：' + e.message); }
+  } catch (e) { window.EMIE.actions.showSystemAlert('终止失败：' + e.message); }
 }
 
 async function createDesignRequirementChat(id) {
-  try { await apiPost(`/design-requirements/${id}/feishu-chat/create`, {}); alert('项目群创建成功'); closeM('designRequirementDetailModal'); await openDesignRequirementDetail(id); }
-  catch (e) { alert('创建项目群失败：' + e.message); }
+  try { await apiPost(`/design-requirements/${id}/feishu-chat/create`, {}); window.EMIE.actions.showSystemAlert('项目群创建成功'); closeM('designRequirementDetailModal'); await openDesignRequirementDetail(id); }
+  catch (e) { window.EMIE.actions.showSystemAlert('创建项目群失败：' + e.message); }
 }
 async function dissolveDesignRequirementChat(id) {
   if (!confirm('确认解散项目群？解散后无法恢复。')) return;
-  try { await apiPost(`/design-requirements/${id}/feishu-chat/dissolve`, {}); alert('项目群已解散'); closeM('designRequirementDetailModal'); await openDesignRequirementDetail(id); }
-  catch (e) { alert('解散项目群失败：' + e.message); }
+  try { await apiPost(`/design-requirements/${id}/feishu-chat/dissolve`, {}); window.EMIE.actions.showSystemAlert('项目群已解散'); closeM('designRequirementDetailModal'); await openDesignRequirementDetail(id); }
+  catch (e) { window.EMIE.actions.showSystemAlert('解散项目群失败：' + e.message); }
 }
 function openDesignRequirementChat(chatId) {
   const opened = window.open(`https://applink.feishu.cn/client/chat/open?openChatId=${encodeURIComponent(chatId)}`, '_blank');
-  if (!opened) alert('浏览器拦截了新窗口，请允许本站弹窗后重试。');
+  if (!opened) window.EMIE.actions.showSystemAlert('浏览器拦截了新窗口，请允许本站弹窗后重试。');
 }
 
 function openDesignRequirementReject(id) {
@@ -158,9 +158,9 @@ function openDesignRequirementReject(id) {
 async function submitDesignRequirementReject(id) {
   const comments = document.getElementById('designRequirementRejectComments')?.value.trim();
   const requiredCompletionDate = document.getElementById('designRequirementRejectDeadline')?.value;
-  if (!comments || !requiredCompletionDate) return alert('请填写驳回意见和要求完成时间');
+  if (!comments || !requiredCompletionDate) return window.EMIE.actions.showSystemAlert('请填写驳回意见和要求完成时间');
   try { await apiPost(`/design-requirements/${id}/reject`, { comments, requiredCompletionDate }); closeM('designRequirementRejectModal'); closeM('designRequirementDetailModal'); await openDesignRequirementDetail(id); }
-  catch (e) { alert('驳回失败：' + e.message); }
+  catch (e) { window.EMIE.actions.showSystemAlert('驳回失败：' + e.message); }
 }
 
 async function confirmDesignRequirementRevision(id) {
@@ -169,7 +169,7 @@ async function confirmDesignRequirementRevision(id) {
     await apiPost(`/design-requirements/${id}/confirm-revision`, {});
     closeM('designRequirementDetailModal');
     await openDesignRequirementDetail(id);
-  } catch (e) { alert('确认修改失败：' + e.message); }
+  } catch (e) { window.EMIE.actions.showSystemAlert('确认修改失败：' + e.message); }
 }
 
 function openDesignRequirementDelivery(id) {
@@ -204,9 +204,9 @@ function openDesignRequirementDelivery(id) {
 }
 
 async function submitDesignRequirementDelivery(id) {
-  if (EMIE.projectState.uploadingCount > 0) return alert('文件正在上传中，请等待上传完成');
+  if (EMIE.projectState.uploadingCount > 0) return window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成');
   const deliveryContent = document.getElementById('designRequirementDeliveryContent')?.value?.trim();
-  if (!deliveryContent) return alert('请填写交付成果');
+  if (!deliveryContent) return window.EMIE.actions.showSystemAlert('请填写交付成果');
   try {
     await apiPost(`/design-requirements/${id}/deliver`, {
       deliveryContent,
@@ -217,7 +217,7 @@ async function submitDesignRequirementDelivery(id) {
     });
     closeM('designRequirementDeliveryModal');
     await openDesignRequirementDetail(id);
-  } catch (e) { alert('提交失败：' + e.message); }
+  } catch (e) { window.EMIE.actions.showSystemAlert('提交失败：' + e.message); }
 }
 
 function openDesignRequirementScore(id, selfScore) {
@@ -233,14 +233,14 @@ function openDesignRequirementScore(id, selfScore) {
 
 async function submitDesignRequirementScore(id, selfScore) {
   const score = Number(document.getElementById('designRequirementScoreValue')?.value);
-  if (!Number.isInteger(score) || score < 1 || score > 100) return alert('请输入1-100的整数评分');
+  if (!Number.isInteger(score) || score < 1 || score > 100) return window.EMIE.actions.showSystemAlert('请输入1-100的整数评分');
   try {
     await apiPost(`/design-requirements/${id}/${selfScore ? 'self-score' : 'score'}`, { score });
     closeM('designRequirementScoreModal');
     EMIE.actions.clearSWRCache?.();
     if (EMIE.state.currentView === 'scoring') await EMIE.actions.renderScoringView(document.getElementById('mainContent'), EMIE.state.currentRole, EMIE.state.currentUserId);
     else await openDesignRequirementDetail(id);
-  } catch (e) { alert('评分失败：' + e.message); }
+  } catch (e) { window.EMIE.actions.showSystemAlert('评分失败：' + e.message); }
 }
 
 async function renderOrderList(main, type, role, uid, titleOverride = '', endpoint = '/projects/page', renderId = EMIE.state.renderId) {
@@ -386,7 +386,7 @@ function jumpProjectListPage() {
   const pages = state?.totalPages;
   const requested = Number.parseInt(input?.value, 10);
   if (!Number.isInteger(requested) || requested < 1 || requested > pages) {
-    alert(`请输入 1 至 ${pages || 1} 的页码`);
+    window.EMIE.actions.showSystemAlert(`请输入 1 至 ${pages || 1} 的页码`);
     return;
   }
   changeProjectListPage(requested - 1);

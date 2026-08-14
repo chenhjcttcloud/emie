@@ -54,7 +54,9 @@ function taskPointSummary(task) {
   const base = Number(task.basePointSnapshot || 0);
   const multiplier = Number(task.difficultyMultiplierSnapshot || 1);
   const estimated = Math.round(base * multiplier * 100) / 100;
-  return `${task.pointRuleCode} · ${pointDifficultyLabel(task.difficultyCode)} · ${estimated} 分`;
+  const labels = { TASK_APPROVED: '通用任务（验收完成）', A1: '包装整套设计', A2: '包装单项设计', A3: '包装修改/刀模/箱规', A4: '包装多语言版', A5: '详情页全套设计', A6: '详情页局部/改版', A7: '主图/单张卖点图', A8: '海报/立牌/单页', A9: '展会物料整套', A10: 'UI界面/灯珠图案/待机页', A11: 'AI生图/场景图/推广图', B1: '原创产品设计', B2: '外采产品IP化设计', B3: '新增SKU/配色衍生', B4: '展会样品/客户定制产品', B5: '3D建模渲染出图', B6: '3D公仔建模/输出', E1: '执行类任务', E2: '执行类任务', E3: '执行类任务', E4: '执行类任务', S1: '特殊专项任务' };
+  const code = String(task.pointRuleCode).toUpperCase();
+  return `${code}（${labels[code] || '积分任务'}） · ${pointDifficultyLabel(task.difficultyCode)} · ${estimated} 分`;
 }
 
 function taskCollaborationSummary(task) {
@@ -105,7 +107,7 @@ async function openProjectDetail(pid) {
     doneOpenModal('projectDetailModal');
   } catch (e) {
     doneOpenModal('projectDetailModal');
-    alert('加载失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('加载失败: ' + e.message);
   }
 }
 
@@ -230,7 +232,7 @@ function renderSubTaskCard(detail, task, idx) {
   // 产品企划对设计师/供应链交付的首轮验收会在“通过并评分”弹窗中一次完成，
   // 不再同时展示一个独立的评分按钮，避免产生重复入口。
   const plannerApproveAndScore = isPlanner && task.status === 'submitted_for_review';
-  const plannerSubmitReview = isPlanner && task.status === 'delivered' && ['designer', 'supplychain'].includes(task.assigneeRole);
+  const plannerSubmitReview = isPlanner && String(getCurrentUserId()) === String(detail.plannerId || '') && task.status === 'delivered' && ['designer', 'supplychain'].includes(task.assigneeRole);
   const doneStatuses = ['delivered', 'planner_approved', 'sales_approved', 'admin_approved', 'completed'];
   const isDone = doneStatuses.includes(task.status);
   const workflowStageLabel = {
@@ -505,19 +507,19 @@ function renderProjectActions(detail) {
 }
 
 async function createProjectFeishuChat(id) {
-  try { await apiPost(`/projects/${id}/feishu-chat/create`, {}); alert('项目群创建成功'); await refreshAfterMutation(id); }
-  catch (e) { alert('创建项目群失败：' + e.message); }
+  try { await apiPost(`/projects/${id}/feishu-chat/create`, {}); window.EMIE.actions.showSystemAlert('项目群创建成功'); await refreshAfterMutation(id); }
+  catch (e) { window.EMIE.actions.showSystemAlert('创建项目群失败：' + e.message); }
 }
 async function dissolveProjectFeishuChat(id) {
   if (!confirm('确认解散项目群？解散后无法恢复。')) return;
-  try { await apiPost(`/projects/${id}/feishu-chat/dissolve`, {}); alert('项目群已解散'); await refreshAfterMutation(id); }
-  catch (e) { alert('解散项目群失败：' + e.message); }
+  try { await apiPost(`/projects/${id}/feishu-chat/dissolve`, {}); window.EMIE.actions.showSystemAlert('项目群已解散'); await refreshAfterMutation(id); }
+  catch (e) { window.EMIE.actions.showSystemAlert('解散项目群失败：' + e.message); }
 }
 function openProjectFeishuChat(chatId) {
   const url = `https://applink.feishu.cn/client/chat/open?openChatId=${encodeURIComponent(chatId)}`;
   // 新窗口打开飞书，保留当前项目管理系统页面和填写状态。
   const opened = window.open(url, '_blank');
-  if (!opened) alert('浏览器拦截了新窗口，请允许本站弹窗后重试。');
+  if (!opened) window.EMIE.actions.showSystemAlert('浏览器拦截了新窗口，请允许本站弹窗后重试。');
 }
 
 // 飞书兼容的确认弹窗
@@ -550,7 +552,7 @@ async function terminateProject(pid) {
     try {
       await apiPost(`/projects/${pid}/terminate`, { currentUser: getCurrentUserName(), currentRole: EMIE.state.currentRole });
       await refreshAfterMutation(pid);
-    } catch(e) { alert('操作失败: ' + e.message); }
+    } catch(e) { window.EMIE.actions.showSystemAlert('操作失败: ' + e.message); }
   });
 }
 
@@ -559,7 +561,7 @@ async function cancelTerminate(pid) {
     try {
       await apiPost(`/projects/${pid}/cancel-terminate`, { currentUser: getCurrentUserName(), currentRole: EMIE.state.currentRole });
       await refreshAfterMutation(pid);
-    } catch(e) { alert('操作失败: ' + e.message); }
+    } catch(e) { window.EMIE.actions.showSystemAlert('操作失败: ' + e.message); }
   });
 }
 
@@ -571,7 +573,7 @@ async function deleteProject(pid) {
       EMIE.state.cache.orders = [];
       clearSWRCache();
       render();
-    } catch(e) { alert('删除失败: ' + e.message); }
+    } catch(e) { window.EMIE.actions.showSystemAlert('删除失败: ' + e.message); }
   });
 }
 
@@ -580,7 +582,7 @@ async function pauseProject(pid) {
     try {
       await apiPost(`/projects/${pid}/pause`, { currentUser: getCurrentUserName(), currentRole: EMIE.state.currentRole });
       await refreshAfterMutation(pid);
-    } catch(e) { alert('操作失败: ' + e.message); }
+    } catch(e) { window.EMIE.actions.showSystemAlert('操作失败: ' + e.message); }
   });
 }
 
@@ -588,7 +590,7 @@ async function resumeProject(pid) {
   try {
     await apiPost(`/projects/${pid}/resume`, { currentUser: getCurrentUserName(), currentRole: EMIE.state.currentRole });
     await refreshAfterMutation(pid);
-  } catch(e) { alert('操作失败: ' + e.message); }
+  } catch(e) { window.EMIE.actions.showSystemAlert('操作失败: ' + e.message); }
 }
 
 // 渲染项目参考图片
@@ -732,7 +734,7 @@ function renderProjectScoringSummary(detail) {
         tw += r.weight;
       }
     });
-    const final = tw > 0 ? (ta / tw).toFixed(0) : null;
+    const final = tw > 0 ? Math.round(ta / tw) : null;
     html += `<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--gray-50);border-radius:6px;margin-bottom:6px;font-size:13px;">
       <span style="font-weight:600;">#${i + 1} ${task.name}</span>
       <span style="flex:1;"></span>
@@ -808,7 +810,7 @@ async function completeWorkflowExecution(projectId) {
   try {
     await apiPost(`/projects/${projectId}/workflow/complete-execution`, {});
     await refreshAfterMutation(projectId);
-  } catch (e) { alert('操作失败：' + e.message); }
+  } catch (e) { window.EMIE.actions.showSystemAlert('操作失败：' + e.message); }
 }
 
 async function submitWorkflowReview(projectId) {
@@ -816,7 +818,7 @@ async function submitWorkflowReview(projectId) {
   try {
     await apiPost(`/projects/${projectId}/workflow/submit-review`, {});
     await refreshAfterMutation(projectId);
-  } catch (e) { alert('提交失败：' + e.message); }
+  } catch (e) { window.EMIE.actions.showSystemAlert('提交失败：' + e.message); }
 }
 
 function openWorkflowReviewModal(projectId, decision, stageLabel) {
@@ -843,12 +845,12 @@ function openWorkflowReviewModal(projectId, decision, stageLabel) {
 
 async function submitWorkflowDecision(projectId, decision) {
   const comment = document.getElementById('workflowReviewComment')?.value?.trim() || '';
-  if (decision === 'rejected' && !comment) { alert('请填写驳回原因'); return; }
+  if (decision === 'rejected' && !comment) { window.EMIE.actions.showSystemAlert('请填写驳回原因'); return; }
   try {
     await apiPost(`/projects/${projectId}/workflow/review`, { decision, comment });
     closeM('workflowReviewModal');
     await refreshAfterMutation(projectId);
-  } catch (e) { alert('审核失败：' + e.message); }
+  } catch (e) { window.EMIE.actions.showSystemAlert('审核失败：' + e.message); }
 }
 
 // ===== 项目总进度管道 =====
@@ -1005,7 +1007,7 @@ async function plannerAcceptProject(pid) {
     await apiPost(`/projects/${pid}/accept`, { currentUser: getCurrentUserName(), currentRole: EMIE.state.currentRole, userId: getCurrentUserId() });
     await refreshAfterMutation(pid);
   } catch (e) {
-    alert('操作失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('操作失败: ' + e.message);
   }
 }
 
@@ -1016,7 +1018,7 @@ async function plannerAcceptFromList(pid) {
     EMIE.state.cache.orders = [];
     await refreshAfterMutation(pid);
   } catch (e) {
-    alert('操作失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('操作失败: ' + e.message);
   }
 }
 

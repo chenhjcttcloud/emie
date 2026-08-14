@@ -172,6 +172,7 @@ async function switchToUser(targetUserId) {
     EMIE.state.authUser = { userId: result.userId, name: result.name, role: result.role, title: result.title };
     EMIE.state.currentRole = normalizeIdentityRole(result.role);
     EMIE.state.currentUserId = result.userId;
+    localStorage.setItem('design_pm_lastRole', EMIE.state.currentRole);
     const capabilities = await apiGet('/auth/permissions').catch(() => null);
     EMIE.state.permissions = Array.isArray(capabilities?.permissions) ? capabilities.permissions : null;
     EMIE.state.permissionScopes = capabilities?.scopes && typeof capabilities.scopes === 'object'
@@ -187,7 +188,7 @@ async function switchToUser(targetUserId) {
     EMIE.state.cache.orders = [];
     await render();
   } catch (e) {
-    alert(e.message || '切换失败');
+    window.EMIE.actions.showSystemAlert(e.message || '切换失败');
   }
 }
 

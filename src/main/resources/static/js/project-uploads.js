@@ -354,7 +354,7 @@ function removeProgress(progId) {
 async function handleFileUpload(input, list, maxCount, typeLabel, isImage) {
   const files = input?.files || input || [];
   if (list.length + files.length > maxCount) {
-    alert(typeLabel + '最多上传' + maxCount + '个');
+    window.EMIE.actions.showSystemAlert(typeLabel + '最多上传' + maxCount + '个');
     if (input?.value !== undefined) input.value = '';
     return;
   }
@@ -363,8 +363,8 @@ async function handleFileUpload(input, list, maxCount, typeLabel, isImage) {
 
   for (const f of files) {
     const ext = '.' + f.name.split('.').pop()?.toLowerCase();
-    if (blocked.includes(ext)) { alert('不允许上传 ' + ext + ' 文件'); continue; }
-    if (f.size > maxBytes) { alert('文件 ' + f.name + ' 超过大小限制'); continue; }
+    if (blocked.includes(ext)) { window.EMIE.actions.showSystemAlert('不允许上传 ' + ext + ' 文件'); continue; }
+    if (f.size > maxBytes) { window.EMIE.actions.showSystemAlert('文件 ' + f.name + ' 超过大小限制'); continue; }
 
     const suffix = typeLabel.includes('交付') ? 'Deliver' : 'Create';
     const containerId = isImage ? (suffix + (isImage ? 'RefImageList' : 'AttachmentList')) : (suffix + (isImage ? 'RefImageList' : 'AttachmentList'));
@@ -383,7 +383,7 @@ async function handleFileUpload(input, list, maxCount, typeLabel, isImage) {
       setTimeout(() => removeProgress(barId), 1500);
     } catch (e) {
       removeProgress(barId);
-      alert('上传失败: ' + f.name + ' - ' + e.message);
+      window.EMIE.actions.showSystemAlert('上传失败: ' + f.name + ' - ' + e.message);
     }
     EMIE.projectState.uploadingCount--;
   }

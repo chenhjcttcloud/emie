@@ -93,7 +93,7 @@ const editCategory = function(id, name, order, active) {
 
 const saveCategory = async function(id) {
   const name = document.getElementById('catName')?.value?.trim();
-  if (!name) { alert('请输入类目名称'); return; }
+  if (!name) { window.EMIE.actions.showSystemAlert('请输入类目名称'); return; }
   const sortOrder = parseInt(document.getElementById('catOrder')?.value) || 0;
   const body = { name, sortOrder };
   if (id) {
@@ -191,7 +191,7 @@ function openIpOptionModal(id, name, sortOrder, active, subOptions = [], selecti
 
 const saveIpOption = async function(id) {
   const name = document.getElementById('ipOptionName')?.value?.trim();
-  if (!name) { alert('请输入IP名称'); return; }
+  if (!name) { window.EMIE.actions.showSystemAlert('请输入IP名称'); return; }
   const sortOrder = parseInt(document.getElementById('ipOptionOrder')?.value, 10) || 0;
   const body = { name, sortOrder: String(sortOrder), subOptions: document.getElementById('ipOptionSubOptions')?.value || '', subOptionSelectionMode: document.getElementById('ipOptionSelectionMode')?.value || 'multiple' };
   if (id) body.active = document.getElementById('ipOptionActive')?.value || 'true';
@@ -202,7 +202,7 @@ const saveIpOption = async function(id) {
     EMIE.state.ipOptions = await apiGet('/ip-options');
     await switchAdminTab('ipOptions');
   } catch (e) {
-    alert('保存失败：' + e.message);
+    window.EMIE.actions.showSystemAlert('保存失败：' + e.message);
   }
 };
 
@@ -213,7 +213,7 @@ const deleteIpOption = async function(id) {
     EMIE.state.ipOptions = await apiGet('/ip-options');
     await switchAdminTab('ipOptions');
   } catch (e) {
-    alert('删除失败：' + e.message);
+    window.EMIE.actions.showSystemAlert('删除失败：' + e.message);
   }
 };
 
@@ -298,7 +298,7 @@ const editCompliance = function(id, name, order, active) {
 
 const saveCompliance = async function(id) {
   const name = document.getElementById('compName')?.value?.trim();
-  if (!name) { alert('请输入名称'); return; }
+  if (!name) { window.EMIE.actions.showSystemAlert('请输入名称'); return; }
   const sortOrder = parseInt(document.getElementById('compOrder')?.value) || 0;
   const body = { name, sortOrder };
   if (id) {
@@ -401,7 +401,7 @@ const editPriceRange = function(id, name, order, active) {
 
 const savePriceRange = async function(id) {
   const name = document.getElementById('prName')?.value?.trim();
-  if (!name) { alert('请输入名称'); return; }
+  if (!name) { window.EMIE.actions.showSystemAlert('请输入名称'); return; }
   const sortOrder = parseInt(document.getElementById('prOrder')?.value) || 0;
   const body = { name, sortOrder };
   if (id) {

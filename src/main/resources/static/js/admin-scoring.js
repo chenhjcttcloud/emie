@@ -89,9 +89,9 @@ const saveScoringWeights = async function() {
   if (!EMIE.adminState.scoringWeights) return;
   try {
     await apiPut('/admin/scoring-weights', EMIE.adminState.scoringWeights);
-    alert('评分权重已保存');
+    window.EMIE.actions.showSystemAlert('评分权重已保存');
   } catch (e) {
-    alert('保存失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('保存失败: ' + e.message);
   }
 };
 
@@ -104,21 +104,20 @@ async function renderAdminPoints(container) {
   container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--gray-400);">加载积分规则…</div>';
   try {
     const targetMonth = new Date().toISOString().slice(0, 7);
-    const [rules, difficulties, standards, months, designerTargets, appeals, poProgress, archives, proposals, forecasts] = await Promise.all([
+    const [rules, difficulties, standards, designerTargets, appeals, poProgress, archives, proposals, systemConfigs] = await Promise.all([
       apiGet('/points/rules'),
       apiGet('/points/difficulties'),
       apiGet('/performance/standard'),
-      apiGet('/performance/monthly'),
       apiGet('/performance/designer-targets?month=' + encodeURIComponent(targetMonth)),
       apiGet('/point-governance/appeals'),
       apiGet('/point-governance/po/progress'),
       apiGet('/point-governance/archives'),
-      apiGet('/point-program/proposals'), apiGet('/point-program/forecasts'),
+      apiGet('/point-program/proposals'), apiGet('/admin/configs'),
     ]);
     const ruleList = Array.isArray(rules) ? rules : [];
     const difficultyList = Array.isArray(difficulties) ? difficulties : [];
     const standardList = Array.isArray(standards) ? standards : [];
-    const monthList = Array.isArray(months) ? months : [];
+    const monthList = [];
     const designerTargetList = Array.isArray(designerTargets) ? designerTargets : [];
     const configuredStandardIds = new Set(standardList.map(item => String(item.configCode || '')));
     const availableDesigners = designerTargetList;
@@ -126,8 +125,8 @@ async function renderAdminPoints(container) {
     const poProgressList = Array.isArray(poProgress) ? poProgress : [];
     const archiveList = Array.isArray(archives) ? archives : [];
     const proposalList = Array.isArray(proposals) ? proposals : [];
-    const forecastList = Array.isArray(forecasts) ? forecasts : [];
-    container.innerHTML = `<div style="max-width:1100px;margin:0 auto;">
+    const governanceConfig = Object.fromEntries((systemConfigs?.business || []).filter(x => String(x.configKey || '').startsWith('points.withdrawal.')).map(x => [x.configKey, x.configValue || '']));
+    container.innerHTML = `<div class="admin-points-config" style="max-width:1100px;margin:0 auto;">
       <div style="margin-bottom:18px;"><h2 style="font-size:18px;margin:0 0 4px;">🏅 积分与绩效配置</h2><p style="color:var(--gray-500);font-size:13px;margin:0;">规则修改只影响后续入账，历史积分台账不会重算。</p></div>
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>积分规则</h3><button class="btn btn-primary btn-sm" data-emie-onclick="createPointRule()">＋ 新增规则</button></div>${ruleList.length ? ruleList.map((rule, index) => `<div style="padding:16px 0;${index ? 'border-top:1px solid var(--gray-200);' : ''}">
         <div style="display:grid;grid-template-columns:1.1fr 1fr .8fr .9fr .9fr;gap:10px;align-items:end;">
@@ -140,7 +139,6 @@ async function renderAdminPoints(container) {
         <div style="display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap;">
           <input class="form-input" id="pr_desc_${index}" value="${escHtml(rule.description || '')}" placeholder="规则说明" style="flex:1;min-width:240px;">
           <label class="checkbox-item ${rule.enabled === false ? '' : 'checked'}"><input type="checkbox" id="pr_enabled_${index}" ${rule.enabled === false ? '' : 'checked'}> 启用</label>
-          <label class="checkbox-item ${rule.countInPerformance === false ? '' : 'checked'}"><input type="checkbox" id="pr_performance_${index}" ${rule.countInPerformance === false ? '' : 'checked'}> 计入绩效</label>
           <button class="btn btn-primary btn-sm" data-emie-onclick="savePointRule('${escJsString(rule.ruleCode)}',${index})">保存规则</button>
           <button class="btn btn-danger btn-sm" data-emie-onclick="deletePointRule('${escJsString(rule.ruleCode)}')">移除</button>
         </div>
@@ -151,33 +149,31 @@ async function renderAdminPoints(container) {
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>难度档位</h3></div><div class="table-wrap"><table><thead><tr><th>档位</th><th>系数</th><th>说明</th><th>启用</th><th>操作</th></tr></thead><tbody>${difficultyList.map((item,index)=>`<tr><td><strong>${escHtml(item.difficultyCode || '-')}</strong></td><td><input class="form-input" type="number" min="0.1" max="10" step="0.1" id="pd_multiplier_${index}" value="${Number(item.multiplier || 1)}"></td><td><input class="form-input" id="pd_desc_${index}" value="${escHtml(item.description || '')}"></td><td><input type="checkbox" id="pd_enabled_${index}" ${item.enabled === false ? '' : 'checked'}></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="savePointDifficulty('${escJsString(item.difficultyCode)}',${index})">保存</button></td></tr>`).join('')}</tbody></table></div></div>
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>设计师个人绩效配置</h3></div>
         <p style="font-size:12px;color:var(--gray-500);">仅支持设计师，用于配置个人标准积分与绩效基数。</p>
-        <div style="display:grid;grid-template-columns:1.4fr .8fr .8fr 1.2fr auto;gap:8px;align-items:end;margin:14px 0 18px;">
-          <label class="form-label">选择设计师<select class="form-select" id="sp_new_user"><option value="">请选择设计师</option>${availableDesigners.map(user => `<option value="${escHtml(user.userId)}">${escHtml(user.userName || '未命名')}（${escHtml(user.userId)}）</option>`).join('')}</select></label>
-          <label class="form-label">标准积分<input class="form-input" type="number" min="0" id="sp_new_points" value="100"></label>
-          <label class="form-label">绩效基数<input class="form-input" type="number" min="0" step="0.01" id="sp_new_base" value="0"></label>
-          <label class="form-label">说明<input class="form-input" id="sp_new_desc" value="个人绩效配置"></label>
-          <button class="btn btn-primary btn-sm" data-emie-onclick="saveStandardPointConfig(-1)" ${availableDesigners.length ? '' : 'disabled'}>添加</button>
-        </div>
+        <div class="admin-inline-note" style="margin:14px 0 18px;padding:10px 12px;border:1px dashed #D9D6FF;border-radius:9px;background:#F8F7FF;color:#6258B8;font-size:12px;">设计师入职后会自动出现在下方配置列表，无需手动添加。</div>
         <div class="table-wrap"><table><thead><tr><th>设计师</th><th>用户 ID</th><th>标准积分</th><th>绩效基数</th><th>说明</th><th>状态</th><th>操作</th></tr></thead><tbody>${standardList.length ? standardList.map((item, index) => { const matched = availableDesigners.find(u => String(u.userId || '') === String(item.configCode || '')); return `<tr><td><strong>${escHtml(matched?.userName || '未命名')}</strong></td><td><input class="form-input" id="sp_code_${index}" value="${escHtml(item.configCode || '')}" ${item.id ? 'disabled' : ''}></td><td><input class="form-input" type="number" min="0" id="sp_points_${index}" value="${Number(item.points || 0)}"></td><td><input class="form-input" type="number" min="0" step="0.01" id="sp_base_${index}" value="${Number(item.performanceBase || 0)}"></td><td><input class="form-input" id="sp_desc_${index}" value="${escHtml(item.description || '')}"></td><td><label class="checkbox-item ${item.enabled === false ? '' : 'checked'}"><input type="checkbox" id="sp_enabled_${index}" ${item.enabled === false ? '' : 'checked'}> 启用</label></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="saveStandardPointConfig(${index})">保存</button></td></tr>`; }).join('') : '<tr><td colspan="7"><div class="empty-state">暂无个人标准积分配置，可点击上方添加</div></td></tr>'}</tbody></table></div>
       </div>
-      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>月度绩效配置</h3><div id="feishuSalesSyncResult" class="points-sync-result">销售额自动同步已开启，每小时更新</div></div><div style="display:flex;gap:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="syncFeishuSalesPerformance(this)">↻ 同步销售额</button><button class="btn btn-outline btn-sm" data-emie-onclick="saveMonthlyPerformanceConfig(-1)">＋ 配置当前月</button></div></div>
+      <div class="card" style="display:none;padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>月度绩效配置</h3><div id="feishuSalesSyncResult" class="points-sync-result">销售额自动同步已开启，每小时更新</div></div><div style="display:flex;gap:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="syncFeishuSalesPerformance(this)">↻ 同步销售额</button><button class="btn btn-outline btn-sm" data-emie-onclick="saveMonthlyPerformanceConfig(-1)">＋ 配置当前月</button></div></div>
         <p style="font-size:12px;color:var(--gray-500);">月度目标与系数用于排行榜及个人绩效预览，最终结果以月度归档为准。</p>
         <div class="table-wrap"><table><thead><tr><th>月份</th><th>目标积分</th><th>公司销售额（万元）</th><th>手动系数</th><th>供单不足</th><th>操作</th></tr></thead><tbody>${monthList.length ? monthList.map((item, index) => `<tr><td><input class="form-input" type="month" id="mp_month_${index}" value="${escHtml(item.monthKey || '')}" ${item.id ? 'disabled' : ''}></td><td><input class="form-input" type="number" min="0" id="mp_target_${index}" value="${Number(item.targetPoints || 0)}"></td><td><input class="form-input" type="number" min="0" step="0.01" id="mp_sales_${index}" value="${item.salesAmount ?? ''}" placeholder="填写后自动匹配档位"></td><td><input class="form-input" type="number" min="0" step="0.01" id="mp_multiplier_${index}" value="${Number(item.multiplier || 1)}"></td><td><input type="checkbox" id="mp_shortage_${index}" ${item.supplyShortage ? 'checked' : ''}></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="saveMonthlyPerformanceConfig(${index})">保存</button></td></tr>`).join('') : '<tr><td colspan="6"><div class="empty-state">暂无月度配置，可点击右上角配置当前月</div></td></tr>'}</tbody></table></div>
       </div>
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>积分异议复核</h3></div>${appealList.length ? `<div class="table-wrap"><table><thead><tr><th>申请人</th><th>记录</th><th>类型与原因</th><th>状态</th><th>操作</th></tr></thead><tbody>${appealList.map(item => `<tr><td>${escHtml(item.applicantName || item.applicantUserId || '-')}</td><td>#${Number(item.pointLedgerId || 0)}</td><td>${escHtml(item.type || '-')}<div style="font-size:12px;color:var(--gray-500);">${escHtml(item.reason || '')}</div></td><td>${escHtml(item.status || '-')}</td><td>${item.status === 'PLANNER_PROCESSED' ? `<button class="btn btn-success btn-sm" data-emie-onclick="reviewPointAppeal(${Number(item.id)},true)">通过</button> <button class="btn btn-danger btn-sm" data-emie-onclick="reviewPointAppeal(${Number(item.id)},false)">驳回</button>` : '-'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无积分异议</div>'}</div>
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>PO 月度积分</h3><button class="btn btn-outline btn-sm" data-emie-onclick="createPoPointProject()">＋ 新增 PO 产品</button></div>${poProgressList.length ? `<div class="table-wrap"><table><thead><tr><th>月份</th><th>项目ID</th><th>进展</th><th>状态</th><th>操作</th></tr></thead><tbody>${poProgressList.map(item => `<tr><td>${escHtml(item.monthKey || '-')}</td><td>#${Number(item.poProjectId || 0)}</td><td>${escHtml(item.summary || '-')}</td><td>${escHtml(item.status || '-')}</td><td>${item.status === 'SUBMITTED' ? `<button class="btn btn-success btn-sm" data-emie-onclick="reviewPoProgress(${Number(item.id)},true)">确认入账</button> <button class="btn btn-danger btn-sm" data-emie-onclick="reviewPoProgress(${Number(item.id)},false)">驳回</button>` : '-'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无 PO 月度进展</div>'}</div>
-      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>成员接单治理</h3><div style="display:flex;gap:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="configurePointSkills()">配置能力标签</button><button class="btn btn-outline btn-sm" data-emie-onclick="configureMarketEligibility()">暂停/恢复接单资格</button></div></div><p style="font-size:12px;color:var(--gray-500);">能力标签控制可接任务范围；无故退单、长期占单或多次延期可暂停开放接单资格。</p></div>
+      <div class="card governance-card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>接单治理</h3></div><div class="governance-section"><div class="card-header"><h3>成员接单资格</h3><button class="btn btn-outline btn-sm" data-emie-onclick="configureMarketEligibility()">暂停/恢复接单资格</button></div><p style="font-size:12px;color:var(--gray-500);">管理员可手动暂停或恢复成员的接单资格。</p></div>
+      <div class="governance-section" style="margin-top:18px;padding-top:18px;border-top:1px solid #EEF0F5;"><div class="card-header"><h3>退单处罚规则</h3><button class="btn btn-primary btn-sm" data-emie-onclick="saveWithdrawalGovernanceConfig()">保存规则</button></div></div><p style="font-size:12px;color:var(--gray-500);">按任务基础分比例扣分；首次超时退单按基础比例计算，后续每次按累计次数递增。</p><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;"><label class="form-label">免罚时长（分钟）<input class="form-input" type="number" min="0" id="withdraw_free_minutes" value="${Number(governanceConfig['points.withdrawal.free_minutes'] || 60)}"></label><label class="form-label">暂停阈值（次）<input class="form-input" type="number" min="1" id="withdraw_suspend_count" value="${Number(governanceConfig['points.withdrawal.suspend_count'] || 3)}"></label><label class="form-label">每次扣分比例（%）<input class="form-input" type="number" min="0" max="100" id="withdraw_penalty_rate" value="${Number(governanceConfig['points.withdrawal.penalty_rate'] || 10)}"></label><label class="form-label">暂停天数<input class="form-input" type="number" min="1" id="withdraw_suspend_days" value="${Number(governanceConfig['points.withdrawal.suspend_days'] || 7)}"></label></div></div>
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>自主开发提案</h3></div>${proposalList.length?proposalList.map(item=>`<div style="padding:10px 0;border-bottom:1px solid var(--gray-100);"><strong>${escHtml(item.title)}</strong> · ${escHtml(item.applicantName)} · ${escHtml(item.status)} ${item.status==='SUBMITTED'?`<button class="btn btn-success btn-sm" data-emie-onclick="reviewSelfProposal(${item.id},true)">立项</button> <button class="btn btn-danger btn-sm" data-emie-onclick="reviewSelfProposal(${item.id},false)">驳回</button>`:''}<div style="font-size:12px;color:var(--gray-500);">${escHtml(item.description||'')}</div>${renderProposalDesignFiles(item.referenceImagesJson)}</div>`).join(''):'<div class="empty-state">暂无提案</div>'}</div>
-      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>下月任务预发布</h3><button class="btn btn-primary btn-sm" data-emie-onclick="createTaskForecast()">新增预告</button></div>${forecastList.length?forecastList.map(item=>`<div style="padding:8px 0;">${escHtml(item.monthKey)} · <strong>${escHtml(item.title)}</strong> · ${escHtml(item.status)} ${item.status==='DRAFT'?`<button class="btn btn-success btn-sm" data-emie-onclick="publishTaskForecast(${item.id})">发布</button>`:''}</div>`).join(''):'<div class="empty-state">暂无任务预告</div>'}</div>
       <div class="card" style="padding:16px;"><div class="card-header"><h3>月度积分归档</h3><div style="display:flex;gap:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="preparePointArchive()">自动生成草稿</button><button class="btn btn-outline btn-sm" data-emie-onclick="savePointArchiveDraft()">手工调整草稿</button><button class="btn btn-primary btn-sm" data-emie-onclick="archivePointMonth()">归档指定月份</button></div></div>${archiveList.length ? `<div class="table-wrap"><table><thead><tr><th>月份</th><th>用户</th><th>获得 / 目标 / 供单</th><th>保护</th><th>季度均值</th><th>状态</th></tr></thead><tbody>${archiveList.map(item => `<tr><td>${escHtml(item.monthKey || '-')}</td><td>${escHtml(item.userId || '-')}</td><td>${Number(item.earnedPoints || 0)} / ${Number(item.targetPoints || 0)} / ${Number(item.suppliedPoints || 0)}</td><td>${item.insufficientSupplyProtection ? '已启用' : '否'}</td><td>${Number(item.quarterlyAveragePoints || 0)}</td><td>${item.status === 'ARCHIVED' ? '已归档' : '草稿'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无月度归档草稿，可自动生成后统一归档。</div>'}</div>
     </div>`;
     EMIE.adminState.pointStandards = standardList;
     document.querySelectorAll('[id^="sp_enabled_"]').forEach((checkbox, index) => {
       checkbox.addEventListener('change', () => saveStandardPointConfig(index));
     });
-    EMIE.adminState.pointMonths = monthList;
     EMIE.adminState.designerTargets = designerTargetList;
   } catch (e) { container.innerHTML = `<div class="empty">积分规则加载失败：${escHtml(e.message || '')}</div>`; }
+}
+
+async function saveWithdrawalGovernanceConfig() {
+  const configs = { 'points.withdrawal.free_minutes': String(Math.max(0, Number(document.getElementById('withdraw_free_minutes').value || 60))), 'points.withdrawal.suspend_count': String(Math.max(1, Number(document.getElementById('withdraw_suspend_count').value || 3))), 'points.withdrawal.penalty_rate': String(Math.min(100, Math.max(0, Number(document.getElementById('withdraw_penalty_rate').value || 10)))), 'points.withdrawal.suspend_days': String(Math.max(1, Number(document.getElementById('withdraw_suspend_days').value || 7))) };
+  try { await apiPut('/admin/configs', {configs}); window.EMIE.actions.showSystemAlert('退单处罚规则已保存'); } catch (e) { window.EMIE.actions.showSystemAlert('保存失败：' + e.message); }
 }
 
 function renderDesignerTargetRows(rows) {
@@ -203,7 +199,7 @@ async function loadDesignerTargetMonth(month) {
     EMIE.adminState.designerTargets = Array.isArray(rows) ? rows : [];
     const body = document.getElementById('designerTargetBody');
     if (body) body.innerHTML = renderDesignerTargetRows(EMIE.adminState.designerTargets);
-  } catch (e) { alert('目标加载失败：' + e.message); }
+  } catch (e) { window.EMIE.actions.showSystemAlert('目标加载失败：' + e.message); }
 }
 
 async function saveDesignerTarget(index) {
@@ -213,7 +209,7 @@ async function saveDesignerTarget(index) {
   try {
     await apiPut('/performance/designer-targets/' + encodeURIComponent(item.userId), { monthKey, targetPoints: Number(document.getElementById('dt_points_' + index)?.value || 0) });
     await loadDesignerTargetMonth(monthKey);
-  } catch (e) { alert('目标保存失败：' + e.message); }
+  } catch (e) { window.EMIE.actions.showSystemAlert('目标保存失败：' + e.message); }
 }
 
 async function createPointRule() {
@@ -223,36 +219,36 @@ async function createPointRule() {
   const points = Number(window.prompt('基础积分', '10'));
   const description = (window.prompt('规则说明', '') || '').trim();
   try {
-    await apiPost('/points/rules', { ruleCode, category, points, description, countInPerformance: true });
+    await apiPost('/points/rules', { ruleCode, category, points, description });
     await renderAdminPoints(document.getElementById('adminContent'));
-  } catch (e) { alert('新增失败：' + e.message); }
+  } catch (e) { window.EMIE.actions.showSystemAlert('新增失败：' + e.message); }
 }
 
 async function deletePointRule(code) {
   if (!confirm(`确定移除积分规则 ${code} 吗？历史任务快照和积分台账不会变化。`)) return;
   try { await apiDelete('/points/rules/' + encodeURIComponent(code)); await renderAdminPoints(document.getElementById('adminContent')); }
-  catch (e) { alert('移除失败：' + e.message); }
+  catch (e) { window.EMIE.actions.showSystemAlert('移除失败：' + e.message); }
 }
 
 async function savePointRule(code, index) {
   try {
-    await apiPut('/points/rules/' + encodeURIComponent(code), { points: Number(document.getElementById('pr_points_' + index).value), category: document.getElementById('pr_category_' + index).value.trim(), qualityBonusThreshold: Number(document.getElementById('pr_threshold_' + index).value), qualityBonusRatio: Number(document.getElementById('pr_ratio_' + index).value), qualityTopThreshold: Number(document.getElementById('pr_top_threshold_' + index).value), qualityTopRatio: Number(document.getElementById('pr_top_ratio_' + index).value), maxTotalMultiplier: Number(document.getElementById('pr_cap_' + index).value), description: document.getElementById('pr_desc_' + index).value.trim(), enabled: document.getElementById('pr_enabled_' + index).checked, countInPerformance: document.getElementById('pr_performance_' + index).checked });
-    alert('积分规则已保存');
-  } catch (e) { alert('保存失败：' + e.message); }
+    await apiPut('/points/rules/' + encodeURIComponent(code), { points: Number(document.getElementById('pr_points_' + index).value), category: document.getElementById('pr_category_' + index).value.trim(), qualityBonusThreshold: Number(document.getElementById('pr_threshold_' + index).value), qualityBonusRatio: Number(document.getElementById('pr_ratio_' + index).value), qualityTopThreshold: Number(document.getElementById('pr_top_threshold_' + index).value), qualityTopRatio: Number(document.getElementById('pr_top_ratio_' + index).value), maxTotalMultiplier: Number(document.getElementById('pr_cap_' + index).value), description: document.getElementById('pr_desc_' + index).value.trim(), enabled: document.getElementById('pr_enabled_' + index).checked });
+    window.EMIE.actions.showSystemAlert('积分规则已保存');
+  } catch (e) { window.EMIE.actions.showSystemAlert('保存失败：' + e.message); }
 }
 
 async function savePointDifficulty(code, index) {
   try {
     await apiPut('/points/difficulties/' + encodeURIComponent(code), { multiplier: Number(document.getElementById('pd_multiplier_' + index).value), description: document.getElementById('pd_desc_' + index).value.trim(), enabled: document.getElementById('pd_enabled_' + index).checked });
-    alert('难度档位已保存');
-  } catch (e) { alert('保存失败：' + e.message); }
+    window.EMIE.actions.showSystemAlert('难度档位已保存');
+  } catch (e) { window.EMIE.actions.showSystemAlert('保存失败：' + e.message); }
 }
 
 async function deleteStandardPointConfig(id) {
   if (!id || !confirm('确定删除这条设计师个人绩效配置吗？')) return;
   const scrollTop = document.getElementById('adminContent')?.scrollTop || 0;
   try { await apiDelete('/performance/standard/' + id); await renderAdminPoints(document.getElementById('adminContent')); requestAnimationFrame(() => { const el = document.getElementById('adminContent'); if (el) el.scrollTop = scrollTop; }); }
-  catch (e) { alert('删除失败：' + e.message); }
+  catch (e) { window.EMIE.actions.showSystemAlert('删除失败：' + e.message); }
 }
 
 async function saveStandardPointConfig(index) {
@@ -286,9 +282,9 @@ async function saveMonthlyPerformanceConfig(index) {
   if (!monthKey) return;
   try {
     await apiPut('/performance/monthly', { id: current?.id || null, monthKey, targetPoints, multiplier, salesAmount, supplyShortage });
-    alert('月度绩效配置已保存');
+    window.EMIE.actions.showSystemAlert('月度绩效配置已保存');
     await renderAdminPoints(document.getElementById('adminContent'));
-  } catch (e) { alert('保存失败：' + e.message); }
+  } catch (e) { window.EMIE.actions.showSystemAlert('保存失败：' + e.message); }
 }
 
 async function syncFeishuSalesPerformance(button) {
@@ -314,10 +310,10 @@ async function reviewPointAppeal(id, approve) {
     const raw = window.prompt('请输入本次调账积分（增加填正数，扣减填负数，不调账填0）', '0');
     if (raw === null) return;
     adjustmentPoints = Number(raw);
-    if (!Number.isInteger(adjustmentPoints)) { alert('调账积分必须是整数'); return; }
+    if (!Number.isInteger(adjustmentPoints)) { window.EMIE.actions.showSystemAlert('调账积分必须是整数'); return; }
   }
   try { await apiPost(`/point-governance/appeals/${id}/admin-review`, { decision: approve ? 'APPROVE' : 'REJECT', comment, adjustmentPoints }); await renderAdminPoints(document.getElementById('adminContent')); }
-  catch (e) { alert('处理失败：' + e.message); }
+  catch (e) { window.EMIE.actions.showSystemAlert('处理失败：' + e.message); }
 }
 
 async function createPoPointProject() {
@@ -367,14 +363,14 @@ async function reviewPoProgress(id, approve) {
   const comment = window.prompt(approve ? '请输入确认说明（可简填）' : '请输入驳回原因', approve ? '确认完成本月履职' : '');
   if (comment === null || (!approve && !comment.trim())) return;
   try { await apiPost(`/point-governance/po/progress/${id}/review`, { approve, comment }); await renderAdminPoints(document.getElementById('adminContent')); }
-  catch (e) { alert('处理失败：' + e.message); }
+  catch (e) { window.EMIE.actions.showSystemAlert('处理失败：' + e.message); }
 }
 
 async function archivePointMonth() {
-  const month = window.prompt('请输入需要归档的月份（YYYY-MM）'); if (!month) return;
-  if (!window.confirm(`归档 ${month} 后将不可修改，确认继续？`)) return;
-  try { await apiPost(`/point-governance/archives/${encodeURIComponent(month)}/archive`, {}); alert('月度积分已归档'); await renderAdminPoints(document.getElementById('adminContent')); }
-  catch (e) { alert('归档失败：' + e.message); }
+  const month = await window.EMIE.actions.showSystemInput('请输入需要归档的月份（YYYY-MM）', '', '月度积分归档'); if (!month) return;
+  if (!await window.EMIE.actions.showSystemConfirm(`归档 ${month} 后将不可修改，确认继续？`, '确认归档')) return;
+  try { await apiPost(`/point-governance/archives/${encodeURIComponent(month)}/archive`, {}); window.EMIE.actions.showSystemAlert('月度积分已归档'); await renderAdminPoints(document.getElementById('adminContent')); }
+  catch (e) { window.EMIE.actions.showSystemAlert('归档失败：' + e.message); }
 }
 
 async function configurePointSkills() {
@@ -383,46 +379,47 @@ async function configurePointSkills() {
   try {
     const data = await apiGet('/points/skills/' + encodeURIComponent(userId.trim()));
     current = JSON.parse(data.skillsJson || '[]');
-  } catch (e) { alert('读取失败：' + e.message); return; }
+  } catch (e) { window.EMIE.actions.showSystemAlert('读取失败：' + e.message); return; }
   const raw = window.prompt('请输入能力标签（逗号分隔，最多20项）', current.join('、'));
   if (raw === null) return;
   const skills = raw.split(/[,，、]/).map(value => value.trim()).filter(Boolean);
-  try { await apiPut('/points/skills/' + encodeURIComponent(userId.trim()), { skills }); alert('能力标签已保存'); }
-  catch (e) { alert('保存失败：' + e.message); }
+  try { await apiPut('/points/skills/' + encodeURIComponent(userId.trim()), { skills }); window.EMIE.actions.showSystemAlert('能力标签已保存'); }
+  catch (e) { window.EMIE.actions.showSystemAlert('保存失败：' + e.message); }
 }
 
 async function configureMarketEligibility() {
-  const userId = window.prompt('请输入成员用户 ID'); if (!userId) return;
-  let current; try { current = await apiGet('/points/market-eligibility/' + encodeURIComponent(userId.trim())); } catch (e) { return alert('读取失败：' + e.message); }
-  const until = window.prompt('暂停到期时间（YYYY-MM-DDTHH:mm，留空立即恢复）', current.suspendedUntil ? String(current.suspendedUntil).slice(0,16) : ''); if (until === null) return;
-  const reason = until ? window.prompt('请输入暂停原因', current.reason || '无故退单/长期占单/多次延期') : '恢复开放接单资格'; if (reason === null) return;
-  const violationCount = until ? Number(window.prompt('累计违规次数', String(Number(current.violationCount || 0) + 1)) || 0) : Number(current.violationCount || 0);
-  try { await apiPut('/points/market-eligibility/' + encodeURIComponent(userId.trim()), { suspendedUntil: until || null, reason, violationCount }); alert(until ? '已暂停该成员开放接单资格' : '已恢复该成员开放接单资格'); }
-  catch (e) { alert('保存失败：' + e.message); }
+  const input = window.EMIE.actions.showSystemInput;
+  let users; try { users = await apiGet('/admin/users'); } catch (e) { return window.EMIE.actions.showSystemAlert('读取成员列表失败：' + e.message); }
+  const options = (Array.isArray(users) ? users : []).filter(u => String(u.role || '').toLowerCase() === 'designer').map(u => ({ value: u.userId, label: `${u.name || u.userName || '未命名'}（${u.userId}）` }));
+  const userId = await window.EMIE.actions.showSystemSelect('选择需要管理接单资格的成员', options, '配置成员接单资格'); if (!userId) return;
+  let current; try { current = await apiGet('/points/market-eligibility/' + encodeURIComponent(userId.trim())); } catch (e) { return window.EMIE.actions.showSystemAlert('读取失败：' + e.message); }
+  const until = await input('暂停到期时间（YYYY-MM-DDTHH:mm，留空立即恢复）', current.suspendedUntil ? String(current.suspendedUntil).slice(0,16) : '', '设置暂停时间'); if (until === null) return;
+  const reason = until ? await input('请输入暂停原因', current.reason || '无故退单/长期占单/多次延期', '填写暂停原因') : '恢复开放接单资格'; if (reason === null) return;
+  const violationRaw = until ? await input('累计违规次数', String(Number(current.violationCount || 0) + 1), '更新违规次数') : String(Number(current.violationCount || 0)); if (violationRaw === null) return;
+  const violationCount = Number(violationRaw || 0);
+  try { await apiPut('/points/market-eligibility/' + encodeURIComponent(userId.trim()), { suspendedUntil: until || null, reason, violationCount }); window.EMIE.actions.showSystemAlert(until ? '已暂停该成员开放接单资格' : '已恢复该成员开放接单资格'); }
+  catch (e) { window.EMIE.actions.showSystemAlert('保存失败：' + e.message); }
 }
 
 async function preparePointArchive() {
   const month = window.prompt('请输入需要自动生成归档草稿的月份（YYYY-MM）'); if (!month) return;
-  try { await apiPost(`/point-governance/archives/${encodeURIComponent(month)}/prepare`, {}); alert('已根据积分、个人标准和供单状态生成草稿'); await renderAdminPoints(document.getElementById('adminContent')); }
-  catch (e) { alert('生成失败：' + e.message); }
+  try { await apiPost(`/point-governance/archives/${encodeURIComponent(month)}/prepare`, {}); window.EMIE.actions.showSystemAlert('已根据积分、个人标准和供单状态生成草稿'); await renderAdminPoints(document.getElementById('adminContent')); }
+  catch (e) { window.EMIE.actions.showSystemAlert('生成失败：' + e.message); }
 }
-async function reviewSelfProposal(id,approve){const comment=prompt(approve?'请输入立项意见':'请输入驳回原因');if(!comment)return;try{await apiPost(`/point-program/proposals/${id}/review`,{approve,comment});await renderAdminPoints(document.getElementById('adminContent'));}catch(e){alert('处理失败：'+e.message);}}
-async function createTaskForecast(){const monthKey=prompt('预告月份（YYYY-MM）');if(!monthKey)return;const title=prompt('预计任务名称');if(!title)return;const description=prompt('任务说明')||'';const pointRuleCode=(prompt('建议积分规则','S1')||'').toUpperCase();const estimatedCount=Number(prompt('预计数量','1')||1);try{await apiPost('/point-program/forecasts',{monthKey,title,description,pointRuleCode,estimatedCount});await renderAdminPoints(document.getElementById('adminContent'));}catch(e){alert('保存失败：'+e.message);}}
-async function publishTaskForecast(id){if(!confirm('发布后将对设计师可见，确认发布？'))return;try{await apiPost(`/point-program/forecasts/${id}/publish`,{});await renderAdminPoints(document.getElementById('adminContent'));}catch(e){alert('发布失败：'+e.message);}}
-
+async function reviewSelfProposal(id,approve){const comment=prompt(approve?'请输入立项意见':'请输入驳回原因');if(!comment)return;try{await apiPost(`/point-program/proposals/${id}/review`,{approve,comment});await renderAdminPoints(document.getElementById('adminContent'));}catch(e){window.EMIE.actions.showSystemAlert('处理失败：'+e.message);}}
 async function savePointArchiveDraft() {
-  const month = window.prompt('归档月份（YYYY-MM）'); if (!/^\d{4}-\d{2}$/.test(month || '')) { if (month) alert('月份格式应为 YYYY-MM'); return; }
+  const month = window.prompt('归档月份（YYYY-MM）'); if (!/^\d{4}-\d{2}$/.test(month || '')) { if (month) window.EMIE.actions.showSystemAlert('月份格式应为 YYYY-MM'); return; }
   const userId = window.prompt('成员用户 ID'); if (!userId) return;
-  const earnedPoints = Number(window.prompt('该月实际获得积分', '0')); if (!Number.isFinite(earnedPoints)) return alert('实际积分格式错误');
-  const targetPoints = Number(window.prompt('该月目标积分', '100')); if (!Number.isFinite(targetPoints) || targetPoints < 0) return alert('目标积分格式错误');
-  const suppliedPoints = Number(window.prompt('该月供单积分', '0')); if (!Number.isFinite(suppliedPoints)) return alert('供单积分格式错误');
-  const quarterlyAveragePoints = Number(window.prompt('季度平均积分（归档快照）', String(earnedPoints))); if (!Number.isFinite(quarterlyAveragePoints)) return alert('季度平均积分格式错误');
+  const earnedPoints = Number(window.prompt('该月实际获得积分', '0')); if (!Number.isFinite(earnedPoints)) return window.EMIE.actions.showSystemAlert('实际积分格式错误');
+  const targetPoints = Number(window.prompt('该月目标积分', '100')); if (!Number.isFinite(targetPoints) || targetPoints < 0) return window.EMIE.actions.showSystemAlert('目标积分格式错误');
+  const suppliedPoints = Number(window.prompt('该月供单积分', '0')); if (!Number.isFinite(suppliedPoints)) return window.EMIE.actions.showSystemAlert('供单积分格式错误');
+  const quarterlyAveragePoints = Number(window.prompt('季度平均积分（归档快照）', String(earnedPoints))); if (!Number.isFinite(quarterlyAveragePoints)) return window.EMIE.actions.showSystemAlert('季度平均积分格式错误');
   const protectionEnabled = window.confirm('是否启用供单不足保护？');
   try {
     await apiPut(`/point-governance/archives/${encodeURIComponent(month)}/${encodeURIComponent(userId.trim())}`, { earnedPoints, targetPoints, suppliedPoints, protectionEnabled, quarterlyAveragePoints });
-    alert('归档草稿已保存');
+    window.EMIE.actions.showSystemAlert('归档草稿已保存');
     await renderAdminPoints(document.getElementById('adminContent'));
-  } catch (e) { alert('保存失败：' + e.message); }
+  } catch (e) { window.EMIE.actions.showSystemAlert('保存失败：' + e.message); }
 }
 
 
@@ -446,8 +443,9 @@ EMIE.registerActions({
   reviewPoProgress,
   configurePointSkills,
   configureMarketEligibility,
+  saveWithdrawalGovernanceConfig,
   preparePointArchive,
-  reviewSelfProposal, createTaskForecast, publishTaskForecast,
+  reviewSelfProposal,
   savePointArchiveDraft,
   archivePointMonth,
 });
@@ -472,8 +470,9 @@ EMIE.registerModule('adminScoring', {
   reviewPoProgress,
   configurePointSkills,
   configureMarketEligibility,
+  saveWithdrawalGovernanceConfig,
   preparePointArchive,
-  reviewSelfProposal, createTaskForecast, publishTaskForecast,
+  reviewSelfProposal,
   savePointArchiveDraft,
   archivePointMonth,
 });

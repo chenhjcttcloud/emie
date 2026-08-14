@@ -32,6 +32,17 @@ function getTaskStatusInfo(status) {
   }[status] || { label: status, cls: '', icon: '❓' };
 }
 
+// 全局任务排序：待处理优先，其次最近动态，再按截止日期和编号稳定排序。
+function compareTaskPriority(a, b) {
+  const rank = { pending: 0, rejected: 1, delivered: 2, submitted_for_review: 3, planner_approved: 3, sales_approved: 3, admin_approved: 3, accepted: 4, completed: 9, approved: 9 };
+  const statusCompare = (rank[a?.status] ?? 8) - (rank[b?.status] ?? 8);
+  if (statusCompare) return statusCompare;
+  const activityCompare = String(b?.lastActivityAt || '').localeCompare(String(a?.lastActivityAt || ''));
+  if (activityCompare) return activityCompare;
+  const dateCompare = String(a?.plannedDate || '9999-12-31').localeCompare(String(b?.plannedDate || '9999-12-31'));
+  return dateCompare || (Number(b?.id || 0) - Number(a?.id || 0));
+}
+
 // ==================== 格式化 ====================
 function formatDate(d) {
   if (!d) return '-';
@@ -310,6 +321,44 @@ function openModal(id) {
   return modal;
 }
 
+function showSystemConfirm(message, title = '请确认操作') {
+  return new Promise(resolve => {
+    const id = 'systemConfirmModal';
+    document.getElementById(id)?.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = id;
+    overlay.style.zIndex = '400';
+    document.body.appendChild(overlay);
+    overlay.innerHTML = `<div class="modal" style="max-width:420px;"><div class="modal-header"><div class="modal-header-left"><div class="modal-title">⚠️ ${escHtml(title)}</div></div><button class="modal-close" aria-label="关闭">✕</button></div><div class="modal-body" style="padding:28px 24px;text-align:center;color:var(--gray-700);">${escHtml(message)}</div><div class="modal-footer" style="justify-content:center;gap:10px;"><button class="btn btn-outline" data-action="cancel">取消</button><button class="btn btn-primary" data-action="confirm">确定</button></div></div>`;
+    const finish = value => { overlay.remove(); doneOpenModal(id); resolve(value); };
+    overlay.querySelector('[data-action="cancel"]').onclick = () => finish(false);
+    overlay.querySelector('[data-action="confirm"]').onclick = () => finish(true);
+    overlay.querySelector('.modal-close').onclick = () => finish(false);
+  });
+}
+
+function showSystemAlert(message, title = '提示') {
+  const id = 'systemAlertModal';
+  document.getElementById(id)?.remove();
+  const overlay = document.createElement('div'); overlay.className = 'modal-overlay'; overlay.id = id; overlay.style.zIndex = '450';
+  document.body.appendChild(overlay);
+  overlay.innerHTML = `<div class="modal" style="max-width:420px;"><div class="modal-header"><div class="modal-header-left"><div class="modal-title">ℹ️ ${escHtml(title)}</div></div><button class="modal-close" aria-label="关闭">✕</button></div><div class="modal-body" style="padding:28px 24px;text-align:center;color:var(--gray-700);white-space:pre-wrap;">${escHtml(message)}</div><div class="modal-footer" style="justify-content:center;"><button class="btn btn-primary" data-action="ok">知道了</button></div></div>`;
+  const finish = () => { overlay.remove(); doneOpenModal(id); };
+  overlay.querySelector('[data-action="ok"]').onclick = finish; overlay.querySelector('.modal-close').onclick = finish;
+  requestAnimationFrame(() => overlay.querySelector('[data-action="ok"]')?.focus());
+}
+function showSystemInput(message, value = '', title = '请输入') {
+  return new Promise(resolve => {
+    const id='systemInputModal'; document.getElementById(id)?.remove(); const overlay=document.createElement('div'); overlay.className='modal-overlay'; overlay.id=id; overlay.style.zIndex='450'; document.body.appendChild(overlay);
+    overlay.innerHTML=`<div class="modal" style="max-width:460px;"><div class="modal-header"><div class="modal-header-left"><div class="modal-title">✎ ${escHtml(title)}</div></div><button class="modal-close" aria-label="关闭">✕</button></div><div class="modal-body" style="padding:22px 24px;"><label class="form-label" style="display:block;margin-bottom:8px;">${escHtml(message)}</label><input class="form-input" id="systemInputValue" value="${escHtml(value)}" autocomplete="off"></div><div class="modal-footer"><button class="btn btn-outline" data-action="cancel">取消</button><button class="btn btn-primary" data-action="ok">确定</button></div></div>`;
+    const input=overlay.querySelector('#systemInputValue'); const finish=v=>{overlay.remove();doneOpenModal(id);resolve(v);}; overlay.querySelector('[data-action="cancel"]').onclick=()=>finish(null); overlay.querySelector('.modal-close').onclick=()=>finish(null); overlay.querySelector('[data-action="ok"]').onclick=()=>finish(input.value); input.addEventListener('keydown',e=>{if(e.key==='Enter')finish(input.value);}); requestAnimationFrame(()=>input.focus());
+  });
+}
+function showSystemSelect(message, options = [], title = '请选择') {
+  return new Promise(resolve => { const id='systemSelectModal'; document.getElementById(id)?.remove(); const overlay=document.createElement('div'); overlay.className='modal-overlay'; overlay.id=id; overlay.style.zIndex='450'; document.body.appendChild(overlay); overlay.innerHTML=`<div class="modal" style="max-width:460px;"><div class="modal-header"><div class="modal-header-left"><div class="modal-title">☷ ${escHtml(title)}</div></div><button class="modal-close">✕</button></div><div class="modal-body" style="padding:22px 24px;"><label class="form-label" style="display:block;margin-bottom:8px;">${escHtml(message)}</label><select class="form-select" id="systemSelectValue"><option value="">请选择成员</option>${options.map(o=>`<option value="${escHtml(o.value)}">${escHtml(o.label)}</option>`).join('')}</select></div><div class="modal-footer"><button class="btn btn-outline" data-action="cancel">取消</button><button class="btn btn-primary" data-action="ok">确定</button></div></div>`; const select=overlay.querySelector('#systemSelectValue'); const finish=v=>{overlay.remove();doneOpenModal(id);resolve(v);}; overlay.querySelector('[data-action="cancel"]').onclick=()=>finish(null); overlay.querySelector('.modal-close').onclick=()=>finish(null); overlay.querySelector('[data-action="ok"]').onclick=()=>finish(select.value||null); requestAnimationFrame(()=>select.focus()); });
+}
+
 // 弹窗关闭确认
 function showSaveConfirmModal() {
   const overlay = document.getElementById('createProjectModal');
@@ -370,6 +419,8 @@ function showLoading(container) {
 
 
 EMIE.registerActions({
+  compareTaskPriority,
+  showSystemConfirm,
   getProjectStatusInfo,
   getTaskStatusInfo,
   formatDate,
@@ -386,12 +437,16 @@ EMIE.registerActions({
   closeM,
   openModal,
   showSaveConfirmModal,
+  showSystemAlert,
+  showSystemInput,
+  showSystemSelect,
   saveCreateDraft,
   discardCreateDraft,
   showLoading,
 });
 
 EMIE.registerModule('coreUi', {
+  compareTaskPriority,
   getProjectStatusInfo,
   getTaskStatusInfo,
   formatDate,
@@ -408,6 +463,9 @@ EMIE.registerModule('coreUi', {
   closeM,
   openModal,
   showSaveConfirmModal,
+  showSystemAlert,
+  showSystemInput,
+  showSystemSelect,
   saveCreateDraft,
   discardCreateDraft,
   showLoading,

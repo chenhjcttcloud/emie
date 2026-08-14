@@ -218,7 +218,7 @@ async function adminRevokeShare(id) {
     showAdminToast('✅ ' + (r.message || '已收回'), 'success');
     await renderAdminShares(document.getElementById('adminContent'));
   } catch(e) {
-    alert('操作失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('操作失败: ' + e.message);
   }
 }
 

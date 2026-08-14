@@ -182,9 +182,7 @@ async function loadDashboardExecutionTasks(uid, role) {
         && projectIsActive
         && ['pending', 'accepted', 'rejected'].includes(t.status);
     });
-    const statusOrder = { rejected: 0, pending: 1, accepted: 2 };
-    tasks.sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9)
-      || String(a.plannedDate || '9999-12-31').localeCompare(String(b.plannedDate || '9999-12-31')));
+    tasks.sort(EMIE.actions.compareTaskPriority);
     EMIE.dashboardState.designerTaskCache = tasks;
     if (!tasks.length) {
       container.innerHTML = '<div class="empty"><div class="empty-icon">🎉</div><p>当前没有需要处理的关联子任务</p></div>';

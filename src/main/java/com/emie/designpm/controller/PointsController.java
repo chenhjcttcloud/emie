@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 @RestController
 @RequestMapping("/api/points")
@@ -30,9 +32,12 @@ public class PointsController {
     }
 
     @GetMapping("/me")
-    public ResponseEntity<?> mine(HttpServletRequest request) {
+    public ResponseEntity<?> mine(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size, HttpServletRequest request) {
         String userId = session(request).userId();
-        return ResponseEntity.ok(Map.of("userId", userId, "balance", points.balance(userId), "ledger", points.ledger(userId),
+        int safePage = Math.max(0, page), safeSize = Math.min(50, Math.max(1, size));
+        var ledger = points.ledgerPage(userId, PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id"))));
+        return ResponseEntity.ok(Map.of("userId", userId, "balance", points.balance(userId), "ledger", ledger.getContent(),
+                "ledgerPage", ledger.getNumber(), "ledgerSize", ledger.getSize(), "ledgerTotal", ledger.getTotalElements(), "ledgerPages", ledger.getTotalPages(),
                 "adjustmentLedger", points.adjustmentLedger(userId)));
     }
 

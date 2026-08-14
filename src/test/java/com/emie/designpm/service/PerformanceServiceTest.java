@@ -15,7 +15,7 @@ class PerformanceServiceTest {
   StandardPointConfig standard=new StandardPointConfig();standard.setConfigCode("u1");standard.setPoints(100);standard.setPerformanceBase(1000d);standard.setDepartmentType("SUPPORT");standard.setEnabled(true);when(standards.findByConfigCode("u1")).thenReturn(Optional.of(standard));
   MonthlyPerformanceConfig month=new MonthlyPerformanceConfig();month.setMonthKey("2026-08");month.setTargetPoints(100);month.setSalesAmount(360d);month.setMultiplier(1d);when(months.findByMonthKey("2026-08")).thenReturn(Optional.of(month));when(configs.findByConfigKey(anyString())).thenReturn(Optional.empty());
   Map<String,Object> preview=new PerformanceService(ledgers,adjustments,users,standards,months,configs).preview("u1","2026-08");
-  assertEquals(1.5,(Double)preview.get("companyCoefficient"),.001);assertEquals(1650d,(Double)preview.get("simulatedPerformanceSalary"),.001);assertEquals(false,preview.get("officiallyApplied"));assertNull(preview.get("payablePerformanceSalary"));
+  assertEquals(1d,(Double)preview.get("companyCoefficient"),.001);assertEquals(1100d,(Double)preview.get("simulatedPerformanceSalary"),.001);assertEquals(false,preview.get("officiallyApplied"));assertNull(preview.get("payablePerformanceSalary"));
  }
 
  @Test void monthlyDesignerTargetOverridesLegacyPersonalStandard(){

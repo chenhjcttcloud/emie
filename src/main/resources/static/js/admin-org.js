@@ -166,7 +166,7 @@ async function openCreateDeptModal() {
 async function submitCreateDept() {
   const fd = new FormData(document.getElementById('createDeptForm'));
   const data = Object.fromEntries(fd.entries());
-  if (!data.name) return alert('请填写部门名称');
+  if (!data.name) return window.EMIE.actions.showSystemAlert('请填写部门名称');
   await apiPost('/departments', data);
   closeM('createDeptModal');
   await refreshOrgData();
@@ -295,7 +295,7 @@ async function openAssignUserDept(userId) {
 
 async function submitAssignDept(userId) {
   const sel = document.querySelector('input[name="deptId"]:checked');
-  if (!sel) return alert('请选择一个部门');
+  if (!sel) return window.EMIE.actions.showSystemAlert('请选择一个部门');
   await apiPut(`/users/org/${userId}`, { departmentId: parseInt(sel.value) });
   closeM('assignDeptModal');
   await refreshOrgData();
@@ -306,7 +306,7 @@ async function removeUserFromDept(userId) {
   // 检查是否为部门负责人，负责人不能移出
   const isHead = EMIE.state.departments.some(d => d.headUserId === userId);
   if (isHead) {
-    alert('该用户是部门负责人，无法直接移出。请先更换部门负责人或删除部门。');
+    window.EMIE.actions.showSystemAlert('该用户是部门负责人，无法直接移出。请先更换部门负责人或删除部门。');
     return;
   }
   if (!confirm('确定将该用户移出部门？')) return;

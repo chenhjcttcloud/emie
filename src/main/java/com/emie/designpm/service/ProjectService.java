@@ -40,6 +40,8 @@ public class ProjectService {
     private final NotificationWorkflowService notificationWorkflowService;
     private PointsService pointsService;
     private DesignerMarketEligibilityRepository marketEligibilityRepository;
+    private TaskWithdrawalRepository taskWithdrawalRepository;
+    private PointAdjustmentLedgerRepository pointAdjustmentLedgerRepository;
     private DesignRequirementScoringService designRequirementScoringService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -75,6 +77,10 @@ public class ProjectService {
     }
     @Autowired(required = false)
     void setMarketEligibilityRepository(DesignerMarketEligibilityRepository repository) { this.marketEligibilityRepository = repository; }
+    @Autowired(required = false)
+    void setTaskWithdrawalRepository(TaskWithdrawalRepository repository) { this.taskWithdrawalRepository = repository; }
+    @Autowired(required = false)
+    void setPointAdjustmentLedgerRepository(PointAdjustmentLedgerRepository repository) { this.pointAdjustmentLedgerRepository = repository; }
     @Autowired(required = false)
     void setDesignRequirementScoringService(DesignRequirementScoringService service) { this.designRequirementScoringService = service; }
 
@@ -921,17 +927,7 @@ public class ProjectService {
             }
         }
 
-        Set<String> required = parseSkillTags(task.getRequiredSkillTagsJson());
-        String configured = systemConfigRepository.findByConfigKey("points.user.skills." + designerUserId)
-                .map(SystemConfig::getConfigValue).orElse("[]");
-        Set<String> actual = parseSkillTags(configured);
-        validateDesignCategoryEligibility(task, designerUserId, actual);
-        if (required.isEmpty()) return;
-        if (!actual.containsAll(required)) {
-            Set<String> missing = new LinkedHashSet<>(required);
-            missing.removeAll(actual);
-            throw new RuntimeException("能力标签不匹配，缺少：" + String.join("、", missing));
-        }
+        // 接单不再按能力标签或任务分类限制；历史标签字段保留，仅用于兼容旧数据展示。
     }
 
     private void validateDesignCategoryEligibility(SubTask task, String designerUserId) {
@@ -1051,6 +1047,51 @@ public class ProjectService {
         return projectRepository.saveAndFlush(p);
     }
 
+    /** 设计师退单：接单后一小时内免费，超时按任务基础分及累计退单次数比例扣分。 */
+    @Transactional
+    public Project withdrawAcceptedTask(Long projectId, Long taskId, Map<String, Object> body) {
+        Project p = lockProject(projectId);
+        SubTask task = lockSubTask(projectId, taskId);
+        String userId = String.valueOf(body.getOrDefault("currentUserId", ""));
+        if (userId.isBlank() || !userId.equals(task.getDesignerId())) throw new RuntimeException("仅当前负责人可退单");
+        if (!"accepted".equals(task.getStatus())) throw new RuntimeException("只有已接单且未交付的任务可以退单");
+        if (taskWithdrawalRepository == null) throw new RuntimeException("退单服务未就绪");
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime claimed = task.getClaimedAt() == null ? now : task.getClaimedAt();
+        long elapsed = Math.max(0, java.time.Duration.between(claimed, now).toMinutes());
+        int previous = marketEligibilityRepository == null ? 0 : marketEligibilityRepository.findByUserId(userId).map(e -> Optional.ofNullable(e.getViolationCount()).orElse(0)).orElse(0);
+        long freeMinutes = positiveLongConfig("points.withdrawal.free_minutes", 60);
+        int suspendCount = positiveIntConfig("points.withdrawal.suspend_count", 3);
+        double perWithdrawalRate = boundedDoubleConfig("points.withdrawal.penalty_rate", 10d) / 100d;
+        int suspendDays = positiveIntConfig("points.withdrawal.suspend_days", 7);
+        double ratio = elapsed <= freeMinutes ? 0d : Math.min(1d, perWithdrawalRate * (previous + 1));
+        int base = (int)Math.round(Optional.ofNullable(task.getBasePointSnapshot()).orElse(0) * Optional.ofNullable(task.getDifficultyMultiplierSnapshot()).orElse(1d));
+        int penalty = (int)Math.ceil(base * ratio);
+        TaskWithdrawal event = new TaskWithdrawal(); event.setSubTaskId(taskId); event.setUserId(userId); event.setElapsedMinutes(elapsed); event.setPenaltyRatio(ratio); event.setPenaltyPoints(penalty); event.setReason(elapsed <= 60 ? "接单1小时内退单（免罚）" : "接单超1小时退单，按累计次数比例扣分");
+        taskWithdrawalRepository.save(event);
+        if (penalty > 0 && pointAdjustmentLedgerRepository != null) {
+            PointAdjustmentLedger adjustment = new PointAdjustmentLedger(); adjustment.setUserId(userId); adjustment.setSourceType("TASK_WITHDRAWAL"); adjustment.setSourceId(event.getId()); adjustment.setPoints(-penalty); adjustment.setReason(event.getReason()); adjustment.setCreatedBy(userId); pointAdjustmentLedgerRepository.save(adjustment);
+        }
+        if (marketEligibilityRepository != null) {
+            DesignerMarketEligibility e = marketEligibilityRepository.findByUserId(userId).orElseGet(() -> { DesignerMarketEligibility x = new DesignerMarketEligibility(); x.setUserId(userId); return x; });
+            e.setViolationCount(previous + 1); e.setReason("退单累计" + (previous + 1) + "次");
+            if (previous + 1 >= suspendCount) e.setSuspendedUntil(now.plusDays(suspendDays));
+            e.setUpdatedBy(userId); marketEligibilityRepository.save(e);
+        }
+        task.setDesignerId(null); task.setDesignerName(null); task.setClaimedAt(null); task.setStatus("pending"); task.setAllocationStatus("market_open");
+        p.getLogs().add(new ActivityLog("设计师退单：" + task.getName() + "，扣分" + penalty, String.valueOf(body.getOrDefault("currentUser", userId)), "designer", p));
+        return projectRepository.saveAndFlush(p);
+    }
+
+    private long positiveLongConfig(String key, long fallback) {
+        try { return Math.max(0, Long.parseLong(systemConfigRepository.findByConfigKey(key).map(SystemConfig::getConfigValue).orElse(String.valueOf(fallback)).trim())); }
+        catch (Exception e) { return fallback; }
+    }
+    private double boundedDoubleConfig(String key, double fallback) {
+        try { return Math.min(100d, Math.max(0d, Double.parseDouble(systemConfigRepository.findByConfigKey(key).map(SystemConfig::getConfigValue).orElse(String.valueOf(fallback)).trim()))); }
+        catch (Exception e) { return fallback; }
+    }
+
     public Project taskDeliver(Long projectId, Long taskId, Map<String, Object> body) {
         Project p = lockProject(projectId);
 
@@ -1105,6 +1146,7 @@ public class ProjectService {
         String currentUserId = (String) body.getOrDefault("currentUserId", "");
         String role = (String) body.getOrDefault("currentRole", "");
         if (!"planner".equals(role)) throw new RuntimeException("仅产品企划可送审");
+        if (!Objects.equals(currentUserId, p.getPlannerId())) throw new RuntimeException("当前用户不是该项目负责人企划，无法送审");
         if (!List.of("designer", "supplychain").contains(task.getAssigneeRole())) throw new RuntimeException("仅设计师和供应链子任务需要送审");
         if (!"delivered".equals(task.getStatus())) throw new RuntimeException("当前子任务不在待送审状态");
         task.setStatus("submitted_for_review");
@@ -1288,6 +1330,14 @@ public class ProjectService {
 
         if (!canReviewTask(p, task, currentRole, currentUserId)) {
             throw new RuntimeException("当前用户无权验收该子任务");
+        }
+
+        // 防止按钮重复点击：首个请求已推进状态时，后续重复请求直接返回当前项目。
+        boolean alreadyProcessed = ("planner".equals(currentRole) && "planner_approved".equals(task.getStatus()))
+                || ("sales".equals(currentRole) && "sales_approved".equals(task.getStatus()))
+                || ("admin".equals(currentRole) && "admin_approved".equals(task.getStatus()));
+        if (alreadyProcessed) {
+            return p;
         }
 
         if ("submitted_for_review".equals(task.getStatus()) && "planner".equals(currentRole)) {
@@ -2038,6 +2088,7 @@ public class ProjectService {
                 item.put("plannerId", p.getPlannerId());
                 item.put("plannerName", p.getPlannerName());
                 item.put("plannedDate", t.getPlannedDate());
+                item.put("lastActivityAt", records.stream().map(ScoringRecord::getReviewedAt).filter(Objects::nonNull).max(LocalDateTime::compareTo).orElse(null));
                 item.put("designerId", t.getDesignerId());
                 item.put("designerName", t.getDesignerName());
                 item.put("selfScore", t.getSelfScore());

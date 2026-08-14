@@ -54,7 +54,7 @@ async function refreshAfterMutation(pid) {
 
     // 按当前视图刷新
     (async () => {
-      if (['orders', 'channel', 'regular', 'design-needs', 'tasks', 'task-market', 'scoring', 'points'].includes(EMIE.state.currentView)) {
+      if (['home', 'dashboard', 'orders', 'channel', 'regular', 'design-needs', 'tasks', 'task-market', 'scoring', 'points'].includes(EMIE.state.currentView)) {
         await render();
       } else if (pid) {
         try {

@@ -628,6 +628,17 @@ public class ProjectController {
         }
     }
 
+    /** 设计师退单（接单后一小时内免罚，超时按比例扣分）。 */
+    @PostMapping("/{projectId}/tasks/{taskId}/withdraw")
+    public ResponseEntity<?> withdrawAcceptedTask(@PathVariable Long projectId, @PathVariable Long taskId,
+                                                   @RequestBody Map<String, Object> body, HttpServletRequest request) {
+        try {
+            ResponseEntity<?> denied = denyUnless(request, "subtask.accept");
+            if (denied != null) return denied;
+            return ResponseEntity.ok(toDetail(projectService.withdrawAcceptedTask(projectId, taskId, withSessionContext(body, request))));
+        } catch (RuntimeException e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
+    }
+
     /** 设计师交付 */
     @PostMapping("/{projectId}/tasks/{taskId}/deliver")
     public ResponseEntity<?> taskDeliver(

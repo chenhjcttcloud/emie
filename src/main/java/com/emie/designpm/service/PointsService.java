@@ -12,7 +12,10 @@ import com.emie.designpm.repository.PointRuleRepository;
 import com.emie.designpm.repository.ScoringRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
@@ -34,6 +37,9 @@ public class PointsService {
     private final PointAdjustmentLedgerRepository adjustments;
     private final PointDifficultyConfigRepository difficulties;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    /** 积分制度生效时间；发布前通过 POINTS_EFFECTIVE_AT 覆盖为正式上线时间。 */
+    @Value("${points.effective-at:2026-08-14T00:00:00}")
+    private String effectiveAtText = "2026-08-14T00:00:00";
 
     @Autowired
     public PointsService(PointRuleRepository rules, PointLedgerRepository ledgers, ScoringRepository scoring,
@@ -57,7 +63,7 @@ public class PointsService {
 
     /** 企划确认送审时立即发放基础积分。 */
     public void awardBaseSubmission(SubTask task) {
-        if (task == null || task.getId() == null || task.getDesignerId() == null || task.getDesignerId().isBlank()) return;
+        if (!eligibleForPoints(task)) return;
         String ruleCode = normalizedRuleCode(task.getPointRuleCode());
         String ledgerCode = ruleCode + ":BASE";
         if (ledgers.existsByUserIdAndSubTaskIdAndRuleCode(task.getDesignerId(), task.getId(), ledgerCode)) return;
@@ -67,7 +73,7 @@ public class PointsService {
 
     /** 最终验收后为 A/B 类按评分另发质量加分。 */
     public void awardQualityCompletion(SubTask task) {
-        if (task == null || task.getId() == null || task.getDesignerId() == null || task.getDesignerId().isBlank()) return;
+        if (!eligibleForPoints(task)) return;
         String ruleCode = normalizedRuleCode(task.getPointRuleCode());
         // 积分归属以子任务实际完成节点为准；基础分可能在送审时已入账，
         // 这里将同一子任务的既有流水统一校正到完成月份，避免跨月错记。
@@ -76,12 +82,13 @@ public class PointsService {
             ledgers.findBySubTaskId(task.getId()).forEach(ledger -> ledger.setAccountingMonth(completionMonth));
         }
         awardBaseSubmission(task);
-        if (!(ruleCode.startsWith("A") || ruleCode.startsWith("B"))) return;
         String ledgerCode = ruleCode + ":QUALITY";
         if (ledgers.existsByUserIdAndSubTaskIdAndRuleCode(task.getDesignerId(), task.getId(), ledgerCode)) return;
         ensureSnapshot(task, ruleCode);
         double averageScore = scoring.findBySubTaskId(task.getId()).stream()
                 .filter(record -> record.getScore() != null).mapToInt(record -> record.getScore()).average().orElse(0d);
+        // 质量阈值按页面展示的整数综合分判断，与用户看到的最终分保持一致。
+        averageScore = Math.round(averageScore);
         double ratio = averageScore >= task.getQualityTopThresholdSnapshot()
                 ? task.getQualityTopRatioSnapshot()
                 : averageScore >= task.getQualityBonusThresholdSnapshot() ? task.getQualityBonusRatioSnapshot() : 0d;
@@ -89,6 +96,17 @@ public class PointsService {
         double base = task.getBasePointSnapshot() * task.getDifficultyMultiplierSnapshot();
         double cap = task.getBasePointSnapshot() * task.getMaxTotalMultiplierSnapshot();
         saveAward(task, ledgerCode, Math.min(base * ratio, Math.max(0d, cap - base)));
+    }
+
+    private boolean eligibleForPoints(SubTask task) {
+        if (task == null || task.getId() == null || task.getDesignerId() == null || task.getDesignerId().isBlank()) return false;
+        // 持久化任务都会有创建时间；兼容旧的内存调用方/单元测试不阻断原有流程。
+        if (task.getCreatedAt() == null) return true;
+        try {
+            return !task.getCreatedAt().isBefore(java.time.LocalDateTime.parse(effectiveAtText));
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private String completionMonth(SubTask task) {
@@ -140,7 +158,8 @@ public class PointsService {
         ledger.setUserId(userId);
         ledger.setSubTaskId(task.getId());
         ledger.setRuleCode(ledgerCode);
-        ledger.setCountInPerformance(Boolean.TRUE.equals(task.getCountInPerformanceSnapshot()));
+        // 有效积分统一参与绩效统计；旧快照字段仅为历史兼容保留。
+        ledger.setCountInPerformance(true);
         String completionMonth = completionMonth(task);
         ledger.setAccountingMonth(completionMonth != null ? completionMonth
                 : task.getMilestoneMonth() == null || task.getMilestoneMonth().isBlank()
@@ -199,6 +218,7 @@ public class PointsService {
 
     @Transactional(readOnly = true)
     public List<PointLedger> ledger(String userId) { return ledgers.findByUserIdOrderByCreatedAtDescIdDesc(userId); }
+    public Page<PointLedger> ledgerPage(String userId, Pageable pageable) { return ledgers.findByUserId(userId, pageable); }
 
     @Transactional(readOnly = true)
     public List<PointAdjustmentLedger> adjustmentLedger(String userId) { return adjustments == null ? List.of() : adjustments.findByUserIdOrderByCreatedAtDescIdDesc(userId); }

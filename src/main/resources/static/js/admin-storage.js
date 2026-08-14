@@ -97,7 +97,7 @@ async function manualArchive() {
     showAdminToast('✅ 归档完成: 成功 ' + (r.success || 0) + ' 个, 失败 ' + (r.fail || 0) + ' 个', r.fail > 0 ? 'warning' : 'success');
     await renderAdminFileStorage(document.getElementById('adminContent'));
   } catch(e) {
-    alert('归档失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('归档失败: ' + e.message);
   }
 }
 
@@ -108,7 +108,7 @@ async function restoreArchivedFile(fileId) {
     showAdminToast('✅ 文件已恢复', 'success');
     await renderAdminFileStorage(document.getElementById('adminContent'));
   } catch(e) {
-    alert('恢复失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('恢复失败: ' + e.message);
   }
 }
 

@@ -232,8 +232,10 @@ async function showApp() {
     }
 
     document.getElementById('userDisplay').textContent = `${EMIE.state.authUser.name}（${roleLabel(EMIE.state.authUser.role)}）`;
-    EMIE.state.currentRole = ['promotion', 'product_promotion', 'product-promotion'].includes(String(EMIE.state.authUser.role || '').toLowerCase())
+        EMIE.state.currentRole = ['promotion', 'product_promotion', 'product-promotion'].includes(String(EMIE.state.authUser.role || '').toLowerCase())
       ? 'promotion' : String(EMIE.state.authUser.role || '').toLowerCase();
+    const savedRole = localStorage.getItem('design_pm_lastRole');
+    if (savedRole && savedRole === EMIE.state.currentRole) EMIE.state.currentRole = savedRole;
     EMIE.state.currentUserId = EMIE.state.authUser.userId;
 
     // 基础数据并行加载：单个接口失败只影响对应功能，不阻塞首屏。
@@ -381,7 +383,7 @@ async function handleLogin(event) {
 function handleFeishuLogin() {
   fetch('/api/auth/feishu/config').then(r => r.json()).then(cfg => {
     if (cfg.enabled !== 'true' || !cfg.appId) {
-      alert('飞书登录暂未开启');
+      window.EMIE.actions.showSystemAlert('飞书登录暂未开启');
       return;
     }
     const redirectUri = window.location.origin + '/api/auth/feishu/callback';
@@ -390,7 +392,7 @@ function handleFeishuLogin() {
       + '&app_id=' + cfg.appId
       + '&state=' + encodeURIComponent(cfg.state || '');
     window.location.href = url;
-  }).catch(() => alert('获取飞书配置失败'));
+  }).catch(() => window.EMIE.actions.showSystemAlert('获取飞书配置失败'));
 }
 
 // 检测飞书 SSO 回调
@@ -399,7 +401,7 @@ async function checkFeishuCallback() {
   const ticket = params.get('sso_ticket');
   const error = params.get('sso_error');
   if (error) {
-    alert('飞书登录失败: ' + error);
+    window.EMIE.actions.showSystemAlert('飞书登录失败: ' + error);
     window.history.replaceState({}, document.title, window.location.pathname);
     return false;
   }
@@ -408,7 +410,7 @@ async function checkFeishuCallback() {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ticket })
   });
-  if (!response.ok) { alert('飞书登录票据已失效，请重新登录'); return false; }
+  if (!response.ok) { window.EMIE.actions.showSystemAlert('飞书登录票据已失效，请重新登录'); return false; }
   const data = await response.json();
   localStorage.setItem('design_pm_token', data.token);
   localStorage.setItem('design_pm_user', JSON.stringify(data.user || {}));

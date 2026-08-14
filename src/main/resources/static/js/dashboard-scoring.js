@@ -6,6 +6,7 @@ const formatDate = (...args) => EMIE.actions.formatDate(...args);
 const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const openScoring = (...args) => EMIE.actions.openScoring(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
+const compareTaskPriority = (...args) => EMIE.actions.compareTaskPriority(...args);
 const matchesSearchText = (...args) => EMIE.actions.matchesSearchText(...args);
 const isDateInRange = (...args) => EMIE.actions.isDateInRange(...args);
 
@@ -28,6 +29,7 @@ async function renderScoringView(main, role, uid) {
       plannerId: item.plannerId,
       plannerName: item.plannerName,
       plannedDate: item.plannedDate,
+      lastActivityAt: item.lastActivityAt,
       designerId: item.designerId,
       designerName: item.designerName,
       selfScore: item.selfScore,
@@ -41,12 +43,11 @@ async function renderScoringView(main, role, uid) {
     pendingTasks.push(t);
   }
 
-  // 待评分任务始终置顶；各分组内按计划完成时间升序，临期任务优先处理。
+  // 待评分优先；有最近评分/审核动态的任务其次，再按计划完成时间和编号稳定排序。
   pendingTasks.sort((a, b) => {
     if (a.isPending !== b.isPending) return a.isPending ? -1 : 1;
-    const dateCompare = (a.plannedDate || '9999-12-31').localeCompare(b.plannedDate || '9999-12-31');
-    if (dateCompare !== 0) return dateCompare;
-    return b.id - a.id;
+    const dateCompare = compareTaskPriority(a, b);
+    return dateCompare;
   });
 
   const pendingCount = pendingTasks.filter(t => t.isPending).length;

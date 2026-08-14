@@ -58,7 +58,7 @@ async function handleProductArchiveFiles(input, key) {
   const files = input?.files || [];
   for (const file of files) {
     try { const result = await uploadFile(file); EMIE.projectState.productArchive[key].files.push({name: result.name, url: result.url, size: result.size, storedName: result.storedName}); }
-    catch (e) { alert('上传失败: ' + file.name + ' - ' + e.message); }
+    catch (e) { window.EMIE.actions.showSystemAlert('上传失败: ' + file.name + ' - ' + e.message); }
   }
   if (input) input.value = '';
   const container = document.getElementById('editProjectModal')?.querySelector('.modal-body');
@@ -416,7 +416,7 @@ function openCreateProject(type) {
 }
 
 async function submitCreateProject(type) {
-  if (EMIE.projectState.uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
+  if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
   // 清除之前的错误提示
   document.querySelectorAll('.field-error').forEach(el => el.remove());
 
@@ -429,7 +429,7 @@ async function submitCreateProject(type) {
     hasError = true;
     // 找到对应表单组，追加红色提示
     const formGroup = document.querySelector(`[name="${fieldName}"]`)?.closest('.form-group');
-    if (!formGroup) { alert(msg); return; }
+    if (!formGroup) { window.EMIE.actions.showSystemAlert(msg); return; }
     const old = formGroup.querySelector('.field-error');
     if (old) old.remove();
     const err = document.createElement('div');
@@ -554,7 +554,7 @@ async function submitCreateProject(type) {
     }
     render();
   } catch (e) {
-    alert('创建失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('创建失败: ' + e.message);
   }
 }
 
@@ -635,7 +635,7 @@ function openEditProject(pid) {
     if (EMIE.projectState.editProjectAttachments.length) renderFileList(EMIE.projectState.editProjectAttachments, '编辑项目附件');
   }).catch(e => {
     doneOpenModal('editProjectModal');
-    alert('无法编辑项目: ' + e.message);
+    window.EMIE.actions.showSystemAlert('无法编辑项目: ' + e.message);
   });
 }
 
@@ -643,15 +643,15 @@ function handleEditProjectRefImages(input) { handleFileUpload(input, EMIE.projec
 function handleEditProjectAttachments(input) { handleFileUpload(input, EMIE.projectState.editProjectAttachments, 5, '编辑项目附件', false); }
 
 async function submitEditProject(pid) {
-  if (EMIE.projectState.uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
+  if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
   const data = Object.fromEntries(new FormData(document.getElementById('editProjectForm')).entries());
   if (!data.productName?.trim() || !data.productCategory || !data.priceRange || data.targetMarket === '[]' || !data.deadline || !data.productRequirements?.trim()) {
-    alert('请完整填写产品类目、名称、参考零售价、目标市场、完成时间和产品要求');
+    window.EMIE.actions.showSystemAlert('请完整填写产品类目、名称、参考零售价、目标市场、完成时间和产品要求');
     return;
   }
-  if (data.productCategory === '其他' && !data.productCategoryNote?.trim()) { alert('请补充其他类目的具体说明'); return; }
-  if (data.ipName && document.getElementById('ipSubOptionGroup')?.style.display !== 'none' && data.ipSubOptions === '[]') { alert('请选择二级IP选项'); return; }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(data.deadline)) { alert('日期格式不正确，请使用 yyyy-mm-dd'); return; }
+  if (data.productCategory === '其他' && !data.productCategoryNote?.trim()) { window.EMIE.actions.showSystemAlert('请补充其他类目的具体说明'); return; }
+  if (data.ipName && document.getElementById('ipSubOptionGroup')?.style.display !== 'none' && data.ipSubOptions === '[]') { window.EMIE.actions.showSystemAlert('请选择二级IP选项'); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data.deadline)) { window.EMIE.actions.showSystemAlert('日期格式不正确，请使用 yyyy-mm-dd'); return; }
   data.referenceImagesJson = JSON.stringify(EMIE.projectState.editProjectRefImages.map(img => ({name: img.name, url: img.url, size: img.size, storedName: img.storedName})));
   data.attachmentsJson = JSON.stringify(EMIE.projectState.editProjectAttachments.map(file => ({name: file.name, url: file.url, size: file.size, storedName: file.storedName})));
   productArchiveChanged();
@@ -661,7 +661,7 @@ async function submitEditProject(pid) {
     closeM('editProjectModal', true);
     await EMIE.actions.refreshAfterMutation(pid);
   } catch (e) {
-    alert('编辑失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('编辑失败: ' + e.message);
   }
 }
 
@@ -669,7 +669,7 @@ async function submitEditProject(pid) {
 function showDateError(inputName, msg) {
   // 找到日期选择器容器，在下方插入红色提示
   const datePicker = document.querySelector(`.date-picker input[name="${inputName}"]`)?.closest('.date-picker');
-  if (!datePicker) { alert(msg); return; }
+  if (!datePicker) { window.EMIE.actions.showSystemAlert(msg); return; }
   // 移除旧错误
   const old = datePicker.parentElement.querySelector('.field-error');
   if (old) old.remove();

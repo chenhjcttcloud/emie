@@ -1058,6 +1058,18 @@ html:has(.admin-page)::-webkit-scrollbar,body:has(.admin-page)::-webkit-scrollba
 #adminContent table tbody tr:hover td { background:#FAFAFD; }
 #adminContent .form-input,#adminContent .form-select,#adminContent .form-textarea { border-color:#DDE0E8; border-radius:8px; }
 #adminContent .form-input:focus,#adminContent .form-select:focus,#adminContent .form-textarea:focus { border-color:#9E97EE; box-shadow:0 0 0 3px rgba(79,70,229,.08); }
+.admin-points-config { padding:4px 2px 28px; }
+.admin-points-config > .card { position:relative; overflow:hidden; padding:22px 24px !important; border:1px solid #E5E7F0; border-radius:16px; box-shadow:0 8px 24px rgba(35,39,59,.045); }
+.admin-points-config > .card::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:linear-gradient(#6558E8,#A78BFA); opacity:.75; }
+.admin-points-config > .card .card-header { min-height:30px; margin-bottom:14px; }
+.admin-points-config > .card .card-header h3 { color:#1F2937; font-size:16px; letter-spacing:.1px; }
+.admin-points-config > .card .card-header h3::before { content:""; display:inline-block; width:7px; height:7px; margin-right:8px; border-radius:50%; background:#7669ED; vertical-align:2px; box-shadow:0 0 0 4px #EEECFF; }
+.admin-points-config > .card > p { line-height:1.7; color:#7B8496 !important; }
+.admin-points-config > .card .empty-state { min-height:54px; display:flex; align-items:center; justify-content:center; color:#9AA3B2; background:#FAFBFD; border:1px dashed #E1E5EF; border-radius:10px; font-size:13px; }
+.admin-points-config > .card .btn { border-radius:8px; font-weight:600; box-shadow:0 2px 6px rgba(79,70,229,.1); }
+.admin-points-config > .card .form-label { color:#697386; font-size:12px; font-weight:600; }
+.admin-points-config > .card table { border-radius:10px; overflow:hidden; }
+@media (max-width:800px) { .admin-points-config > .card { padding:18px 16px !important; } .admin-points-config > .card .card-header { align-items:flex-start; } }
 .points-sync-result { margin-top:4px; color:#778197; font-size:10px; font-weight:400; }
 .admin-log-filter-panel { margin-bottom:14px; padding:15px 17px; border:1px solid #E7E9F1; border-radius:14px; background:#fff; box-shadow:0 4px 15px rgba(30,41,59,.035); display:flex; align-items:center; justify-content:space-between; gap:18px; }
 .admin-log-filter-title { display:flex; align-items:center; gap:9px; flex-shrink:0; }
@@ -1125,6 +1137,21 @@ html:has(.admin-page)::-webkit-scrollbar,body:has(.admin-page)::-webkit-scrollba
 .points-hero-side label { display:block; margin-bottom:9px; font-size:12px; font-weight:600; color:rgba(255,255,255,.78); }
 .points-hero-side span { display:block; margin-top:9px; font-size:11px; color:rgba(255,255,255,.58); }
 .points-month-input { width:100%; padding:10px 12px; border:1px solid rgba(255,255,255,.28); border-radius:9px; background:#fff; color:var(--gray-800); font:inherit; font-size:13px; outline:none; }
+.points-scope-controls { display:flex; gap:7px; align-items:center; }
+.points-scope-controls .points-month-input { min-width:0; flex:1; }
+.points-total-button { border:1px solid rgba(255,255,255,.5); border-radius:9px; padding:10px 12px; background:rgba(255,255,255,.18); color:#fff; font-size:12px; font-weight:650; cursor:pointer; white-space:nowrap; transition:background .2s,transform .2s; }
+.points-total-button:hover { background:rgba(255,255,255,.3); transform:translateY(-1px); }
+.points-total-label { display:block; color:#fff; font-size:24px; line-height:1.2; }
+.points-month-inline { width:145px; flex:0 0 auto; padding:7px 9px; font-size:12px; }
+.points-month-picker { display:flex; align-items:center; gap:10px; padding:7px 10px 7px 12px; border:1px solid #D9D6FF; border-radius:10px; background:#F7F6FF; color:#5B57B8; font-size:11px; font-weight:650; box-shadow:0 2px 6px rgba(83,74,183,.08); }
+.points-month-picker span { white-space:nowrap; }
+.points-month-picker .points-month-input { width:132px; padding:7px 9px; border:1px solid #C9C5FF; border-radius:7px; background:#fff; color:#3730A3; font-weight:650; }
+.designer-config-form { width:100%; grid-template-columns:minmax(190px,1.25fr) minmax(120px,.85fr) minmax(120px,.85fr) minmax(180px,1.35fr) 44px !important; }
+.designer-config-form .form-label { min-width:0; }
+.designer-config-form .form-input,.designer-config-form .form-select { width:100%; box-sizing:border-box; }
+.designer-config-form .form-label { font-size:12px; color:#586275; }
+.designer-config-form > .btn { height:32px; padding:0 10px; align-self:end; }
+@media (max-width:900px) { .designer-config-form { grid-template-columns:repeat(2,minmax(0,1fr)) !important; } .designer-config-form > button { width:100%; } }
 .points-dashboard-grid { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr); gap:18px; }
 .points-panel { overflow:hidden; background:#fff; border:1px solid #E8EAF2; border-radius:16px; box-shadow:0 4px 18px rgba(30,41,59,.045); }
 .points-section-head { min-height:74px; padding:16px 20px; border-bottom:1px solid #EEF0F5; display:flex; align-items:center; justify-content:space-between; gap:16px; }

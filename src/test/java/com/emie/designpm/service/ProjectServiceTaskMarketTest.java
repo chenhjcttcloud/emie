@@ -59,18 +59,17 @@ class ProjectServiceTaskMarketTest {
     }
 
     @Test
-    void requiredSkillTagsMustBeConfiguredForDesigner() {
+    void legacySkillTagsDoNotBlockDesignerClaim() {
         Fixture fixture = fixture("market_open");
         fixture.task.setRequiredSkillTagsJson("[\"包装\",\"3D\"]");
         SystemConfig skills = new SystemConfig();
         skills.setConfigValue("[\"包装\"]");
         when(fixture.configs.findByConfigKey("points.user.skills.designer-1")).thenReturn(Optional.of(skills));
 
-        RuntimeException error = assertThrows(RuntimeException.class, () -> fixture.service.taskAccept(1L, 2L, Map.of(
+        fixture.service.taskAccept(1L, 2L, Map.of(
                 "currentRole", "designer", "currentUser", "张设计",
-                "currentUserId", "designer-1", "designerUserId", "designer-1")));
-
-        assertEquals("能力标签不匹配，缺少：3D", error.getMessage());
+                "currentUserId", "designer-1", "designerUserId", "designer-1"));
+        assertEquals("designer-1", fixture.task.getDesignerId());
     }
 
     private Fixture fixture(String allocationStatus) {

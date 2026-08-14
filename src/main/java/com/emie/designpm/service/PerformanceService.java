@@ -16,7 +16,6 @@ public class PerformanceService {
     private final PointAdjustmentLedgerRepository adjustments;
     private final UserRepository users;
     private final StandardPointConfigRepository standards;
-    private final MonthlyPerformanceConfigRepository months;
     private final SystemConfigRepository configs;
     private MonthlyUserPointTargetRepository userTargets;
 
@@ -24,7 +23,7 @@ public class PerformanceService {
                               UserRepository users, StandardPointConfigRepository standards,
                               MonthlyPerformanceConfigRepository months, SystemConfigRepository configs) {
         this.ledgers = ledgers; this.adjustments = adjustments; this.users = users;
-        this.standards = standards; this.months = months; this.configs = configs;
+        this.standards = standards; this.configs = configs;
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -35,12 +34,19 @@ public class PerformanceService {
         YearMonth selected = month == null || month.isBlank() ? null : YearMonth.parse(month);
         LocalDateTime from = selected == null ? null : selected.atDay(1).atStartOfDay();
         LocalDateTime to = selected == null ? null : selected.plusMonths(1).atDay(1).atStartOfDay();
-        Map<String, Double> sums = ledgers.findAll().stream().filter(PointLedger::isCountInPerformance)
-                .filter(item -> selected == null ? within(item.getCreatedAt(), from, to) : month.equals(item.getAccountingMonth()))
-                .collect(Collectors.groupingBy(PointLedger::getUserId,
-                        Collectors.summingDouble(item -> item.getPoints() == null ? 0 : item.getPoints())));
-        adjustments.findAll().stream().filter(item -> within(item.getCreatedAt(), from, to))
-                .forEach(item -> sums.merge(item.getUserId(), item.getPoints() == null ? 0d : item.getPoints().doubleValue(), Double::sum));
+        Map<String, Double> sums = new HashMap<>();
+        ledgers.sumPerformancePointsByMonth(month, from, to).forEach(row ->
+                sums.put((String) row[0], ((Number) row[1]).doubleValue()));
+        adjustments.sumPointsByPeriod(from, to).forEach(row ->
+                sums.merge((String) row[0], ((Number) row[1]).doubleValue(), Double::sum));
+        // 保留对旧仓储 mock/自定义实现的兼容；正常 JPA 实现会走上面的聚合查询。
+        if (sums.isEmpty()) {
+            ledgers.findAll().stream().filter(PointLedger::isCountInPerformance)
+                    .filter(item -> selected == null ? within(item.getCreatedAt(), from, to) : month.equals(item.getAccountingMonth()))
+                    .forEach(item -> sums.merge(item.getUserId(), item.getPoints() == null ? 0d : item.getPoints(), Double::sum));
+            adjustments.findAll().stream().filter(item -> within(item.getCreatedAt(), from, to))
+                    .forEach(item -> sums.merge(item.getUserId(), item.getPoints() == null ? 0d : item.getPoints().doubleValue(), Double::sum));
+        }
         return sums.entrySet().stream().sorted(Map.Entry.<String, Double>comparingByValue().reversed()).map(entry -> {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("userId", entry.getKey()); row.put("points", entry.getValue());
@@ -58,15 +64,12 @@ public class PerformanceService {
         double points = month == null ? ledgers.sumPerformancePointsByUserId(userId) + adjustments.sumPointsByUserId(userId)
                 : leaderboard(month).stream().filter(row -> userId.equals(row.get("userId")))
                 .mapToDouble(row -> ((Number) row.get("points")).doubleValue()).findFirst().orElse(0);
-        MonthlyPerformanceConfig monthly = month == null ? null : months.findByMonthKey(month).orElse(null);
         StandardPointConfig personal = standards.findByConfigCode(userId).filter(StandardPointConfig::isEnabled).orElse(null);
         MonthlyUserPointTarget assignedTarget = month == null || userTargets == null ? null
                 : userTargets.findByMonthKeyAndUserId(month, userId).orElse(null);
         int target = assignedTarget != null ? assignedTarget.getTargetPoints()
-                : personal != null ? personal.getPoints() : monthly == null ? 0 : monthly.getTargetPoints();
-        double companyCoefficient = monthly != null && monthly.getSalesAmount() != null
-                ? companyCoefficient(monthly.getSalesAmount(), personal == null ? "SUPPORT" : personal.getDepartmentType())
-                : monthly == null ? 1d : monthly.getMultiplier();
+                : personal != null ? personal.getPoints() : 0;
+        double companyCoefficient = 1d;
         double attainmentRate = target > 0 ? (double) points / target : 0d;
         double performanceBase = personal == null || personal.getPerformanceBase() == null ? 0d : personal.getPerformanceBase();
         double simulatedSalary = performanceBase * companyCoefficient * attainmentRate;
@@ -117,12 +120,6 @@ public class PerformanceService {
         return standards.save(config);
     }
 
-    public MonthlyPerformanceConfig saveMonthly(MonthlyPerformanceConfig config) {
-        if (config.getMonthKey() == null || !config.getMonthKey().matches("\\d{4}-\\d{2}")) throw new IllegalArgumentException("月份格式应为YYYY-MM");
-        if (config.getTargetPoints() == null || config.getTargetPoints() < 0 || config.getMultiplier() == null || config.getMultiplier() < 0) throw new IllegalArgumentException("绩效参数不能小于0");
-        if (config.getSalesAmount() != null && config.getSalesAmount() < 0) throw new IllegalArgumentException("销售额不能小于0");
-        return months.save(config);
-    }
 
     public List<StandardPointConfig> standards() {
         Map<String, StandardPointConfig> existing = standards.findAll().stream()
@@ -138,7 +135,6 @@ public class PerformanceService {
         return new ArrayList<>(existing.values());
     }
     public void deleteStandard(Long id) { if (id == null || !standards.existsById(id)) throw new IllegalArgumentException("配置不存在"); standards.deleteById(id); }
-    public List<MonthlyPerformanceConfig> months() { return months.findAll(); }
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> designerTargets(String month) {

@@ -14,6 +14,7 @@ const openScoring = (...args) => EMIE.actions.openScoring(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const matchesSearchText = (...args) => EMIE.actions.matchesSearchText(...args);
 const isDateInRange = (...args) => EMIE.actions.isDateInRange(...args);
+const compareTaskPriority = (...args) => EMIE.actions.compareTaskPriority(...args);
 
 async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.currentRole,
                                    endpoint = '/projects/my-subtasks', readOnly = false) {
@@ -32,12 +33,7 @@ async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.
 
   if (bucket === 'pending') myTasks = myTasks.filter(t => !['approved', 'completed'].includes(t.status));
   if (bucket === 'completed') myTasks = myTasks.filter(t => ['approved', 'completed'].includes(t.status));
-  myTasks.sort((a, b) => {
-    const done = task => ['approved', 'completed'].includes(task.status);
-    const overdue = task => !done(task) && task.plannedDate && task.plannedDate < new Date().toISOString().slice(0, 10);
-    const rank = task => overdue(task) ? 0 : (task.status === 'rejected' ? 1 : (task.status === 'delivered' ? 2 : (done(task) ? 4 : 3)));
-    return rank(a) - rank(b) || (a.plannedDate || '9999-12-31').localeCompare(b.plannedDate || '9999-12-31') || (b.id - a.id);
-  });
+  myTasks.sort(compareTaskPriority);
 
   EMIE.dashboardState.designerTasksReadOnly = readOnly;
   const taskEmoji = role === 'promotion' ? '📣' : role === 'supplychain' ? '🛒' : role === 'planner' ? '📋' : '🎨';
@@ -151,7 +147,7 @@ function renderDesignerTaskCards(tasks, readOnly = false) {
           <div class="subtask-actions">
             ${!readOnly && t.status === 'pending' && !t._unassigned ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskAccept(${t.projectId},${t.id})">✅ 接单</button>` : ''}
             ${!readOnly && t._unassigned ? `<button class="btn btn-success btn-sm" data-emie-onclick='taskAccept(${t.projectId},${t.id},${JSON.stringify(t).replace(/'/g, '&#39;')})'>⚡ 抢单</button>` : ''}
-            ${!readOnly && t.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskDeliver(${t.projectId},${t.id})">📤 交付成果</button>` : ''}
+            ${!readOnly && t.status === 'accepted' && t.designerId === getCurrentUserId() ? `<button class="btn btn-warning btn-sm" data-emie-onclick="withdrawAcceptedTask(${t.projectId},${t.id})">↩️ 退单</button><button class="btn btn-primary btn-sm" data-emie-onclick="taskDeliver(${t.projectId},${t.id})">📤 交付成果</button>` : ''}
             ${!readOnly && t.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-onclick="taskConfirmRevision(${t.projectId},${t.id})">🛠️ 确认修改</button>` : ''}
             ${!readOnly && ['delivered', 'planner_approved', 'sales_approved', 'admin_approved'].includes(t.status) && t.designerId === getCurrentUserId() ? `<button class="btn btn-outline btn-sm" data-emie-onclick="taskCorrectDelivery(${t.projectId},${t.id})">📝 修正交付</button>` : ''}
             ${!readOnly && needScore ? `<button class="btn btn-warning btn-sm" data-emie-onclick="openScoring(${t.projectId},${t.id})">⭐ 评分</button>` : ''}
@@ -240,6 +236,8 @@ function openPublishedSubTaskDetail(taskId) {
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" data-emie-onclick="openProjectDetail(${task.projectId})">查看所属项目</button>
+        ${EMIE.state.currentRole === 'designer' && task.status === 'pending' ? `<button class="btn btn-primary" data-emie-onclick="taskAccept(${task.projectId},${task.id})">✅ 接单</button>` : ''}
+        ${EMIE.state.currentRole === 'designer' && task.status === 'accepted' ? `<button class="btn btn-primary" data-emie-onclick="taskDeliver(${task.projectId},${task.id})">📤 交付成果</button>` : ''}
         <button class="btn btn-primary" data-emie-onclick="closeM('publishedSubTaskDetailModal')">关闭</button>
       </div>
     </div>`;

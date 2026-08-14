@@ -45,7 +45,7 @@ function renderPointRuleOptions(rules, selectedCode) {
   const groups = new Map();
   active.forEach(rule => { const key = String(rule.category || '其他').toUpperCase(); if (!groups.has(key)) groups.set(key, []); groups.get(key).push(rule); });
   const order = { A: 1, B: 2, E: 3, S: 4, 其他: 9 };
-  return `<option value="" ${selected ? '' : 'selected'} disabled>请选择积分规则</option>` + missingSelected + [...groups.entries()].sort((a, b) => (order[a[0]] || 8) - (order[b[0]] || 8)).map(([category, items]) => `<optgroup label="${escHtml(category)}">${items.sort((a, b) => { const na = Number(String(a.ruleCode || '').match(/\d+/)?.[0] || 0); const nb = Number(String(b.ruleCode || '').match(/\d+/)?.[0] || 0); return na - nb; }).map(rule => `<option value="${escHtml(rule.ruleCode || '')}" ${String(rule.ruleCode || '') === selected ? 'selected' : ''}>${escHtml(rule.ruleCode || '')}（${Number(rule.points || 0)} 分）${rule.description ? ' · ' + escHtml(rule.description) : ''}</option>`).join('')}</optgroup>`).join('');
+  return `<option value="" ${selected ? '' : 'selected'} disabled>请选择积分规则</option>` + missingSelected + [...groups.entries()].sort((a, b) => (order[a[0]] || 8) - (order[b[0]] || 8)).map(([category, items]) => `<optgroup label="${escHtml(category)}">${items.sort((a, b) => { const na = Number(String(a.ruleCode || '').match(/\d+/)?.[0] || 0); const nb = Number(String(b.ruleCode || '').match(/\d+/)?.[0] || 0); return na - nb; }).map(rule => { const code = String(rule.ruleCode || ''); const desc = code === 'TASK_APPROVED' ? '' : (rule.description || ''); return `<option value="${escHtml(code)}" ${code === selected ? 'selected' : ''}>${escHtml(code)}（${Number(rule.points || 0)} 分）${desc ? ' · ' + escHtml(desc) : ''}</option>`; }).join('')}</optgroup>`).join('');
 }
 
 function pointRuleCategoryHint(category) {
@@ -70,7 +70,7 @@ function handleSubTaskAttachments(input) {
 async function addSubTask(pid) {
   if (document.getElementById('addSubTaskModal')) return;
   if (!EMIE.actions.hasPermission('subtask.create')) {
-    alert('当前账号没有新建子任务的权限');
+    window.EMIE.actions.showSystemAlert('当前账号没有新建子任务的权限');
     return;
   }
   // 清理可能残留的其他弹窗，避免遮挡
@@ -85,11 +85,11 @@ async function addSubTask(pid) {
     [pointRules, pointDifficulties] = await Promise.all([apiGet('/points/rules'), apiGet('/points/difficulties')]);
     pointRules = enabledPointRules(pointRules);
   } catch (error) {
-    alert('积分规则加载失败：' + (error.message || '请稍后重试'));
+    window.EMIE.actions.showSystemAlert('积分规则加载失败：' + (error.message || '请稍后重试'));
     return;
   }
   if (!pointRules.length) {
-    alert('当前没有可用的积分规则，请联系管理员启用后再创建子任务');
+    window.EMIE.actions.showSystemAlert('当前没有可用的积分规则，请联系管理员启用后再创建子任务');
     return;
   }
 
@@ -240,8 +240,8 @@ function saveSubTaskDraft(pid) {
 }
 
 async function submitAddSubTask(pid) {
-  if (!pid) { alert('项目ID无效'); return; }
-  if (EMIE.projectState.uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
+  if (!pid) { window.EMIE.actions.showSystemAlert('项目ID无效'); return; }
+  if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
   // 清除之前错误
   document.querySelectorAll('#addSubTaskForm .field-error').forEach(el => el.remove());
   document.querySelectorAll('#addSubTaskForm .form-input, #addSubTaskForm .form-select, #addSubTaskForm .form-textarea').forEach(el => el.style.borderColor = '');
@@ -326,7 +326,7 @@ async function submitAddSubTask(pid) {
     if (detailActions) detailActions.innerHTML = renderProjectActions(detail);
     await refreshAfterMutation(pid);
   } catch (e) {
-    alert('添加失败: ' + (e.message || '未知错误'));
+    window.EMIE.actions.showSystemAlert('添加失败: ' + (e.message || '未知错误'));
   }
 }
 
@@ -398,7 +398,7 @@ function editTask(pid, tid) {
             <div class="form-row">
               <div class="form-group"><label class="form-label">合作积分分配</label><input class="form-input" name="collaboratorAllocationsText" value="${escHtml(collaboratorAllocationsText)}" placeholder="designer02:30" ${task.status !== 'pending' ? 'disabled' : ''}></div>
             </div>
-            <div class="form-group"><label class="form-label">接单能力要求（可选）</label><input class="form-input" name="requiredSkillTagsText" value="${escHtml(requiredSkillTagsText)}" placeholder="如：包装、3D、AI（使用逗号分隔）" ${task.status !== 'pending' ? 'disabled' : ''}></div>
+            <input type="hidden" name="requiredSkillTagsText" value="">
             <div class="form-row">
               <div class="form-group"><label class="form-label">积分规则</label>
                 <select class="form-select" name="pointRuleCode" ${task.status !== 'pending' ? 'disabled' : ''}>${renderPointRuleOptions(rules, task.pointRuleCode)}</select>
@@ -465,7 +465,7 @@ function handleEditRefImages(input) { handleFileUpload(input, EMIE.projectState.
 function handleEditAttachments(input) { handleFileUpload(input, EMIE.projectState.editTaskAttachments, 9, '编辑附件', false); }
 
 async function submitEditTask(pid, tid) {
-  if (EMIE.projectState.uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
+  if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
   const fd = new FormData(document.getElementById('editTaskForm'));
   const data = Object.fromEntries(fd.entries());
   if (Object.prototype.hasOwnProperty.call(data, 'requiredSkillTagsText')) {
@@ -478,7 +478,7 @@ async function submitEditTask(pid, tid) {
         const [userId, ratio] = item.split(/[:：]/); if (!userId || !ratio) throw new Error();
         return { userId: userId.trim(), ratio: Number(ratio) };
       }));
-    } catch (_) { alert('合作积分分配格式应为 用户ID:比例'); return; }
+    } catch (_) { window.EMIE.actions.showSystemAlert('合作积分分配格式应为 用户ID:比例'); return; }
     delete data.collaboratorAllocationsText;
   }
 
@@ -488,7 +488,7 @@ async function submitEditTask(pid, tid) {
   if (data.plannedDate && /^\d{4}-\d{2}-\d{2}$/.test(data.plannedDate)) {
     const selected = new Date(data.plannedDate);
     if (selected < today) {
-      alert('计划完成时间不能早于今天');
+      window.EMIE.actions.showSystemAlert('计划完成时间不能早于今天');
       return;
     }
   }
@@ -504,7 +504,7 @@ async function submitEditTask(pid, tid) {
     closeM('editTaskModal');
     await refreshAfterMutation(pid);
   } catch (e) {
-    alert('编辑失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('编辑失败: ' + e.message);
   }
 }
 
@@ -515,7 +515,7 @@ async function deleteTask(pid, tid) {
     closeM('editTaskModal');
     await refreshAfterMutation(pid);
   } catch (e) {
-    alert('删除失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('删除失败: ' + e.message);
   }
 }
 
@@ -525,8 +525,14 @@ async function withdrawMarketTask(pid, tid) {
     await apiPost(`/projects/${pid}/tasks/${tid}/withdraw-market`, {});
     await refreshAfterMutation(pid);
   } catch (e) {
-    alert('撤回失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('撤回失败: ' + e.message);
   }
+}
+
+async function withdrawAcceptedTask(pid, tid) {
+  if (!window.confirm('确认退单？接单后1小时内退单免扣分，超过1小时将按累计退单次数比例扣分。')) return;
+  try { await apiPost(`/projects/${pid}/tasks/${tid}/withdraw`, {}); await refreshAfterMutation(pid); }
+  catch (e) { window.EMIE.actions.showSystemAlert('退单失败：' + e.message); }
 }
 
 // ==================== 任务工作流 ====================
@@ -561,21 +567,21 @@ async function taskAccept(pid, tid, marketTask = null) {
     doneOpenModal('taskAcceptModal');
   } catch (e) {
     doneOpenModal('taskAcceptModal');
-    alert('加载失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('加载失败: ' + e.message);
   }
 }
 
 async function submitTaskAccept(pid, tid) {
   const fd = new FormData(document.getElementById('taskAcceptForm'));
   const plannedDate = fd.get('plannedDate');
-  if (!plannedDate) { alert('请选择计划完成时间'); return; }
+  if (!plannedDate) { window.EMIE.actions.showSystemAlert('请选择计划完成时间'); return; }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(plannedDate) || isNaN(new Date(plannedDate).getTime())) {
-    alert('日期格式不正确（yyyy-mm-dd）');
+    window.EMIE.actions.showSystemAlert('日期格式不正确（yyyy-mm-dd）');
     return;
   }
   const today = new Date(); today.setHours(0, 0, 0, 0);
   if (new Date(plannedDate) < today) {
-    alert('计划完成时间不能早于今天');
+    window.EMIE.actions.showSystemAlert('计划完成时间不能早于今天');
     return;
   }
 
@@ -586,11 +592,24 @@ async function submitTaskAccept(pid, tid) {
       currentRole: EMIE.state.currentRole,
       designerUserId: getCurrentUserId(),
     });
+    // 立即同步工作台缓存，避免列表仍显示旧的“待接单”状态。
+    const cached = EMIE.dashboardState?.designerTaskCache;
+    if (Array.isArray(cached)) {
+      const current = cached.find(item => Number(item.id) === Number(tid));
+      if (current) {
+        current.status = 'accepted';
+        current.designerId = getCurrentUserId();
+        current.designerName = getCurrentUserName();
+        current.plannedDate = plannedDate;
+      }
+      if (typeof EMIE.actions.applyFilterDesignerTasks === 'function') EMIE.actions.applyFilterDesignerTasks();
+    }
     closeM('taskAcceptModal');
+    closeM('publishedSubTaskDetailModal');
     await refreshAfterMutation(pid);
   } catch (e) {
     await refreshAfterMutation(pid);
-    alert('操作失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('操作失败: ' + e.message);
   }
 }
 
@@ -642,7 +661,7 @@ async function taskDeliver(pid, tid) {
       </div>`;
     document.body.appendChild(modal);
   } catch (e) {
-    alert('加载失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('加载失败: ' + e.message);
   }
 }
 
@@ -665,13 +684,13 @@ const validateScoreInput = function(input) {
 };
 
 async function submitTaskDeliver(pid, tid) {
-  if (EMIE.projectState.uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
+  if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
   const fd = new FormData(document.getElementById('taskDeliverForm'));
   const data = Object.fromEntries(fd.entries());
   data.actualDate = new Date().toISOString().split('T')[0];
-  if (!data.deliverables) { alert('请填写交付成果描述'); return; }
+  if (!data.deliverables) { window.EMIE.actions.showSystemAlert('请填写交付成果描述'); return; }
   const selfScore = parseInt(data.selfScore);
-  if (isNaN(selfScore) || selfScore < 1 || selfScore > 100) { alert('请输入有效的自评分（1-100分）'); return; }
+  if (isNaN(selfScore) || selfScore < 1 || selfScore > 100) { window.EMIE.actions.showSystemAlert('请输入有效的自评分（1-100分）'); return; }
   data.selfScore = selfScore;
   data.currentUser = getCurrentUserName();
   data.currentRole = EMIE.state.currentRole;
@@ -684,18 +703,18 @@ async function submitTaskDeliver(pid, tid) {
     closeM('taskDeliverModal');
     await refreshAfterMutation(pid);
   } catch (e) {
-    alert('交付失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('交付失败: ' + e.message);
   }
 }
 
 async function submitTaskReview(pid, tid) {
-  if (!confirm('确认将该子任务送审吗？')) return;
+  if (EMIE.actions.showSystemConfirm && !(await EMIE.actions.showSystemConfirm('确认将该子任务送审吗？', '提交送审'))) return;
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/submit-review`, {
       currentUser: getCurrentUserName(), currentRole: EMIE.state.currentRole, currentUserId: getCurrentUserId()
     });
     await refreshAfterMutation(pid);
-  } catch (e) { alert('送审失败: ' + e.message); }
+  } catch (e) { window.EMIE.actions.showSystemAlert('送审失败: ' + e.message); }
 }
 
 async function taskRedeliver(pid, tid) {
@@ -749,7 +768,7 @@ async function taskRedeliver(pid, tid) {
     doneOpenModal('taskRedeliverModal');
   } catch (e) {
     doneOpenModal('taskRedeliverModal');
-    alert('加载失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('加载失败: ' + e.message);
   }
 }
 
@@ -760,17 +779,17 @@ async function taskConfirmRevision(pid, tid) {
       currentUser: getCurrentUserName(), currentRole: EMIE.state.currentRole, currentUserId: getCurrentUserId()
     });
     await refreshAfterMutation(pid);
-  } catch (e) { alert('确认修改失败: ' + e.message); }
+  } catch (e) { window.EMIE.actions.showSystemAlert('确认修改失败: ' + e.message); }
 }
 
 async function submitTaskRedeliver(pid, tid) {
-  if (EMIE.projectState.uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
+  if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
   const fd = new FormData(document.getElementById('taskRedeliverForm'));
   const data = Object.fromEntries(fd.entries());
   data.actualDate = new Date().toISOString().split('T')[0];
-  if (!data.deliverables) { alert('请填写交付成果描述'); return; }
+  if (!data.deliverables) { window.EMIE.actions.showSystemAlert('请填写交付成果描述'); return; }
   const selfScore = parseInt(data.selfScore);
-  if (isNaN(selfScore) || selfScore < 1 || selfScore > 100) { alert('请输入有效的自评分（1-100分）'); return; }
+  if (isNaN(selfScore) || selfScore < 1 || selfScore > 100) { window.EMIE.actions.showSystemAlert('请输入有效的自评分（1-100分）'); return; }
   data.selfScore = selfScore;
   data.currentUser = getCurrentUserName();
   data.currentRole = EMIE.state.currentRole;
@@ -783,7 +802,7 @@ async function submitTaskRedeliver(pid, tid) {
     closeM('taskRedeliverModal');
     await refreshAfterMutation(pid);
   } catch (e) {
-    alert('交付失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('交付失败: ' + e.message);
   }
 }
 
@@ -830,17 +849,17 @@ async function taskCorrectDelivery(pid, tid) {
     doneOpenModal('taskCorrectDeliveryModal');
   } catch (e) {
     doneOpenModal('taskCorrectDeliveryModal');
-    alert('加载失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('加载失败: ' + e.message);
   }
 }
 
 async function submitTaskCorrectDelivery(pid, tid) {
-  if (EMIE.projectState.uploadingCount > 0) { alert('文件正在上传中，请等待上传完成'); return; }
+  if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
   const form = document.getElementById('taskCorrectDeliveryForm');
   if (!form?.reportValidity()) return;
   const data = Object.fromEntries(new FormData(form).entries());
   const selfScore = parseInt(data.selfScore);
-  if (isNaN(selfScore) || selfScore < 1 || selfScore > 100) { alert('请输入有效的自评分（1-100分）'); return; }
+  if (isNaN(selfScore) || selfScore < 1 || selfScore > 100) { window.EMIE.actions.showSystemAlert('请输入有效的自评分（1-100分）'); return; }
   data.selfScore = selfScore;
   data.actualDate = new Date().toISOString().split('T')[0];
   data.currentUser = getCurrentUserName();
@@ -853,7 +872,7 @@ async function submitTaskCorrectDelivery(pid, tid) {
     closeM('taskCorrectDeliveryModal');
     await refreshAfterMutation(pid);
   } catch (e) {
-    alert('修正交付失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('修正交付失败: ' + e.message);
   }
 }
 
@@ -898,7 +917,7 @@ async function submitTaskApprove(pid, tid) {
   const scoreVal = parseInt(document.getElementById('approveScore')?.value);
   const hasScoreFields = document.getElementById('approveScore') !== null;
   if (hasScoreFields) {
-    if (isNaN(scoreVal) || scoreVal < 1 || scoreVal > 100) { alert('请输入有效的评分（1-100）'); return; }
+    if (isNaN(scoreVal) || scoreVal < 1 || scoreVal > 100) { window.EMIE.actions.showSystemAlert('请输入有效的评分（1-100）'); return; }
   }
   const comments = document.getElementById('approveComments')?.value || '';
 
@@ -914,7 +933,7 @@ async function submitTaskApprove(pid, tid) {
     closeM('taskApproveModal');
     await refreshAfterMutation(pid);
   } catch (e) {
-    alert('操作失败: ' + (e.message || '未知错误'));
+    window.EMIE.actions.showSystemAlert('操作失败: ' + (e.message || '未知错误'));
   }
 }
 
@@ -959,8 +978,8 @@ function updateRejectDeadlineLabel(input) {
 async function submitTaskReject(pid, tid) {
   const comments = document.getElementById('rejectComments')?.value || '';
   const requiredCompletionDate = document.getElementById('rejectDeadline')?.value || '';
-  if (!comments) { alert('请填写修改意见'); return; }
-  if (!requiredCompletionDate) { alert('请选择要求完成时间'); return; }
+  if (!comments) { window.EMIE.actions.showSystemAlert('请填写修改意见'); return; }
+  if (!requiredCompletionDate) { window.EMIE.actions.showSystemAlert('请选择要求完成时间'); return; }
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/reject`, {
       comments,
@@ -973,7 +992,7 @@ async function submitTaskReject(pid, tid) {
     closeM('taskRejectModal');
     await refreshAfterMutation(pid);
   } catch (e) {
-    alert('操作失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('操作失败: ' + e.message);
   }
 }
 
@@ -984,7 +1003,7 @@ function openScoring(pid, tid) {
     const task = detail.tasks.find(t => t.id === tid);
     if (!task || !task.scoringRecords) return;
     const myRecord = task.scoringRecords.find(sr => sr.role === EMIE.state.currentRole);
-    if (!myRecord) { alert('您无需对此任务评分'); return; }
+    if (!myRecord) { window.EMIE.actions.showSystemAlert('您无需对此任务评分'); return; }
 
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
@@ -1007,7 +1026,7 @@ function openScoring(pid, tid) {
 
 async function submitScoring(pid, tid) {
   const score = parseInt(document.getElementById('scoreValue').value);
-  if (isNaN(score) || score < 1 || score > 100) { alert('请输入有效的评分（1-100分）'); return; }
+  if (isNaN(score) || score < 1 || score > 100) { window.EMIE.actions.showSystemAlert('请输入有效的评分（1-100分）'); return; }
 
   const data = {
     role: EMIE.state.currentRole,
@@ -1021,7 +1040,7 @@ async function submitScoring(pid, tid) {
     closeM('scoringModal');
     await refreshAfterMutation(pid);
   } catch (e) {
-    alert('评分提交失败: ' + e.message);
+    window.EMIE.actions.showSystemAlert('评分提交失败: ' + e.message);
   }
 }
 
@@ -1038,6 +1057,7 @@ EMIE.registerActions({
   submitEditTask,
   deleteTask,
   withdrawMarketTask,
+  withdrawAcceptedTask,
   taskAccept,
   submitTaskAccept,
   taskDeliver,
@@ -1068,6 +1088,7 @@ EMIE.registerModule('projectTasks', {
   submitEditTask,
   deleteTask,
   withdrawMarketTask,
+  withdrawAcceptedTask,
   handleSubTaskRefImages,
   handleSubTaskAttachments,
   handleEditRefImages,
