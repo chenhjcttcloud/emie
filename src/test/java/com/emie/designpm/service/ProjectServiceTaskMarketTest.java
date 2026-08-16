@@ -1,5 +1,6 @@
 package com.emie.designpm.service;
 
+import com.emie.designpm.entity.DesignerMarketEligibility;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.PointAppeal;
 import com.emie.designpm.entity.PointLedger;
@@ -9,6 +10,7 @@ import com.emie.designpm.entity.TaskWithdrawal;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.*;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.springframework.dao.DataIntegrityViolationException;
 
@@ -81,6 +83,80 @@ class ProjectServiceTaskMarketTest {
                 "currentRole", "designer", "currentUser", "张设计",
                 "currentUserId", "designer-1", "designerUserId", "designer-1"));
         assertEquals("designer-1", fixture.task.getDesignerId());
+    }
+
+    @Test
+    void supplyChainWithdrawalRecordsEventWithoutPenaltyOrViolation() {
+        ProjectRepository projects = mock(ProjectRepository.class);
+        SubTaskRepository tasks = mock(SubTaskRepository.class);
+        TaskWithdrawalRepository withdrawals = mock(TaskWithdrawalRepository.class);
+        DesignerMarketEligibilityRepository eligibilityRepo = mock(DesignerMarketEligibilityRepository.class);
+        PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
+        Project project = new Project(); project.setId(1L); project.setStatus("in_progress");
+        SubTask task = new SubTask(); task.setId(2L); task.setName("包装采购"); task.setStatus("accepted");
+        task.setDesignerId("supply-1"); task.setAssigneeRole("supplychain");
+        task.setBasePointSnapshot(20); task.setDifficultyMultiplierSnapshot(1.5);
+        task.setClaimedAt(LocalDateTime.now().minusHours(3));
+        task.setProject(project);
+        project.getTasks().add(task);
+        when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
+        when(tasks.findByIdForUpdate(2L)).thenReturn(Optional.of(task));
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ProjectService service = new ProjectService(projects, tasks, mock(ScoringRepository.class),
+                mock(SubTaskDeliveryVersionRepository.class), mock(UserService.class), mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class), mock(SystemConfigRepository.class), mock(SyncQueueService.class),
+                mock(FileArchiveService.class), mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
+        service.setTaskWithdrawalRepository(withdrawals);
+        service.setMarketEligibilityRepository(eligibilityRepo);
+        service.setPointAdjustmentLedgerRepository(adjustments);
+
+        service.withdrawAcceptedTask(1L, 2L, Map.of("currentUserId", "supply-1", "currentUser", "供应链甲"));
+
+        ArgumentCaptor<TaskWithdrawal> captor = ArgumentCaptor.forClass(TaskWithdrawal.class);
+        verify(withdrawals).save(captor.capture());
+        assertEquals(0, captor.getValue().getPenaltyPoints());
+        assertEquals("接单1小时内退单（免罚）", captor.getValue().getReason());
+        verify(adjustments, never()).save(any());
+        verify(eligibilityRepo, never()).findByUserIdForUpdate(any());
+        verify(eligibilityRepo, never()).save(any());
+        assertEquals("pending", task.getStatus());
+    }
+
+    @Test
+    void designerWithdrawalBeyondFreeWindowDeductsPenaltyAndIncrementsViolation() {
+        ProjectRepository projects = mock(ProjectRepository.class);
+        SubTaskRepository tasks = mock(SubTaskRepository.class);
+        TaskWithdrawalRepository withdrawals = mock(TaskWithdrawalRepository.class);
+        DesignerMarketEligibilityRepository eligibilityRepo = mock(DesignerMarketEligibilityRepository.class);
+        PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
+        Project project = new Project(); project.setId(1L); project.setStatus("in_progress");
+        SubTask task = new SubTask(); task.setId(2L); task.setName("包装设计"); task.setStatus("accepted");
+        task.setDesignerId("designer-1"); task.setAssigneeRole("designer");
+        task.setBasePointSnapshot(20); task.setDifficultyMultiplierSnapshot(1.5);
+        task.setClaimedAt(LocalDateTime.now().minusHours(3));
+        task.setProject(project);
+        project.getTasks().add(task);
+        when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
+        when(tasks.findByIdForUpdate(2L)).thenReturn(Optional.of(task));
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ProjectService service = new ProjectService(projects, tasks, mock(ScoringRepository.class),
+                mock(SubTaskDeliveryVersionRepository.class), mock(UserService.class), mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class), mock(SystemConfigRepository.class), mock(SyncQueueService.class),
+                mock(FileArchiveService.class), mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
+        service.setTaskWithdrawalRepository(withdrawals);
+        service.setMarketEligibilityRepository(eligibilityRepo);
+        service.setPointAdjustmentLedgerRepository(adjustments);
+
+        service.withdrawAcceptedTask(1L, 2L, Map.of("currentUserId", "designer-1", "currentUser", "张设计"));
+
+        verify(withdrawals).save(argThat(w -> w.getPenaltyPoints() == 3
+                && "接单超1小时退单，按累计次数比例扣分".equals(w.getReason())));
+        verify(adjustments).save(argThat(a -> a.getPoints() == -3));
+        ArgumentCaptor<DesignerMarketEligibility> captor = ArgumentCaptor.forClass(DesignerMarketEligibility.class);
+        verify(eligibilityRepo).save(captor.capture());
+        assertEquals(1, captor.getValue().getViolationCount());
     }
 
     private Fixture fixture(String allocationStatus) {

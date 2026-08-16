@@ -88,6 +88,30 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
+    void updateSubTaskNormalizesNullBlankAndAliasAssigneeRoleToDesigner() {
+        Project project = projectWithTask("regular", "pending");
+        when(users.getUserByUserId("designer-1")).thenReturn(com.emie.designpm.entity.User.builder()
+                .userId("designer-1").name("设计师甲").role("designer").status("active").build());
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Map<String, Object> nullRole = new java.util.HashMap<>(Map.of(
+                "currentRole", "admin", "currentUserId", "admin-1", "currentUser", "管理员甲"));
+        nullRole.put("assigneeRole", null);
+        service.updateSubTask(1L, 11L, nullRole);
+        assertEquals("designer", project.getTasks().get(0).getAssigneeRole());
+
+        service.updateSubTask(1L, 11L, Map.of(
+                "currentRole", "admin", "currentUserId", "admin-1", "currentUser", "管理员甲",
+                "assigneeRole", ""));
+        assertEquals("designer", project.getTasks().get(0).getAssigneeRole());
+
+        service.updateSubTask(1L, 11L, Map.of(
+                "currentRole", "admin", "currentUserId", "admin-1", "currentUser", "管理员甲",
+                "assigneeRole", "设计师"));
+        assertEquals("designer", project.getTasks().get(0).getAssigneeRole());
+    }
+
+    @Test
     void channelDeliveryCreatesPlannerAndSalesReviewRows() {
         Project project = projectWithTask("channel_custom", "accepted");
         when(projects.findById(1L)).thenReturn(Optional.of(project));

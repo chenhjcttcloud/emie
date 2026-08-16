@@ -255,6 +255,50 @@ class PointsServiceSnapshotTest {
                 && "2026-07".equals(ledger.getAccountingMonth())));
     }
 
+    @Test
+    void supplyChainTaskGetsNoBaseOrQualityAward() {
+        PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
+        PointsService service = new PointsService(mock(PointRuleRepository.class), ledgers,
+                mock(ScoringRepository.class), mock(PointDifficultyConfigRepository.class));
+        SubTask task = taskWithRole("supplychain");
+
+        service.awardBaseSubmission(task);
+        service.awardQualityCompletion(task);
+
+        verify(ledgers, never()).save(any());
+        verify(ledgers, never()).existsByUserIdAndSubTaskIdAndRuleCode(any(), any(), any());
+    }
+
+    @Test
+    void nullRoleTaskGetsNoBaseOrQualityAward() {
+        PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
+        PointsService service = new PointsService(mock(PointRuleRepository.class), ledgers,
+                mock(ScoringRepository.class), mock(PointDifficultyConfigRepository.class));
+        SubTask task = taskWithRole(null);
+
+        service.awardBaseSubmission(task);
+        service.awardQualityCompletion(task);
+
+        verify(ledgers, never()).save(any());
+    }
+
+    private SubTask taskWithRole(String role) {
+        SubTask task = new SubTask();
+        task.setId(10L);
+        task.setDesignerId("designer-1");
+        task.setAssigneeRole(role);
+        task.setPointRuleCode("B1");
+        task.setBasePointSnapshot(20);
+        task.setDifficultyMultiplierSnapshot(1.5);
+        task.setQualityBonusThresholdSnapshot(95);
+        task.setQualityBonusRatioSnapshot(0.5);
+        task.setQualityTopThresholdSnapshot(97);
+        task.setQualityTopRatioSnapshot(0.6);
+        task.setMaxTotalMultiplierSnapshot(3d);
+        task.setCountInPerformanceSnapshot(true);
+        return task;
+    }
+
     private PointRule rule(String code, int points, double multiplier, boolean enabled) {
         PointRule rule = new PointRule();
         rule.setRuleCode(code);

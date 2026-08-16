@@ -733,7 +733,10 @@ public class ProjectService {
             }
         }
         if (body.containsKey("assigneeRole")) {
-            task.setAssigneeRole((String) body.get("assigneeRole"));
+            String assigneeRole = (String) body.get("assigneeRole");
+            // 与 addSubTask 对齐：null/空值按设计师处理；别名（如"设计师"）落库标准值 designer。
+            task.setAssigneeRole(assigneeRole != null && !assigneeRole.isBlank()
+                    && !"designer".equals(PermissionCatalog.normalizeRole(assigneeRole)) ? assigneeRole : "designer");
         }
         if (body.containsKey("pointRuleCode") || body.containsKey("difficultyCode")) {
             if (!"pending".equals(task.getStatus())) {
@@ -1146,7 +1149,8 @@ public class ProjectService {
         LocalDateTime claimed = task.getClaimedAt() == null ? now : task.getClaimedAt();
         long elapsed = Math.max(0, java.time.Duration.between(claimed, now).toMinutes());
         // 行锁读取市场资格，防同一设计师并发退单时 violation_count 读改写丢失更新。
-        DesignerMarketEligibility eligibility = marketEligibilityRepository == null ? null
+        // 非设计师任务不涉及市场资格：不读取也不更新资格违规（P2-4）。
+        DesignerMarketEligibility eligibility = !"designer".equals(task.getAssigneeRole()) || marketEligibilityRepository == null ? null
                 : marketEligibilityRepository.findByUserIdForUpdate(userId)
                         .orElseGet(() -> { DesignerMarketEligibility x = new DesignerMarketEligibility(); x.setUserId(userId); return x; });
         int previous = eligibility == null ? 0 : Optional.ofNullable(eligibility.getViolationCount()).orElse(0);
@@ -1157,10 +1161,12 @@ public class ProjectService {
         double ratio = elapsed <= freeMinutes ? 0d : Math.min(1d, perWithdrawalRate * (previous + 1));
         int base = (int)Math.round(Optional.ofNullable(task.getBasePointSnapshot()).orElse(0) * Optional.ofNullable(task.getDifficultyMultiplierSnapshot()).orElse(1d));
         int penalty = (int)Math.ceil(base * ratio);
-        TaskWithdrawal event = new TaskWithdrawal(); event.setSubTaskId(taskId); event.setUserId(userId); event.setElapsedMinutes(elapsed); event.setPenaltyRatio(ratio); event.setPenaltyPoints(penalty); event.setReason(elapsed <= 60 ? "接单1小时内退单（免罚）" : "接单超1小时退单，按累计次数比例扣分");
+        // 积分仅面向设计师任务：供应链等其它负责人类型的退单不扣分（P2-3），事件 penaltyPoints=0、reason 走免罚文案。
+        if (!"designer".equals(task.getAssigneeRole())) penalty = 0;
+        TaskWithdrawal event = new TaskWithdrawal(); event.setSubTaskId(taskId); event.setUserId(userId); event.setElapsedMinutes(elapsed); event.setPenaltyRatio(ratio); event.setPenaltyPoints(penalty); event.setReason(penalty <= 0 ? "接单1小时内退单（免罚）" : "接单超1小时退单，按累计次数比例扣分");
         taskWithdrawalRepository.save(event);
-        // 积分仅面向设计师任务：供应链等其它负责人类型的退单不产生积分扣减（调账），仅记录退单。
-        if (penalty > 0 && pointAdjustmentLedgerRepository != null && "designer".equals(task.getAssigneeRole())) {
+        // 积分仅面向设计师任务：penalty 已对非设计师置 0，仅设计师任务可能产生积分扣减（调账），退单一律记录。
+        if (penalty > 0 && pointAdjustmentLedgerRepository != null) {
             PointAdjustmentLedger adjustment = new PointAdjustmentLedger(); adjustment.setUserId(userId); adjustment.setSourceType("TASK_WITHDRAWAL"); adjustment.setSourceId(event.getId()); adjustment.setPoints(-penalty); adjustment.setReason(event.getReason()); adjustment.setCreatedBy(userId); pointAdjustmentLedgerRepository.save(adjustment);
         }
         if (eligibility != null) {

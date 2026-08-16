@@ -317,8 +317,8 @@ async function openManualAdjustmentModal() {
   let users;
   try { users = await apiGet('/admin/users'); } catch (e) { window.EMIE.actions.showSystemAlert('读取成员列表失败：' + e.message); return; }
   const activeUsers = (Array.isArray(users) ? users : []).filter(u => (u.status || 'active') === 'active');
-  // 手动调账仅面向有积分资格的角色（设计师），与后端校验一致。
-  const eligibleUsers = activeUsers.filter(u => u.role === 'designer');
+  // 手动调账仅面向有积分资格的角色（设计师），与后端校验一致；角色可能为英文标准值或中文别名（'设计师'）。
+  const eligibleUsers = activeUsers.filter(u => u.role === 'designer' || u.role === '设计师');
   if (!eligibleUsers.length) { window.EMIE.actions.showSystemAlert('暂无可调账的启用成员（仅设计师）'); return; }
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
