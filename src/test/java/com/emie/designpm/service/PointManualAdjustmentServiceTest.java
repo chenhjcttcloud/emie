@@ -1,171 +1,88 @@
 package com.emie.designpm.service;
 
 import com.emie.designpm.controller.AuthController;
-import com.emie.designpm.entity.PointAdjustmentLedger;
-import com.emie.designpm.entity.User;
-import com.emie.designpm.repository.PointAdjustmentLedgerRepository;
-import com.emie.designpm.repository.UserRepository;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import com.emie.designpm.entity.*;
+import com.emie.designpm.repository.*;
+import org.junit.jupiter.api.*;
+import org.mockito.*;
 import org.springframework.dao.DataIntegrityViolationException;
-
-import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import java.util.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.*;
 
-/**
- * 管理员手动调账（PointManualAdjustmentService）单元测试。
- * 覆盖：成功补分/扣分与审计字段、非管理员拒绝、积分非法值、备注必填、
- * 用户不存在、sourceId 递增以及唯一约束兜底转业务异常。
- */
 class PointManualAdjustmentServiceTest {
-
-    private PointAdjustmentLedgerRepository adjustments;
-    private UserRepository users;
-    private PointManualAdjustmentService service;
-
-    @BeforeEach
-    void setup() {
-        adjustments = mock(PointAdjustmentLedgerRepository.class);
-        users = mock(UserRepository.class);
-        service = new PointManualAdjustmentService(adjustments, users);
-    }
-
-    @Test
-    void adminCanAddAndDeductPointsWithAuditFields() {
-        when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
-        when(adjustments.maxSourceIdByType("MANUAL")).thenReturn(3L);
-        when(adjustments.save(any())).thenAnswer(i -> i.getArgument(0));
-
-        PointAdjustmentLedger added = service.adjust("designer-1", 50, "  管理员补分  ", session("admin-1", "admin"));
-        assertEquals("MANUAL", added.getSourceType());
-        assertEquals(4L, added.getSourceId());
-        assertEquals(50, added.getPoints());
-        assertEquals("管理员补分", added.getReason());
-        assertEquals("designer-1", added.getUserId());
-        assertEquals("admin-1", added.getCreatedBy());
-
-        PointAdjustmentLedger deducted = service.adjust("designer-1", -30, "管理员扣分", session("admin-1", "admin"));
-        assertEquals(-30, deducted.getPoints());
-    }
-
-    @Test
-    void nonAdminIsRejected() {
-        assertThrows(SecurityException.class,
-                () -> service.adjust("designer-1", 10, "备注", session("designer-1", "designer")));
-        verify(adjustments, never()).save(any());
-    }
-
-    @Test
-    void zeroAndOverLimitPointsAreRejected() {
-        when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
-        assertThrows(IllegalArgumentException.class, () -> service.adjust("designer-1", 0, "备注", admin()));
-        assertThrows(IllegalArgumentException.class, () -> service.adjust("designer-1", 100001, "备注", admin()));
-        assertThrows(IllegalArgumentException.class, () -> service.adjust("designer-1", -100001, "备注", admin()));
-        verify(adjustments, never()).save(any());
-    }
-
-    @Test
-    void boundaryPointsAreAccepted() {
-        when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
-        when(adjustments.maxSourceIdByType("MANUAL")).thenReturn(0L);
-        when(adjustments.save(any())).thenAnswer(i -> i.getArgument(0));
-        assertEquals(100000, service.adjust("designer-1", 100000, "上限补分", admin()).getPoints());
-        assertEquals(-100000, service.adjust("designer-1", -100000, "下限扣分", admin()).getPoints());
-    }
-
-    @Test
-    void emptyOrTooLongReasonIsRejected() {
-        when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
-        assertThrows(IllegalArgumentException.class, () -> service.adjust("designer-1", 10, null, admin()));
-        assertThrows(IllegalArgumentException.class, () -> service.adjust("designer-1", 10, "", admin()));
-        assertThrows(IllegalArgumentException.class, () -> service.adjust("designer-1", 10, "   ", admin()));
-        assertThrows(IllegalArgumentException.class, () -> service.adjust("designer-1", 10, "长".repeat(501), admin()));
-        verify(adjustments, never()).save(any());
-    }
-
-    @Test
-    void unknownOrBlankUserIsRejected() {
-        when(users.findByUserId("ghost")).thenReturn(Optional.empty());
-        assertThrows(IllegalArgumentException.class, () -> service.adjust("ghost", 10, "备注", admin()));
-        assertThrows(IllegalArgumentException.class, () -> service.adjust("   ", 10, "备注", admin()));
-        assertThrows(IllegalArgumentException.class, () -> service.adjust(null, 10, "备注", admin()));
-        verify(adjustments, never()).save(any());
-    }
-
-    @Test
-    void sourceIdIncrementsAcrossConsecutiveAdjustments() {
-        when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
-        // 模拟两次独立调账事务：每次取 MAX(source_id)+1，分别得到 1、2。
-        when(adjustments.maxSourceIdByType("MANUAL")).thenReturn(0L, 1L);
-        when(adjustments.save(any())).thenAnswer(i -> i.getArgument(0));
-
-        PointAdjustmentLedger first = service.adjust("designer-1", 20, "第一次补分", admin());
-        PointAdjustmentLedger second = service.adjust("designer-1", -5, "第二次扣分", admin());
-        assertEquals(1L, first.getSourceId());
-        assertEquals(2L, second.getSourceId());
-    }
-
-    @Test
-    void uniqueConstraintConflictTranslatesToBusinessException() {
-        when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
-        when(adjustments.maxSourceIdByType("MANUAL")).thenReturn(5L);
-        when(adjustments.save(any())).thenThrow(new DataIntegrityViolationException("uk_point_adjustment_source"));
-
-        IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> service.adjust("designer-1", 10, "备注", admin()));
-        assertEquals("手动调账记录冲突，请重试", e.getMessage());
-    }
-
-    @Test
-    void trimmingKeepsUserIdAndReasonCanonical() {
-        when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
-        when(adjustments.maxSourceIdByType(eq("MANUAL"))).thenReturn(0L);
-        when(adjustments.save(any())).thenAnswer(i -> i.getArgument(0));
-
-        PointAdjustmentLedger saved = service.adjust("  designer-1  ", 10, "  补发漏记积分  ", admin());
-        assertEquals("designer-1", saved.getUserId());
-        assertEquals("补发漏记积分", saved.getReason());
-    }
-
-    @Test
-    void salesAndSupplyChainTargetsAreRejected() {
-        when(users.findByUserId("sales-1")).thenReturn(Optional.of(userWithRole("sales")));
-        when(users.findByUserId("supply-1")).thenReturn(Optional.of(userWithRole("supplychain")));
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> service.adjust("sales-1", 10, "备注", admin()));
-        assertEquals("只能为设计师调账", e.getMessage());
-        assertThrows(IllegalArgumentException.class,
-                () -> service.adjust("supply-1", 10, "备注", admin()));
-        verify(adjustments, never()).save(any());
-    }
-
-    @Test
-    void plannerAndAdminTargetsAreRejected() {
-        when(users.findByUserId("planner-1")).thenReturn(Optional.of(userWithRole("planner")));
-        when(users.findByUserId("admin-1")).thenReturn(Optional.of(userWithRole("admin")));
-        assertThrows(IllegalArgumentException.class,
-                () -> service.adjust("planner-1", 10, "备注", admin()));
-        assertThrows(IllegalArgumentException.class,
-                () -> service.adjust("admin-1", 10, "备注", admin()));
-        verify(adjustments, never()).save(any());
-    }
-
-    private User userWithRole(String role) {
-        User u = new User();
-        u.setRole(role);
-        return u;
-    }
-
-    private AuthController.AuthSession admin() {
-        return session("admin-1", "admin");
-    }
-
-    private AuthController.AuthSession session(String id, String role) {
-        return new AuthController.AuthSession(id, role, id);
-    }
+ @Test void adminCanAddAndDeductPointsWithAuditFields(){
+  PointAdjustmentLedgerRepository adjustments=mock(PointAdjustmentLedgerRepository.class);UserRepository users=mock(UserRepository.class);PointManualAdjustmentService service=new PointManualAdjustmentService(adjustments,users);
+  when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));when(adjustments.maxSourceIdByType("MANUAL")).thenReturn(3L);when(adjustments.save(any())).thenAnswer(i->i.getArgument(0));
+  PointAdjustmentLedger added=service.adjust("designer-1",50,"  管理员补分  ",session("admin-1","admin"));
+  assertEquals("MANUAL",added.getSourceType());assertEquals(4L,added.getSourceId());assertEquals(50,added.getPoints());assertEquals("管理员补分",added.getReason());assertEquals("designer-1",added.getUserId());assertEquals("admin-1",added.getCreatedBy());
+  PointAdjustmentLedger deducted=service.adjust("designer-1",-30,"管理员扣分",session("admin-1","admin"));assertEquals(-30,deducted.getPoints());
+ }
+ @Test void nonAdminIsRejected(){
+  PointAdjustmentLedgerRepository adjustments=mock(PointAdjustmentLedgerRepository.class);UserRepository users=mock(UserRepository.class);PointManualAdjustmentService service=new PointManualAdjustmentService(adjustments,users);
+  assertThrows(SecurityException.class,()->service.adjust("designer-1",10,"备注",session("designer-1","designer")));
+  verify(adjustments,never()).save(any());
+ }
+ @Test void zeroAndOverLimitPointsAreRejected(){
+  PointAdjustmentLedgerRepository adjustments=mock(PointAdjustmentLedgerRepository.class);UserRepository users=mock(UserRepository.class);PointManualAdjustmentService service=new PointManualAdjustmentService(adjustments,users);
+  when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
+  assertThrows(IllegalArgumentException.class,()->service.adjust("designer-1",0,"备注",admin()));assertThrows(IllegalArgumentException.class,()->service.adjust("designer-1",100001,"备注",admin()));assertThrows(IllegalArgumentException.class,()->service.adjust("designer-1",-100001,"备注",admin()));
+  verify(adjustments,never()).save(any());
+ }
+ @Test void boundaryPointsAreAccepted(){
+  PointAdjustmentLedgerRepository adjustments=mock(PointAdjustmentLedgerRepository.class);UserRepository users=mock(UserRepository.class);PointManualAdjustmentService service=new PointManualAdjustmentService(adjustments,users);
+  when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));when(adjustments.maxSourceIdByType("MANUAL")).thenReturn(0L);when(adjustments.save(any())).thenAnswer(i->i.getArgument(0));
+  assertEquals(100000,service.adjust("designer-1",100000,"上限补分",admin()).getPoints());assertEquals(-100000,service.adjust("designer-1",-100000,"下限扣分",admin()).getPoints());
+ }
+ @Test void emptyOrTooLongReasonIsRejected(){
+  PointAdjustmentLedgerRepository adjustments=mock(PointAdjustmentLedgerRepository.class);UserRepository users=mock(UserRepository.class);PointManualAdjustmentService service=new PointManualAdjustmentService(adjustments,users);
+  when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
+  assertThrows(IllegalArgumentException.class,()->service.adjust("designer-1",10,null,admin()));assertThrows(IllegalArgumentException.class,()->service.adjust("designer-1",10,"",admin()));assertThrows(IllegalArgumentException.class,()->service.adjust("designer-1",10,"   ",admin()));assertThrows(IllegalArgumentException.class,()->service.adjust("designer-1",10,"长".repeat(501),admin()));
+  verify(adjustments,never()).save(any());
+ }
+ @Test void unknownOrBlankUserIsRejected(){
+  PointAdjustmentLedgerRepository adjustments=mock(PointAdjustmentLedgerRepository.class);UserRepository users=mock(UserRepository.class);PointManualAdjustmentService service=new PointManualAdjustmentService(adjustments,users);
+  when(users.findByUserId("ghost")).thenReturn(Optional.empty());
+  assertThrows(IllegalArgumentException.class,()->service.adjust("ghost",10,"备注",admin()));assertThrows(IllegalArgumentException.class,()->service.adjust("   ",10,"备注",admin()));assertThrows(IllegalArgumentException.class,()->service.adjust(null,10,"备注",admin()));
+  verify(adjustments,never()).save(any());
+ }
+ @Test void sourceIdIncrementsAcrossConsecutiveAdjustments(){
+  PointAdjustmentLedgerRepository adjustments=mock(PointAdjustmentLedgerRepository.class);UserRepository users=mock(UserRepository.class);PointManualAdjustmentService service=new PointManualAdjustmentService(adjustments,users);
+  when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
+  // 模拟两次独立调账事务：每次取 MAX(source_id)+1，分别得到 1、2。
+  when(adjustments.maxSourceIdByType("MANUAL")).thenReturn(0L,1L);when(adjustments.save(any())).thenAnswer(i->i.getArgument(0));
+  PointAdjustmentLedger first=service.adjust("designer-1",20,"第一次补分",admin());PointAdjustmentLedger second=service.adjust("designer-1",-5,"第二次扣分",admin());
+  assertEquals(1L,first.getSourceId());assertEquals(2L,second.getSourceId());
+ }
+ @Test void uniqueConstraintConflictTranslatesToBusinessException(){
+  PointAdjustmentLedgerRepository adjustments=mock(PointAdjustmentLedgerRepository.class);UserRepository users=mock(UserRepository.class);PointManualAdjustmentService service=new PointManualAdjustmentService(adjustments,users);
+  when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));when(adjustments.maxSourceIdByType("MANUAL")).thenReturn(5L);when(adjustments.save(any())).thenThrow(new DataIntegrityViolationException("uk_point_adjustment_source"));
+  IllegalStateException e=assertThrows(IllegalStateException.class,()->service.adjust("designer-1",10,"备注",admin()));
+  assertEquals("手动调账记录冲突，请重试",e.getMessage());
+ }
+ @Test void trimmingKeepsUserIdAndReasonCanonical(){
+  PointAdjustmentLedgerRepository adjustments=mock(PointAdjustmentLedgerRepository.class);UserRepository users=mock(UserRepository.class);PointManualAdjustmentService service=new PointManualAdjustmentService(adjustments,users);
+  when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));when(adjustments.maxSourceIdByType(eq("MANUAL"))).thenReturn(0L);when(adjustments.save(any())).thenAnswer(i->i.getArgument(0));
+  PointAdjustmentLedger saved=service.adjust("  designer-1  ",10,"  补发漏记积分  ",admin());
+  assertEquals("designer-1",saved.getUserId());assertEquals("补发漏记积分",saved.getReason());
+ }
+ @Test void salesAndSupplyChainTargetsAreRejected(){
+  PointAdjustmentLedgerRepository adjustments=mock(PointAdjustmentLedgerRepository.class);UserRepository users=mock(UserRepository.class);PointManualAdjustmentService service=new PointManualAdjustmentService(adjustments,users);
+  when(users.findByUserId("sales-1")).thenReturn(Optional.of(userWithRole("sales")));when(users.findByUserId("supply-1")).thenReturn(Optional.of(userWithRole("supplychain")));
+  IllegalArgumentException e=assertThrows(IllegalArgumentException.class,()->service.adjust("sales-1",10,"备注",admin()));
+  assertEquals("只能为设计师调账",e.getMessage());
+  IllegalArgumentException supply=assertThrows(IllegalArgumentException.class,()->service.adjust("supply-1",10,"备注",admin()));
+  assertEquals("只能为设计师调账",supply.getMessage());
+  verify(adjustments,never()).save(any());
+ }
+ @Test void plannerAndAdminTargetsAreRejected(){
+  PointAdjustmentLedgerRepository adjustments=mock(PointAdjustmentLedgerRepository.class);UserRepository users=mock(UserRepository.class);PointManualAdjustmentService service=new PointManualAdjustmentService(adjustments,users);
+  when(users.findByUserId("planner-1")).thenReturn(Optional.of(userWithRole("planner")));when(users.findByUserId("admin-1")).thenReturn(Optional.of(userWithRole("admin")));
+  assertThrows(IllegalArgumentException.class,()->service.adjust("planner-1",10,"备注",admin()));assertThrows(IllegalArgumentException.class,()->service.adjust("admin-1",10,"备注",admin()));
+  verify(adjustments,never()).save(any());
+ }
+ private User userWithRole(String role){User u=new User();u.setRole(role);return u;}
+ private AuthController.AuthSession admin(){return session("admin-1","admin");}
+ private AuthController.AuthSession session(String id,String role){return new AuthController.AuthSession(id,role,id);}
 }
