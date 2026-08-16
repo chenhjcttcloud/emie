@@ -116,6 +116,8 @@ public class PointsService {
 
     private boolean eligibleForPoints(SubTask task) {
         if (task == null || task.getId() == null || task.getDesignerId() == null || task.getDesignerId().isBlank()) return false;
+        // 积分仅面向设计师任务（产品确认：供应链等其它负责人类型不参与积分）。
+        if (!"designer".equals(task.getAssigneeRole())) return false;
         // 持久化任务都会有创建时间；兼容旧的内存调用方/单元测试不阻断原有流程。
         if (task.getCreatedAt() == null) return true;
         try {

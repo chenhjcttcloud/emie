@@ -1159,7 +1159,8 @@ public class ProjectService {
         int penalty = (int)Math.ceil(base * ratio);
         TaskWithdrawal event = new TaskWithdrawal(); event.setSubTaskId(taskId); event.setUserId(userId); event.setElapsedMinutes(elapsed); event.setPenaltyRatio(ratio); event.setPenaltyPoints(penalty); event.setReason(elapsed <= 60 ? "接单1小时内退单（免罚）" : "接单超1小时退单，按累计次数比例扣分");
         taskWithdrawalRepository.save(event);
-        if (penalty > 0 && pointAdjustmentLedgerRepository != null) {
+        // 积分仅面向设计师任务：供应链等其它负责人类型的退单不产生积分扣减（调账），仅记录退单。
+        if (penalty > 0 && pointAdjustmentLedgerRepository != null && "designer".equals(task.getAssigneeRole())) {
             PointAdjustmentLedger adjustment = new PointAdjustmentLedger(); adjustment.setUserId(userId); adjustment.setSourceType("TASK_WITHDRAWAL"); adjustment.setSourceId(event.getId()); adjustment.setPoints(-penalty); adjustment.setReason(event.getReason()); adjustment.setCreatedBy(userId); pointAdjustmentLedgerRepository.save(adjustment);
         }
         if (eligibility != null) {

@@ -41,7 +41,7 @@ class PointsServiceSnapshotTest {
         PointsService service = new PointsService(rules, ledgers, scoring, difficulties);
         SubTask task = new SubTask();
         task.setId(9L);
-        task.setDesignerId("designer-1");
+        task.setDesignerId("designer-1"); task.setAssigneeRole("designer");
 
         service.bindRuleSnapshot(task, "b1", "standard");
         rule.setPoints(100);
@@ -70,7 +70,7 @@ class PointsServiceSnapshotTest {
         PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
         PointsService service = new PointsService(mock(PointRuleRepository.class), ledgers,
                 mock(ScoringRepository.class), mock(PointDifficultyConfigRepository.class));
-        SubTask task = new SubTask(); task.setId(10L); task.setDesignerId("main");
+        SubTask task = new SubTask(); task.setId(10L); task.setDesignerId("main"); task.setAssigneeRole("designer");
         task.setPointRuleCode("B1"); task.setBasePointSnapshot(25); task.setDifficultyMultiplierSnapshot(1.5);
         task.setQualityBonusThresholdSnapshot(95); task.setQualityBonusRatioSnapshot(.3);
         task.setQualityTopThresholdSnapshot(97); task.setQualityTopRatioSnapshot(.6); task.setMaxTotalMultiplierSnapshot(3d);
@@ -157,7 +157,7 @@ class PointsServiceSnapshotTest {
         PointsService service = new PointsService(rules, ledgers, scoring, difficulties);
         SubTask task = new SubTask();
         task.setId(9L);
-        task.setDesignerId("designer-1");
+        task.setDesignerId("designer-1"); task.setAssigneeRole("designer");
         service.bindRuleSnapshot(task, "A1", "standard");
 
         service.awardTaskApproval(task);
@@ -190,7 +190,7 @@ class PointsServiceSnapshotTest {
         PointsService service = new PointsService(rules, ledgers, scoring, difficulties);
         SubTask task = new SubTask();
         task.setId(9L);
-        task.setDesignerId("designer-1");
+        task.setDesignerId("designer-1"); task.setAssigneeRole("designer");
         service.bindRuleSnapshot(task, "A1", "standard");
 
         service.awardTaskApproval(task);
@@ -231,7 +231,7 @@ class PointsServiceSnapshotTest {
         PointsService service = new PointsService(rules, ledgers, scoring, difficulties);
         SubTask task = new SubTask();
         task.setId(9L);
-        task.setDesignerId("designer-1");
+        task.setDesignerId("designer-1"); task.setAssigneeRole("designer");
         task.setPointRuleCode("B1");
         task.setBasePointSnapshot(20);
         task.setDifficultyMultiplierSnapshot(1.5);
