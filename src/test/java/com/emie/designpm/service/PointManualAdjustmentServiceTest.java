@@ -133,11 +133,14 @@ class PointManualAdjustmentServiceTest {
     }
 
     @Test
-    void salesTargetIsRejected() {
+    void salesAndSupplyChainTargetsAreRejected() {
         when(users.findByUserId("sales-1")).thenReturn(Optional.of(userWithRole("sales")));
+        when(users.findByUserId("supply-1")).thenReturn(Optional.of(userWithRole("supplychain")));
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> service.adjust("sales-1", 10, "备注", admin()));
-        assertEquals("只能为设计师或供应链成员调账", e.getMessage());
+        assertEquals("只能为设计师调账", e.getMessage());
+        assertThrows(IllegalArgumentException.class,
+                () -> service.adjust("supply-1", 10, "备注", admin()));
         verify(adjustments, never()).save(any());
     }
 
@@ -150,17 +153,6 @@ class PointManualAdjustmentServiceTest {
         assertThrows(IllegalArgumentException.class,
                 () -> service.adjust("admin-1", 10, "备注", admin()));
         verify(adjustments, never()).save(any());
-    }
-
-    @Test
-    void supplyChainTargetIsAccepted() {
-        when(users.findByUserId("supply-1")).thenReturn(Optional.of(userWithRole("supplychain")));
-        when(adjustments.maxSourceIdByType(eq("MANUAL"))).thenReturn(0L);
-        when(adjustments.save(any())).thenAnswer(i -> i.getArgument(0));
-
-        PointAdjustmentLedger saved = service.adjust("supply-1", -5, "供应链扣分", admin());
-        assertEquals("supply-1", saved.getUserId());
-        assertEquals(-5, saved.getPoints());
     }
 
     private User userWithRole(String role) {

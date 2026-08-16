@@ -317,16 +317,16 @@ async function openManualAdjustmentModal() {
   let users;
   try { users = await apiGet('/admin/users'); } catch (e) { window.EMIE.actions.showSystemAlert('读取成员列表失败：' + e.message); return; }
   const activeUsers = (Array.isArray(users) ? users : []).filter(u => (u.status || 'active') === 'active');
-  // 手动调账仅面向有积分资格的角色（设计师/供应链），与后端校验一致。
-  const eligibleUsers = activeUsers.filter(u => u.role === 'designer' || u.role === 'supplychain');
-  if (!eligibleUsers.length) { window.EMIE.actions.showSystemAlert('暂无可调账的启用成员（仅设计师/供应链）'); return; }
+  // 手动调账仅面向有积分资格的角色（设计师），与后端校验一致。
+  const eligibleUsers = activeUsers.filter(u => u.role === 'designer');
+  if (!eligibleUsers.length) { window.EMIE.actions.showSystemAlert('暂无可调账的启用成员（仅设计师）'); return; }
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'manualAdjustmentModal';
   modal.innerHTML = `<div class="modal" style="max-width:540px;">
     <div class="modal-header"><div class="modal-header-left"><div class="modal-title">手动调账</div><div class="modal-subtitle">管理员主动补分或扣分，必填备注并记入调账台账</div></div><button class="modal-close" data-emie-onclick="closeM('manualAdjustmentModal')">✕</button></div>
     <div class="modal-body">
-      <div class="form-group"><label class="form-label">成员 <span style="color:var(--gray-400);">（仅设计师/供应链）</span></label><select class="form-input" id="manualAdjUser"><option value="">请选择成员</option>${eligibleUsers.map(u => `<option value="${escHtml(u.userId)}">${escHtml(u.name || u.userId)}（${escHtml(u.userId)}）</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">成员 <span style="color:var(--gray-400);">（仅设计师）</span></label><select class="form-input" id="manualAdjUser"><option value="">请选择成员</option>${eligibleUsers.map(u => `<option value="${escHtml(u.userId)}">${escHtml(u.name || u.userId)}（${escHtml(u.userId)}）</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">积分 <span style="color:var(--danger);">*</span></label><input class="form-input" type="number" step="1" id="manualAdjPoints" placeholder="例如：50 或 -30"><div style="font-size:12px;color:var(--gray-400);margin-top:4px;">非零整数，绝对值不超过 100000；增加填正数，扣减填负数。</div></div>
       <div class="form-group"><label class="form-label">备注 <span style="color:var(--danger);">*</span></label><textarea class="form-input" id="manualAdjReason" rows="3" maxlength="500" placeholder="必填，说明调账原因（500 字内）"></textarea></div>
       <div id="manualAdjError" style="display:none;color:var(--danger);font-size:13px;"></div>

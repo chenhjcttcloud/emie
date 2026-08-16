@@ -23,8 +23,8 @@ public class PointManualAdjustmentService {
     private static final String SOURCE_TYPE = "MANUAL";
     private static final int MAX_POINTS = 100000;
     private static final int MAX_REASON = 500;
-    /** 手动调账仅面向有积分资格的角色：设计师与供应链（子任务负责人发分机制）。 */
-    private static final Set<String> ELIGIBLE_ROLES = Set.of("designer", "supplychain");
+    /** 手动调账仅面向有积分资格的角色：设计师（产品确认供应链不参与积分）。 */
+    private static final Set<String> ELIGIBLE_ROLES = Set.of("designer");
 
     private final PointAdjustmentLedgerRepository adjustments;
     private final UserRepository users;
@@ -41,7 +41,7 @@ public class PointManualAdjustmentService {
         User user = users.findByUserId(uid).orElse(null);
         if (user == null) throw new IllegalArgumentException("用户不存在");
         if (!ELIGIBLE_ROLES.contains(PermissionCatalog.normalizeRole(user.getRole()))) {
-            throw new IllegalArgumentException("只能为设计师或供应链成员调账");
+            throw new IllegalArgumentException("只能为设计师调账");
         }
         if (points == null) throw new IllegalArgumentException("积分不能为空");
         if (points == 0) throw new IllegalArgumentException("积分必须为非零整数");
