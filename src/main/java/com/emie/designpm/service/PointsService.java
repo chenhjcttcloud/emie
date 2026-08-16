@@ -4,6 +4,7 @@ import com.emie.designpm.entity.PointLedger;
 import com.emie.designpm.entity.PointAdjustmentLedger;
 import com.emie.designpm.entity.PointDifficultyConfig;
 import com.emie.designpm.entity.PointRule;
+import com.emie.designpm.entity.ScoringRecord;
 import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.repository.PointLedgerRepository;
 import com.emie.designpm.repository.PointAdjustmentLedgerRepository;
@@ -91,10 +92,17 @@ public class PointsService {
         String ledgerCode = ruleCode + ":QUALITY";
         if (ledgers.existsByUserIdAndSubTaskIdAndRuleCode(task.getDesignerId(), task.getId(), ledgerCode)) return;
         ensureSnapshot(task, ruleCode);
-        double averageScore = scoring.findBySubTaskId(task.getId()).stream()
-                .filter(record -> record.getScore() != null).mapToInt(record -> record.getScore()).average().orElse(0d);
-        // 质量阈值按页面展示的整数综合分判断，与用户看到的最终分保持一致。
-        averageScore = Math.round(averageScore);
+        // 质量阈值按页面展示的加权综合分判断（Σ(评分×权重)/Σ(权重)，与项目详情/设计师看板的加权综合一致），
+        // 避免服务端简单平均与前端加权平均不一致，导致同一批数据服务端判定与页面展示矛盾。
+        double weightedSum = 0d, totalWeight = 0d;
+        for (ScoringRecord record : scoring.findBySubTaskId(task.getId())) {
+            if (record.getScore() != null) {
+                double weight = record.getWeight() == null ? 1d : record.getWeight();
+                weightedSum += record.getScore() * weight;
+                totalWeight += weight;
+            }
+        }
+        double averageScore = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0d;
         double ratio = averageScore >= task.getQualityTopThresholdSnapshot()
                 ? task.getQualityTopRatioSnapshot()
                 : averageScore >= task.getQualityBonusThresholdSnapshot() ? task.getQualityBonusRatioSnapshot() : 0d;

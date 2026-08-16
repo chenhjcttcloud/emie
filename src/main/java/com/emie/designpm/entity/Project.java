@@ -30,8 +30,8 @@ public class Project {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 对外展示的项目编号：EMIE + 年月 + 当月四位序号。 */
-    @Column(length = 14, unique = true)
+    /** 对外展示的项目编号：EMIE + 年月 + 当月四位序号。V39 迁移加宽至 40 并建唯一索引兜底。 */
+    @Column(length = 40, unique = true)
     private String projectCode;
 
     /** channel_custom / regular */

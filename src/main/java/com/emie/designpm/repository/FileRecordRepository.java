@@ -2,11 +2,13 @@ package com.emie.designpm.repository;
 
 import com.emie.designpm.entity.FileRecord;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,4 +30,9 @@ public interface FileRecordRepository extends JpaRepository<FileRecord, Long> {
     List<FileRecord> findByStorageTierOrderByCreatedAtDesc(String storageTier);
 
     long countByStorageTier(String storageTier);
+
+    @Modifying
+    @Query("DELETE FROM FileRecord f WHERE f.targetType = :targetType AND f.targetId IN :targetIds")
+    void deleteByTargetTypeAndTargetIdIn(@Param("targetType") String targetType,
+                                         @Param("targetIds") Collection<Long> targetIds);
 }

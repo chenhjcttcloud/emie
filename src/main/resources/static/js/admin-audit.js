@@ -177,7 +177,7 @@ async function adminEditShare(id) {
         <div class="form-group">
           <label class="form-label">访问密码</label>
           <input type="text" class="form-input" id="editSharePassword" placeholder="留空不修改，输入新密码覆盖" style="text-align:center;">
-          <div style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:4px;">留空 = 不修改密码 / 清空输入框内容并保存 = 清除密码</div>
+          <div style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:4px;">留空 = 不修改密码 / 清空输入框内容并保存 = 清除密码（新密码需至少 6 位且不能全为数字）</div>
         </div>
         <div id="editShareError" style="color:var(--danger);font-size:13px;text-align:center;margin-top:12px;display:none;"></div>
       </div>
@@ -187,6 +187,11 @@ async function adminEditShare(id) {
       </div>
     </div>`;
   document.body.appendChild(modal);
+  // 跟踪密码框是否被用户主动修改：区分「未修改 → null」与「清空 → ""」，与后端语义对齐
+  const pwdInput = document.getElementById('editSharePassword');
+  if (pwdInput) {
+    pwdInput.addEventListener('input', () => { pwdInput.dataset.passwordTouched = '1'; });
+  }
 }
 
 async function doAdminUpdateShare(id) {
@@ -197,11 +202,26 @@ async function doAdminUpdateShare(id) {
 
   const expiresVal = expiresEl.value;
   const expiresIn = parseInt(expiresVal, 10);
-  // password：空字符串表示留空不传（不修改），有值表示修改
+  // 与后端语义对齐：null=不修改密码、空串""=清除密码；仅用户主动动过密码框才可能触发清除
   const password = passwordEl.value;
+  const passwordTouched = passwordEl.dataset.passwordTouched === '1';
+  let passwordPayload;
+  if (!passwordTouched) {
+    passwordPayload = null; // 用户未修改密码
+  } else if (password === '') {
+    passwordPayload = ''; // 用户清空输入框 → 清除密码
+  } else {
+    passwordPayload = password; // 输入新密码
+  }
+  // 与后端规则一致：非空时必须至少 6 位且不能全为数字（提交前校验，避免后端 400）
+  if (password && (password.length < 6 || /^\d+$/.test(password))) {
+    errEl.textContent = '访问密码至少 6 位且不能全为数字';
+    errEl.style.display = '';
+    return;
+  }
 
   try {
-    await apiPut('/share/admin/' + id, { expiresIn, password: password || null });
+    await apiPut('/share/admin/' + id, { expiresIn, password: passwordPayload });
     showAdminToast('✅ 更新成功', 'success');
     closeM('shareEditModal');
     await renderAdminShares(document.getElementById('adminContent'));

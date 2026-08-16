@@ -190,7 +190,7 @@ function renderProjectDetailContent(detail) {
     <div class="detail-section">
       <div class="detail-section-title">📜 操作日志</div>
       <div class="timeline">${detail.logs.map(l => `
-        <div class="timeline-item"><div class="timeline-dot done"></div><div class="timeline-content"><div class="timeline-title">${cleanLogAction(l.action)}</div><div class="timeline-time">${renderLogLabel(l)} · ${fmtDT(l.time)}</div></div></div>
+        <div class="timeline-item"><div class="timeline-dot done"></div><div class="timeline-content"><div class="timeline-title">${escHtml(cleanLogAction(l.action))}</div><div class="timeline-time">${renderLogLabel(l)} · ${fmtDT(l.time)}</div></div></div>
       `).join('')}</div>
     </div>`;
 }
@@ -219,9 +219,9 @@ function renderLogLabel(l) {
     const match = l.action.match(/（(.+?)已评/);
     const scoreRole = match ? match[1] : l.role;
     const scoreRoleName = scoreRole === 'sales' ? '销售' : scoreRole === 'planner' ? '产品企划' : scoreRole === 'designer' ? '设计师' : scoreRole === 'supplychain' ? '供应链' : scoreRole;
-    return `（${scoreRoleName}：${l.user} 已评）`;
+    return `（${escHtml(scoreRoleName)}：${escHtml(l.user)} 已评）`;
   }
-  return `（${roleName}：${l.user}）`;
+  return `（${escHtml(roleName)}：${escHtml(l.user)}）`;
 }
 
 function renderSubTaskCard(detail, task, idx) {
@@ -489,7 +489,7 @@ function renderProjectActions(detail) {
   // 但群本身仍然存在，此时必须继续保留“进入项目群”入口。
   const hasProjectChat = !!String(detail.feishuChatId || '').trim();
   if (hasProjectChat) {
-    actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="openProjectFeishuChat('${escJsString(detail.feishuChatId)}')">💬 进入项目群</button>`;
+    actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="openProjectFeishuChat('${escHtml(escJsString(detail.feishuChatId))}')">💬 进入项目群</button>`;
   } else if (canCreateProjectChat && !['terminated', 'pending_terminate'].includes(detail.status)
       && (!detail.feishuChatStatus || ['not_created', 'failed', 'dissolved'].includes(detail.feishuChatStatus))) {
     actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="createProjectFeishuChat(${detail.id})">💬 创建项目群</button>`;
@@ -626,9 +626,9 @@ function renderAttachmentActions(fileOrUrl, compact = false) {
   const fileSize = typeof fileOrUrl === 'object' ? (fileOrUrl?.size || 0) : 0;
   const fileUrl = normalizeFileUrl(fileOrUrl);
   const previewButton = isPreviewableFile(fileName)
-    ? `<button class="attachment-action-btn preview" data-emie-onclick="event.stopPropagation();openFilePreview('${escJsString(fileUrl)}','${escJsString(fileName)}',${fileSize})" title="在线预览">${compact ? '👁' : '👁 预览'}</button>`
+    ? `<button class="attachment-action-btn preview" data-emie-onclick="event.stopPropagation();openFilePreview('${escHtml(escJsString(fileUrl))}','${escHtml(escJsString(fileName))}',${fileSize})" title="在线预览">${compact ? '👁' : '👁 预览'}</button>`
     : '';
-  return `<span class="attachment-actions">${previewButton}<button class="attachment-action-btn download" data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(fileUrl)}','${escJsString(fileName)}',${fileSize})" title="下载选项">${compact ? '⬇' : '⬇ 下载'}</button></span>`;
+  return `<span class="attachment-actions">${previewButton}<button class="attachment-action-btn download" data-emie-onclick="event.stopPropagation();showDownloadOptions('${escHtml(escJsString(fileUrl))}','${escHtml(escJsString(fileName))}',${fileSize})" title="下载选项">${compact ? '⬇' : '⬇ 下载'}</button></span>`;
 }
 
 function renderProjectReferenceImages(detail) {
@@ -642,7 +642,7 @@ function renderProjectReferenceImages(detail) {
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => isRasterImageFile(img.name || storedNameFromFile(img)) ? `<div style="position:relative;display:inline-block;">
           <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" title="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="cursor:pointer;">
-          <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
+          <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escHtml(escJsString(normalizeFileUrl(img)))}','${escHtml(escJsString(img.name || 'image.png'))}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>` : `<div class="attachment-item" style="width:100%;display:flex;align-items:center;gap:8px;"><span>📐</span><span class="attachment-name" style="flex:1;">${escHtml(img.name || storedNameFromFile(img))}</span>${renderAttachmentActions(img)}</div>`).join('')}
     </div></div>`;
 }
@@ -659,7 +659,7 @@ function renderSubTaskImages(jsonStr) {
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => isRasterImageFile(img.name || storedNameFromFile(img)) ? `<div style="position:relative;display:inline-block;">
           <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="cursor:pointer;">
-          <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
+          <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escHtml(escJsString(normalizeFileUrl(img)))}','${escHtml(escJsString(img.name || 'image.png'))}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>` : `<div class="attachment-item" style="width:100%;display:flex;align-items:center;gap:8px;"><span>📐</span><span class="attachment-name" style="flex:1;">${escHtml(img.name || storedNameFromFile(img))}</span>${renderAttachmentActions(img)}</div>`).join('')}
     </div></div>`;
 }
@@ -699,7 +699,7 @@ function renderTaskAttachments(jsonStr) {
       <div class="image-preview" style="margin-top:4px;">
         ${images.map(img => `<div style="position:relative;display:inline-block;">
             <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable img-preview-large" draggable="true" loading="lazy" decoding="async" style="cursor:grab;">
-            <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(normalizeFileUrl(img))}','${escJsString(img.name || 'image.png')}',${img.size || 0})" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
+            <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escHtml(escJsString(normalizeFileUrl(img)))}','${escHtml(escJsString(img.name || 'image.png'))}',${img.size || 0})" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
         </div>`).join('')}
       </div></div>`;
   }
@@ -733,7 +733,7 @@ function renderProjectScoringSummary(detail) {
     });
     const final = tw > 0 ? Math.round(ta / tw) : null;
     html += `<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--gray-50);border-radius:6px;margin-bottom:6px;font-size:13px;">
-      <span style="font-weight:600;">#${i + 1} ${task.name}</span>
+      <span style="font-weight:600;">#${i + 1} ${escHtml(task.name)}</span>
       <span style="flex:1;"></span>
       ${final ? `<span style="font-size:16px;font-weight:700;color:var(--primary);">${final}分</span>` : `<span style="color:var(--gray-400);">评分中…</span>`}
     </div>`;
@@ -968,7 +968,7 @@ function renderProjectPipeline(detail) {
     return `<div style="flex:1;text-align:center;position:relative;">
       <div style="width:28px;height:28px;border-radius:50%;margin:0 auto 6px;display:flex;align-items:center;justify-content:center;${dotStyle}">${dotInner}</div>
       <div style="font-size:11px;${labelColor}">${s.label}</div>
-      <div style="font-size:10px;${detailColor};margin-top:2px;">${st === 'done' ? '已完成' : st === 'current' ? '进行中' : '待进行'}${s.detail ? ' · ' + s.detail : ''}</div>
+      <div style="font-size:10px;${detailColor};margin-top:2px;">${st === 'done' ? '已完成' : st === 'current' ? '进行中' : '待进行'}${s.detail ? ' · ' + escHtml(s.detail) : ''}</div>
       ${connector}
     </div>`;
   }).join('');
@@ -980,7 +980,7 @@ function renderProjectPipeline(detail) {
         <span style="font-size:16px;">${hint.icon}</span>
         <div>
           <div style="font-size:12px;font-weight:500;color:${hint.color};">${hint.title}</div>
-          <div style="font-size:12px;color:${hint.color};opacity:0.85;">${hint.text}</div>
+          <div style="font-size:12px;color:${hint.color};opacity:0.85;">${escHtml(hint.text)}</div>
         </div>
       </div>
     </div>` : '';

@@ -27,7 +27,7 @@ class ProjectWorkflowServiceTest {
         Project project = project("regular");
         AtomicReference<ProjectWorkflowAttempt> latest = new AtomicReference<>();
 
-        when(projects.findById(9L)).thenReturn(Optional.of(project));
+        when(projects.findByIdForUpdate(9L)).thenReturn(Optional.of(project));
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(attempts.save(any(ProjectWorkflowAttempt.class))).thenAnswer(invocation -> {
             ProjectWorkflowAttempt attempt = invocation.getArgument(0);
@@ -62,7 +62,7 @@ class ProjectWorkflowServiceTest {
         project.setSalesId("sales-1");
         project.setWorkflowStage("design_review");
         project.setWorkflowStatus("under_review");
-        when(projects.findById(9L)).thenReturn(Optional.of(project));
+        when(projects.findByIdForUpdate(9L)).thenReturn(Optional.of(project));
         ProjectWorkflowService service = new ProjectWorkflowService(projects, attempts);
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,

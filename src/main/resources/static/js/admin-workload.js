@@ -105,7 +105,7 @@ async function renderAdminWorkload(container) {
       container.innerHTML += html;
     }
   } catch (e) {
-    container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${e.message}</p></div>`;
+    container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${escHtml(e.message)}</p></div>`;
   }
 }
 

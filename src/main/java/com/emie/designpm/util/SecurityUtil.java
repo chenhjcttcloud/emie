@@ -2,6 +2,7 @@ package com.emie.designpm.util;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * 安全工具类：输入过滤、文件校验等
@@ -11,6 +12,20 @@ public class SecurityUtil {
     private static final String USER_ID_PATTERN = "^[a-zA-Z0-9_]{3,30}$";
     private static final String PHONE_PATTERN = "^1\\d{10}$";
     private static final String EMAIL_PATTERN = "^[\\w.-]+@[\\w.-]+\\.[A-Za-z]{2,}$";
+
+    // HTML 事件处理器属性名白名单（WHATWG 全局事件属性 + 常用遗留事件）。
+    // 只精确匹配真实事件属性，避免把 one=/online=/done=/continue= 等合法文本误改写；
+    // 要求前面是空白或字符串开头（(^|\s)），从而不命中单词中部的 on（如 donation=）。
+    private static final String EVENT_HANDLER_ATTR_NAMES =
+            "abort|auxclick|beforeinput|beforematch|beforetoggle|blur|cancel|canplay|canplaythrough|change|click|" +
+            "close|contextlost|contextmenu|contextrestored|copy|cuechange|cut|dblclick|drag|dragend|dragenter|" +
+            "dragleave|dragover|dragstart|drop|durationchange|emptied|ended|error|focus|formdata|input|invalid|" +
+            "keydown|keypress|keyup|load|loadeddata|loadedmetadata|loadstart|mousedown|mouseenter|mouseleave|" +
+            "mousemove|mouseout|mouseover|mouseup|paste|pause|play|playing|progress|ratechange|reset|resize|" +
+            "scroll|scrollend|securitypolicyviolation|seeked|seeking|select|slotchange|stalled|submit|suspend|" +
+            "timeupdate|toggle|volumechange|waiting|wheel";
+    private static final Pattern XSS_EVENT_HANDLER_ATTR = Pattern.compile(
+            "(?i)(^|\\s)on(?:" + EVENT_HANDLER_ATTR_NAMES + ")\\s*=");
 
     // 允许上传的图片扩展名
     // 设计源文件可放入参考图片区域，但不参与缩略图/在线预览。
@@ -40,9 +55,10 @@ public class SecurityUtil {
         if (s.length() > maxLen) s = s.substring(0, maxLen);
         // 移除 HTML 标签
         s = s.replaceAll("<[^>]*>", "");
-        // 移除可能导致 XSS 的危险字符
-        s = s.replaceAll("javascript:", "x-javascript:")
-             .replaceAll("on\\w+\\s*=", "x-event=");
+        // 移除可能导致 XSS 的危险字符：大小写不敏感；事件属性用白名单精确匹配，
+        // 避免把 done=/one=/online=/continue= 等合法文本（含 URL 参数）误改写。
+        s = s.replaceAll("(?i)javascript:", "x-javascript:");
+        s = XSS_EVENT_HANDLER_ATTR.matcher(s).replaceAll("$1x-event=");
         return s;
     }
 
@@ -75,6 +91,10 @@ public class SecurityUtil {
         if (fileName == null || fileName.isEmpty()) return false;
         // 防止路径穿越
         if (fileName.contains("..") || fileName.contains("/") || fileName.contains("\\")) return false;
+        // 拒绝 HTML 敏感字符（与前端转义防线对齐，纵深防御；校验仅在上传入口执行，存量数据不重校验）
+        if (fileName.contains("\"") || fileName.contains("'") || fileName.contains("<") || fileName.contains(">")) {
+            return false;
+        }
         // 获取扩展名
         int dot = fileName.lastIndexOf('.');
         if (dot < 0) return false;

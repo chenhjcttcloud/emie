@@ -132,6 +132,73 @@ class PointsServiceSnapshotTest {
         verify(rules).delete(saved);
     }
 
+    @Test
+    void qualityThresholdUsesWeightedAverageMatchingPageDisplay() {
+        PointRuleRepository rules = mock(PointRuleRepository.class);
+        PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
+        ScoringRepository scoring = mock(ScoringRepository.class);
+        PointDifficultyConfigRepository difficulties = mock(PointDifficultyConfigRepository.class);
+        PointRule rule = rule("A1", 20, 1d, true);
+        rule.setQualityBonusThreshold(89);
+        rule.setQualityBonusRatio(0.5);
+        when(rules.findByRuleCode("A1")).thenReturn(Optional.of(rule));
+        when(difficulties.findByDifficultyCode("STANDARD")).thenReturn(Optional.of(difficulty("STANDARD", 1d, true)));
+
+        // 加权综合 = (80×0.6 + 100×0.4) / (0.6+0.4) = 88；简单平均 = 90。
+        // 阈值 89：按页面展示的加权算法不应发质量加分（简单平均则会误发）。
+        ScoringRecord planner = new ScoringRecord();
+        planner.setScore(80);
+        planner.setWeight(0.6);
+        ScoringRecord admin = new ScoringRecord();
+        admin.setScore(100);
+        admin.setWeight(0.4);
+        when(scoring.findBySubTaskId(9L)).thenReturn(List.of(planner, admin));
+
+        PointsService service = new PointsService(rules, ledgers, scoring, difficulties);
+        SubTask task = new SubTask();
+        task.setId(9L);
+        task.setDesignerId("designer-1");
+        service.bindRuleSnapshot(task, "A1", "standard");
+
+        service.awardTaskApproval(task);
+
+        verify(ledgers).save(argThat(ledger -> "A1:BASE".equals(ledger.getRuleCode())));
+        verify(ledgers, never()).save(argThat(ledger -> "A1:QUALITY".equals(ledger.getRuleCode())));
+    }
+
+    @Test
+    void qualityThresholdAwardsWhenWeightedAverageMeetsThreshold() {
+        PointRuleRepository rules = mock(PointRuleRepository.class);
+        PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
+        ScoringRepository scoring = mock(ScoringRepository.class);
+        PointDifficultyConfigRepository difficulties = mock(PointDifficultyConfigRepository.class);
+        PointRule rule = rule("A1", 20, 1d, true);
+        rule.setQualityBonusThreshold(88);
+        rule.setQualityBonusRatio(0.5);
+        when(rules.findByRuleCode("A1")).thenReturn(Optional.of(rule));
+        when(difficulties.findByDifficultyCode("STANDARD")).thenReturn(Optional.of(difficulty("STANDARD", 1d, true)));
+
+        // 加权综合 = 88，阈值 88：达到阈值应发质量加分（基础分 20 × 比例 0.5 = 10）。
+        ScoringRecord planner = new ScoringRecord();
+        planner.setScore(80);
+        planner.setWeight(0.6);
+        ScoringRecord admin = new ScoringRecord();
+        admin.setScore(100);
+        admin.setWeight(0.4);
+        when(scoring.findBySubTaskId(9L)).thenReturn(List.of(planner, admin));
+
+        PointsService service = new PointsService(rules, ledgers, scoring, difficulties);
+        SubTask task = new SubTask();
+        task.setId(9L);
+        task.setDesignerId("designer-1");
+        service.bindRuleSnapshot(task, "A1", "standard");
+
+        service.awardTaskApproval(task);
+
+        verify(ledgers).save(argThat(ledger -> "A1:QUALITY".equals(ledger.getRuleCode())
+                && ledger.getPoints() == 10d));
+    }
+
     private PointRule rule(String code, int points, double multiplier, boolean enabled) {
         PointRule rule = new PointRule();
         rule.setRuleCode(code);

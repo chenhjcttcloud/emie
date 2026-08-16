@@ -20,6 +20,8 @@ function notifySystemVersion(version) {
 
 function connectVersionStream() {
   if (!window.EventSource || EMIE.state.versionStream) return;
+  // 登出后不再重连（登出时已 close 的流若存在挂起重试，直接放弃）
+  if (!localStorage.getItem('design_pm_token')) return;
   const stream = new EventSource('/api/admin/version/stream');
   stream.addEventListener('version', event => notifySystemVersion(event.data));
   stream.onerror = () => {
@@ -31,6 +33,11 @@ function connectVersionStream() {
   };
   stream.onopen = () => { EMIE.state.versionStreamRetry = 0; };
   EMIE.state.versionStream = stream;
+}
+
+/** 页面重新可见时立即检查版本；具名以便登出时解绑。 */
+function onVersionVisibilityChange() {
+  if (!document.hidden) checkSystemVersion();
 }
 
 /** 清理 WebView 可控缓存后刷新；不清理 token/localStorage，避免打断用户当前登录。 */
@@ -90,7 +97,6 @@ async function initApp() {
         if (r.ok) {
           const data = await r.json();
           localStorage.setItem('design_pm_token', data.token);
-          localStorage.setItem('design_pm_user', JSON.stringify(data.user));
           // 继续走正常登录流程
         }
       }
@@ -137,6 +143,16 @@ function showLogin() {
   loadPublicConfig();
 }
 
+// 品牌图片地址白名单：仅允许 http(s)、协议相对（//）或站内相对路径；
+// 拒绝 javascript:/data:/vbscript: 等危险协议以及引号、尖括号、反斜杠、空白。
+function safeImageSrc(value) {
+  const raw = String(value || '').trim();
+  if (!raw || /["'<>\\\s]/.test(raw)) return '';
+  if (/^(https?:)?\/\//i.test(raw)) return raw;
+  if (raw.startsWith('/') || raw.startsWith('./') || raw.startsWith('../')) return raw;
+  return '';
+}
+
 // 加载公开配置到登录页
 async function loadPublicConfig() {
   try {
@@ -149,9 +165,12 @@ async function loadPublicConfig() {
       if (cfg['login.bg']) {
         const loginContainer = document.querySelector('.login-container');
         if (loginContainer) {
-          loginContainer.style.backgroundImage = `url(${cfg['login.bg']})`;
-          loginContainer.style.backgroundSize = 'cover';
-          loginContainer.style.backgroundPosition = 'center';
+          const bgSrc = safeImageSrc(cfg['login.bg']);
+          if (bgSrc) {
+            loginContainer.style.backgroundImage = `url("${bgSrc}")`;
+            loginContainer.style.backgroundSize = 'cover';
+            loginContainer.style.backgroundPosition = 'center';
+          }
         }
       } else if (cfg['login.bgColor']) {
         const loginContainer = document.querySelector('.login-container');
@@ -164,12 +183,19 @@ async function loadPublicConfig() {
       if (cfg['app.subtitle']) {
         document.querySelector('.login-subtitle').textContent = cfg['app.subtitle'];
       }
-      // Logo（图片优先，无图片则用 emoji）
+      // Logo（图片优先，无图片则用 emoji；只用安全 src + textContent，避免未认证页注入）
       const logoEl = document.querySelector('.login-logo');
       if (logoEl) {
-        if (cfg['app.logo']) {
-          const logoSrc = String(cfg['app.logo']).startsWith('/api/files/download/admin/') ? '/favicon.ico' : cfg['app.logo'];
-          logoEl.innerHTML = `<img src="${logoSrc}" style="height:48px;width:auto;" alt="logo">`;
+        const rawLogo = String(cfg['app.logo'] || '');
+        // uploads/admin 下 logo 已匿名放行（AuthFilter 前缀白名单 + FileController 正则兜底），直接使用下载 URL
+        const logoSrc = safeImageSrc(rawLogo);
+        if (logoSrc) {
+          logoEl.innerHTML = '';
+          const img = document.createElement('img');
+          img.src = logoSrc;
+          img.style.cssText = 'height:48px;width:auto;';
+          img.alt = 'logo';
+          logoEl.appendChild(img);
         } else if (cfg['app.logoEmoji']) {
           logoEl.textContent = cfg['app.logoEmoji'];
         }
@@ -211,13 +237,30 @@ async function showApp() {
         notifySystemVersion(cfg['system.version']);
         const logoEl = document.querySelector('.logo');
         if (logoEl) {
-          if (cfg['app.logo']) {
-            const logoSrc = String(cfg['app.logo']).startsWith('/api/files/download/admin/') ? '/favicon.ico' : cfg['app.logo'];
-            logoEl.innerHTML = `<img src="${logoSrc}" style="height:32px;width:auto;vertical-align:middle;margin-right:8px;" alt="logo"><span>${cfg['app.title'] || '产品管理系统'}</span><small class="app-version">v${cfg['system.version'] || '—'}</small>`;
-          } else if (cfg['app.logoEmoji']) {
-            logoEl.innerHTML = `${cfg['app.logoEmoji']} ${cfg['app.title'] || '产品管理系统'}<small class="app-version">v${cfg['system.version'] || '—'}</small><span>${cfg['app.subtitle'] || 'Product Management'}</span>`;
+          const rawLogo = String(cfg['app.logo'] || '');
+          // uploads/admin 下 logo 已匿名放行（AuthFilter 前缀白名单 + FileController 正则兜底），直接使用下载 URL
+          const logoSrc = safeImageSrc(rawLogo);
+          const titleSpan = document.createElement('span');
+          titleSpan.textContent = cfg['app.title'] || '产品管理系统';
+          const versionSmall = document.createElement('small');
+          versionSmall.className = 'app-version';
+          versionSmall.textContent = 'v' + (cfg['system.version'] || '—');
+          logoEl.innerHTML = '';
+          if (logoSrc) {
+            const img = document.createElement('img');
+            img.src = logoSrc;
+            img.style.cssText = 'height:32px;width:auto;vertical-align:middle;margin-right:8px;';
+            img.alt = 'logo';
+            logoEl.appendChild(img);
+            logoEl.appendChild(titleSpan);
+            logoEl.appendChild(versionSmall);
           } else {
-            logoEl.innerHTML = `🎨 ${cfg['app.title'] || '产品管理系统'}<small class="app-version">v${cfg['system.version'] || '—'}</small><span>${cfg['app.subtitle'] || 'Product Management'}</span>`;
+            logoEl.appendChild(document.createTextNode((cfg['app.logoEmoji'] || '🎨') + ' '));
+            logoEl.appendChild(titleSpan);
+            logoEl.appendChild(versionSmall);
+            const subSpan = document.createElement('span');
+            subSpan.textContent = cfg['app.subtitle'] || 'Product Management';
+            logoEl.appendChild(subSpan);
           }
         }
       }
@@ -227,7 +270,7 @@ async function showApp() {
     if (!EMIE.state.versionCheckTimer) EMIE.state.versionCheckTimer = setInterval(checkSystemVersion, 10000);
     if (!EMIE.state.versionFocusBound) {
       window.addEventListener('focus', checkSystemVersion);
-      document.addEventListener('visibilitychange', () => { if (!document.hidden) checkSystemVersion(); });
+      document.addEventListener('visibilitychange', onVersionVisibilityChange);
       EMIE.state.versionFocusBound = true;
     }
 
@@ -413,7 +456,6 @@ async function checkFeishuCallback() {
   if (!response.ok) { window.EMIE.actions.showSystemAlert('飞书登录票据已失效，请重新登录'); return false; }
   const data = await response.json();
   localStorage.setItem('design_pm_token', data.token);
-  localStorage.setItem('design_pm_user', JSON.stringify(data.user || {}));
   window.history.replaceState({}, document.title, window.location.pathname);
   // 只保存回调 token，由 initApp 统一调用 /me 并启动一次 showApp，避免并发首屏渲染。
   return true;
@@ -438,6 +480,14 @@ function handleLogout() {
   idleLastActive = 0;
   const idleEl = document.getElementById('idleCountdown');
   if (idleEl) idleEl.style.display = 'none';
+  // 清理版本检查轮询、版本 SSE 流与页面事件监听，避免登出后仍在后台运行
+  if (EMIE.state.versionCheckTimer) { clearInterval(EMIE.state.versionCheckTimer); EMIE.state.versionCheckTimer = null; }
+  if (EMIE.state.versionStream) { EMIE.state.versionStream.close(); EMIE.state.versionStream = null; }
+  if (EMIE.state.versionFocusBound) {
+    window.removeEventListener('focus', checkSystemVersion);
+    document.removeEventListener('visibilitychange', onVersionVisibilityChange);
+    EMIE.state.versionFocusBound = false;
+  }
   showLogin();
 }
 

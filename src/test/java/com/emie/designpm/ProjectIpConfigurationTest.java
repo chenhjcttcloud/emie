@@ -2,6 +2,7 @@ package com.emie.designpm;
 
 import com.emie.designpm.entity.IpOption;
 import com.emie.designpm.entity.Project;
+import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.*;
 import com.emie.designpm.service.*;
 import org.junit.jupiter.api.Test;
@@ -48,6 +49,12 @@ class ProjectIpConfigurationTest {
     private ProjectService createService(ProjectRepository projects, IpOptionRepository ipOptions) {
         UserService users = mock(UserService.class);
         when(users.getUserName(any())).thenAnswer(invocation -> String.valueOf((Object) invocation.getArgument(0)));
+        // P3 加固：plannerId 非空时必须解析到在职企划，测试构造需提供有效企划用户
+        User planner = new User();
+        planner.setUserId("planner-test");
+        planner.setRole("planner");
+        planner.setStatus("active");
+        when(users.getUserByUserId(any())).thenReturn(planner);
         return new ProjectService(
                 projects,
                 mock(SubTaskRepository.class),

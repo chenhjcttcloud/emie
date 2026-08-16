@@ -9,6 +9,7 @@ const roleLabel = (...args) => EMIE.actions.roleLabel(...args);
 const getProjectStatusInfo = (...args) => EMIE.actions.getProjectStatusInfo(...args);
 const formatDate = (...args) => EMIE.actions.formatDate(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
+const escJsString = (...args) => EMIE.actions.escJsString(...args);
 const renderDesignerTasks = (...args) => EMIE.actions.renderDesignerTasks(...args);
 const renderProjectRow = (...args) => EMIE.actions.renderProjectRow(...args);
 const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
@@ -115,7 +116,7 @@ async function openDesignRequirementDetail(id) {
           ${canDeliver && ['draft', 'in_progress'].includes(detail.status) ? `<button class="btn btn-primary" data-emie-onclick="openDesignRequirementDelivery(${id})">📦 提交交付成果</button>` : ''}
           ${myScore?.status === 'pending' && myScore.stage === 'self' ? `<button class="btn btn-warning" data-emie-onclick="openDesignRequirementScore(${id},true)">⭐ 完成自评</button>` : ''}
           ${myScore?.status === 'pending' && myScore.stage === 'review' ? `<button class="btn btn-primary" data-emie-onclick="openDesignRequirementScore(${id},false)">⭐ 立即评分</button>` : ''}
-          ${hasChat ? `<button class="btn btn-outline" data-emie-onclick="openDesignRequirementChat('${escHtml(detail.feishuChatId)}')">💬 进入项目群</button>` : (canManageChat && detail.status !== 'terminated' ? `<button class="btn btn-outline" data-emie-onclick="createDesignRequirementChat(${id})">💬 创建项目群</button>` : '')}
+          ${hasChat ? `<button class="btn btn-outline" data-emie-onclick="openDesignRequirementChat('${escHtml(escJsString(detail.feishuChatId))}')">💬 进入项目群</button>` : (canManageChat && detail.status !== 'terminated' ? `<button class="btn btn-outline" data-emie-onclick="createDesignRequirementChat(${id})">💬 创建项目群</button>` : '')}
           ${hasChat && ['completed', 'terminated'].includes(detail.status) && canManageChat ? `<button class="btn btn-danger" data-emie-onclick="dissolveDesignRequirementChat(${id})">解散项目群</button>` : ''}
         </div>
       </div>`;

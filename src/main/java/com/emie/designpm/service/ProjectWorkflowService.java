@@ -159,8 +159,10 @@ public class ProjectWorkflowService {
         return result;
     }
 
+    /** 流程推进/审核一律加项目行锁（FOR UPDATE），在锁内重校验阶段与轮次，
+     *  防止并发提交导致留痕（attempt 记录）与项目阶段/轮次计数矛盾（P2-3/P2-19）。 */
     private Project loadActive(Long projectId) {
-        Project project = projects.findById(projectId)
+        Project project = projects.findByIdForUpdate(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("项目不存在"));
         if (List.of("terminated", "paused", "pending_terminate").contains(project.getStatus())) {
             throw new IllegalArgumentException("项目当前状态不能推进子任务总流程");

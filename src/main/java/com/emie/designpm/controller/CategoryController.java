@@ -2,6 +2,7 @@ package com.emie.designpm.controller;
 
 import com.emie.designpm.entity.ProductCategory;
 import com.emie.designpm.repository.ProductCategoryRepository;
+import com.emie.designpm.util.SecurityUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -44,7 +45,7 @@ public class CategoryController {
         if (body.containsKey("sortOrder")) {
             try { sortOrder = Integer.parseInt(body.get("sortOrder")); } catch (NumberFormatException ignored) {}
         }
-        ProductCategory cat = new ProductCategory(name.trim(), sortOrder);
+        ProductCategory cat = new ProductCategory(SecurityUtil.sanitizeText(name.trim(), 50), sortOrder);
         return ResponseEntity.ok(repo.save(cat));
     }
 
@@ -55,7 +56,7 @@ public class CategoryController {
         ProductCategory cat = repo.findById(id).orElse(null);
         if (cat == null) return ResponseEntity.notFound().build();
 
-        if (body.containsKey("name")) cat.setName(body.get("name").trim());
+        if (body.containsKey("name") && body.get("name") != null) cat.setName(SecurityUtil.sanitizeText(body.get("name").trim(), 50));
         if (body.containsKey("sortOrder")) {
             try { cat.setSortOrder(Integer.parseInt(body.get("sortOrder"))); } catch (NumberFormatException ignored) {}
         }

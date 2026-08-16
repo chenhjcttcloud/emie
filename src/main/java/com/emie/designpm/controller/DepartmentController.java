@@ -4,6 +4,7 @@ import com.emie.designpm.entity.Department;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.DepartmentRepository;
 import com.emie.designpm.service.UserService;
+import com.emie.designpm.util.SecurityUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -39,6 +40,11 @@ public class DepartmentController {
         if (dept.getName() == null || dept.getName().isBlank()) {
             return ResponseEntity.badRequest().build();
         }
+        // 部门名属于原始用户输入，入库前清洗（列长默认 255）
+        dept.setName(SecurityUtil.sanitizeText(dept.getName(), 255));
+        if (dept.getName().isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
         if (!isValidHeadRole(dept.getRole(), dept.getHeadUserId())) {
             return ResponseEntity.badRequest().build();
         }
@@ -60,7 +66,10 @@ public class DepartmentController {
                     if (!isValidHeadRole(dept.getRole(), dept.getHeadUserId())) {
                         return ResponseEntity.badRequest().<Department>build();
                     }
-                    existing.setName(dept.getName());
+                    String sanitizedName = SecurityUtil.sanitizeText(dept.getName(), 255);
+                    if (sanitizedName != null && !sanitizedName.isBlank()) {
+                        existing.setName(sanitizedName);
+                    }
                     existing.setRole(dept.getRole());
 
                     // 如果负责人变更，旧负责人降为普通成员

@@ -26,6 +26,7 @@ import java.util.concurrent.Semaphore;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -249,5 +250,28 @@ class FileAccessRegressionTest {
                 session, storedName, storedName);
 
         assertTrue(allowed);
+    }
+
+    @Test
+    void anonymousAdminManagedImageIsAllowedButOtherAdminFilesFailClosed() {
+        FileController controller = new FileController(mock(FileArchiveService.class),
+                mock(FileRecordRepository.class), mock(ProjectAccessService.class),
+                mock(SubTaskRepository.class), mock(FilePreviewService.class));
+        HttpServletRequest anonymous = mock(HttpServletRequest.class);
+
+        // 白名单文件名（AdminService 生成规则）→ 匿名放行
+        ResponseEntity<Object> allowed = ReflectionTestUtils.invokeMethod(controller, "checkDownloadAccess",
+                "admin", "admin_logo_a1b2c3d4.png", anonymous);
+        assertNull(allowed);
+
+        // 同目录非白名单文件名 → 匿名会话缺失，fail-closed 401
+        ResponseEntity<Object> rejected = ReflectionTestUtils.invokeMethod(controller, "checkDownloadAccess",
+                "admin", "secret-plan.pdf", anonymous);
+        assertTrue(rejected != null && rejected.getStatusCode().value() == 401);
+
+        // 非法文件名（不符生成规则，即使扩展名是图片）同样拒绝
+        ResponseEntity<Object> sneaky = ReflectionTestUtils.invokeMethod(controller, "checkDownloadAccess",
+                "admin", "admin_logo_hack.png", anonymous);
+        assertTrue(sneaky != null && sneaky.getStatusCode().value() == 401);
     }
 }

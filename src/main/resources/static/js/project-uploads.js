@@ -328,7 +328,7 @@ function showProgressBar(containerId, fileName) {
   el.id = 'prog_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
   el.style.cssText = 'margin-top:6px;background:var(--gray-100);border-radius:6px;overflow:hidden;font-size:11px;';
   el.innerHTML = `<div style="display:flex;justify-content:space-between;padding:2px 8px;color:var(--gray-500);">
-    <span>⏳ ${fileName}</span><span class="prog-pct">0%</span>
+    <span>⏳ ${escHtml(fileName)}</span><span class="prog-pct">0%</span>
   </div><div style="height:4px;background:var(--gray-200);border-radius:2px;margin:0 8px 6px;">
     <div class="prog-bar" style="width:0%;height:100%;background:var(--primary);border-radius:2px;transition:width .3s;"></div>
   </div>`;
@@ -407,7 +407,7 @@ function renderFileList(list, typeLabel) {
     c.innerHTML = `<div class="image-preview">${list.map((img, i) => canRenderAsImage(img)
       ? `<div style="position:relative;display:inline-block;">
         <img src="${escHtml(authUrl(img.url))}" alt="${escHtml(img.name)}" class="img-clickable" draggable="true" loading="lazy" decoding="async" style="width:180px;height:180px;object-fit:contain;border-radius:6px;border:1px solid var(--gray-200);cursor:grab;background:#fff;">
-        <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escJsString(img.url)}','${escJsString(img.name)}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:20px;height:20px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
+        <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escHtml(escJsString(img.url))}','${escHtml(escJsString(img.name))}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:20px;height:20px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
         <button style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button>
       </div>`
       : `<div class="file-item" style="width:100%;"><span class="file-item-name">📐 ${escHtml(img.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(img.size)}</span>${renderAttachmentActions(img, true)}<button class="remove-file" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button></div>`).join('')}</div>`;

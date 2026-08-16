@@ -21,17 +21,17 @@ async function renderAdminCategories(container) {
           <button class="btn btn-primary btn-sm" data-emie-onclick="addCategory()">➕ 新增类目</button>
         </div>
         <div class="config-card-body">
-          <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">当前类目（顺序按排序号）：${nameList}</p>
+          <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">当前类目（顺序按排序号）：${cats.map(c => escHtml(c.name)).join(', ')}</p>
           <div class="table-wrap"><table>
             <thead><tr><th>ID</th><th>名称</th><th>排序</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>${cats.map(c => `
               <tr>
                 <td>${c.id}</td>
-                <td><strong>${c.name}</strong></td>
+                <td><strong>${escHtml(c.name)}</strong></td>
                 <td>${c.sortOrder}</td>
                 <td><span class="badge ${c.active ? 'badge-completed' : 'badge-rejected'}">${c.active ? '启用' : '禁用'}</span></td>
                 <td style="white-space:nowrap;">
-                  <button class="btn btn-outline btn-sm" data-emie-onclick="editCategory(${c.id}, '${escHtml(c.name)}', ${c.sortOrder}, ${c.active})">✏️ 编辑</button>
+                  <button class="btn btn-outline btn-sm" data-emie-onclick="editCategory(${c.id}, '${escHtml(escJsString(c.name))}', ${c.sortOrder}, ${c.active})">✏️ 编辑</button>
                   <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-emie-onclick="deleteCategory(${c.id})">🗑️ 删除</button>
                 </td>
               </tr>`).join('')}
@@ -74,7 +74,7 @@ const editCategory = function(id, name, order, active) {
     <div class="modal">
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✏️ 编辑产品类目</div></div></div>
       <div class="modal-body">
-        <div class="form-group"><label class="form-label"><span class="required">*</span> 类目名称</label><input class="form-input" id="catName" value="${name}"></div>
+        <div class="form-group"><label class="form-label"><span class="required">*</span> 类目名称</label><input class="form-input" id="catName" value="${escHtml(name)}"></div>
         <div class="form-group"><label class="form-label">排序号</label><input class="form-input" id="catOrder" type="number" value="${order}"></div>
         <div class="form-group"><label class="form-label">状态</label>
           <select class="form-select" id="catActive">
@@ -140,7 +140,7 @@ async function renderAdminIpOptions(container) {
               <td>${item.sortOrder}</td>
               <td><span class="badge ${item.active ? 'badge-completed' : 'badge-rejected'}">${item.active ? '启用' : '禁用'}</span></td>
               <td style="white-space:nowrap;">
-                <button class="btn btn-outline btn-sm" data-emie-onclick="editIpOption(${item.id}, '${escHtml(escJsString(item.name))}', ${item.sortOrder}, ${item.active}, '${encodeURIComponent(item.subOptionsJson || '[]')}', '${item.subOptionSelectionMode || 'multiple'}')">✏️ 编辑</button>
+                <button class="btn btn-outline btn-sm" data-emie-onclick="editIpOption(${item.id}, '${escHtml(escJsString(item.name))}', ${item.sortOrder}, ${item.active}, '${escHtml(escJsString(encodeURIComponent(item.subOptionsJson || '[]')))}', '${escHtml(escJsString(item.subOptionSelectionMode || 'multiple'))}')">✏️ 编辑</button>
                 <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-emie-onclick="deleteIpOption(${item.id})">🗑️ 删除</button>
               </td>
             </tr>`).join('')}
@@ -233,11 +233,11 @@ async function renderAdminCompliance(container) {
             <tbody>${items.map(c => `
               <tr>
                 <td>${c.id}</td>
-                <td><strong>${c.name}</strong></td>
+                <td><strong>${escHtml(c.name)}</strong></td>
                 <td>${c.sortOrder}</td>
                 <td><span class="badge ${c.active ? 'badge-completed' : 'badge-rejected'}">${c.active ? '启用' : '禁用'}</span></td>
                 <td style="white-space:nowrap;">
-                  <button class="btn btn-outline btn-sm" data-emie-onclick="editCompliance(${c.id}, '${escHtml(c.name)}', ${c.sortOrder}, ${c.active})">✏️ 编辑</button>
+                  <button class="btn btn-outline btn-sm" data-emie-onclick="editCompliance(${c.id}, '${escHtml(escJsString(c.name))}', ${c.sortOrder}, ${c.active})">✏️ 编辑</button>
                   <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-emie-onclick="deleteCompliance(${c.id})">🗑️ 删除</button>
                 </td>
               </tr>`).join('')}
@@ -279,7 +279,7 @@ const editCompliance = function(id, name, order, active) {
     <div class="modal">
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✏️ 编辑合规处罚项</div></div></div>
       <div class="modal-body">
-        <div class="form-group"><label class="form-label"><span class="required">*</span> 名称</label><input class="form-input" id="compName" value="${name}"></div>
+        <div class="form-group"><label class="form-label"><span class="required">*</span> 名称</label><input class="form-input" id="compName" value="${escHtml(name)}"></div>
         <div class="form-group"><label class="form-label">排序号</label><input class="form-input" id="compOrder" type="number" value="${order}"></div>
         <div class="form-group"><label class="form-label">状态</label>
           <select class="form-select" id="compActive">
@@ -336,11 +336,11 @@ async function renderAdminPriceRanges(container) {
             <tbody>${items.map(c => `
               <tr>
                 <td>${c.id}</td>
-                <td><strong>${c.name}</strong></td>
+                <td><strong>${escHtml(c.name)}</strong></td>
                 <td>${c.sortOrder}</td>
                 <td><span class="badge ${c.active ? 'badge-completed' : 'badge-rejected'}">${c.active ? '启用' : '禁用'}</span></td>
                 <td style="white-space:nowrap;">
-                  <button class="btn btn-outline btn-sm" data-emie-onclick="editPriceRange(${c.id}, '${escHtml(c.name)}', ${c.sortOrder}, ${c.active})">✏️ 编辑</button>
+                  <button class="btn btn-outline btn-sm" data-emie-onclick="editPriceRange(${c.id}, '${escHtml(escJsString(c.name))}', ${c.sortOrder}, ${c.active})">✏️ 编辑</button>
                   <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-emie-onclick="deletePriceRange(${c.id})">🗑️ 删除</button>
                 </td>
               </tr>`).join('')}
@@ -382,7 +382,7 @@ const editPriceRange = function(id, name, order, active) {
     <div class="modal">
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✏️ 编辑参考零售价</div></div></div>
       <div class="modal-body">
-        <div class="form-group"><label class="form-label"><span class="required">*</span> 名称</label><input class="form-input" id="prName" value="${name}"></div>
+        <div class="form-group"><label class="form-label"><span class="required">*</span> 名称</label><input class="form-input" id="prName" value="${escHtml(name)}"></div>
         <div class="form-group"><label class="form-label">排序号</label><input class="form-input" id="prOrder" type="number" value="${order}"></div>
         <div class="form-group"><label class="form-label">状态</label>
           <select class="form-select" id="prActive">

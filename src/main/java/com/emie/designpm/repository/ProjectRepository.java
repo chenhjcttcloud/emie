@@ -43,6 +43,8 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, Project
 
     long countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(LocalDateTime start, LocalDateTime end);
 
+    boolean existsByProjectCode(String projectCode);
+
     /** 列表页查询：仅加载当前页项目，避免首页渲染时读取全表。 */
     @EntityGraph(attributePaths = "productCategory")
     @Query("SELECT p FROM Project p WHERE (:type IS NULL OR p.type = :type) ORDER BY p.createdAt DESC")

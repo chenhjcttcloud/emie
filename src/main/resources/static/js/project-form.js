@@ -286,7 +286,7 @@ function openCreateProject(type) {
           <div class="form-group"><label class="form-label"><span class="required">*</span> 产品类目</label>
             <select class="form-select" name="productCategory" id="productCategorySelect" data-emie-onchange="onCategoryChange(this)">
               <option value="">请选择产品类目</option>
-              ${EMIE.state.categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}
+              ${EMIE.state.categories.map(c => `<option value="${escHtml(c.name)}">${escHtml(c.name)}</option>`).join('')}
             </select>
             <div id="categoryNoteWrapper" style="display:none;margin-top:8px;">
               <textarea class="form-textarea" name="productCategoryNote" placeholder="请说明其他类目的具体内容..." data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()"></textarea>
@@ -309,7 +309,7 @@ function openCreateProject(type) {
           </div>
           <div class="form-group" style="${type === 'design_requirement' ? 'display:none;' : ''}"><label class="form-label"><span class="required">*</span> 参考零售价</label>
             <div class="chip-group" id="priceRangeChips">
-              ${EMIE.state.priceRanges.map(p => `<span class="chip" data-value="${p.name}" data-emie-onclick="togglePriceRange(this)">${p.name}</span>`).join('')}
+              ${EMIE.state.priceRanges.map(p => `<span class="chip" data-value="${escHtml(p.name)}" data-emie-onclick="togglePriceRange(this)">${escHtml(p.name)}</span>`).join('')}
             </div>
             <input type="hidden" name="priceRange" id="priceRangeInput" value="">
           </div>
@@ -323,7 +323,7 @@ function openCreateProject(type) {
           </div>
           <div class="form-group" style="${type === 'design_requirement' ? 'display:none;' : ''}"><label class="form-label">合规处罚<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选，非必选）</span></label>
             <div class="chip-group" id="complianceChips">
-              ${EMIE.state.complianceItems.map(c => `<span class="chip" data-value="${c.name}" data-emie-onclick="toggleCompliance(this)">${c.name}</span>`).join('')}
+              ${EMIE.state.complianceItems.map(c => `<span class="chip" data-value="${escHtml(c.name)}" data-emie-onclick="toggleCompliance(this)">${escHtml(c.name)}</span>`).join('')}
             </div>
             <input type="hidden" name="complianceItems" id="complianceItemsInput" value="">
             <div class="form-hint">提醒产品企划关注相关供应商是否有相关资质</div>

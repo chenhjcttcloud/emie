@@ -34,8 +34,9 @@ public class RequestTimingInterceptor implements HandlerInterceptor {
         long elapsedMs = (System.nanoTime() - (Long) started) / 1_000_000L;
         if (request.getRequestURI().startsWith("/api/")) {
             response.setHeader("X-Response-Time-Ms", String.valueOf(elapsedMs));
-            if (elapsedMs >= SLOW_MS) log.warn("慢接口 path={} method={} status={} elapsedMs={} query={}",
-                    request.getRequestURI(), request.getMethod(), response.getStatus(), elapsedMs, request.getQueryString());
+            // 只记录 URI path，不记录 query：query 中可能携带 token/password/code 等敏感参数。
+            if (elapsedMs >= SLOW_MS) log.warn("慢接口 path={} method={} status={} elapsedMs={}",
+                    request.getRequestURI(), request.getMethod(), response.getStatus(), elapsedMs);
         }
     }
 }

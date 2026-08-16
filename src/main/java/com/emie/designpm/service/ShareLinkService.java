@@ -74,9 +74,13 @@ public class ShareLinkService {
 
         String token = generateToken();
         LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(expiresInSec);
-        String passwordHash = rawPassword != null && !rawPassword.isBlank()
-                ? PASSWORD_ENCODER.encode(rawPassword)
-                : null;
+        String passwordHash;
+        if (rawPassword != null && !rawPassword.isBlank()) {
+            validateSharePassword(rawPassword);
+            passwordHash = PASSWORD_ENCODER.encode(rawPassword);
+        } else {
+            passwordHash = null;
+        }
 
         ShareLink link = ShareLink.builder()
                 .token(token)
@@ -256,6 +260,7 @@ public class ShareLinkService {
             if (rawPassword.isBlank()) {
                 link.setPassword(null);
             } else {
+                validateSharePassword(rawPassword);
                 link.setPassword(PASSWORD_ENCODER.encode(rawPassword));
             }
         }
@@ -269,6 +274,24 @@ public class ShareLinkService {
         }
         if (expiresInSec <= 0 || expiresInSec > MAX_EXPIRY_SECONDS) {
             throw new IllegalArgumentException("分享链接有效期必须在1秒到60天之间");
+        }
+    }
+
+    /** 分享密码复杂度：最小长度 6 位且不能为纯数字（防止弱口令被轻易猜出）。空值/空白表示不设置或清除。 */
+    private static void validateSharePassword(String rawPassword) {
+        if (rawPassword == null || rawPassword.isBlank()) return;
+        if (rawPassword.length() < 6) {
+            throw new IllegalArgumentException("分享密码长度不能少于6位");
+        }
+        boolean allDigits = true;
+        for (int i = 0; i < rawPassword.length(); i++) {
+            if (!Character.isDigit(rawPassword.charAt(i))) {
+                allDigits = false;
+                break;
+            }
+        }
+        if (allDigits) {
+            throw new IllegalArgumentException("分享密码不能为纯数字");
         }
     }
 

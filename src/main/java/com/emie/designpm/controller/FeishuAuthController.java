@@ -7,6 +7,7 @@ import com.emie.designpm.entity.SystemConfig;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.SystemConfigRepository;
 import com.emie.designpm.repository.UserRepository;
+import com.emie.designpm.util.SecurityUtil;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -188,7 +189,7 @@ public class FeishuAuthController {
         if (user == null) {
             user = User.builder()
                     .userId(buildPendingUserId(openId))
-                    .name(firstNonBlank(userInfo.getName(), "飞书用户"))
+                    .name(SecurityUtil.sanitizeText(firstNonBlank(userInfo.getName(), "飞书用户"), 20))
                     .role("pending")
                     .title("待分配角色")
                     .email(email)

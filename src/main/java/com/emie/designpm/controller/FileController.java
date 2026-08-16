@@ -39,6 +39,7 @@ import java.nio.file.Paths;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.*;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/api/files")
@@ -48,6 +49,9 @@ public class FileController {
     private static final Semaphore THUMBNAIL_REQUEST_SLOTS = new Semaphore(8);
     private static final Logger log = LoggerFactory.getLogger(FileController.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    /** 仅放行 AdminService.uploadAdminImage 生成的管理图片（admin_{logo|login-bg}_{8位hex}.{图片扩展名}）。 */
+    private static final Pattern ADMIN_MANAGED_IMAGE = Pattern.compile(
+            "admin_(logo|login-bg)_[0-9a-f]{8}\\.(jpg|jpeg|png|gif|bmp|webp)");
 
     @Value("${app.upload.dir:./uploads}")
     private String uploadDir;
@@ -377,7 +381,9 @@ public class FileController {
     }
 
     private ResponseEntity<Object> checkDownloadAccess(String subDir, String fileName, HttpServletRequest request) {
-        if ("admin".equals(subDir)) {
+        // 管理图片（logo/登录背景）需要匿名可访问，但仅限 AdminService 生成规则的图片；
+        // 其它位于 admin 子目录的文件必须走正常权限校验，避免绕过授权读取。
+        if ("admin".equals(subDir) && fileName != null && ADMIN_MANAGED_IMAGE.matcher(fileName).matches()) {
             return null;
         }
         AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");

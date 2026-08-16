@@ -20,8 +20,18 @@ public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, Object>> handleBadRequest(IllegalArgumentException ex) {
-        return response(HttpStatus.BAD_REQUEST, "请求参数不合法", ex.getMessage(), null);
+    public ResponseEntity<Map<String, Object>> handleBadRequest(IllegalArgumentException ex, HttpServletRequest request) {
+        String traceId = traceId();
+        log.warn("请求参数不合法 traceId={} path={} detail={}", traceId, request.getRequestURI(), ex.getMessage());
+        return response(HttpStatus.BAD_REQUEST, "请求参数不合法，请检查输入", null, traceId);
+    }
+
+    @ExceptionHandler(java.time.format.DateTimeParseException.class)
+    public ResponseEntity<Map<String, Object>> handleBadDateTime(java.time.format.DateTimeParseException ex,
+                                                                 HttpServletRequest request) {
+        String traceId = traceId();
+        log.warn("日期时间格式错误 traceId={} path={} detail={}", traceId, request.getRequestURI(), ex.getMessage());
+        return response(HttpStatus.BAD_REQUEST, "日期或时间格式不正确，请检查输入", null, traceId);
     }
 
     @ExceptionHandler(DataAccessException.class)

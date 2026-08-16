@@ -4,6 +4,7 @@ const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const apiPost = (...args) => EMIE.actions.apiPost(...args);
 const renderSidebar = (...args) => EMIE.actions.renderSidebar(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
+const escJsString = (...args) => EMIE.actions.escJsString(...args);
 const render = (...args) => EMIE.actions.render(...args);
 
 // ==================== 用户视角切换（天花板版） ====================
@@ -89,7 +90,7 @@ async function renderRoleSwitcher() {
     <button class="identity-trigger" data-emie-onclick="toggleIdentityPanel(event)" aria-label="切换用户视角" title="切换用户视角">
       <span class="identity-avatar role-${roleKey}">${initial}</span>
       <span class="identity-info">
-        <span class="identity-name">${EMIE.state.authUser.name}</span>
+        <span class="identity-name">${escHtml(EMIE.state.authUser.name)}</span>
         <span class="identity-role-tag">${escHtml(identityRoleLabel(EMIE.state.authUser.role))}</span>
       </span>
       <svg class="identity-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
@@ -108,7 +109,7 @@ async function renderRoleSwitcher() {
       </div>
       ${isSwitched ? `
       <div style="padding:4px 10px 10px;">
-        <button class="identity-back-btn" data-emie-onclick="switchToUser('${EMIE.state.originalUser.userId}')">
+        <button class="identity-back-btn" data-emie-onclick="switchToUser('${escHtml(escJsString(EMIE.state.originalUser.userId))}')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
           返回我的视角
         </button>
@@ -139,20 +140,20 @@ function renderUserList(users) {
     const dotClass = 'g-' + identityRoleColor(role);
     html += `<div class="identity-group" data-role="${role}">
       <div class="identity-group-label">
-        <span class="identity-group-dot ${dotClass}"></span>${label}
+        <span class="identity-group-dot ${dotClass}"></span>${escHtml(label)}
       </div>`;
     for (const u of group) {
       const isActive = u.userId === EMIE.state.currentUserId;
       const avatarInitial = u.name.charAt(0);
       const uClass = 'u-' + identityRoleColor(u.role);
       const rClass = 'r-' + identityRoleColor(u.role);
-      html += `<div class="identity-user${isActive ? ' active' : ''}" data-userid="${u.userId}" data-emie-onclick="switchToUser('${u.userId}')">
+      html += `<div class="identity-user${isActive ? ' active' : ''}" data-userid="${escHtml(u.userId)}" data-emie-onclick="switchToUser('${escHtml(escJsString(u.userId))}')">
         <span class="identity-user-avatar ${uClass}">${avatarInitial}</span>
         <span class="identity-user-info">
           <div class="identity-user-name">${escHtml(u.name)}</div>
           <div class="identity-user-id">${escHtml(u.userId)}</div>
         </span>
-        <span class="identity-user-role ${rClass}">${label}</span>
+        <span class="identity-user-role ${rClass}">${escHtml(label)}</span>
         <svg class="identity-user-check${isActive ? ' show' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
       </div>`;
     }

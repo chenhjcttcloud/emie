@@ -10,11 +10,14 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
@@ -42,6 +45,10 @@ public class ProjectService {
     private DesignerMarketEligibilityRepository marketEligibilityRepository;
     private TaskWithdrawalRepository taskWithdrawalRepository;
     private PointAdjustmentLedgerRepository pointAdjustmentLedgerRepository;
+    private PointLedgerRepository pointLedgerRepository;
+    private PointAppealRepository pointAppealRepository;
+    private NotificationRepository notificationRepository;
+    private FileRecordRepository fileRecordRepository;
     private DesignRequirementScoringService designRequirementScoringService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -81,6 +88,14 @@ public class ProjectService {
     void setTaskWithdrawalRepository(TaskWithdrawalRepository repository) { this.taskWithdrawalRepository = repository; }
     @Autowired(required = false)
     void setPointAdjustmentLedgerRepository(PointAdjustmentLedgerRepository repository) { this.pointAdjustmentLedgerRepository = repository; }
+    @Autowired(required = false)
+    void setPointLedgerRepository(PointLedgerRepository repository) { this.pointLedgerRepository = repository; }
+    @Autowired(required = false)
+    void setPointAppealRepository(PointAppealRepository repository) { this.pointAppealRepository = repository; }
+    @Autowired(required = false)
+    void setNotificationRepository(NotificationRepository repository) { this.notificationRepository = repository; }
+    @Autowired(required = false)
+    void setFileRecordRepository(FileRecordRepository repository) { this.fileRecordRepository = repository; }
     @Autowired(required = false)
     void setDesignRequirementScoringService(DesignRequirementScoringService service) { this.designRequirementScoringService = service; }
 
@@ -253,7 +268,7 @@ public class ProjectService {
         String plannerId = SecurityUtil.sanitizeText((String) body.get("plannerId"), 100);
         String salesId = SecurityUtil.sanitizeText((String) body.get("salesId"), 100);
         String productName = SecurityUtil.sanitizeText((String) body.get("productName"), 200);
-        String deadline = (String) body.get("deadline");
+        String deadline = SecurityUtil.sanitizeText((String) body.get("deadline"), 20);
         String productRequirements = SecurityUtil.sanitizeText((String) body.get("productRequirements"), 2000);
         String description = SecurityUtil.sanitizeText((String) body.getOrDefault("description", ""), 2000);
         boolean feishuChatEnabled = Boolean.parseBoolean(String.valueOf(body.getOrDefault("feishuChatEnabled", "false")));
@@ -274,6 +289,35 @@ public class ProjectService {
         }
         if ("planner".equals(currentRole) && "regular".equals(type)) {
             plannerId = currentUserId;
+        }
+
+        // 截止日期：非空且为 yyyy-MM-dd。
+        // 不做“不早于今天”约束：受控历史批量导入（createImportedProject）允许过去日期。
+        // 抛 IllegalArgumentException：GlobalExceptionHandler 归为 400（业务/参数错误），
+        // 避免落入 Exception 处理器返回 500（P1-12）；ProjectController 的 catch(RuntimeException) 亦兼容。
+        if (deadline == null || deadline.isBlank()) {
+            throw new IllegalArgumentException("要求完成时间不能为空");
+        }
+        try {
+            LocalDate.parse(deadline.trim());
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException("要求完成时间格式应为 yyyy-MM-dd");
+        }
+
+        // 产品企划归属校验：渠道定制项目的企划由创建方指定，必须为非空且可解析到真实在职企划账号，
+        // 避免项目无人接单；常规品项目的 plannerId 非空时同样要求真实在职企划（消除幽灵 plannerId），
+        // 为空则保持历史语义（管理员代建/提案立项沿用空值）。
+        if ("channel_custom".equals(type) && (plannerId == null || plannerId.isBlank())) {
+            throw new IllegalArgumentException("请选择产品企划");
+        }
+        if (plannerId != null && !plannerId.isBlank()) {
+            User plannerUser = userService.getUserByUserId(plannerId);
+            if (plannerUser == null
+                    || !"planner".equals(plannerUser.getRole())
+                    || "disabled".equalsIgnoreCase(plannerUser.getStatus())
+                    || "pending".equalsIgnoreCase(plannerUser.getStatus())) {
+                throw new IllegalArgumentException("请选择有效的在职产品企划");
+            }
         }
 
         // 验证并清理文件上传
@@ -336,7 +380,7 @@ public class ProjectService {
                 ? "销售提交渠道定制项目" : "产品企划新建常规品设计项目";
         p.getLogs().add(new ActivityLog(logAction, currentUser, currentRole, p));
 
-        Project saved = projectRepository.saveAndFlush(p);
+        Project saved = saveProjectWithUniqueCodeRetry(p);
         fileArchiveService.bindFilesFromJson(refImagesJson, "project", saved.getId());
         fileArchiveService.bindFilesFromJson(attsJson, "project", saved.getId());
         // 批量历史导入不应向每位负责人逐条发送即时通知；导入本身仍保留操作日志与同步记录。
@@ -347,15 +391,46 @@ public class ProjectService {
         return saved;
     }
 
-    /** 单实例下串行分配月序号；数据库唯一约束负责最终兜底。 */
+    /** 单实例下串行分配月序号；数据库唯一索引（V39 uk_projects_project_code）负责最终兜底。 */
     private String nextProjectCode(LocalDateTime now) {
+        return nextProjectCode(now, 1);
+    }
+
+    /** offset 用于并发生成冲突重试时顺延当月月序号，避免重试生成相同编号再次冲突。 */
+    private String nextProjectCode(LocalDateTime now, long offset) {
         synchronized (PROJECT_CODE_LOCK) {
             LocalDateTime start = now.withDayOfMonth(1).toLocalDate().atStartOfDay();
             LocalDateTime end = start.plusMonths(1);
-            long sequence = projectRepository.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(start, end) + 1;
+            long sequence = projectRepository.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(start, end) + offset;
             if (sequence > 9999) throw new RuntimeException("本月项目编号已超过 9999 个");
             return String.format("EMIE%04d%02d%04d", now.getYear(), now.getMonthValue(), sequence);
         }
+    }
+
+    /**
+     * 保存项目并处理 project_code 并发生成冲突。
+     * 采用「预检查 + 顺延序号循环」：每轮先查编号是否已被占用，未占用才尝试保存，占用则
+     * 顺延当月月序号重试（上限 3 次）。不使用「catch 后在原事务内再次保存」的重试——
+     * flush 抛异常后事务已被标记 rollback-only，再次保存即使成功最终 commit 也必抛
+     * UnexpectedRollbackException。saveAndFlush 的 DataIntegrityViolationException 仅作为
+     * 预检查与保存之间跨实例竞态的最终兜底，转中文业务异常。
+     */
+    private Project saveProjectWithUniqueCodeRetry(Project p) {
+        LocalDateTime now = LocalDateTime.now();
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            String code = nextProjectCode(now, attempt);
+            p.setProjectCode(code);
+            if (!projectRepository.existsByProjectCode(code)) {
+                try {
+                    return projectRepository.saveAndFlush(p);
+                } catch (DataIntegrityViolationException e) {
+                    // 唯一索引（V39 uk_projects_project_code）兜住预检查与保存之间的并发竞态
+                    throw new RuntimeException("项目编号生成冲突，请稍后重试", e);
+                }
+            }
+            // 编号已被占用：顺延序号进入下一轮
+        }
+        throw new RuntimeException("项目编号生成冲突，请稍后重试");
     }
 
     // ==================== Project Information Edit ====================
@@ -803,18 +878,29 @@ public class ProjectService {
 
     @Transactional
     public Project deleteSubTask(Long projectId, Long taskId) {
-        Project p = projectRepository.findById(projectId)
-                .orElseThrow(() -> new RuntimeException("项目不存在"));
-        SubTask task = p.getTasks().stream()
-                .filter(t -> t.getId().equals(taskId))
-                .findFirst().orElseThrow(() -> new RuntimeException("子任务不存在"));
-
-        if (!List.of("pending", "pending_planner").contains(p.getStatus()) && !"pending".equals(task.getStatus())) {
-            throw new RuntimeException("项目已进入工作流程，无法删除子任务");
-        }
+        // 锁序与全项目一致：project → subtask。锁内重新加载并重校验状态，
+        // 避免与 taskAccept 抢单并发时快照校验通过、DELETE 阻塞后误删刚被认领的任务。
+        Project p = lockProject(projectId);
         if ("paused".equals(p.getStatus())) {
             throw new RuntimeException("项目已暂停，无法删除子任务");
         }
+        SubTask task = lockSubTask(projectId, taskId);
+        if (!List.of("pending", "pending_planner").contains(p.getStatus()) && !"pending".equals(task.getStatus())) {
+            throw new RuntimeException("项目已进入工作流程，无法删除子任务");
+        }
+
+        // 锁内按 FK 依赖顺序清理子任务关联数据，避免 DELETE 子任务时触发外键违例：
+        // 退单调账（TASK_WITHDRAWAL，按 withdrawalId）→ 退单记录（FK→sub_tasks）→ 交付版本（FK→sub_tasks）→ 评分（FK→sub_tasks）。
+        List<TaskWithdrawal> withdrawals = taskWithdrawalRepository == null ? List.of()
+                : taskWithdrawalRepository.findBySubTaskIdIn(List.of(taskId));
+        List<Long> withdrawalIds = withdrawals.stream().map(TaskWithdrawal::getId).toList();
+        if (!withdrawalIds.isEmpty() && pointAdjustmentLedgerRepository != null) {
+            pointAdjustmentLedgerRepository.deleteProjectRelated(List.of(), withdrawalIds);
+        }
+        if (!withdrawalIds.isEmpty() && taskWithdrawalRepository != null) {
+            taskWithdrawalRepository.deleteBySubTaskIds(List.of(taskId));
+        }
+        deliveryVersionRepository.deleteBySubTaskIds(List.of(taskId));
 
         // 删除关联的评分记录，并同步删除飞书记录
         List<ScoringRecord> scoringRecords = scoringRepository.findBySubTaskId(taskId);
@@ -1059,7 +1145,11 @@ public class ProjectService {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime claimed = task.getClaimedAt() == null ? now : task.getClaimedAt();
         long elapsed = Math.max(0, java.time.Duration.between(claimed, now).toMinutes());
-        int previous = marketEligibilityRepository == null ? 0 : marketEligibilityRepository.findByUserId(userId).map(e -> Optional.ofNullable(e.getViolationCount()).orElse(0)).orElse(0);
+        // 行锁读取市场资格，防同一设计师并发退单时 violation_count 读改写丢失更新。
+        DesignerMarketEligibility eligibility = marketEligibilityRepository == null ? null
+                : marketEligibilityRepository.findByUserIdForUpdate(userId)
+                        .orElseGet(() -> { DesignerMarketEligibility x = new DesignerMarketEligibility(); x.setUserId(userId); return x; });
+        int previous = eligibility == null ? 0 : Optional.ofNullable(eligibility.getViolationCount()).orElse(0);
         long freeMinutes = positiveLongConfig("points.withdrawal.free_minutes", 60);
         int suspendCount = positiveIntConfig("points.withdrawal.suspend_count", 3);
         double perWithdrawalRate = boundedDoubleConfig("points.withdrawal.penalty_rate", 10d) / 100d;
@@ -1072,11 +1162,10 @@ public class ProjectService {
         if (penalty > 0 && pointAdjustmentLedgerRepository != null) {
             PointAdjustmentLedger adjustment = new PointAdjustmentLedger(); adjustment.setUserId(userId); adjustment.setSourceType("TASK_WITHDRAWAL"); adjustment.setSourceId(event.getId()); adjustment.setPoints(-penalty); adjustment.setReason(event.getReason()); adjustment.setCreatedBy(userId); pointAdjustmentLedgerRepository.save(adjustment);
         }
-        if (marketEligibilityRepository != null) {
-            DesignerMarketEligibility e = marketEligibilityRepository.findByUserId(userId).orElseGet(() -> { DesignerMarketEligibility x = new DesignerMarketEligibility(); x.setUserId(userId); return x; });
-            e.setViolationCount(previous + 1); e.setReason("退单累计" + (previous + 1) + "次");
-            if (previous + 1 >= suspendCount) e.setSuspendedUntil(now.plusDays(suspendDays));
-            e.setUpdatedBy(userId); marketEligibilityRepository.save(e);
+        if (eligibility != null) {
+            eligibility.setViolationCount(previous + 1); eligibility.setReason("退单累计" + (previous + 1) + "次");
+            if (previous + 1 >= suspendCount) eligibility.setSuspendedUntil(now.plusDays(suspendDays));
+            eligibility.setUpdatedBy(userId); marketEligibilityRepository.save(eligibility);
         }
         task.setDesignerId(null); task.setDesignerName(null); task.setClaimedAt(null); task.setStatus("pending"); task.setAllocationStatus("market_open");
         p.getLogs().add(new ActivityLog("设计师退单：" + task.getName() + "，扣分" + penalty, String.valueOf(body.getOrDefault("currentUser", userId)), "designer", p));
@@ -1365,11 +1454,8 @@ public class ProjectService {
             throw new RuntimeException("当前状态无法执行验收操作");
         }
 
-        // 检查是否所有评分已完成
-        checkTaskCompletion(task, p);
-        if ("completed".equals(task.getStatus()) && pointsService != null && !task.isSelfInitiated()) {
-            pointsService.awardQualityCompletion(task);
-        }
+        // 检查是否所有评分已完成；最终验收通过时发放质量加分（与评分中心 submitScoring 共用同一发分路径）
+        finalizeTaskApproval(task, p);
         Project saved = projectRepository.save(p);
         Map<String, String> notifyContext = notificationContext(saved, task, currentUser, comments);
         notifyContext.put("reviewRole", "planner".equals(currentRole) ? "产品企划" : ("admin".equals(currentRole) ? "管理员" : "销售"));
@@ -1534,6 +1620,19 @@ public class ProjectService {
         }
     }
 
+    /**
+     * 最终验收通过（任务进入 completed）时发放质量加分。
+     * 任务详情入口（taskApprove）与评分中心入口（submitScoring）共用本方法，
+     * 保证同一业务动作「最终验收通过」在两个入口的积分结果一致；
+     * awardQualityCompletion 内部以用户+子任务+规则码幂等，同一任务只会发放一次。
+     */
+    private void finalizeTaskApproval(SubTask task, Project project) {
+        checkTaskCompletion(task, project);
+        if ("completed".equals(task.getStatus()) && pointsService != null && !task.isSelfInitiated()) {
+            pointsService.awardQualityCompletion(task);
+        }
+    }
+
     public Project taskReject(Long projectId, Long taskId, Map<String, Object> body) {
         Project p = lockProject(projectId);
 
@@ -1683,15 +1782,15 @@ public class ProjectService {
         String currentUser = (String) body.getOrDefault("currentUser", "");
         p.getLogs().add(new ActivityLog("子任务评分（" + role + "：" + score + "分）：" + task.getName(), currentUser, currentRole, p));
 
-        checkTaskCompletion(task, p);
+        // 最终验收通过时发放质量加分（与任务详情 taskApprove 共用同一发分路径）
+        finalizeTaskApproval(task, p);
         return projectRepository.save(p);
     }
 
     // ==================== Terminate / Pause / Resume ====================
 
     public Project terminateProject(Long projectId, Map<String, Object> body) {
-        Project p = projectRepository.findById(projectId)
-                .orElseThrow(() -> new RuntimeException("项目不存在"));
+        Project p = lockProject(projectId);
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
 
@@ -1733,8 +1832,7 @@ public class ProjectService {
 
     /** 取消终止（仅发起者可以取消） */
     public Project cancelTerminate(Long projectId, Map<String, Object> body) {
-        Project p = projectRepository.findById(projectId)
-                .orElseThrow(() -> new RuntimeException("项目不存在"));
+        Project p = lockProject(projectId);
         if (!"pending_terminate".equals(p.getStatus())) {
             throw new RuntimeException("项目不处于终止确认状态");
         }
@@ -1747,8 +1845,7 @@ public class ProjectService {
     }
 
     public Project pauseProject(Long projectId, Map<String, Object> body) {
-        Project p = projectRepository.findById(projectId)
-                .orElseThrow(() -> new RuntimeException("项目不存在"));
+        Project p = lockProject(projectId);
         if (!List.of("pending_planner", "planner_accepted", "in_progress").contains(p.getStatus())) {
             throw new RuntimeException("当前状态不允许暂停");
         }
@@ -1761,8 +1858,7 @@ public class ProjectService {
     }
 
     public Project resumeProject(Long projectId, Map<String, Object> body) {
-        Project p = projectRepository.findById(projectId)
-                .orElseThrow(() -> new RuntimeException("项目不存在"));
+        Project p = lockProject(projectId);
         if (!"paused".equals(p.getStatus())) {
             throw new RuntimeException("只有暂停中的项目可以继续");
         }
@@ -1785,9 +1881,55 @@ public class ProjectService {
 
     // ==================== Delete ====================
 
+    /**
+     * 删除项目并清理全部关联数据，避免遗留孤儿记录。
+     * 现有表大多没有 FK 级联（baseline 为空迁移），必须显式清理，删除顺序满足 FK 依赖：
+     * 调账(APPEAL/TASK_WITHDRAWAL) → 退单(FK→sub_tasks) → 异议(FK→point_ledgers) →
+     * 积分流水 → 交付版本(FK→sub_tasks) → 评分(FK→sub_tasks) → 通知 → 文件记录 →
+     * 项目本身（级联删除子任务与操作日志）。
+     */
     public void deleteProject(Long projectId) {
-        List<ScoringRecord> scoringRecords = scoringRepository.findByProjectIds(List.of(projectId));
-        scoringRepository.deleteAll(scoringRecords);
+        List<SubTask> tasks = subTaskRepository.findByProjectIdOrderByCreatedAtAsc(projectId);
+        List<Long> taskIds = tasks.stream().map(SubTask::getId).toList();
+
+        if (taskIds.isEmpty()) {
+            scoringRepository.deleteByProjectId(projectId);
+            projectRepository.deleteById(projectId);
+            return;
+        }
+
+        // 1) 关联调账记录（异议调账按 appealId、退单调账按 withdrawalId）
+        List<Long> withdrawalIds = taskWithdrawalRepository == null ? List.of()
+                : taskWithdrawalRepository.findBySubTaskIdIn(taskIds).stream().map(TaskWithdrawal::getId).toList();
+        List<Long> ledgerIds = pointLedgerRepository == null ? List.of()
+                : pointLedgerRepository.findBySubTaskIdIn(taskIds).stream().map(PointLedger::getId).toList();
+        List<Long> appealIds = (pointAppealRepository == null || ledgerIds.isEmpty()) ? List.of()
+                : pointAppealRepository.findByPointLedgerIdIn(ledgerIds).stream().map(PointAppeal::getId).toList();
+        if (pointAdjustmentLedgerRepository != null
+                && (!appealIds.isEmpty() || !withdrawalIds.isEmpty())) {
+            pointAdjustmentLedgerRepository.deleteProjectRelated(appealIds, withdrawalIds);
+        }
+        // 2) 退单记录（FK → sub_tasks，必须先删）
+        if (taskWithdrawalRepository != null) taskWithdrawalRepository.deleteBySubTaskIds(taskIds);
+        // 3) 积分异议（FK → point_ledgers，必须先删）
+        if (pointAppealRepository != null && !ledgerIds.isEmpty()) pointAppealRepository.deleteByPointLedgerIds(ledgerIds);
+        // 4) 积分流水
+        if (pointLedgerRepository != null) pointLedgerRepository.deleteBySubTaskIds(taskIds);
+        // 5) 交付版本（FK → sub_tasks）
+        deliveryVersionRepository.deleteBySubTaskIds(taskIds);
+        // 6) 评分记录（FK → sub_tasks）
+        scoringRepository.deleteByProjectId(projectId);
+        // 7) 通知（project / sub_task 聚合）
+        if (notificationRepository != null) {
+            notificationRepository.deleteByAggregateTypeAndAggregateIdIn("project", List.of(projectId));
+            notificationRepository.deleteByAggregateTypeAndAggregateIdIn("sub_task", taskIds);
+        }
+        // 8) 文件记录（project / sub_task 目标）
+        if (fileRecordRepository != null) {
+            fileRecordRepository.deleteByTargetTypeAndTargetIdIn("project", List.of(projectId));
+            fileRecordRepository.deleteByTargetTypeAndTargetIdIn("sub_task", taskIds);
+        }
+        // 9) 项目本身（级联删除子任务与操作日志；@PostRemove 在提交后入队飞书删除）
         projectRepository.deleteById(projectId);
     }
 

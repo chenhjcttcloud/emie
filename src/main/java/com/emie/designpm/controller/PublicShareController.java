@@ -34,6 +34,8 @@ public class PublicShareController {
         response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
         response.setHeader("Pragma", "no-cache");
         response.setHeader("Referrer-Policy", "no-referrer");
+        // 分享页为自包含 HTML（无外链脚本），禁止内联脚本与外部资源，阻止反射 XSS 落地。
+        response.setHeader("Content-Security-Policy", "default-src 'self'");
         try {
             Map<String, Object> data = shareLinkService.resolveShare(token, password);
 
@@ -64,6 +66,9 @@ public class PublicShareController {
     // ==================== HTML 渲染 ====================
 
     private String renderPasswordPage(String token, String errorMessage) {
+        // 错误提示仅在存在时渲染（避免空错误块占位）；隐藏逻辑由 /js/share.js 事件委托处理。
+        String errorHtml = errorMessage != null && !errorMessage.isBlank()
+                ? "<div class=\"error\" id=\"pwErr\">" + esc(errorMessage) + "</div>" : "";
         return """
             <!DOCTYPE html>
             <html lang="zh-CN">
@@ -71,39 +76,23 @@ public class PublicShareController {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>请输入访问密码 - EMIE</title>
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                       background: #f3f4f6; display: flex; align-items: center; justify-content: center;
-                       min-height: 100vh; }
-                .pwd-card { background: #fff; border-radius: 16px; padding: 40px; width: 360px;
-                            box-shadow: 0 4px 24px rgba(0,0,0,0.08); text-align: center; }
-                .pwd-card h1 { font-size: 18px; color: #1f2937; margin-bottom: 8px; }
-                .pwd-card p { font-size: 13px; color: #6b7280; margin-bottom: 24px; }
-                .pwd-card input { width: 100%%; padding: 10px 16px; border: 1px solid #d1d5db;
-                                  border-radius: 8px; font-size: 14px; text-align: center;
-                                  outline: none; margin-bottom: 16px; }
-                .pwd-card input:focus { border-color: #3370FF; box-shadow: 0 0 0 3px rgba(51,112,255,0.1); }
-                .pwd-card button { width: 100%%; padding: 10px; background: #3370FF; color: #fff;
-                                   border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
-                .pwd-card button:hover { background: #2860E0; }
-                .pwd-card .error { color: #dc2626; font-size: 13px; margin-top: 12px; display: none; }
-            </style>
+            <link rel="stylesheet" href="/css/share.css?v=1">
+            <script src="/js/share.js?v=1" defer></script>
             </head>
-            <body>
+            <body class="centered">
             <div class="pwd-card">
-                <div style="font-size: 36px; margin-bottom: 16px;">🔒</div>
+                <div class="pwd-emoji">🔒</div>
                 <h1>此分享需要密码</h1>
                 <p>请输入分享者提供的访问密码</p>
-                <form method="POST" action="/share/%s" onsubmit="document.getElementById('pwErr').style.display='none'">
+                <form method="POST" action="/share/%s" data-pw-form>
                     <input type="password" name="password" placeholder="请输入密码" required autofocus>
                     <button type="submit">验证</button>
-                    <div class="error" id="pwErr" style="%s">%s</div>
+                    %s
                 </form>
             </div>
             </body>
             </html>
-            """.formatted(token, errorMessage != null && !errorMessage.isBlank() ? "display:block;" : "", esc(errorMessage));
+            """.formatted(esc(token), errorHtml);
     }
 
     private String renderSharePage(Map<String, Object> data) {
@@ -143,14 +132,14 @@ public class PublicShareController {
         List<Map<String, Object>> tasks = (List<Map<String, Object>>) data.getOrDefault("tasks", List.of());
         String taskRows;
         if (tasks.isEmpty()) {
-            taskRows = "<tr><td colspan='4' style='text-align:center;color:#9ca3af;padding:24px;'>暂无子任务</td></tr>";
+            taskRows = "<tr><td colspan='4' class='empty-row'>暂无子任务</td></tr>";
         } else {
             taskRows = tasks.stream().map(t -> {
                 String name = safe(t, "name");
                 String tStatus = safe(t, "statusLabel");
                 String designer = safe(t, "designerName");
                 String planned = safe(t, "plannedDate");
-                return "<tr><td>" + esc(name) + "</td><td><span class=\"tag tag-" + t.getOrDefault("status", "")
+                return "<tr><td>" + esc(name) + "</td><td><span class=\"tag tag-" + esc(String.valueOf(t.getOrDefault("status", "")))
                         + "\">" + esc(tStatus) + "</span></td><td>" + esc(designer) + "</td><td>" + esc(planned) + "</td></tr>";
             }).collect(Collectors.joining());
         }
@@ -162,46 +151,7 @@ public class PublicShareController {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>%s</title>
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                       background: #f3f4f6; color: #1f2937; line-height: 1.6; }
-                .top-bar { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 12px 24px;
-                           display: flex; justify-content: space-between; align-items: center; }
-                .top-bar .logo { font-size: 14px; font-weight: 600; color: #374151; }
-                .top-bar .meta { font-size: 12px; color: #9ca3af; }
-                .container { max-width: 800px; margin: 24px auto; padding: 0 16px; }
-                .card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 16px;
-                        box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-                .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #111827; }
-                .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-                .info-item label { font-size: 12px; color: #9ca3af; display: block; margin-bottom: 2px; }
-                .info-item .value { font-size: 14px; color: #1f2937; }
-                .tag { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; }
-                .tag-draft { background: #f3f4f6; color: #6b7280; }
-                .tag-pending_planner, .tag-pending { background: #fef3c7; color: #92400e; }
-                .tag-planner_accepted, .tag-accepted { background: #dbeafe; color: #1e40af; }
-                .tag-in_progress { background: #dbeafe; color: #1e40af; }
-                .tag-planner_approved, .tag-sales_approved, .tag-admin_approved, .tag-completed, .tag-approved { background: #d1fae5; color: #065f46; }
-                .tag-scoring_planner { background: #fef3c7; color: #92400e; }
-                .tag-delivered { background: #fef3c7; color: #92400e; }
-                .tag-rejected { background: #fee2e2; color: #991b1b; }
-                .tag-pending_terminate { background: #fee2e2; color: #991b1b; }
-                .tag-paused { background: #f3f4f6; color: #6b7280; }
-                .tag-terminated { background: #fee2e2; color: #991b1b; }
-                table { width: 100%%; border-collapse: collapse; }
-                th { text-align: left; padding: 8px 12px; font-size: 12px; color: #6b7280;
-                     border-bottom: 1px solid #e5e7eb; font-weight: 500; }
-                td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #f3f4f6; }
-                .desc-box { background: #f9fafb; border-radius: 8px; padding: 16px;
-                            font-size: 13px; color: #374151; line-height: 1.7; white-space: pre-wrap; }
-                .footer { text-align: center; padding: 24px; font-size: 12px; color: #9ca3af; }
-                @media (max-width: 640px) {
-                    .info-grid { grid-template-columns: 1fr; }
-                    .container { padding: 0 8px; }
-                    .card { padding: 16px; }
-                }
-            </style>
+            <link rel="stylesheet" href="/css/share.css?v=1">
             </head>
             <body>
             <div class="top-bar">
@@ -210,10 +160,10 @@ public class PublicShareController {
             </div>
             <div class="container">
                 <div class="card">
-                    <h2 style="margin-bottom:4px;">%s</h2>
-                    <p style="color:#6b7280;font-size:13px;margin-bottom:16px;">
+                    <h2 class="card-title">%s</h2>
+                    <p class="card-subtitle">
                         <span class="tag tag-%s">%s</span>
-                        <span style="margin-left:8px;">创建于 %s</span>
+                        <span class="created-at">创建于 %s</span>
                     </p>
                     <div class="info-grid">
                         <div class="info-item"><label>项目类型</label><div class="value">%s</div></div>
@@ -243,7 +193,7 @@ public class PublicShareController {
             </body>
             </html>
             """.formatted(
-                    esc(title), viewCount,
+                    esc(title), esc(viewCount),
                     esc(projectTitle != null && !projectTitle.isBlank() ? projectTitle : "项目详情"),
                     esc(safe(data, "status")), esc(statusLabel), esc(createdAt.substring(0, Math.min(10, createdAt.length()))),
                     esc(typeLabel), esc(deadline), esc(salesName), esc(plannerName),
@@ -269,43 +219,16 @@ public class PublicShareController {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>任务详情 - EMIE</title>
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                       background: #f3f4f6; color: #1f2937; }
-                .top-bar { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 12px 24px;
-                           display: flex; justify-content: space-between; align-items: center; }
-                .top-bar .logo { font-size: 14px; font-weight: 600; color: #374151; }
-                .container { max-width: 700px; margin: 24px auto; padding: 0 16px; }
-                .card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 16px;
-                        box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-                .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #111827; }
-                .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-                .info-item label { font-size: 12px; color: #9ca3af; display: block; margin-bottom: 2px; }
-                .info-item .value { font-size: 14px; color: #1f2937; }
-                .tag { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; }
-                .tag-pending { background: #fef3c7; color: #92400e; }
-                .tag-accepted { background: #dbeafe; color: #1e40af; }
-                .tag-in_progress { background: #dbeafe; color: #1e40af; }
-                .tag-delivered { background: #fef3c7; color: #92400e; }
-                .tag-planner_approved, .tag-sales_approved, .tag-admin_approved, .tag-approved, .tag-completed { background: #d1fae5; color: #065f46; }
-                .tag-scoring_planner { background: #fef3c7; color: #92400e; }
-                .tag-rejected { background: #fee2e2; color: #991b1b; }
-                .desc-box { background: #f9fafb; border-radius: 8px; padding: 16px;
-                            font-size: 13px; color: #374151; white-space: pre-wrap; }
-                .footer { text-align: center; padding: 24px; font-size: 12px; color: #9ca3af; }
-                .back-link { display: inline-block; margin-bottom: 16px; color: #3370FF;
-                             text-decoration: none; font-size: 13px; }
-            </style>
+            <link rel="stylesheet" href="/css/share.css?v=1">
             </head>
             <body>
             <div class="top-bar">
                 <div class="logo">🎨 EMIE 产品管理系统</div>
             </div>
-            <div class="container">
+            <div class="container narrow">
                 <div class="card">
-                    <h2 style="margin-bottom:4px;">%s</h2>
-                    <p style="margin-bottom:16px;"><span class="tag tag-%s">%s</span></p>
+                    <h2 class="card-title">%s</h2>
+                    <p class="card-subtitle"><span class="tag tag-%s">%s</span></p>
                     <div class="info-grid">
                         <div class="info-item"><label>负责人</label><div class="value">%s</div></div>
                         <div class="info-item"><label>计划日期</label><div class="value">%s</div></div>
@@ -321,9 +244,9 @@ public class PublicShareController {
             </body>
             </html>
             """.formatted(
-                    esc(name), status, statusLabel,
-                    esc(designerName), plannedDate,
-                    actualDate != null && !actualDate.isBlank() ? actualDate : "尚未完成",
+                    esc(name), esc(status), esc(statusLabel),
+                    esc(designerName), esc(plannedDate),
+                    esc(actualDate != null && !actualDate.isBlank() ? actualDate : "尚未完成"),
                     esc(deliverables != null && !deliverables.isBlank() ? deliverables : "暂无交付成果")
             );
     }
@@ -333,15 +256,10 @@ public class PublicShareController {
             "<html lang=\"zh-CN\">\n<head>\n<meta charset=\"UTF-8\">\n" +
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
             "<title>分享链接 - EMIE</title>\n" +
-            "<style>\n" +
-            "* { margin:0;padding:0;box-sizing:border-box; }\n" +
-            "body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f3f4f6;display:flex;align-items:center;justify-content:center;min-height:100vh; }\n" +
-            ".err-card { background:#fff;border-radius:16px;padding:40px;width:400px;box-shadow:0 4px 24px rgba(0,0,0,0.08);text-align:center; }\n" +
-            ".err-card h1 { font-size:18px;color:#1f2937;margin-bottom:8px; }\n" +
-            ".err-card p { font-size:14px;color:#6b7280; }\n" +
-            "</style>\n</head>\n<body>\n" +
+            "<link rel=\"stylesheet\" href=\"/css/share.css?v=1\">\n" +
+            "</head>\n<body class=\"centered\">\n" +
             "<div class=\"err-card\">\n" +
-            "  <div style=\"font-size:48px;margin-bottom:16px;\">😕</div>\n" +
+            "  <div class=\"err-emoji\">😕</div>\n" +
             "  <h1>" + esc(message) + "</h1>\n" +
             "  <p>请联系分享者获取最新的链接</p>\n" +
             "</div>\n</body>\n</html>";
