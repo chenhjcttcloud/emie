@@ -199,6 +199,62 @@ class PointsServiceSnapshotTest {
                 && ledger.getPoints() == 10d));
     }
 
+    @Test
+    void crossMonthCompletionKeepsBaseInBookingMonthAndQualityInCompletionMonth() {
+        PointRuleRepository rules = mock(PointRuleRepository.class);
+        PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
+        ScoringRepository scoring = mock(ScoringRepository.class);
+        PointDifficultyConfigRepository difficulties = mock(PointDifficultyConfigRepository.class);
+        PointRule rule = rule("B1", 20, 1.5, true);
+        rule.setQualityBonusThreshold(95);
+        rule.setQualityBonusRatio(0.5);
+        rule.setQualityTopThreshold(97);
+        rule.setQualityTopRatio(0.6);
+        rule.setMaxTotalMultiplier(3d);
+        when(rules.findByRuleCode("B1")).thenReturn(Optional.of(rule));
+        when(difficulties.findByDifficultyCode("COMPLEX")).thenReturn(Optional.of(difficulty("COMPLEX", 1.5, true)));
+        ScoringRecord score = new ScoringRecord();
+        score.setScore(96);
+        when(scoring.findBySubTaskId(9L)).thenReturn(List.of(score));
+
+        // 6 月送审入账的 BASE：送审时 actualDate 为空，按里程碑月锁定为 2026-06。
+        PointLedger base = new PointLedger();
+        base.setUserId("designer-1");
+        base.setSubTaskId(9L);
+        base.setRuleCode("B1:BASE");
+        base.setPoints(30d);
+        base.setAccountingMonth("2026-06");
+        when(ledgers.findBySubTaskId(9L)).thenReturn(List.of(base));
+        when(ledgers.existsByUserIdAndSubTaskIdAndRuleCode("designer-1", 9L, "B1:BASE")).thenReturn(true);
+        when(ledgers.existsByUserIdAndSubTaskIdAndRuleCode("designer-1", 9L, "B1:QUALITY")).thenReturn(false);
+
+        PointsService service = new PointsService(rules, ledgers, scoring, difficulties);
+        SubTask task = new SubTask();
+        task.setId(9L);
+        task.setDesignerId("designer-1");
+        task.setPointRuleCode("B1");
+        task.setBasePointSnapshot(20);
+        task.setDifficultyMultiplierSnapshot(1.5);
+        task.setQualityBonusThresholdSnapshot(95);
+        task.setQualityBonusRatioSnapshot(0.5);
+        task.setQualityTopThresholdSnapshot(97);
+        task.setQualityTopRatioSnapshot(0.6);
+        task.setMaxTotalMultiplierSnapshot(3d);
+        task.setCountInPerformanceSnapshot(true);
+        task.setMilestoneMonth("2026-06");
+        // 7 月最终验收：actualDate 在完成节点写入。
+        task.setActualDate("2026-07-15");
+
+        service.awardQualityCompletion(task);
+
+        // P1-3：不得回溯改写既有流水——BASE 仍归属送审入账月 2026-06，且不再发起改写查询。
+        assertEquals("2026-06", base.getAccountingMonth());
+        verify(ledgers, never()).findBySubTaskId(any());
+        // 新增 QUALITY 按实际完成月归属 2026-07，与 BASE 分属各自入账月，月度统计无重复错位。
+        verify(ledgers).save(argThat(ledger -> "B1:QUALITY".equals(ledger.getRuleCode())
+                && "2026-07".equals(ledger.getAccountingMonth())));
+    }
+
     private PointRule rule(String code, int points, double multiplier, boolean enabled) {
         PointRule rule = new PointRule();
         rule.setRuleCode(code);

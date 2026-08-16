@@ -71,7 +71,7 @@ class PointGovernanceServicesTest {
   PoPointProject project=new PoPointProject();project.setId(3L);project.setOwnerUserId("owner");project.setOwnerName("负责人");project.setEnabled(true);project.setMonthlyPoints(30);when(projects.findById(3L)).thenReturn(Optional.of(project));when(progress.findByPoProjectIdAndMonthKey(3L,"2026-08")).thenReturn(Optional.empty());when(progress.save(any())).thenAnswer(i->{PoMonthlyProgress g=i.getArgument(0);if(g.getId()==null)g.setId(9L);return g;});
   assertThrows(SecurityException.class,()->service.submit(3L,"2026-08","进展",session("other","designer")));
   PoMonthlyProgress submitted=service.submit(3L,"2026-08","完成评审",session("owner","designer"));when(progress.findLockedById(9L)).thenReturn(Optional.of(submitted));when(ledgers.findByProgressId(9L)).thenReturn(Optional.empty(),Optional.of(new PoPointLedger()));when(adjustments.findBySourceTypeAndSourceId("PO_PROGRESS",9L)).thenReturn(Optional.empty());
-  assertEquals("CONFIRMED",service.review(9L,true,"通过",session("admin","admin")).getStatus());verify(ledgers,times(1)).save(any(PoPointLedger.class));verify(adjustments,times(1)).save(any(PointAdjustmentLedger.class));
+  assertEquals("CONFIRMED",service.review(9L,true,"通过",session("admin","admin")).getStatus());verify(ledgers,times(1)).save(any(PoPointLedger.class));verify(adjustments,times(1)).save(argThat(x->x.getPoints()==30&&"PO_PROGRESS".equals(x.getSourceType())&&"2026-08".equals(x.getAccountingMonth())));
   assertEquals("CONFIRMED",service.review(9L,true,"重复确认",session("admin","admin")).getStatus());verify(ledgers,times(1)).save(any(PoPointLedger.class));
  }
 

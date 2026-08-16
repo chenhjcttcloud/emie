@@ -90,7 +90,7 @@ async function refreshPointsMonth(month) {
         ? Math.round(Number(preview.attainmentRate) * 1000) / 10
         : (target > 0 ? Math.round(actual / target * 1000) / 10 : 0);
       const progress = Math.max(0, Math.min(100, rate));
-      previewBox.innerHTML = `<div class="points-performance-head"><div><span>本月目标进度</span><strong>${target > 0 ? rate + '%' : '未配置'}</strong></div><span>${formatPoints(actual)} / ${formatPoints(target)} 分</span></div><div class="points-progress"><span style="width:${progress}%"></span></div>${preview.officiallyApplied ? `<div class="points-pay-note"><span>正式绩效工资</span><strong>${formatPoints(preview.payablePerformanceSalary)} 元</strong><small>已按当前规则正式应用</small></div>` : ''}`;
+      previewBox.innerHTML = `<div class="points-performance-head"><div><span>本月目标进度</span><strong>${target > 0 ? rate + '%' : '未配置'}</strong></div><span>${formatPoints(actual)} / ${formatPoints(target)} 分</span></div><div class="points-progress"><span style="width:${progress}%"></span></div>`;
     }
   } catch (error) {
     if (leaderboardBody) leaderboardBody.innerHTML = `<div class="points-empty-compact">加载失败：${escHtml(error.message || '请稍后重试')}</div>`;

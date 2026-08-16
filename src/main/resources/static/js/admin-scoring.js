@@ -111,7 +111,7 @@ async function renderAdminPoints(container) {
   container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--gray-400);">加载积分规则…</div>';
   try {
     const targetMonth = new Date().toISOString().slice(0, 7);
-    const [rules, difficulties, standards, designerTargets, appeals, poProgress, archives, proposals, systemConfigs] = await Promise.all([
+    const [rules, difficulties, standards, designerTargets, appeals, poProgress, archives, proposals, systemConfigs, monthlyConfigs] = await Promise.all([
       apiGet('/points/rules'),
       apiGet('/points/difficulties'),
       apiGet('/performance/standard'),
@@ -120,11 +120,12 @@ async function renderAdminPoints(container) {
       apiGet('/point-governance/po/progress'),
       apiGet('/point-governance/archives'),
       apiGet('/point-program/proposals'), apiGet('/admin/configs'),
+      apiGet('/performance/monthly'),
     ]);
     const ruleList = (Array.isArray(rules) ? rules : []).slice().sort(compareRuleCodes);
     const difficultyList = Array.isArray(difficulties) ? difficulties : [];
     const standardList = Array.isArray(standards) ? standards : [];
-    const monthList = [];
+    const monthList = Array.isArray(monthlyConfigs) ? monthlyConfigs : [];
     const designerTargetList = Array.isArray(designerTargets) ? designerTargets : [];
     const configuredStandardIds = new Set(standardList.map(item => String(item.configCode || '')));
     const availableDesigners = designerTargetList;
@@ -159,7 +160,7 @@ async function renderAdminPoints(container) {
         <div class="admin-inline-note" style="margin:14px 0 18px;padding:10px 12px;border:1px dashed #D9D6FF;border-radius:9px;background:#F8F7FF;color:#6258B8;font-size:12px;">设计师入职后会自动出现在下方配置列表，无需手动添加。</div>
         <div class="table-wrap"><table><thead><tr><th>设计师</th><th>用户 ID</th><th>标准积分</th><th>绩效基数</th><th>说明</th><th>状态</th><th>操作</th></tr></thead><tbody>${standardList.length ? standardList.map((item, index) => { const matched = availableDesigners.find(u => String(u.userId || '') === String(item.configCode || '')); return `<tr><td><strong>${escHtml(matched?.userName || '未命名')}</strong></td><td><input class="form-input" id="sp_code_${index}" value="${escHtml(item.configCode || '')}" ${item.id ? 'disabled' : ''}></td><td><input class="form-input" type="number" min="0" id="sp_points_${index}" value="${Number(item.points || 0)}"></td><td><input class="form-input" type="number" min="0" step="0.01" id="sp_base_${index}" value="${Number(item.performanceBase || 0)}"></td><td><input class="form-input" id="sp_desc_${index}" value="${escHtml(item.description || '')}"></td><td><label class="checkbox-item ${item.enabled === false ? '' : 'checked'}"><input type="checkbox" id="sp_enabled_${index}" ${item.enabled === false ? '' : 'checked'}> 启用</label></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="saveStandardPointConfig(${index})">保存</button></td></tr>`; }).join('') : '<tr><td colspan="7"><div class="empty-state">暂无个人标准积分配置，可点击上方添加</div></td></tr>'}</tbody></table></div>
       </div>
-      <div class="card" style="display:none;padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>月度绩效配置</h3><div id="feishuSalesSyncResult" class="points-sync-result">销售额自动同步已开启，每小时更新</div></div><div style="display:flex;gap:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="syncFeishuSalesPerformance(this)">↻ 同步销售额</button><button class="btn btn-outline btn-sm" data-emie-onclick="saveMonthlyPerformanceConfig(-1)">＋ 配置当前月</button></div></div>
+      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>月度绩效配置</h3><p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">供单不足标记用于月度归档保护计算；目标积分与系数供排行榜及绩效预览参考。</p></div><div style="display:flex;gap:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="saveMonthlyPerformanceConfig(-1)">＋ 配置当前月</button></div></div>
         <p style="font-size:12px;color:var(--gray-500);">月度目标与系数用于排行榜及个人绩效预览，最终结果以月度归档为准。</p>
         <div class="table-wrap"><table><thead><tr><th>月份</th><th>目标积分</th><th>公司销售额（万元）</th><th>手动系数</th><th>供单不足</th><th>操作</th></tr></thead><tbody>${monthList.length ? monthList.map((item, index) => `<tr><td><input class="form-input" type="month" id="mp_month_${index}" value="${escHtml(item.monthKey || '')}" ${item.id ? 'disabled' : ''}></td><td><input class="form-input" type="number" min="0" id="mp_target_${index}" value="${Number(item.targetPoints || 0)}"></td><td><input class="form-input" type="number" min="0" step="0.01" id="mp_sales_${index}" value="${item.salesAmount ?? ''}" placeholder="填写后自动匹配档位"></td><td><input class="form-input" type="number" min="0" step="0.01" id="mp_multiplier_${index}" value="${Number(item.multiplier || 1)}"></td><td><input type="checkbox" id="mp_shortage_${index}" ${item.supplyShortage ? 'checked' : ''}></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="saveMonthlyPerformanceConfig(${index})">保存</button></td></tr>`).join('') : '<tr><td colspan="6"><div class="empty-state">暂无月度配置，可点击右上角配置当前月</div></td></tr>'}</tbody></table></div>
       </div>
@@ -171,6 +172,7 @@ async function renderAdminPoints(container) {
       <div class="card" style="padding:16px;"><div class="card-header"><h3>月度积分归档</h3><div style="display:flex;gap:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="preparePointArchive()">自动生成草稿</button><button class="btn btn-outline btn-sm" data-emie-onclick="savePointArchiveDraft()">手工调整草稿</button><button class="btn btn-primary btn-sm" data-emie-onclick="archivePointMonth()">归档指定月份</button></div></div>${archiveList.length ? `<div class="table-wrap"><table><thead><tr><th>月份</th><th>用户</th><th>获得 / 目标 / 供单</th><th>保护</th><th>季度均值</th><th>状态</th></tr></thead><tbody>${archiveList.map(item => `<tr><td>${escHtml(item.monthKey || '-')}</td><td>${escHtml(item.userId || '-')}</td><td>${Number(item.earnedPoints || 0)} / ${Number(item.targetPoints || 0)} / ${Number(item.suppliedPoints || 0)}</td><td>${item.insufficientSupplyProtection ? '已启用' : '否'}</td><td>${Number(item.quarterlyAveragePoints || 0)}</td><td>${item.status === 'ARCHIVED' ? '已归档' : '草稿'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无月度归档草稿，可自动生成后统一归档。</div>'}</div>
     </div>`;
     EMIE.adminState.pointStandards = standardList;
+    EMIE.adminState.pointMonths = monthList;
     document.querySelectorAll('[id^="sp_enabled_"]').forEach((checkbox, index) => {
       checkbox.addEventListener('change', () => saveStandardPointConfig(index));
     });
@@ -288,25 +290,10 @@ async function saveMonthlyPerformanceConfig(index) {
   const supplyShortage = current ? document.getElementById('mp_shortage_' + index)?.checked : window.confirm('该月是否存在企划供单不足？');
   if (!monthKey) return;
   try {
-    await apiPut('/performance/monthly', { id: current?.id || null, monthKey, targetPoints, multiplier, salesAmount, supplyShortage });
+    await apiPut('/performance/monthly/' + encodeURIComponent(monthKey), { targetPoints, multiplier, salesAmount, supplyShortage });
     window.EMIE.actions.showSystemAlert('月度绩效配置已保存');
     await renderAdminPoints(document.getElementById('adminContent'));
   } catch (e) { window.EMIE.actions.showSystemAlert('保存失败：' + e.message); }
-}
-
-async function syncFeishuSalesPerformance(button) {
-  const resultEl = document.getElementById('feishuSalesSyncResult');
-  if (button) { button.disabled = true; button.textContent = '同步中…'; }
-  if (resultEl) resultEl.textContent = '正在读取飞书销售数据…';
-  try {
-    const result = await apiPost('/performance/sales/sync', {});
-    const syncMessage = result?.success === false ? (result.message || '同步失败，已保留上次结果') : `同步完成 · ${result.month || ''} · 有效订单 ${result.included ?? 0} 条 · 销售额 ${Number(result.salesAmount || 0).toLocaleString()} · 跳过 ${result.skipped ?? 0} 条`;
-    if (resultEl) resultEl.textContent = syncMessage;
-    await renderAdminPoints(document.getElementById('adminContent'));
-    const refreshedResult = document.getElementById('feishuSalesSyncResult');
-    if (refreshedResult) refreshedResult.textContent = syncMessage;
-  } catch (e) { if (resultEl) resultEl.textContent = '同步失败：' + (e.message || '请检查飞书销售表配置'); }
-  finally { if (button) { button.disabled = false; button.textContent = '↻ 同步销售额'; } }
 }
 
 async function reviewPointAppeal(id, approve) {
@@ -443,7 +430,6 @@ EMIE.registerActions({
   saveStandardPointConfig,
   deleteStandardPointConfig,
   saveMonthlyPerformanceConfig,
-  syncFeishuSalesPerformance,
   reviewPointAppeal,
   createPoPointProject,
   submitPoPointProjectForm,
@@ -470,7 +456,6 @@ EMIE.registerModule('adminScoring', {
   saveStandardPointConfig,
   deleteStandardPointConfig,
   saveMonthlyPerformanceConfig,
-  syncFeishuSalesPerformance,
   reviewPointAppeal,
   createPoPointProject,
   submitPoPointProjectForm,

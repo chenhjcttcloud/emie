@@ -40,6 +40,10 @@ public class PointAppealService {
   String d=decision(decision);if("APPROVE".equals(d)&&adjustmentPoints==null)throw new IllegalArgumentException("通过异议时必须提供adjustmentPoints");if(adjustmentPoints!=null&&Math.abs((long)adjustmentPoints)>100000)throw new IllegalArgumentException("调账积分绝对值不得超过100000");a.setAdminDecision(d);a.setAdminComment(required(comment,"复核说明",1000));a.setAdminUserId(s.userId());a.setAdminName(s.name());a.setAdminReviewedAt(LocalDateTime.now());a.setStatus("APPROVE".equals(d)?"APPROVED":"REJECTED");
   try{
    a=appeals.save(a);
+   // 显式 flush：JPA 对已加载实体的 save 不会立即执行 SQL，唯一索引冲突会延迟到
+   // 事务提交（或后续查询自动 flush）才抛出，落在 try 之外导致 500/503；
+   // 这里强制立即 flush，让 V40 兜底在 try 内转换为业务异常（409）。
+   appeals.flush();
   }catch(DataIntegrityViolationException e){
    // V40 approved_ledger_user_key 唯一索引兜底：同 (ledger,user) 已有一笔 APPROVED 时再次 APPROVE 被拒
    throw new IllegalStateException("该积分记录已完成异议终审，不可重复申诉",e);

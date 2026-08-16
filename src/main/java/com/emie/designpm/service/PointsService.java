@@ -19,6 +19,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Optional;
@@ -34,6 +36,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @Transactional
 public class PointsService {
     public static final String TASK_APPROVED = "TASK_APPROVED";
+    private static final Logger log = LoggerFactory.getLogger(PointsService.class);
     private final PointRuleRepository rules;
     private final PointLedgerRepository ledgers;
     private final ScoringRepository scoring;
@@ -82,12 +85,11 @@ public class PointsService {
     public void awardQualityCompletion(SubTask task) {
         if (!eligibleForPoints(task)) return;
         String ruleCode = normalizedRuleCode(task.getPointRuleCode());
-        // 积分归属以子任务实际完成节点为准；基础分可能在送审时已入账，
-        // 这里将同一子任务的既有流水统一校正到完成月份，避免跨月错记。
-        String completionMonth = completionMonth(task);
-        if (completionMonth != null) {
-            ledgers.findBySubTaskId(task.getId()).forEach(ledger -> ledger.setAccountingMonth(completionMonth));
-        }
+        // 归属月在每笔流水入账时锁定（见 saveRecipientAward）：BASE 在送审入账时按
+        // 里程碑月/入账月落账，QUALITY 在本节点按实际完成月落账。
+        // 严禁在此回溯改写同一子任务的既有流水（P1-3）：跨月任务（送审月≠完成月）若把
+        // 已入账/已归档月份的 BASE 统一挪到完成月，会回溯改写已归档与已统计的月度数据，
+        // 并与完成月统计重复错位。去掉改写后，各月统计按各自入账归属月取值，前后一致。
         awardBaseSubmission(task);
         String ledgerCode = ruleCode + ":QUALITY";
         if (ledgers.existsByUserIdAndSubTaskIdAndRuleCode(task.getDesignerId(), task.getId(), ledgerCode)) return;
@@ -118,7 +120,10 @@ public class PointsService {
         if (task.getCreatedAt() == null) return true;
         try {
             return !task.getCreatedAt().isBefore(java.time.LocalDateTime.parse(effectiveAtText));
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            // 生效时间配置解析失败时不再静默：记录配置值与受影响任务，便于上线前排查。
+            log.warn("积分生效时间配置解析失败，跳过任务积分入账 effectiveAtText={} taskId={} detail={}",
+                    effectiveAtText, task.getId(), e.getMessage());
             return false;
         }
     }

@@ -10,5 +10,7 @@ public class PointAdjustmentLedger {
  @Column(nullable=false,length=500) private String reason;
  @Column(name="created_by",nullable=false,length=100) private String createdBy;
  @Column(name="created_at",nullable=false) private LocalDateTime createdAt;
- @PrePersist void c(){if(createdAt==null)createdAt=LocalDateTime.now();}
+ /** 会计归属月（P1-4）：月度排行榜/统计与 point_ledgers 统一按 accounting_month 归月；缺省即入账当月。 */
+ @Column(name="accounting_month",length=7) private String accountingMonth;
+ @PrePersist void c(){if(createdAt==null)createdAt=LocalDateTime.now();if(accountingMonth==null)accountingMonth=java.time.YearMonth.from(createdAt).toString();}
 }
