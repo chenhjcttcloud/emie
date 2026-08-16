@@ -37,7 +37,7 @@ class PointManualAdjustmentServiceTest {
 
     @Test
     void adminCanAddAndDeductPointsWithAuditFields() {
-        when(users.findByUserId("designer-1")).thenReturn(Optional.of(new User()));
+        when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
         when(adjustments.maxSourceIdByType("MANUAL")).thenReturn(3L);
         when(adjustments.save(any())).thenAnswer(i -> i.getArgument(0));
 
@@ -62,7 +62,7 @@ class PointManualAdjustmentServiceTest {
 
     @Test
     void zeroAndOverLimitPointsAreRejected() {
-        when(users.findByUserId("designer-1")).thenReturn(Optional.of(new User()));
+        when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
         assertThrows(IllegalArgumentException.class, () -> service.adjust("designer-1", 0, "备注", admin()));
         assertThrows(IllegalArgumentException.class, () -> service.adjust("designer-1", 100001, "备注", admin()));
         assertThrows(IllegalArgumentException.class, () -> service.adjust("designer-1", -100001, "备注", admin()));
@@ -71,7 +71,7 @@ class PointManualAdjustmentServiceTest {
 
     @Test
     void boundaryPointsAreAccepted() {
-        when(users.findByUserId("designer-1")).thenReturn(Optional.of(new User()));
+        when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
         when(adjustments.maxSourceIdByType("MANUAL")).thenReturn(0L);
         when(adjustments.save(any())).thenAnswer(i -> i.getArgument(0));
         assertEquals(100000, service.adjust("designer-1", 100000, "上限补分", admin()).getPoints());
@@ -80,7 +80,7 @@ class PointManualAdjustmentServiceTest {
 
     @Test
     void emptyOrTooLongReasonIsRejected() {
-        when(users.findByUserId("designer-1")).thenReturn(Optional.of(new User()));
+        when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
         assertThrows(IllegalArgumentException.class, () -> service.adjust("designer-1", 10, null, admin()));
         assertThrows(IllegalArgumentException.class, () -> service.adjust("designer-1", 10, "", admin()));
         assertThrows(IllegalArgumentException.class, () -> service.adjust("designer-1", 10, "   ", admin()));
@@ -99,7 +99,7 @@ class PointManualAdjustmentServiceTest {
 
     @Test
     void sourceIdIncrementsAcrossConsecutiveAdjustments() {
-        when(users.findByUserId("designer-1")).thenReturn(Optional.of(new User()));
+        when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
         // 模拟两次独立调账事务：每次取 MAX(source_id)+1，分别得到 1、2。
         when(adjustments.maxSourceIdByType("MANUAL")).thenReturn(0L, 1L);
         when(adjustments.save(any())).thenAnswer(i -> i.getArgument(0));
@@ -112,7 +112,7 @@ class PointManualAdjustmentServiceTest {
 
     @Test
     void uniqueConstraintConflictTranslatesToBusinessException() {
-        when(users.findByUserId("designer-1")).thenReturn(Optional.of(new User()));
+        when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
         when(adjustments.maxSourceIdByType("MANUAL")).thenReturn(5L);
         when(adjustments.save(any())).thenThrow(new DataIntegrityViolationException("uk_point_adjustment_source"));
 
@@ -123,13 +123,50 @@ class PointManualAdjustmentServiceTest {
 
     @Test
     void trimmingKeepsUserIdAndReasonCanonical() {
-        when(users.findByUserId("designer-1")).thenReturn(Optional.of(new User()));
+        when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
         when(adjustments.maxSourceIdByType(eq("MANUAL"))).thenReturn(0L);
         when(adjustments.save(any())).thenAnswer(i -> i.getArgument(0));
 
         PointAdjustmentLedger saved = service.adjust("  designer-1  ", 10, "  补发漏记积分  ", admin());
         assertEquals("designer-1", saved.getUserId());
         assertEquals("补发漏记积分", saved.getReason());
+    }
+
+    @Test
+    void salesTargetIsRejected() {
+        when(users.findByUserId("sales-1")).thenReturn(Optional.of(userWithRole("sales")));
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> service.adjust("sales-1", 10, "备注", admin()));
+        assertEquals("只能为设计师或供应链成员调账", e.getMessage());
+        verify(adjustments, never()).save(any());
+    }
+
+    @Test
+    void plannerAndAdminTargetsAreRejected() {
+        when(users.findByUserId("planner-1")).thenReturn(Optional.of(userWithRole("planner")));
+        when(users.findByUserId("admin-1")).thenReturn(Optional.of(userWithRole("admin")));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.adjust("planner-1", 10, "备注", admin()));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.adjust("admin-1", 10, "备注", admin()));
+        verify(adjustments, never()).save(any());
+    }
+
+    @Test
+    void supplyChainTargetIsAccepted() {
+        when(users.findByUserId("supply-1")).thenReturn(Optional.of(userWithRole("supplychain")));
+        when(adjustments.maxSourceIdByType(eq("MANUAL"))).thenReturn(0L);
+        when(adjustments.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        PointAdjustmentLedger saved = service.adjust("supply-1", -5, "供应链扣分", admin());
+        assertEquals("supply-1", saved.getUserId());
+        assertEquals(-5, saved.getPoints());
+    }
+
+    private User userWithRole(String role) {
+        User u = new User();
+        u.setRole(role);
+        return u;
     }
 
     private AuthController.AuthSession admin() {

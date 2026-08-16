@@ -9,6 +9,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Set;
+
 /**
  * 管理员主动调账（积分纠错）：无需用户发起异议，管理员直接补分/扣分。
  *
@@ -21,6 +23,8 @@ public class PointManualAdjustmentService {
     private static final String SOURCE_TYPE = "MANUAL";
     private static final int MAX_POINTS = 100000;
     private static final int MAX_REASON = 500;
+    /** 手动调账仅面向有积分资格的角色：设计师与供应链（子任务负责人发分机制）。 */
+    private static final Set<String> ELIGIBLE_ROLES = Set.of("designer", "supplychain");
 
     private final PointAdjustmentLedgerRepository adjustments;
     private final UserRepository users;
@@ -36,6 +40,9 @@ public class PointManualAdjustmentService {
         String uid = required(userId, "用户ID", 100);
         User user = users.findByUserId(uid).orElse(null);
         if (user == null) throw new IllegalArgumentException("用户不存在");
+        if (!ELIGIBLE_ROLES.contains(PermissionCatalog.normalizeRole(user.getRole()))) {
+            throw new IllegalArgumentException("只能为设计师或供应链成员调账");
+        }
         if (points == null) throw new IllegalArgumentException("积分不能为空");
         if (points == 0) throw new IllegalArgumentException("积分必须为非零整数");
         if (Math.abs((long) points) > MAX_POINTS) throw new IllegalArgumentException("调账积分绝对值不得超过100000");
