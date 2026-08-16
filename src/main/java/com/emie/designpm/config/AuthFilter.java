@@ -25,14 +25,17 @@ public class AuthFilter implements Filter {
 
     /**
      * 全站 CSP（P3 加固）：
-     * - script-src-attr 'none'：禁止内联事件处理器（onclick= 等），纵深防御，即使渲染侧转义漏网也执行不了；
-     *   data-emie-on* 是自定义属性，由 addEventListener 统一处理，不受影响。
+     * - script-src 必须显式含 'unsafe-eval'：事件运行时（event-runtime.js）用 new Function
+     *   编译 data-emie-on* 处理器；若 script-src 回退到 default-src 'self'（无 unsafe-eval），
+     *   浏览器禁止 new Function 执行会导致全站点击失效（2026-08-16 生产回归根因）。
+     * - script-src-attr 'none'：禁止原生内联事件处理器（onclick= 等）注入，纵深防御；
+     *   data-emie-on* 是自定义属性，由 addEventListener + new Function 统一处理，不受影响。
      * - style-src 显式放行 'unsafe-inline'：前端（含 JS 模板字符串）有大量内联 style 属性，
      *   若省略该指令会回退到 default-src 'self' 反而破坏样式。
      * - img-src 显式允许 http(s)/data：safeImageSrc 允许外域图片（登录页/头部 logo、背景图）。
      * - /share/** 由 PublicShareController 自行设置分享页 CSP，此处跳过避免双头叠加歧义。
      */
-    private static final String SITE_CSP = "default-src 'self'; script-src-attr 'none'; "
+    private static final String SITE_CSP = "default-src 'self'; script-src 'self' 'unsafe-eval'; script-src-attr 'none'; "
             + "style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data:; "
             + "object-src 'none'; base-uri 'self'";
 

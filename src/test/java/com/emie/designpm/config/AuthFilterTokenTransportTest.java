@@ -90,6 +90,8 @@ class AuthFilterTokenTransportTest {
         assertEquals(200, response.getStatus());
         String csp = response.getHeader("Content-Security-Policy");
         assertNotNull(csp);
+        assertTrue(csp.contains("script-src 'self' 'unsafe-eval'"),
+                "CSP 必须显式含 unsafe-eval（事件运行时 new Function 依赖，缺失会导致全站点击失效）");
         assertTrue(csp.contains("script-src-attr 'none'"), "CSP 必须包含 script-src-attr 'none'");
         assertTrue(csp.contains("object-src 'none'"));
     }
