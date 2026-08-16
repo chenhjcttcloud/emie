@@ -13,6 +13,13 @@
 
 ## 最近完成
 
+- 积分上线前审计与修复（2026-08-16）：P0 无（幂等双保险成立）；修复 6 个 P1 + 关键 P2。
+  - 跨月归月回溯改写移除（BASE 入账时锁定归属月）；V41 调账表加 accounting_month 统一两表口径；PO 履职积分按进展月落账。
+  - 供分不足标记管理入口（GET/PUT /api/performance/monthly + 前端卡片恢复）；绩效工资展示隐藏（管理员线下计算）。
+  - 并发 APPROVE 唯一冲突显式 flush 转 409；effective-at 解析失败补 WARN 日志。
+  - 前端积分规则必选（ACTIVE 前置）；归档目标统一为「设计师本月目标」（monthly_user_point_targets，回退 standard config）。
+  - 生效日配置 points.effective-at=2026-08-17（application.yml）；生产清理 7 月任务 3 条流水（已备份服务器 /tmp）。
+  - 生产数据验证：幂等 0 重复、23 规则启用、模式 TRIAL（8/1~9/30，ACTIVE 10/1 由产品决定提前）。
 - 缺陷审计与修复（2026-08-16）：四领域并行审计（安全/并发事务/业务逻辑/前端）+ 4 名工程师并行修复 + 3 路复审 + P3 加固批次 + 测试缺口补齐。
 - P0：积分异议重复入账（APPROVED 终审拦截 + V38 处理中唯一索引 + V40 APPROVED 唯一索引 + 并发兜底转中文业务异常）。
 - P1×12：分享页反射 XSS（esc 转义 + CSP + share.css/share.js 外置）；前端存储型 XSS ×5（评分中心/管理后台/新建弹窗/操作日志/登录页品牌）；admin 子目录下载授权旁路；SyncWorker 事务边界；deleteSubTask 无锁删除；评分中心终验不发质量加分；月度归档 shortage 保护失效；异常分类缺失。
