@@ -10,10 +10,14 @@
 - 生产发布状态：已完成（1.4.1 缺陷修复批次含 V38/V39/V40；1.4.2 CSP 修复；1.4.3 积分上线前修复含 V41）
 - 积分功能：已于 2026-08-16 正式启用（mode=ACTIVE，生效日 2026-08-17，冒烟验证通过）
 - 测试环境状态：已通过 `./scripts/test-update.sh`
-- 最近完整测试：210 个测试全部通过
+- 最近完整测试：222 个测试全部通过
 
 ## 最近完成
 
+- 管理员手动调账（2026-08-16）：积分纠错新入口（无需用户提异议）。
+  - 后端 POST /api/point-governance/manual-adjustment：admin 角色校验；userId 必须存在；points 非零整数且 |points|≤100000；reason 必填 ≤500 字；写 point_adjustment_ledgers（sourceType=MANUAL，sourceId 取 MAX+1，(source_type,source_id) 唯一索引兜底并发冲突转 409；createdBy 审计；accountingMonth 缺省入账当月）。
+  - 前端管理端「积分与绩效配置」新增手动调账卡片+弹窗（成员下拉仅列启用成员、正负积分提示、备注必填 500 字内、前端校验、后端 error 文案透出）；用户积分页「调账与 PO 积分」MANUAL 来源显示为「管理员调账」。
+  - 测试：新增 PointManualAdjustmentServiceTest（9 用例），全量 222 个测试全绿。
 - 积分上线前审计与修复（2026-08-16）：P0 无（幂等双保险成立）；修复 6 个 P1 + 关键 P2。
   - 跨月归月回溯改写移除（BASE 入账时锁定归属月）；V41 调账表加 accounting_month 统一两表口径；PO 履职积分按进展月落账。
   - 供分不足标记管理入口（GET/PUT /api/performance/monthly + 前端卡片恢复）；绩效工资展示隐藏（管理员线下计算）。

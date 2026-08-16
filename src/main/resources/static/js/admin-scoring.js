@@ -165,6 +165,7 @@ async function renderAdminPoints(container) {
         <div class="table-wrap"><table><thead><tr><th>月份</th><th>目标积分</th><th>公司销售额（万元）</th><th>手动系数</th><th>供单不足</th><th>操作</th></tr></thead><tbody>${monthList.length ? monthList.map((item, index) => `<tr><td><input class="form-input" type="month" id="mp_month_${index}" value="${escHtml(item.monthKey || '')}" ${item.id ? 'disabled' : ''}></td><td><input class="form-input" type="number" min="0" id="mp_target_${index}" value="${Number(item.targetPoints || 0)}"></td><td><input class="form-input" type="number" min="0" step="0.01" id="mp_sales_${index}" value="${item.salesAmount ?? ''}" placeholder="填写后自动匹配档位"></td><td><input class="form-input" type="number" min="0" step="0.01" id="mp_multiplier_${index}" value="${Number(item.multiplier || 1)}"></td><td><input type="checkbox" id="mp_shortage_${index}" ${item.supplyShortage ? 'checked' : ''}></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="saveMonthlyPerformanceConfig(${index})">保存</button></td></tr>`).join('') : '<tr><td colspan="6"><div class="empty-state">暂无月度配置，可点击右上角配置当前月</div></td></tr>'}</tbody></table></div>
       </div>
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>积分异议复核</h3></div>${appealList.length ? `<div class="table-wrap"><table><thead><tr><th>申请人</th><th>记录</th><th>类型与原因</th><th>状态</th><th>操作</th></tr></thead><tbody>${appealList.map(item => `<tr><td>${escHtml(item.applicantName || item.applicantUserId || '-')}</td><td>#${Number(item.pointLedgerId || 0)}</td><td>${escHtml(item.type || '-')}<div style="font-size:12px;color:var(--gray-500);">${escHtml(item.reason || '')}</div></td><td>${escHtml(item.status || '-')}</td><td>${item.status === 'PLANNER_PROCESSED' ? `<button class="btn btn-success btn-sm" data-emie-onclick="reviewPointAppeal(${Number(item.id)},true)">通过</button> <button class="btn btn-danger btn-sm" data-emie-onclick="reviewPointAppeal(${Number(item.id)},false)">驳回</button>` : '-'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无积分异议</div>'}</div>
+      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>手动调账</h3><p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">管理员主动补分/扣分，必填备注并记入调账台账，展示在成员积分页。</p></div><button class="btn btn-primary btn-sm" data-emie-onclick="openManualAdjustmentModal()">＋ 手动调账</button></div></div>
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>PO 月度积分</h3><button class="btn btn-outline btn-sm" data-emie-onclick="createPoPointProject()">＋ 新增 PO 产品</button></div>${poProgressList.length ? `<div class="table-wrap"><table><thead><tr><th>月份</th><th>项目ID</th><th>进展</th><th>状态</th><th>操作</th></tr></thead><tbody>${poProgressList.map(item => `<tr><td>${escHtml(item.monthKey || '-')}</td><td>#${Number(item.poProjectId || 0)}</td><td>${escHtml(item.summary || '-')}</td><td>${escHtml(item.status || '-')}</td><td>${item.status === 'SUBMITTED' ? `<button class="btn btn-success btn-sm" data-emie-onclick="reviewPoProgress(${Number(item.id)},true)">确认入账</button> <button class="btn btn-danger btn-sm" data-emie-onclick="reviewPoProgress(${Number(item.id)},false)">驳回</button>` : '-'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无 PO 月度进展</div>'}</div>
       <div class="card governance-card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>接单治理</h3></div><div class="governance-section"><div class="card-header"><h3>成员接单资格</h3><button class="btn btn-outline btn-sm" data-emie-onclick="configureMarketEligibility()">暂停/恢复接单资格</button></div><p style="font-size:12px;color:var(--gray-500);">管理员可手动暂停或恢复成员的接单资格。</p></div>
       <div class="governance-section" style="margin-top:18px;padding-top:18px;border-top:1px solid #EEF0F5;"><div class="card-header"><h3>退单处罚规则</h3><button class="btn btn-primary btn-sm" data-emie-onclick="saveWithdrawalGovernanceConfig()">保存规则</button></div></div><p style="font-size:12px;color:var(--gray-500);">按任务基础分比例扣分；首次超时退单按基础比例计算，后续每次按累计次数递增。</p><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;"><label class="form-label">免罚时长（分钟）<input class="form-input" type="number" min="0" id="withdraw_free_minutes" value="${Number(governanceConfig['points.withdrawal.free_minutes'] || 60)}"></label><label class="form-label">暂停阈值（次）<input class="form-input" type="number" min="1" id="withdraw_suspend_count" value="${Number(governanceConfig['points.withdrawal.suspend_count'] || 3)}"></label><label class="form-label">每次扣分比例（%）<input class="form-input" type="number" min="0" max="100" id="withdraw_penalty_rate" value="${Number(governanceConfig['points.withdrawal.penalty_rate'] || 10)}"></label><label class="form-label">暂停天数<input class="form-input" type="number" min="1" id="withdraw_suspend_days" value="${Number(governanceConfig['points.withdrawal.suspend_days'] || 7)}"></label></div></div>
@@ -310,6 +311,55 @@ async function reviewPointAppeal(id, approve) {
   catch (e) { window.EMIE.actions.showSystemAlert('处理失败：' + e.message); }
 }
 
+// ==================== 手动调账（管理员主动补分/扣分） ====================
+async function openManualAdjustmentModal() {
+  if (document.getElementById('manualAdjustmentModal')) return;
+  let users;
+  try { users = await apiGet('/admin/users'); } catch (e) { window.EMIE.actions.showSystemAlert('读取成员列表失败：' + e.message); return; }
+  const activeUsers = (Array.isArray(users) ? users : []).filter(u => (u.status || 'active') === 'active');
+  if (!activeUsers.length) { window.EMIE.actions.showSystemAlert('暂无可调账的启用成员'); return; }
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'manualAdjustmentModal';
+  modal.innerHTML = `<div class="modal" style="max-width:540px;">
+    <div class="modal-header"><div class="modal-header-left"><div class="modal-title">手动调账</div><div class="modal-subtitle">管理员主动补分或扣分，必填备注并记入调账台账</div></div><button class="modal-close" data-emie-onclick="closeM('manualAdjustmentModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">成员</label><select class="form-input" id="manualAdjUser"><option value="">请选择成员</option>${activeUsers.map(u => `<option value="${escHtml(u.userId)}">${escHtml(u.name || u.userId)}（${escHtml(u.userId)}）</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">积分 <span style="color:var(--danger);">*</span></label><input class="form-input" type="number" step="1" id="manualAdjPoints" placeholder="例如：50 或 -30"><div style="font-size:12px;color:var(--gray-400);margin-top:4px;">非零整数，绝对值不超过 100000；增加填正数，扣减填负数。</div></div>
+      <div class="form-group"><label class="form-label">备注 <span style="color:var(--danger);">*</span></label><textarea class="form-input" id="manualAdjReason" rows="3" maxlength="500" placeholder="必填，说明调账原因（500 字内）"></textarea></div>
+      <div id="manualAdjError" style="display:none;color:var(--danger);font-size:13px;"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('manualAdjustmentModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitManualAdjustment(this)">确认调账</button></div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+async function submitManualAdjustment(button) {
+  const error = document.getElementById('manualAdjError');
+  if (error) { error.style.display = 'none'; }
+  const userId = document.getElementById('manualAdjUser')?.value;
+  const pointsRaw = document.getElementById('manualAdjPoints')?.value;
+  const reason = document.getElementById('manualAdjReason')?.value.trim();
+  if (!userId) { if (error) { error.textContent = '请选择成员。'; error.style.display = 'block'; } return; }
+  const points = Number(pointsRaw);
+  if (String(pointsRaw || '').trim() === '' || !Number.isInteger(points) || points === 0 || Math.abs(points) > 100000) {
+    if (error) { error.textContent = '积分必须为非零整数，且绝对值不超过 100000。'; error.style.display = 'block'; }
+    return;
+  }
+  if (!reason) { if (error) { error.textContent = '请填写调账备注。'; error.style.display = 'block'; } return; }
+  if (reason.length > 500) { if (error) { error.textContent = '备注不能超过 500 字。'; error.style.display = 'block'; } return; }
+  if (button) { button.disabled = true; button.textContent = '调账中…'; }
+  try {
+    await apiPost('/point-governance/manual-adjustment', { userId, points, reason });
+    closeM('manualAdjustmentModal');
+    showAdminToast('调账成功，已记入调账台账', 'success');
+    await renderAdminPoints(document.getElementById('adminContent'));
+  } catch (e) {
+    if (error) { error.textContent = '调账失败：' + (e.message || '请稍后重试'); error.style.display = 'block'; }
+    if (button) { button.disabled = false; button.textContent = '确认调账'; }
+  }
+}
+
 async function createPoPointProject() {
   if (document.getElementById('poPointProjectModal')) return;
   const designers = EMIE.adminState.designerTargets || [];
@@ -431,6 +481,8 @@ EMIE.registerActions({
   deleteStandardPointConfig,
   saveMonthlyPerformanceConfig,
   reviewPointAppeal,
+  openManualAdjustmentModal,
+  submitManualAdjustment,
   createPoPointProject,
   submitPoPointProjectForm,
   reviewPoProgress,
@@ -457,6 +509,8 @@ EMIE.registerModule('adminScoring', {
   deleteStandardPointConfig,
   saveMonthlyPerformanceConfig,
   reviewPointAppeal,
+  openManualAdjustmentModal,
+  submitManualAdjustment,
   createPoPointProject,
   submitPoPointProjectForm,
   reviewPoProgress,
