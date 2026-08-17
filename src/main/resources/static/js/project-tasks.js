@@ -129,9 +129,9 @@ async function addSubTask(pid) {
           <div class="form-row">
           </div>
           <div class="form-row">
-            <div class="form-group"><label class="form-label"><span class="required">*</span> 积分规则</label>
-              <select class="form-select" name="pointRuleCode" required>${renderPointRuleOptions(pointRules, '')}</select>
-              <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">正式运行后必须选择积分规则。A：常规设计；B：复杂/重点设计；E：简单辅助；S：特殊专项。创建时锁定基础分，后续调整规则不会影响该任务。</div>
+            <div class="form-group"><label class="form-label">积分规则（可选）</label>
+              <select class="form-select" name="pointRuleCode"><option value="" selected>暂不设置积分规则</option>${renderPointRuleOptions(pointRules, '').replace(/<option value=""[^>]*>[^<]*<\/option>/, '')}</select>
+              <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">可暂不设置；设置后会锁定规则快照并参与积分计算。</div>
             </div>
             <div class="form-group"><label class="form-label">难度档位（未启用时可留空）</label>
               <select class="form-select" name="difficultyCode"><option value="" selected>暂不设置难度</option>${renderDifficultyOptions(pointDifficulties, '').replace(/ selected/g, '')}</select>
@@ -301,11 +301,6 @@ async function submitAddSubTask(pid) {
   const designerSel = document.querySelector('#addSubTaskForm [name="designerId"]');
   if (!data.publishToMarket && designerSel && designerSel.selectedIndex === 0) {
     showError('designerId', '请选择子任务负责人');
-    hasErr = true;
-  }
-  // 积分模式正式运行后必选积分规则，未选择时阻止提交并给出明确提示
-  if (!data.pointRuleCode) {
-    showError('pointRuleCode', '正式运行后必须选择积分规则');
     hasErr = true;
   }
   if (hasErr) return;
@@ -491,13 +486,6 @@ async function submitEditTask(pid, tid) {
       window.EMIE.actions.showSystemAlert('计划完成时间不能早于今天');
       return;
     }
-  }
-
-  // 待执行任务编辑时积分规则必选：未选择时阻止提交，避免后端 ACTIVE 模式报错
-  const editRuleSelect = document.querySelector('#editTaskForm [name="pointRuleCode"]');
-  if (editRuleSelect && !editRuleSelect.disabled && !editRuleSelect.value) {
-    window.EMIE.actions.showSystemAlert('正式运行后必须选择积分规则');
-    return;
   }
 
   data.currentUser = getCurrentUserName();

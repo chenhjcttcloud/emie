@@ -203,9 +203,8 @@ public class PointsService {
     /** Validate an enabled rule and freeze its point/multiplier values onto a task. */
     public void bindRuleSnapshot(SubTask task, String requestedRuleCode, String difficultyCode) {
         if (task == null) throw new IllegalArgumentException("子任务不能为空");
-        // 试运行阶段兼容无积分历史/特殊任务；正式运行后新建或编辑任务必须绑定规则。
+        // 积分规则为可选配置；未选择时保留普通任务，不生成积分快照。
         if (requestedRuleCode == null || requestedRuleCode.isBlank()) {
-            if (isPointRuleRequired()) throw new IllegalArgumentException("正式运行后必须选择积分规则");
             return;
         }
         String ruleCode = normalizedRuleCode(requestedRuleCode);
