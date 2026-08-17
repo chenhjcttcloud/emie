@@ -4,6 +4,7 @@ import com.emie.designpm.controller.AuthController;
 import com.emie.designpm.entity.Role;
 import com.emie.designpm.entity.SystemConfig;
 import com.emie.designpm.entity.User;
+import com.emie.designpm.util.TextEncodingUtil;
 import com.emie.designpm.repository.RoleRepository;
 import com.emie.designpm.repository.SystemConfigRepository;
 import com.emie.designpm.repository.UserRepository;
@@ -386,7 +387,7 @@ public class AdminService {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", u.getId());
             m.put("userId", u.getUserId());
-            m.put("name", u.getName());
+            m.put("name", TextEncodingUtil.repairUtf8Mojibake(u.getName()));
             m.put("role", u.getRole());
             m.put("roleLevel", u.getRoleLevel());
             m.put("title", u.getTitle());
@@ -406,7 +407,7 @@ public class AdminService {
 
     private Map<String, Object> toUserMap(User u) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("id", u.getId()); m.put("userId", u.getUserId()); m.put("name", u.getName());
+        m.put("id", u.getId()); m.put("userId", u.getUserId()); m.put("name", TextEncodingUtil.repairUtf8Mojibake(u.getName()));
         m.put("role", u.getRole()); m.put("roleLevel", u.getRoleLevel()); m.put("title", u.getTitle());
         m.put("phone", u.getPhone()); m.put("email", u.getEmail());
         m.put("status", u.getStatus() != null ? u.getStatus() : "active");
@@ -485,6 +486,11 @@ public class AdminService {
     public void deleteUser(Long userId) {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+        // 删除用户时同步清理配置型数据，避免积分配置页出现“未命名”孤立行。
+        entityManager.createNativeQuery("DELETE FROM standard_point_configs WHERE config_code = :userId")
+                .setParameter("userId", user.getUserId()).executeUpdate();
+        entityManager.createNativeQuery("DELETE FROM monthly_user_point_targets WHERE user_id = :userId")
+                .setParameter("userId", user.getUserId()).executeUpdate();
         userRepository.delete(user);
         AuthController.clearUserTokens(user.getUserId());
         userService.refreshCache();

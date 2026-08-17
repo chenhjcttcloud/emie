@@ -102,6 +102,21 @@ function enhanceDateInputs(root = document) {
   });
 }
 
+// 月份输入框也需要直接绑定点击手势；部分浏览器不会对动态插入的
+// input[type="month"] 触发原生选择器，导致看起来无法切换月份。
+function enhanceMonthInputs(root = document) {
+  root.querySelectorAll?.('input[type="month"]').forEach(input => {
+    if (input.dataset.monthPickerReady === '1') return;
+    input.dataset.monthPickerReady = '1';
+    input.style.cursor = 'pointer';
+    input.addEventListener('click', () => {
+      try {
+        if (typeof input.showPicker === 'function') input.showPicker();
+      } catch (_) { /* 浏览器已自动打开或不支持 showPicker */ }
+    });
+  });
+}
+
 // 弹窗基础设施：旧模板、新模板都在插入 DOM 时统一收敛。
 // 这里只处理容器、关闭和可访问性，不改写任何业务按钮的原有函数。
 const DETAIL_DRAWER_MODAL_IDS = new Set([
@@ -210,12 +225,14 @@ function restoreModalFocus(overlay) {
 // 页面大部分表单由模块按需动态渲染，统一监听新增节点，避免遗漏任何日期控件。
 if (document.body) {
   enhanceDateInputs(document);
+  enhanceMonthInputs(document);
   normalizeModalStructure(document);
   new MutationObserver(mutations => {
     mutations.forEach(mutation => {
       mutation.addedNodes.forEach(node => {
         if (node.nodeType !== 1) return;
         enhanceDateInputs(node);
+        enhanceMonthInputs(node);
         normalizeModalStructure(node);
       });
       mutation.removedNodes.forEach(node => {

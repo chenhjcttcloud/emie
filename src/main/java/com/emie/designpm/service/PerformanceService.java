@@ -2,6 +2,7 @@ package com.emie.designpm.service;
 
 import com.emie.designpm.entity.*;
 import com.emie.designpm.repository.*;
+import com.emie.designpm.util.TextEncodingUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,8 +66,8 @@ public class PerformanceService {
                 : leaderboard(month).stream().filter(row -> userId.equals(row.get("userId")))
                 .mapToDouble(row -> ((Number) row.get("points")).doubleValue()).findFirst().orElse(0);
         StandardPointConfig personal = standards.findByConfigCode(userId).filter(StandardPointConfig::isEnabled).orElse(null);
-        MonthlyUserPointTarget assignedTarget = month == null || userTargets == null ? null
-                : userTargets.findByMonthKeyAndUserId(month, userId).orElse(null);
+        MonthlyUserPointTarget assignedTarget = userTargets == null ? null
+                : userTargets.findByUserId(userId).orElse(null);
         int target = assignedTarget != null ? assignedTarget.getTargetPoints()
                 : personal != null ? personal.getPoints() : 0;
         double companyCoefficient = 1d;
@@ -124,9 +125,12 @@ public class PerformanceService {
     public List<StandardPointConfig> standards() {
         Map<String, StandardPointConfig> existing = standards.findAll().stream()
                 .collect(Collectors.toMap(StandardPointConfig::getConfigCode, item -> item, (a, b) -> a, LinkedHashMap::new));
-        users.findByRole("designer").stream()
+        List<User> activeDesigners = users.findByRole("designer").stream()
                 .filter(user -> user.getStatus() == null || "active".equalsIgnoreCase(user.getStatus()))
-                .forEach(user -> existing.computeIfAbsent(user.getUserId(), id -> {
+                .toList();
+        Set<String> activeDesignerIds = activeDesigners.stream().map(User::getUserId).collect(Collectors.toSet());
+        existing.keySet().removeIf(id -> !activeDesignerIds.contains(id));
+        activeDesigners.forEach(user -> existing.computeIfAbsent(user.getUserId(), id -> {
                     StandardPointConfig config = new StandardPointConfig();
                     config.setConfigCode(id); config.setPoints(100); config.setPerformanceBase(0d);
                     config.setDepartmentType("SUPPORT"); config.setEnabled(true); config.setDescription("自动生成的设计师个人绩效配置");
@@ -138,15 +142,15 @@ public class PerformanceService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> designerTargets(String month) {
-        validateMonth(month);
-        Map<String, MonthlyUserPointTarget> configured = userTargets.findByMonthKeyOrderByUserNameAscUserIdAsc(month)
-                .stream().collect(Collectors.toMap(MonthlyUserPointTarget::getUserId, item -> item));
+        Map<String, MonthlyUserPointTarget> configured = userTargets.findAll().stream()
+                .collect(Collectors.toMap(MonthlyUserPointTarget::getUserId, item -> item, (a, b) -> b));
         return users.findByRole("designer").stream().filter(user -> user.getStatus() == null || "active".equalsIgnoreCase(user.getStatus()))
                 .map(user -> {
                     MonthlyUserPointTarget target = configured.get(user.getUserId());
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("id", target == null ? null : target.getId());
-                    row.put("monthKey", month); row.put("userId", user.getUserId()); row.put("userName", user.getName());
+                    row.put("userId", user.getUserId());
+                    row.put("userName", TextEncodingUtil.repairUtf8Mojibake(user.getName()));
                     row.put("targetPoints", target == null ? 0 : target.getTargetPoints());
                     row.put("configured", target != null);
                     return row;
@@ -154,13 +158,12 @@ public class PerformanceService {
     }
 
     public MonthlyUserPointTarget saveDesignerTarget(String month, String userId, Integer targetPoints, String adminId) {
-        validateMonth(month);
         if (userId == null || userId.isBlank()) throw new IllegalArgumentException("设计师不能为空");
         if (targetPoints == null || targetPoints < 0) throw new IllegalArgumentException("目标积分不能小于0");
         User user = users.findByUserId(userId).filter(item -> "designer".equalsIgnoreCase(item.getRole()))
                 .orElseThrow(() -> new IllegalArgumentException("请选择有效的设计师"));
-        MonthlyUserPointTarget target = userTargets.findByMonthKeyAndUserId(month, userId).orElseGet(MonthlyUserPointTarget::new);
-        target.setMonthKey(month); target.setUserId(userId); target.setUserName(user.getName());
+        MonthlyUserPointTarget target = userTargets.findByUserId(userId).orElseGet(MonthlyUserPointTarget::new);
+        target.setMonthKey("PERMANENT"); target.setUserId(userId); target.setUserName(user.getName());
         target.setTargetPoints(targetPoints); target.setUpdatedBy(adminId);
         return userTargets.save(target);
     }

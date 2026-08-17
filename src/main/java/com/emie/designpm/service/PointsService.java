@@ -303,9 +303,11 @@ public class PointsService {
         }
         if (!code.matches("[A-Z0-9_-]{1,80}")) throw new IllegalArgumentException("规则编号仅支持字母、数字、下划线和短横线");
         if (rules.findByRuleCode(code).isPresent()) throw new IllegalArgumentException("积分规则编号已存在");
-        if (rule.getPoints() == null || rule.getPoints() < 0) throw new IllegalArgumentException("积分不能小于0");
+        if (rule.getPoints() == null) rule.setPoints(0);
+        if (rule.getPoints() < 0) throw new IllegalArgumentException("积分不能小于0");
         rule.setId(null); rule.setRuleCode(code); rule.setEnabled(true);
         if (rule.getCategory() == null || rule.getCategory().isBlank()) rule.setCategory("GENERAL");
+        if (rule.getDescription() == null) rule.setDescription("");
         return rules.save(rule);
     }
 

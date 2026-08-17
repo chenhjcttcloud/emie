@@ -4,6 +4,7 @@ import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.DepartmentRepository;
 import com.emie.designpm.repository.RoleRepository;
 import com.emie.designpm.service.UserService;
+import com.emie.designpm.util.TextEncodingUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -70,7 +71,7 @@ public class UserController {
         Map<String, String> result = new LinkedHashMap<>();
         result.put("id", String.valueOf(user.getId()));
         result.put("userId", user.getUserId());
-        result.put("name", user.getName());
+        result.put("name", TextEncodingUtil.repairUtf8Mojibake(user.getName()));
         result.put("role", user.getRole());
         result.put("title", user.getTitle());
         result.put("roleLevel", user.getRoleLevel() != null ? String.valueOf(user.getRoleLevel()) : "");
