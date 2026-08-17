@@ -22,6 +22,16 @@ function adminOrgRoleKey(role) {
   return adminOrgRoleClass(role);
 }
 
+function uniqueAdminOrgUsers(usersData) {
+  const seen = new Set();
+  return Object.values(usersData || {}).flat().filter(user => {
+    const key = String(user?.userId || user?.id || '').trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 async function refreshOrgData() {
   try {
     const [users, depts] = await Promise.all([
@@ -44,7 +54,7 @@ async function renderAdminOrg(container) {
   EMIE.state.departments = depts;
   EMIE.state.users = usersData;
   // 展平所有用户
-  const allUsers = Object.values(usersData).flat();
+  const allUsers = uniqueAdminOrgUsers(usersData);
   const roleLabels = Object.fromEntries(roles.map(r => [r.name, r.displayName || r.name]));
 
   // 确保部门负责人也计入部门成员（即使 departmentId 未同步）
@@ -116,7 +126,7 @@ async function openCreateDeptModal() {
     apiGet('/users'),
   ]);
   const roles = roleData.filter(r => r.name !== 'pending');
-  const allUsers = Object.values(usersData).flat();
+  const allUsers = uniqueAdminOrgUsers(usersData);
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'createDeptModal';
@@ -184,7 +194,7 @@ async function editDept(d) {
   if (d.role && !roles.some(r => r.name === d.role)) {
     roles.push({ name: d.role, displayName: d.role });
   }
-  const allUsers = Object.values(usersData).flat();
+  const allUsers = uniqueAdminOrgUsers(usersData);
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'editDeptModal';
@@ -263,7 +273,7 @@ async function openAssignUserDept(userId) {
     apiGet('/departments'),
     apiGet('/users'),
   ]);
-  const allUsers = Object.values(usersData).flat();
+  const allUsers = uniqueAdminOrgUsers(usersData);
   const user = allUsers.find(u => u.userId === userId);
   if (!user) return;
   // 按角色过滤可选部门
