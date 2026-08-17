@@ -109,7 +109,8 @@ async function renderPointsView(main) {
     const isDesignerView = EMIE.state.currentRole === 'designer';
     const plannerTasks = plannerMode ? await apiGet('/projects/my-subtasks') : [];
     const issuedTasks = (Array.isArray(plannerTasks) ? plannerTasks : [])
-      .filter(task => task.publisherId === EMIE.state.currentUserId || task.relation === 'publisher');
+      .filter(task => task.publisherId === EMIE.state.currentUserId
+        && Number(task.issuedPoints || 0) > 0);
     const issuedPoints = issuedTasks.reduce((sum, task) => sum + Number(task.issuedPoints || 0), 0);
     const ledger = Array.isArray(mine.ledger) ? mine.ledger : [];
     const ledgerPages = Number(mine.ledgerPages || 0);
