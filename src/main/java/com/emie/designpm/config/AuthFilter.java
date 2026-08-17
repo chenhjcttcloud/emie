@@ -97,6 +97,8 @@ public class AuthFilter implements Filter {
         if (path.startsWith("/api/")) {
             String token = req.getHeader("X-Auth-Token");
             if (token == null || token.isBlank()) token = cookieToken(req);
+            // 图片/预览等浏览器原生资源请求无法自定义请求头，兼容受保护资源的查询参数认证。
+            if (token == null || token.isBlank()) token = req.getParameter("access_token");
             AuthController.AuthSession session = AuthController.validateToken(token);
             if (token == null || session == null) {
                 res.setStatus(401);

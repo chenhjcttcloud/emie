@@ -611,6 +611,12 @@ function storedNameFromFile(fileOrUrl) {
   try { return decodeURIComponent(rawName); } catch (e) { return rawName; }
 }
 
+function protectedFileUrl(url) {
+  const token = localStorage.getItem('design_pm_token');
+  if (!token) return url;
+  return url + (url.includes('?') ? '&' : '?') + 'access_token=' + encodeURIComponent(token);
+}
+
 function isPreviewableFile(fileName) {
   return /\.(pdf|ppt|pptx)$/i.test(fileName || '');
 }
@@ -637,7 +643,7 @@ function renderProjectReferenceImages(detail) {
   try { imgs = JSON.parse(detail.referenceImagesJson); } catch(e) { return ''; }
   if (!imgs || !imgs.length) return '';
   const authUrl = u => normalizeFileUrl(u);
-  const thumbUrl = u => '/api/files/thumbnail/' + encodeURIComponent(storedNameFromFile(u));
+  const thumbUrl = u => protectedFileUrl('/api/files/thumbnail/' + encodeURIComponent(storedNameFromFile(u)));
   return `<div style="margin-top:8px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => isRasterImageFile(img.name || storedNameFromFile(img)) ? `<div style="position:relative;display:inline-block;">
@@ -654,7 +660,7 @@ function renderSubTaskImages(jsonStr) {
   try { imgs = JSON.parse(jsonStr); } catch(e) { return ''; }
   if (!imgs || !imgs.length) return '';
   const authUrl = u => normalizeFileUrl(u);
-  const thumbUrl = u => '/api/files/thumbnail/' + encodeURIComponent(storedNameFromFile(u));
+  const thumbUrl = u => protectedFileUrl('/api/files/thumbnail/' + encodeURIComponent(storedNameFromFile(u)));
   return `<div style="margin-top:8px;padding-left:4px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => isRasterImageFile(img.name || storedNameFromFile(img)) ? `<div style="position:relative;display:inline-block;">
@@ -692,7 +698,7 @@ function renderTaskAttachments(jsonStr) {
 
   let html = '';
   const authUrl = u => normalizeFileUrl(u);
-  const thumbUrl = u => '/api/files/thumbnail/' + encodeURIComponent(storedNameFromFile(u));
+  const thumbUrl = u => protectedFileUrl('/api/files/thumbnail/' + encodeURIComponent(storedNameFromFile(u)));
   // 图片预览
   if (images.length) {
     html += `<div style="margin-top:8px;"><div class="detail-label">🖼️ 交付图片</div>
