@@ -4,6 +4,11 @@ const closeM = (...args) => EMIE.actions.closeM(...args);
 
 // ==================== 分享链接 ====================
 
+/** 本地时间格式化为 datetime-local 输入框所需的 YYYY-MM-DDTHH:mm（避免 toISOString() 的 UTC 偏差）。 */
+function formatLocalDateTimeInput(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 async function shareProject(projectId) {
   document.getElementById('shareModal')?.remove();
   const modal = document.createElement('div');
@@ -32,6 +37,7 @@ async function shareProject(projectId) {
           <div class="form-group">
             <label class="form-label">访问密码（可选）</label>
             <input type="text" class="form-input" id="sharePassword" placeholder="留空则无需密码" style="text-align:center;">
+            <div style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:4px;">设置密码需至少 6 位且不能全为数字</div>
           </div>
           <div id="shareCreateArea">
             <button class="btn btn-primary btn-lg" data-emie-onclick="doCreateShareLink('project', ${projectId})" style="width:100%;justify-content:center;">生成分享链接</button>
@@ -60,9 +66,9 @@ async function shareProject(projectId) {
     if (!custom) return;
     custom.style.display = event.target.value === 'custom' ? '' : 'none';
     if (event.target.value === 'custom') {
-      const max = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
-      custom.min = new Date(Date.now() + 60 * 1000).toISOString().slice(0, 16);
-      custom.max = max.toISOString().slice(0, 16);
+      // min/max 用本地时间（datetime-local 按本地时区解析），避免 UTC+8 早 8 点前差一天
+      custom.min = formatLocalDateTimeInput(new Date(Date.now() + 60 * 1000));
+      custom.max = formatLocalDateTimeInput(new Date(Date.now() + 60 * 24 * 60 * 60 * 1000));
     }
   });
 }
@@ -77,6 +83,14 @@ async function doCreateShareLink(targetType, targetId) {
   const resultArea = document.getElementById('shareResultArea');
   const urlInput = document.getElementById('shareUrl');
   const statusEl = document.getElementById('shareStatus');
+
+  // 访问密码与后端规则一致：非空时必须至少 6 位且不能全为数字（提交前校验，避免后端 400）
+  const password = passwordEl.value.trim() || null;
+  if (password && (password.length < 6 || /^\d+$/.test(password))) {
+    errEl.textContent = '访问密码至少 6 位且不能全为数字';
+    errEl.style.display = '';
+    return;
+  }
 
   errEl.style.display = 'none';
   loadingEl.style.display = '';
@@ -95,7 +109,6 @@ async function doCreateShareLink(targetType, targetId) {
     if (!Number.isFinite(expiresIn) || expiresIn <= 0 || expiresIn > 60 * 24 * 60 * 60) {
       throw new Error('分享链接有效期必须在1秒到60天之间');
     }
-    const password = passwordEl.value.trim() || null;
     const result = await apiPost('/share', { targetType, targetId, expiresIn, password });
     const fullUrl = window.location.origin + result.url;
     urlInput.value = fullUrl;

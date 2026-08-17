@@ -31,6 +31,17 @@ class SecurityRegressionTest {
     }
 
     @Test
+    void filenamesRejectHtmlSensitiveCharacters() {
+        assertFalse(SecurityUtil.isValidFileName("a\"b.png"));
+        assertFalse(SecurityUtil.isValidFileName("a'b.png"));
+        assertFalse(SecurityUtil.isValidFileName("a<b.png"));
+        assertFalse(SecurityUtil.isValidFileName("a>b.png"));
+        assertFalse(SecurityUtil.isValidFileName("\"onerror\".png"));
+        assertTrue(SecurityUtil.isValidFileName("设计稿-最终版.png"));
+        assertTrue(SecurityUtil.isValidFileName("O’Brien的图.png"));
+    }
+
+    @Test
     void attachmentsOnlyAllowSupportedBusinessTypes() {
         assertFalse(SecurityUtil.isValidAttachmentFile("page.html"));
         assertFalse(SecurityUtil.isValidAttachmentFile("script.js"));

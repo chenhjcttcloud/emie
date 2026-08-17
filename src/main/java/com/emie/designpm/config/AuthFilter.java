@@ -23,6 +23,22 @@ public class AuthFilter implements Filter {
     private static final Logger log = LoggerFactory.getLogger(AuthFilter.class);
     private final PermissionService permissionService;
 
+    /**
+     * 全站 CSP（P3 加固）：
+     * - script-src 必须显式含 'unsafe-eval'：事件运行时（event-runtime.js）用 new Function
+     *   编译 data-emie-on* 处理器；若 script-src 回退到 default-src 'self'（无 unsafe-eval），
+     *   浏览器禁止 new Function 执行会导致全站点击失效（2026-08-16 生产回归根因）。
+     * - script-src-attr 'none'：禁止原生内联事件处理器（onclick= 等）注入，纵深防御；
+     *   data-emie-on* 是自定义属性，由 addEventListener + new Function 统一处理，不受影响。
+     * - style-src 显式放行 'unsafe-inline'：前端（含 JS 模板字符串）有大量内联 style 属性，
+     *   若省略该指令会回退到 default-src 'self' 反而破坏样式。
+     * - img-src 显式允许 http(s)/data：safeImageSrc 允许外域图片（登录页/头部 logo、背景图）。
+     * - /share/** 由 PublicShareController 自行设置分享页 CSP，此处跳过避免双头叠加歧义。
+     */
+    private static final String SITE_CSP = "default-src 'self'; script-src 'self' 'unsafe-eval'; script-src-attr 'none'; "
+            + "style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data:; "
+            + "object-src 'none'; base-uri 'self'";
+
     @Autowired
     public AuthFilter(PermissionService permissionService) {
         this.permissionService = permissionService;
@@ -41,10 +57,14 @@ public class AuthFilter implements Filter {
         HttpServletResponse res = (HttpServletResponse) response;
         String path = req.getRequestURI();
 
-        // 统一安全响应头；不设置严格 CSP，避免破坏现有前端内联脚本和资源加载。
+        // 统一安全响应头。
         res.setHeader("X-Content-Type-Options", "nosniff");
         res.setHeader("X-Frame-Options", "SAMEORIGIN");
         res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+        // 全站 CSP；/share/** 由 PublicShareController 设置分享页自身的 CSP（此处跳过）。
+        if (!path.startsWith("/share/")) {
+            res.setHeader("Content-Security-Policy", SITE_CSP);
+        }
         if (path.startsWith("/api/")) {
             res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
             res.setHeader("Pragma", "no-cache");
@@ -61,6 +81,10 @@ public class AuthFilter implements Filter {
             path.equals("/api/admin/version/stream") ||
             path.equals("/api/health/live") ||
             path.equals("/favicon.ico") ||
+            // P1-7 遗留闭环：uploads/admin 下的管理图片（logo/login-bg）需匿名可访问。
+            // 精确前缀白名单 + FileController.checkDownloadAccess 的 ADMIN_MANAGED_IMAGE
+            // 正则兜底（匿名 + 非白名单文件名 → 401），不重新打开 P1-7 的口子。
+            path.startsWith("/api/files/download/admin/") ||
             path.startsWith("/css/") ||
             path.startsWith("/js/") ||
             path.equals("/") ||

@@ -7,6 +7,7 @@ const apiPut = (...args) => EMIE.actions.apiPut(...args);
 const isModalOpen = (...args) => EMIE.actions.isModalOpen(...args);
 const apiDelete = (...args) => EMIE.actions.apiDelete(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
+const escJsString = (...args) => EMIE.actions.escJsString(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
 const renderRoleSwitcher = (...args) => EMIE.actions.renderRoleSwitcher(...args);
 const renderSidebar = (...args) => EMIE.actions.renderSidebar(...args);
@@ -52,7 +53,7 @@ async function renderAdminRoles(container) {
         <div style="margin-top:18px;font-weight:600;">风险检测 <span class="badge ${anomalies.length ? 'badge-danger' : 'badge-success'}">${anomalies.length}</span></div>
         <div style="margin-top:8px;">${anomalies.length ? anomalies.map(a => `<div style="padding:8px 10px;margin-bottom:6px;border-radius:6px;background:${a.severity === 'high' ? '#FEF2F2' : '#FFFBEB'};font-size:12px;">${escHtml(a.displayName)}：${escHtml(a.message)}</div>`).join('') : '<span style="font-size:12px;color:var(--success);">未发现权限配置异常</span>'}</div>
         <details style="margin-top:14px;"><summary style="cursor:pointer;font-weight:600;">最近权限变更（${history.length}）</summary>
-          <div style="margin-top:8px;">${history.slice(0, 20).map(h => `<div style="padding:8px 0;border-bottom:1px solid var(--gray-100);font-size:12px;"><strong>${escHtml(h.targetKey)}</strong> · ${escHtml(h.action)} · ${escHtml(h.actorName)} · ${escHtml(h.reason)} ${h.afterData ? `<button class="btn btn-outline btn-sm" style="float:right;" data-emie-onclick="rollbackPermissionVersion('${escHtml(h.targetKey)}', ${h.id})">回滚到此版本</button>` : ''}</div>`).join('') || '暂无记录'}</div>
+          <div style="margin-top:8px;">${history.slice(0, 20).map(h => `<div style="padding:8px 0;border-bottom:1px solid var(--gray-100);font-size:12px;"><strong>${escHtml(h.targetKey)}</strong> · ${escHtml(h.action)} · ${escHtml(h.actorName)} · ${escHtml(h.reason)} ${h.afterData ? `<button class="btn btn-outline btn-sm" style="float:right;" data-emie-onclick="rollbackPermissionVersion('${escHtml(escJsString(h.targetKey))}', ${h.id})">回滚到此版本</button>` : ''}</div>`).join('') || '暂无记录'}</div>
         </details>
       </div>
     </div>
@@ -87,7 +88,7 @@ async function renderAdminRoles(container) {
                   <td>
                     <div class="admin-user-actions">
                       <button class="btn-edit-user" data-emie-onclick="openEditRoleById(${r.id})">✏️ 编辑</button>
-                      ${!r.isSystem ? `<button class="btn-delete" data-emie-onclick="confirmDeleteRole(${r.id}, '${escHtml(r.displayName)}')">🗑️ 删除</button>` : ''}
+                      ${!r.isSystem ? `<button class="btn-delete" data-emie-onclick="confirmDeleteRole(${r.id}, '${escHtml(escJsString(r.displayName))}')">🗑️ 删除</button>` : ''}
                     </div>
                   </td>
                 </tr>

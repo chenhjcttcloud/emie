@@ -149,11 +149,11 @@ function renderProjectRow(o, compact = false, showType = true) {
     <td><strong>#${o.id}</strong></td>
     <td style="font-size:12px;">${o.type === 'channel_custom' ? '📦 渠道' : '🏭 常规'}</td>
     <td>${escHtml(displayText(o.productName, '未设置'))}</td>
-    <td>${o.salesName || '-'}</td>
-    <td>${o.plannerName || '<span style="color:var(--gray-400);">未指定</span>'}</td>
-    <td>${o.productCategory || '-'}</td>
-    <td>${o.targetMarket ? (() => { try { return JSON.parse(o.targetMarket).join('/'); } catch(e) { return o.targetMarket; } })() : '-'}</td>
-    <td style="font-size:12px;">${o.priceRange || '-'}</td>
+    <td>${o.salesName ? escHtml(o.salesName) : '-'}</td>
+    <td>${o.plannerName ? escHtml(o.plannerName) : '<span style="color:var(--gray-400);">未指定</span>'}</td>
+    <td>${o.productCategory ? escHtml(o.productCategory) : '-'}</td>
+    <td>${o.targetMarket ? (() => { try { return JSON.parse(o.targetMarket).map(escHtml).join('/'); } catch(e) { return escHtml(o.targetMarket); } })() : '-'}</td>
+    <td style="font-size:12px;">${o.priceRange ? escHtml(o.priceRange) : '-'}</td>
     <td style="font-size:12px;">${o.approvedTaskCount}/${o.taskCount}</td>
     <td style="font-size:12px;">${renderScore(o.score)}</td>
     <td style="font-size:12px;">${formatDate(o.deadline)}</td>
@@ -218,7 +218,7 @@ async function render() {
     if (EMIE.state.renderId === renderId) await refreshNavigationBadges();
   } catch (e) {
     console.error('渲染错误:', e);
-    main.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${e.message}</p></div>`;
+    main.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${escHtml(e.message)}</p></div>`;
   }
 }
 

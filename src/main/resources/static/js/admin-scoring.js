@@ -110,20 +110,22 @@ const resetScoringWeights = async function() {
 async function renderAdminPoints(container) {
   container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--gray-400);">加载积分规则…</div>';
   try {
-    const [rules, difficulties, standards, designerTargets, appeals, poProgress, archives, proposals, systemConfigs] = await Promise.all([
+    const targetMonth = new Date().toISOString().slice(0, 7);
+    const [rules, difficulties, standards, designerTargets, appeals, poProgress, archives, proposals, systemConfigs, monthlyConfigs] = await Promise.all([
       apiGet('/points/rules'),
       apiGet('/points/difficulties'),
       apiGet('/performance/standard'),
-      apiGet('/performance/designer-targets'),
+      apiGet('/performance/designer-targets?month=' + encodeURIComponent(targetMonth)),
       apiGet('/point-governance/appeals'),
       apiGet('/point-governance/po/progress'),
       apiGet('/point-governance/archives'),
       apiGet('/point-program/proposals'), apiGet('/admin/configs'),
+      apiGet('/performance/monthly'),
     ]);
     const ruleList = (Array.isArray(rules) ? rules : []).slice().sort(compareRuleCodes);
     const difficultyList = Array.isArray(difficulties) ? difficulties : [];
     const standardList = Array.isArray(standards) ? standards : [];
-    const monthList = [];
+    const monthList = Array.isArray(monthlyConfigs) ? monthlyConfigs : [];
     const designerTargetList = Array.isArray(designerTargets) ? designerTargets : [];
     const configuredStandardIds = new Set(standardList.map(item => String(item.configCode || '')));
     const availableDesigners = designerTargetList;
@@ -136,29 +138,34 @@ async function renderAdminPoints(container) {
       <div style="margin-bottom:18px;"><h2 style="font-size:18px;margin:0 0 4px;">🏅 积分与绩效配置</h2><p style="color:var(--gray-500);font-size:13px;margin:0;">规则修改只影响后续入账，历史积分台账不会重算。</p></div>
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>积分规则</h3><button class="btn btn-primary btn-sm" data-emie-onclick="createPointRule()">＋ 新增规则</button></div>${ruleList.length ? ruleList.map((rule, index) => `<div style="padding:16px 0;${index ? 'border-top:1px solid var(--gray-200);' : ''}">
         <div style="display:grid;grid-template-columns:1.1fr 1fr .8fr .9fr .9fr;gap:10px;align-items:end;">
-          <label class="form-label">规则编号（必填）<input class="form-input" value="${escHtml(rule.ruleCode || '')}" disabled></label>
-          <label class="form-label">类别（可选）<input class="form-input" id="pr_category_${index}" value="${escHtml(rule.category || '')}" placeholder="如 A / B / E / S"></label>
-          <label class="form-label">基础分（可选）<input class="form-input" type="number" min="0" id="pr_points_${index}" value="${Number(rule.points || 0)}"></label>
-          <label class="form-label">质量阈值（可选）<input class="form-input" type="number" min="0" id="pr_threshold_${index}" value="${Number(rule.qualityBonusThreshold || 0)}"></label>
-          <label class="form-label">加分比例（可选）<input class="form-input" type="number" min="0" step="0.05" id="pr_ratio_${index}" value="${Number(rule.qualityBonusRatio || 0)}"></label>
+          <label class="form-label">规则编号<input class="form-input" value="${escHtml(rule.ruleCode || '')}" disabled></label>
+          <label class="form-label">类别<input class="form-input" id="pr_category_${index}" value="${escHtml(rule.category || '')}" placeholder="如 A / B / E / S"></label>
+          <label class="form-label">基础分<input class="form-input" type="number" min="0" id="pr_points_${index}" value="${Number(rule.points || 0)}"></label>
+          <label class="form-label">质量阈值<input class="form-input" type="number" min="0" id="pr_threshold_${index}" value="${Number(rule.qualityBonusThreshold || 0)}"></label>
+          <label class="form-label">加分比例<input class="form-input" type="number" min="0" step="0.05" id="pr_ratio_${index}" value="${Number(rule.qualityBonusRatio || 0)}"></label>
         </div>
         <div style="display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap;">
-          <input class="form-input" id="pr_desc_${index}" value="${escHtml(rule.description || '')}" placeholder="规则说明（可选）" style="flex:1;min-width:240px;">
+          <input class="form-input" id="pr_desc_${index}" value="${escHtml(rule.description || '')}" placeholder="规则说明" style="flex:1;min-width:240px;">
           <label class="checkbox-item ${rule.enabled === false ? '' : 'checked'}"><input type="checkbox" id="pr_enabled_${index}" ${rule.enabled === false ? '' : 'checked'}> 启用</label>
-          <button class="btn btn-primary btn-sm" data-emie-onclick="savePointRule('${escJsString(rule.ruleCode)}',${index})">保存规则</button>
-          <button class="btn btn-danger btn-sm" data-emie-onclick="deletePointRule('${escJsString(rule.ruleCode)}')">移除</button>
+          <button class="btn btn-primary btn-sm" data-emie-onclick="savePointRule('${escHtml(escJsString(rule.ruleCode))}',${index})">保存规则</button>
+          <button class="btn btn-danger btn-sm" data-emie-onclick="deletePointRule('${escHtml(escJsString(rule.ruleCode))}')">移除</button>
         </div>
       </div>`).join('') : '<div class="empty-state">暂无积分规则</div>'}</div>
-      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>难度档位</h3></div><div class="table-wrap"><table><thead><tr><th>档位</th><th>系数</th><th>说明</th><th>启用</th><th>操作</th></tr></thead><tbody>${difficultyList.map((item,index)=>`<tr><td><strong>${escHtml(item.difficultyCode || '-')}</strong></td><td><input class="form-input" type="number" min="0.1" max="10" step="0.1" id="pd_multiplier_${index}" value="${Number(item.multiplier || 1)}"></td><td><input class="form-input" id="pd_desc_${index}" value="${escHtml(item.description || '')}"></td><td><input type="checkbox" id="pd_enabled_${index}" ${item.enabled === false ? '' : 'checked'}></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="savePointDifficulty('${escJsString(item.difficultyCode)}',${index})">保存</button></td></tr>`).join('')}</tbody></table></div></div>
-      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>设计师积分配置</h3><p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">统一配置个人标准积分、绩效基数和长期目标积分，修改后对后续月份持续生效。</p></div></div>
-        <div class="admin-inline-note" style="margin:14px 0 18px;padding:10px 12px;border:1px dashed #D9D6FF;border-radius:9px;background:#F8F7FF;color:#6258B8;font-size:12px;">设计师入职后会自动出现在下方配置列表，无需手动添加。</div>
-        <div class="table-wrap"><table><thead><tr><th>设计师</th><th>用户 ID</th><th>标准积分</th><th>绩效基数</th><th>本月目标</th><th>说明</th><th>状态</th><th>操作</th></tr></thead><tbody id="designerPerformanceBody">${renderDesignerPerformanceRows(standardList, designerTargetList)}</tbody></table></div>
+      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>设计师本月目标</h3><p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">管理员按月份为每位设计师单独设置目标积分。</p></div><input class="form-input" type="month" id="designerTargetMonth" value="${targetMonth}" data-emie-onchange="loadDesignerTargetMonth(this.value)" style="width:160px;"></div>
+        <div class="table-wrap"><table><thead><tr><th>设计师</th><th>用户 ID</th><th>目标积分</th><th>状态</th><th>操作</th></tr></thead><tbody id="designerTargetBody">${renderDesignerTargetRows(designerTargetList)}</tbody></table></div>
       </div>
-      <div class="card" style="display:none;padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>月度绩效配置</h3><div id="feishuSalesSyncResult" class="points-sync-result">销售额自动同步已开启，每小时更新</div></div><div style="display:flex;gap:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="syncFeishuSalesPerformance(this)">↻ 同步销售额</button><button class="btn btn-outline btn-sm" data-emie-onclick="saveMonthlyPerformanceConfig(-1)">＋ 配置当前月</button></div></div>
+      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>难度档位</h3></div><div class="table-wrap"><table><thead><tr><th>档位</th><th>系数</th><th>说明</th><th>启用</th><th>操作</th></tr></thead><tbody>${difficultyList.map((item,index)=>`<tr><td><strong>${escHtml(item.difficultyCode || '-')}</strong></td><td><input class="form-input" type="number" min="0.1" max="10" step="0.1" id="pd_multiplier_${index}" value="${Number(item.multiplier || 1)}"></td><td><input class="form-input" id="pd_desc_${index}" value="${escHtml(item.description || '')}"></td><td><input type="checkbox" id="pd_enabled_${index}" ${item.enabled === false ? '' : 'checked'}></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="savePointDifficulty('${escHtml(escJsString(item.difficultyCode))}',${index})">保存</button></td></tr>`).join('')}</tbody></table></div></div>
+      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>设计师个人绩效配置</h3></div>
+        <p style="font-size:12px;color:var(--gray-500);">仅支持设计师，用于配置个人标准积分与绩效基数。</p>
+        <div class="admin-inline-note" style="margin:14px 0 18px;padding:10px 12px;border:1px dashed #D9D6FF;border-radius:9px;background:#F8F7FF;color:#6258B8;font-size:12px;">设计师入职后会自动出现在下方配置列表，无需手动添加。</div>
+        <div class="table-wrap"><table><thead><tr><th>设计师</th><th>用户 ID</th><th>标准积分</th><th>绩效基数</th><th>说明</th><th>状态</th><th>操作</th></tr></thead><tbody>${standardList.length ? standardList.map((item, index) => { const matched = availableDesigners.find(u => String(u.userId || '') === String(item.configCode || '')); return `<tr><td><strong>${escHtml(matched?.userName || '未命名')}</strong></td><td><input class="form-input" id="sp_code_${index}" value="${escHtml(item.configCode || '')}" ${item.id ? 'disabled' : ''}></td><td><input class="form-input" type="number" min="0" id="sp_points_${index}" value="${Number(item.points || 0)}"></td><td><input class="form-input" type="number" min="0" step="0.01" id="sp_base_${index}" value="${Number(item.performanceBase || 0)}"></td><td><input class="form-input" id="sp_desc_${index}" value="${escHtml(item.description || '')}"></td><td><label class="checkbox-item ${item.enabled === false ? '' : 'checked'}"><input type="checkbox" id="sp_enabled_${index}" ${item.enabled === false ? '' : 'checked'}> 启用</label></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="saveStandardPointConfig(${index})">保存</button></td></tr>`; }).join('') : '<tr><td colspan="7"><div class="empty-state">暂无个人标准积分配置，可点击上方添加</div></td></tr>'}</tbody></table></div>
+      </div>
+      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>月度绩效配置</h3><p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">供单不足标记用于月度归档保护计算；目标积分与系数供排行榜及绩效预览参考。</p></div><div style="display:flex;gap:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="saveMonthlyPerformanceConfig(-1)">＋ 配置当前月</button></div></div>
         <p style="font-size:12px;color:var(--gray-500);">月度目标与系数用于排行榜及个人绩效预览，最终结果以月度归档为准。</p>
         <div class="table-wrap"><table><thead><tr><th>月份</th><th>目标积分</th><th>公司销售额（万元）</th><th>手动系数</th><th>供单不足</th><th>操作</th></tr></thead><tbody>${monthList.length ? monthList.map((item, index) => `<tr><td><input class="form-input" type="month" id="mp_month_${index}" value="${escHtml(item.monthKey || '')}" ${item.id ? 'disabled' : ''}></td><td><input class="form-input" type="number" min="0" id="mp_target_${index}" value="${Number(item.targetPoints || 0)}"></td><td><input class="form-input" type="number" min="0" step="0.01" id="mp_sales_${index}" value="${item.salesAmount ?? ''}" placeholder="填写后自动匹配档位"></td><td><input class="form-input" type="number" min="0" step="0.01" id="mp_multiplier_${index}" value="${Number(item.multiplier || 1)}"></td><td><input type="checkbox" id="mp_shortage_${index}" ${item.supplyShortage ? 'checked' : ''}></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="saveMonthlyPerformanceConfig(${index})">保存</button></td></tr>`).join('') : '<tr><td colspan="6"><div class="empty-state">暂无月度配置，可点击右上角配置当前月</div></td></tr>'}</tbody></table></div>
       </div>
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>积分异议复核</h3></div>${appealList.length ? `<div class="table-wrap"><table><thead><tr><th>申请人</th><th>记录</th><th>类型与原因</th><th>状态</th><th>操作</th></tr></thead><tbody>${appealList.map(item => `<tr><td>${escHtml(item.applicantName || item.applicantUserId || '-')}</td><td>#${Number(item.pointLedgerId || 0)}</td><td>${escHtml(item.type || '-')}<div style="font-size:12px;color:var(--gray-500);">${escHtml(item.reason || '')}</div></td><td>${escHtml(item.status || '-')}</td><td>${item.status === 'PLANNER_PROCESSED' ? `<button class="btn btn-success btn-sm" data-emie-onclick="reviewPointAppeal(${Number(item.id)},true)">通过</button> <button class="btn btn-danger btn-sm" data-emie-onclick="reviewPointAppeal(${Number(item.id)},false)">驳回</button>` : '-'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无积分异议</div>'}</div>
+      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>手动调账</h3><p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">管理员主动补分/扣分，必填备注并记入调账台账，展示在成员积分页。</p></div><button class="btn btn-primary btn-sm" data-emie-onclick="openManualAdjustmentModal()">＋ 手动调账</button></div></div>
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>PO 月度积分</h3><button class="btn btn-outline btn-sm" data-emie-onclick="createPoPointProject()">＋ 新增 PO 产品</button></div>${poProgressList.length ? `<div class="table-wrap"><table><thead><tr><th>月份</th><th>项目ID</th><th>进展</th><th>状态</th><th>操作</th></tr></thead><tbody>${poProgressList.map(item => `<tr><td>${escHtml(item.monthKey || '-')}</td><td>#${Number(item.poProjectId || 0)}</td><td>${escHtml(item.summary || '-')}</td><td>${escHtml(item.status || '-')}</td><td>${item.status === 'SUBMITTED' ? `<button class="btn btn-success btn-sm" data-emie-onclick="reviewPoProgress(${Number(item.id)},true)">确认入账</button> <button class="btn btn-danger btn-sm" data-emie-onclick="reviewPoProgress(${Number(item.id)},false)">驳回</button>` : '-'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无 PO 月度进展</div>'}</div>
       <div class="card governance-card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>接单治理</h3></div><div class="governance-section"><div class="card-header"><h3>成员接单资格</h3><button class="btn btn-outline btn-sm" data-emie-onclick="configureMarketEligibility()">暂停/恢复接单资格</button></div><p style="font-size:12px;color:var(--gray-500);">管理员可手动暂停或恢复成员的接单资格。</p></div>
       <div class="governance-section" style="margin-top:18px;padding-top:18px;border-top:1px solid #EEF0F5;"><div class="card-header"><h3>退单处罚规则</h3><button class="btn btn-primary btn-sm" data-emie-onclick="saveWithdrawalGovernanceConfig()">保存规则</button></div></div><p style="font-size:12px;color:var(--gray-500);">按任务基础分比例扣分；首次超时退单按基础比例计算，后续每次按累计次数递增。</p><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;"><label class="form-label">免罚时长（分钟）<input class="form-input" type="number" min="0" id="withdraw_free_minutes" value="${Number(governanceConfig['points.withdrawal.free_minutes'] || 60)}"></label><label class="form-label">暂停阈值（次）<input class="form-input" type="number" min="1" id="withdraw_suspend_count" value="${Number(governanceConfig['points.withdrawal.suspend_count'] || 3)}"></label><label class="form-label">每次扣分比例（%）<input class="form-input" type="number" min="0" max="100" id="withdraw_penalty_rate" value="${Number(governanceConfig['points.withdrawal.penalty_rate'] || 10)}"></label><label class="form-label">暂停天数<input class="form-input" type="number" min="1" id="withdraw_suspend_days" value="${Number(governanceConfig['points.withdrawal.suspend_days'] || 7)}"></label></div></div>
@@ -166,6 +173,7 @@ async function renderAdminPoints(container) {
       <div class="card" style="padding:16px;"><div class="card-header"><h3>月度积分归档</h3><div style="display:flex;gap:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="preparePointArchive()">自动生成草稿</button><button class="btn btn-outline btn-sm" data-emie-onclick="savePointArchiveDraft()">手工调整草稿</button><button class="btn btn-primary btn-sm" data-emie-onclick="archivePointMonth()">归档指定月份</button></div></div>${archiveList.length ? `<div class="table-wrap"><table><thead><tr><th>月份</th><th>用户</th><th>获得 / 目标 / 供单</th><th>保护</th><th>季度均值</th><th>状态</th></tr></thead><tbody>${archiveList.map(item => `<tr><td>${escHtml(item.monthKey || '-')}</td><td>${escHtml(item.userId || '-')}</td><td>${Number(item.earnedPoints || 0)} / ${Number(item.targetPoints || 0)} / ${Number(item.suppliedPoints || 0)}</td><td>${item.insufficientSupplyProtection ? '已启用' : '否'}</td><td>${Number(item.quarterlyAveragePoints || 0)}</td><td>${item.status === 'ARCHIVED' ? '已归档' : '草稿'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无月度归档草稿，可自动生成后统一归档。</div>'}</div>
     </div>`;
     EMIE.adminState.pointStandards = standardList;
+    EMIE.adminState.pointMonths = monthList;
     document.querySelectorAll('[id^="sp_enabled_"]').forEach((checkbox, index) => {
       checkbox.addEventListener('change', () => saveStandardPointConfig(index));
     });
@@ -178,12 +186,8 @@ async function saveWithdrawalGovernanceConfig() {
   try { await apiPut('/admin/configs', {configs}); window.EMIE.actions.showSystemAlert('退单处罚规则已保存'); } catch (e) { window.EMIE.actions.showSystemAlert('保存失败：' + e.message); }
 }
 
-function renderDesignerPerformanceRows(standardList, targetList) {
-  return standardList.length ? standardList.map((item, index) => {
-    const targetIndex = targetList.findIndex(target => String(target.userId || '') === String(item.configCode || ''));
-    const target = targetIndex >= 0 ? targetList[targetIndex] : {};
-    return `<tr><td><strong>${escHtml(target.userName || '未命名')}</strong></td><td><input class="form-input" id="sp_code_${index}" value="${escHtml(item.configCode || '')}" ${item.id ? 'disabled' : ''}></td><td><input class="form-input" type="number" min="0" id="sp_points_${index}" value="${Number(item.points || 0)}"></td><td><input class="form-input" type="number" min="0" step="0.01" id="sp_base_${index}" value="${Number(item.performanceBase || 0)}"></td><td>${targetIndex >= 0 ? `<div style="display:flex;gap:6px;align-items:center;"><input class="form-input" type="number" min="0" id="dt_points_${targetIndex}" value="${Number(target.targetPoints || 0)}"><button class="btn btn-outline btn-sm" data-emie-onclick="saveDesignerTarget(${targetIndex})">保存</button></div><div style="font-size:11px;color:var(--gray-500);margin-top:3px;">${target.configured ? '已配置' : '待配置'}</div>` : '<span style="color:var(--gray-400);">暂无目标</span>'}</td><td><input class="form-input" id="sp_desc_${index}" value="${escHtml(item.description || '')}"></td><td><label class="checkbox-item ${item.enabled === false ? '' : 'checked'}"><input type="checkbox" id="sp_enabled_${index}" ${item.enabled === false ? '' : 'checked'}> 启用</label></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="saveStandardPointConfig(${index})">保存</button></td></tr>`;
-  }).join('') : '<tr><td colspan="8"><div class="empty-state">暂无个人积分配置</div></td></tr>';
+function renderDesignerTargetRows(rows) {
+  return rows.length ? rows.map((item, index) => `<tr><td><strong>${escHtml(item.userName || '-')}</strong></td><td>${escHtml(item.userId || '-')}</td><td><input class="form-input" type="number" min="0" id="dt_points_${index}" value="${Number(item.targetPoints || 0)}"></td><td>${item.configured ? '<span class="badge badge-completed">已配置</span>' : '<span class="badge badge-pending">待配置</span>'}</td><td><button class="btn btn-primary btn-sm" data-emie-onclick="saveDesignerTarget(${index})">保存</button></td></tr>`).join('') : '<tr><td colspan="5"><div class="empty-state">暂无在职设计师</div></td></tr>';
 }
 
 function renderProposalDesignFiles(value) {
@@ -198,21 +202,23 @@ function renderProposalDesignFiles(value) {
   }).join('')}</div>`;
 }
 
-async function loadDesignerTargets() {
+async function loadDesignerTargetMonth(month) {
+  if (!/^\d{4}-\d{2}$/.test(month || '')) return;
   try {
-    const rows = await apiGet('/performance/designer-targets');
+    const rows = await apiGet('/performance/designer-targets?month=' + encodeURIComponent(month));
     EMIE.adminState.designerTargets = Array.isArray(rows) ? rows : [];
-    const body = document.getElementById('designerPerformanceBody');
-    if (body) body.innerHTML = renderDesignerPerformanceRows(EMIE.adminState.pointStandards || [], EMIE.adminState.designerTargets);
+    const body = document.getElementById('designerTargetBody');
+    if (body) body.innerHTML = renderDesignerTargetRows(EMIE.adminState.designerTargets);
   } catch (e) { window.EMIE.actions.showSystemAlert('目标加载失败：' + e.message); }
 }
 
 async function saveDesignerTarget(index) {
   const item = (EMIE.adminState.designerTargets || [])[index];
-  if (!item) return;
+  const monthKey = document.getElementById('designerTargetMonth')?.value;
+  if (!item || !monthKey) return;
   try {
-    await apiPut('/performance/designer-targets/' + encodeURIComponent(item.userId), { targetPoints: Number(document.getElementById('dt_points_' + index)?.value || 0) });
-    await loadDesignerTargets();
+    await apiPut('/performance/designer-targets/' + encodeURIComponent(item.userId), { monthKey, targetPoints: Number(document.getElementById('dt_points_' + index)?.value || 0) });
+    await loadDesignerTargetMonth(monthKey);
   } catch (e) { window.EMIE.actions.showSystemAlert('目标保存失败：' + e.message); }
 }
 
@@ -220,8 +226,7 @@ async function createPointRule() {
   const ruleCode = (window.prompt('规则编号（字母、数字、下划线或短横线）') || '').trim().toUpperCase();
   if (!ruleCode) return;
   const category = (window.prompt('规则分类', 'GENERAL') || 'GENERAL').trim();
-  const pointsRaw = window.prompt('基础积分（可选，留空默认为0）', '10');
-  const points = pointsRaw === null || pointsRaw.trim() === '' ? 0 : Number(pointsRaw);
+  const points = Number(window.prompt('基础积分', '10'));
   const description = (window.prompt('规则说明', '') || '').trim();
   try {
     await apiPost('/points/rules', { ruleCode, category, points, description });
@@ -237,7 +242,7 @@ async function deletePointRule(code) {
 
 async function savePointRule(code, index) {
   try {
-    await apiPut('/points/rules/' + encodeURIComponent(code), { points: Number(document.getElementById('pr_points_' + index).value || 0), category: document.getElementById('pr_category_' + index).value.trim(), qualityBonusThreshold: Number(document.getElementById('pr_threshold_' + index).value || 0), qualityBonusRatio: Number(document.getElementById('pr_ratio_' + index).value || 0), description: document.getElementById('pr_desc_' + index).value.trim(), enabled: document.getElementById('pr_enabled_' + index).checked });
+    await apiPut('/points/rules/' + encodeURIComponent(code), { points: Number(document.getElementById('pr_points_' + index).value), category: document.getElementById('pr_category_' + index).value.trim(), qualityBonusThreshold: Number(document.getElementById('pr_threshold_' + index).value), qualityBonusRatio: Number(document.getElementById('pr_ratio_' + index).value), qualityTopThreshold: Number(document.getElementById('pr_top_threshold_' + index).value), qualityTopRatio: Number(document.getElementById('pr_top_ratio_' + index).value), maxTotalMultiplier: Number(document.getElementById('pr_cap_' + index).value), description: document.getElementById('pr_desc_' + index).value.trim(), enabled: document.getElementById('pr_enabled_' + index).checked });
     window.EMIE.actions.showSystemAlert('积分规则已保存');
   } catch (e) { window.EMIE.actions.showSystemAlert('保存失败：' + e.message); }
 }
@@ -286,25 +291,10 @@ async function saveMonthlyPerformanceConfig(index) {
   const supplyShortage = current ? document.getElementById('mp_shortage_' + index)?.checked : window.confirm('该月是否存在企划供单不足？');
   if (!monthKey) return;
   try {
-    await apiPut('/performance/monthly', { id: current?.id || null, monthKey, targetPoints, multiplier, salesAmount, supplyShortage });
+    await apiPut('/performance/monthly/' + encodeURIComponent(monthKey), { targetPoints, multiplier, salesAmount, supplyShortage });
     window.EMIE.actions.showSystemAlert('月度绩效配置已保存');
     await renderAdminPoints(document.getElementById('adminContent'));
   } catch (e) { window.EMIE.actions.showSystemAlert('保存失败：' + e.message); }
-}
-
-async function syncFeishuSalesPerformance(button) {
-  const resultEl = document.getElementById('feishuSalesSyncResult');
-  if (button) { button.disabled = true; button.textContent = '同步中…'; }
-  if (resultEl) resultEl.textContent = '正在读取飞书销售数据…';
-  try {
-    const result = await apiPost('/performance/sales/sync', {});
-    const syncMessage = result?.success === false ? (result.message || '同步失败，已保留上次结果') : `同步完成 · ${result.month || ''} · 有效订单 ${result.included ?? 0} 条 · 销售额 ${Number(result.salesAmount || 0).toLocaleString()} · 跳过 ${result.skipped ?? 0} 条`;
-    if (resultEl) resultEl.textContent = syncMessage;
-    await renderAdminPoints(document.getElementById('adminContent'));
-    const refreshedResult = document.getElementById('feishuSalesSyncResult');
-    if (refreshedResult) refreshedResult.textContent = syncMessage;
-  } catch (e) { if (resultEl) resultEl.textContent = '同步失败：' + (e.message || '请检查飞书销售表配置'); }
-  finally { if (button) { button.disabled = false; button.textContent = '↻ 同步销售额'; } }
 }
 
 async function reviewPointAppeal(id, approve) {
@@ -319,6 +309,57 @@ async function reviewPointAppeal(id, approve) {
   }
   try { await apiPost(`/point-governance/appeals/${id}/admin-review`, { decision: approve ? 'APPROVE' : 'REJECT', comment, adjustmentPoints }); await renderAdminPoints(document.getElementById('adminContent')); }
   catch (e) { window.EMIE.actions.showSystemAlert('处理失败：' + e.message); }
+}
+
+// ==================== 手动调账（管理员主动补分/扣分） ====================
+async function openManualAdjustmentModal() {
+  if (document.getElementById('manualAdjustmentModal')) return;
+  let users;
+  try { users = await apiGet('/admin/users'); } catch (e) { window.EMIE.actions.showSystemAlert('读取成员列表失败：' + e.message); return; }
+  const activeUsers = (Array.isArray(users) ? users : []).filter(u => (u.status || 'active') === 'active');
+  // 手动调账仅面向有积分资格的角色（设计师），与后端校验一致；角色可能为英文标准值或中文别名（'设计师'）。
+  const eligibleUsers = activeUsers.filter(u => u.role === 'designer' || u.role === '设计师');
+  if (!eligibleUsers.length) { window.EMIE.actions.showSystemAlert('暂无可调账的启用成员（仅设计师）'); return; }
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'manualAdjustmentModal';
+  modal.innerHTML = `<div class="modal" style="max-width:540px;">
+    <div class="modal-header"><div class="modal-header-left"><div class="modal-title">手动调账</div><div class="modal-subtitle">管理员主动补分或扣分，必填备注并记入调账台账</div></div><button class="modal-close" data-emie-onclick="closeM('manualAdjustmentModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">成员 <span style="color:var(--gray-400);">（仅设计师）</span></label><select class="form-input" id="manualAdjUser"><option value="">请选择成员</option>${eligibleUsers.map(u => `<option value="${escHtml(u.userId)}">${escHtml(u.name || u.userId)}（${escHtml(u.userId)}）</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">积分 <span style="color:var(--danger);">*</span></label><input class="form-input" type="number" step="1" id="manualAdjPoints" placeholder="例如：50 或 -30"><div style="font-size:12px;color:var(--gray-400);margin-top:4px;">非零整数，绝对值不超过 100000；增加填正数，扣减填负数。</div></div>
+      <div class="form-group"><label class="form-label">备注 <span style="color:var(--danger);">*</span></label><textarea class="form-input" id="manualAdjReason" rows="3" maxlength="500" placeholder="必填，说明调账原因（500 字内）"></textarea></div>
+      <div id="manualAdjError" style="display:none;color:var(--danger);font-size:13px;"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('manualAdjustmentModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitManualAdjustment(this)">确认调账</button></div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+async function submitManualAdjustment(button) {
+  const error = document.getElementById('manualAdjError');
+  if (error) { error.style.display = 'none'; }
+  const userId = document.getElementById('manualAdjUser')?.value;
+  const pointsRaw = document.getElementById('manualAdjPoints')?.value;
+  const reason = document.getElementById('manualAdjReason')?.value.trim();
+  if (!userId) { if (error) { error.textContent = '请选择成员。'; error.style.display = 'block'; } return; }
+  const points = Number(pointsRaw);
+  if (String(pointsRaw || '').trim() === '' || !Number.isInteger(points) || points === 0 || Math.abs(points) > 100000) {
+    if (error) { error.textContent = '积分必须为非零整数，且绝对值不超过 100000。'; error.style.display = 'block'; }
+    return;
+  }
+  if (!reason) { if (error) { error.textContent = '请填写调账备注。'; error.style.display = 'block'; } return; }
+  if (reason.length > 500) { if (error) { error.textContent = '备注不能超过 500 字。'; error.style.display = 'block'; } return; }
+  if (button) { button.disabled = true; button.textContent = '调账中…'; }
+  try {
+    await apiPost('/point-governance/manual-adjustment', { userId, points, reason });
+    closeM('manualAdjustmentModal');
+    showAdminToast('调账成功，已记入调账台账', 'success');
+    await renderAdminPoints(document.getElementById('adminContent'));
+  } catch (e) {
+    if (error) { error.textContent = '调账失败：' + (e.message || '请稍后重试'); error.style.display = 'block'; }
+    if (button) { button.disabled = false; button.textContent = '确认调账'; }
+  }
 }
 
 async function createPoPointProject() {
@@ -436,13 +477,14 @@ EMIE.registerActions({
   resetScoringWeights,
   renderAdminPoints,
   savePointRule,
-  createPointRule, deletePointRule, loadDesignerTargets, saveDesignerTarget,
+  createPointRule, deletePointRule, loadDesignerTargetMonth, saveDesignerTarget,
   savePointDifficulty,
   saveStandardPointConfig,
   deleteStandardPointConfig,
   saveMonthlyPerformanceConfig,
-  syncFeishuSalesPerformance,
   reviewPointAppeal,
+  openManualAdjustmentModal,
+  submitManualAdjustment,
   createPoPointProject,
   submitPoPointProjectForm,
   reviewPoProgress,
@@ -463,13 +505,14 @@ EMIE.registerModule('adminScoring', {
   resetScoringWeights,
   renderAdminPoints,
   savePointRule,
-  createPointRule, deletePointRule, loadDesignerTargets, saveDesignerTarget,
+  createPointRule, deletePointRule, loadDesignerTargetMonth, saveDesignerTarget,
   savePointDifficulty,
   saveStandardPointConfig,
   deleteStandardPointConfig,
   saveMonthlyPerformanceConfig,
-  syncFeishuSalesPerformance,
   reviewPointAppeal,
+  openManualAdjustmentModal,
+  submitManualAdjustment,
   createPoPointProject,
   submitPoPointProjectForm,
   reviewPoProgress,

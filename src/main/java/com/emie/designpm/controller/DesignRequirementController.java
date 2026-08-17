@@ -10,6 +10,7 @@ import com.emie.designpm.service.PermissionService;
 import com.emie.designpm.service.NotificationWorkflowService;
 import com.emie.designpm.service.FeishuChatService;
 import com.emie.designpm.entity.User;
+import com.emie.designpm.util.SecurityUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -142,9 +143,12 @@ public class DesignRequirementController {
         String plannerName = planner != null ? planner.getName()
                 : ("planner".equals(creatorRole) ? session.name() : text(body.get("plannerName")));
         DesignRequirement d = new DesignRequirement();
-        d.setName(name); d.setDeadline(deadline); d.setRequirements(requirements);
-        d.setDescription(text(body.get("description")));
-        d.setCustomerName(text(body.get("customerName")));
+        // 用户文本字段统一清洗（去 HTML 标签/危险脚本，按列长截断）；JSON 结构字段不在此列。
+        d.setName(SecurityUtil.sanitizeText(name, 200));
+        d.setDeadline(deadline);
+        d.setRequirements(SecurityUtil.sanitizeText(requirements, 2000));
+        d.setDescription(SecurityUtil.sanitizeText(text(body.get("description")), 2000));
+        d.setCustomerName(SecurityUtil.sanitizeText(text(body.get("customerName")), 100));
         // 需求负责人始终以当前登录账号为准，不信任前端传入的负责人身份。
         d.setResponsibleId(session.userId());
         d.setResponsibleName(session.name());
@@ -199,7 +203,7 @@ public class DesignRequirementController {
         }
         String content = text(body.get("deliveryContent"));
         if (content == null) return ResponseEntity.badRequest().body(java.util.Map.of("error", "请填写交付成果"));
-        d.setDeliveryContent(content);
+        d.setDeliveryContent(SecurityUtil.sanitizeText(content, 2000));
         d.setDeliveryAttachmentsJson(text(body.get("deliveryAttachmentsJson")));
         d.setDeliveryReferenceImagesJson(text(body.get("deliveryReferenceImagesJson")));
         d.setDeliveredAt(java.time.LocalDateTime.now());
@@ -261,7 +265,7 @@ public class DesignRequirementController {
         String comments = text(body.get("comments"));
         String deadline = text(body.get("requiredCompletionDate"));
         if (comments == null || deadline == null) return ResponseEntity.badRequest().body(java.util.Map.of("error", "驳回意见和要求完成时间不能为空"));
-        d.setRejectionComments(comments); d.setRejectionDeadline(deadline); d.setStatus("rejected");
+        d.setRejectionComments(SecurityUtil.sanitizeText(comments, 2000)); d.setRejectionDeadline(deadline); d.setStatus("rejected");
         repository.save(d);
         if (notificationWorkflowService != null) {
             java.util.Map<String, String> context = notificationContext(d, session.name());

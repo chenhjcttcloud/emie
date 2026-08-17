@@ -1237,3 +1237,7 @@ html:has(.admin-page)::-webkit-scrollbar,body:has(.admin-page)::-webkit-scrollba
 .points-rules-scroll thead th { background:var(--gray-50); }
 @media (max-width:900px) { .points-dashboard-grid { grid-template-columns:1fr; } .points-hero { padding:28px; } }
 @media (max-width:600px) { .points-page { gap:12px; } .points-hero { min-height:0; padding:24px 20px; border-radius:15px; flex-direction:column; align-items:stretch; } .points-hero-side { width:auto; } .points-hero h2 { font-size:23px; } .points-hero-stats { margin-top:20px; } .points-section-head { align-items:flex-start; } .points-section-head > .btn { flex-shrink:0; } .points-forecast-grid { grid-template-columns:1fr; padding:14px; } .points-performance-head { align-items:flex-start; gap:8px; } .points-rules-card .card-header { align-items:flex-start; gap:12px; } .points-rule-filter { width:100%; justify-content:space-between; } .points-rule-filter select { flex:1; } .points-rules-scroll { height:390px; min-height:390px; } }
+
+/* 文件下载选项面板按钮：悬停背景由 CSS 承担（P3 内联事件迁移，配合 CSP script-src-attr 'none'） */
+.file-dl-btn { transition: background 0.15s; }
+.file-dl-btn:hover { background:#f9fafb; }

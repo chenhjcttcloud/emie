@@ -2,6 +2,7 @@ package com.emie.designpm.controller;
 
 import com.emie.designpm.entity.ComplianceItem;
 import com.emie.designpm.repository.ComplianceItemRepository;
+import com.emie.designpm.util.SecurityUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -41,7 +42,7 @@ public class ComplianceController {
         if (body.containsKey("sortOrder")) {
             try { sortOrder = Integer.parseInt(body.get("sortOrder")); } catch (NumberFormatException ignored) {}
         }
-        ComplianceItem item = new ComplianceItem(name.trim(), sortOrder);
+        ComplianceItem item = new ComplianceItem(SecurityUtil.sanitizeText(name.trim(), 50), sortOrder);
         return ResponseEntity.ok(repo.save(item));
     }
 
@@ -51,7 +52,7 @@ public class ComplianceController {
         ComplianceItem item = repo.findById(id).orElse(null);
         if (item == null) return ResponseEntity.notFound().build();
 
-        if (body.containsKey("name")) item.setName(body.get("name").trim());
+        if (body.containsKey("name") && body.get("name") != null) item.setName(SecurityUtil.sanitizeText(body.get("name").trim(), 50));
         if (body.containsKey("sortOrder")) {
             try { item.setSortOrder(Integer.parseInt(body.get("sortOrder"))); } catch (NumberFormatException ignored) {}
         }

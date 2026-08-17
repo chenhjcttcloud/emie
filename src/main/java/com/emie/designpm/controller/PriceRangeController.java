@@ -2,6 +2,7 @@ package com.emie.designpm.controller;
 
 import com.emie.designpm.entity.PriceRange;
 import com.emie.designpm.repository.PriceRangeRepository;
+import com.emie.designpm.util.SecurityUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -37,7 +38,7 @@ public class PriceRangeController {
         if (body.containsKey("sortOrder")) {
             try { sortOrder = Integer.parseInt(body.get("sortOrder")); } catch (NumberFormatException ignored) {}
         }
-        return ResponseEntity.ok(repo.save(new PriceRange(name.trim(), sortOrder)));
+        return ResponseEntity.ok(repo.save(new PriceRange(SecurityUtil.sanitizeText(name.trim(), 50), sortOrder)));
     }
 
     @PutMapping("/{id}")
@@ -45,7 +46,7 @@ public class PriceRangeController {
         if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
         PriceRange item = repo.findById(id).orElse(null);
         if (item == null) return ResponseEntity.notFound().build();
-        if (body.containsKey("name")) item.setName(body.get("name").trim());
+        if (body.containsKey("name") && body.get("name") != null) item.setName(SecurityUtil.sanitizeText(body.get("name").trim(), 50));
         if (body.containsKey("sortOrder")) {
             try { item.setSortOrder(Integer.parseInt(body.get("sortOrder"))); } catch (NumberFormatException ignored) {}
         }

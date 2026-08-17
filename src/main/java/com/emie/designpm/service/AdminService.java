@@ -521,7 +521,7 @@ public class AdminService {
         if (fields.containsKey("name")) {
             String name = fields.get("name");
             if (!SecurityUtil.isValidDisplayName(name)) throw new IllegalArgumentException("姓名限1-20字不含特殊字符");
-            user.setName(name.trim());
+            user.setName(SecurityUtil.sanitizeText(name.trim(), 20));
         }
 
         if (fields.containsKey("phone")) {
@@ -719,9 +719,9 @@ public class AdminService {
         if (roleRepository.existsByName(name)) throw new IllegalArgumentException("角色标识「" + name + "」已存在");
 
         Role role = Role.builder()
-            .name(name)
-            .displayName(displayName)
-            .description(description != null ? description : "")
+            .name(SecurityUtil.sanitizeText(name, 50))
+            .displayName(SecurityUtil.sanitizeText(displayName, 100))
+            .description(SecurityUtil.sanitizeText(description != null ? description : "", 255))
             .permissions(permissions != null ? String.join(",", permissions) : "")
             .isSystem(false)
             .build();
@@ -745,8 +745,8 @@ public class AdminService {
         Role role = roleRepository.findById(roleId)
             .orElseThrow(() -> new IllegalArgumentException("角色不存在"));
 
-        if (displayName != null && !displayName.isBlank()) role.setDisplayName(displayName);
-        if (description != null) role.setDescription(description);
+        if (displayName != null && !displayName.isBlank()) role.setDisplayName(SecurityUtil.sanitizeText(displayName, 100));
+        if (description != null) role.setDescription(SecurityUtil.sanitizeText(description, 255));
         if (permissions != null) role.setPermissions(String.join(",", permissions));
 
         role = roleRepository.save(role);

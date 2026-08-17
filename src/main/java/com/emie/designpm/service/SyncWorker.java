@@ -9,7 +9,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
@@ -38,6 +39,8 @@ public class SyncWorker {
     private final FeishuBaseService feishuBaseService;
     private final SyncQueueService syncQueueService;
     private final SystemConfigRepository systemConfigRepository;
+    /** 每条队列任务独立的主库短事务；队列状态更新走后台连接池，独立提交。 */
+    private final TransactionTemplate itemTransaction;
 
     @Autowired
     public SyncWorker(@Qualifier("backgroundSyncQueueRepository") SyncQueueOperations syncQueueRepository,
@@ -47,7 +50,8 @@ public class SyncWorker {
                       ActivityLogRepository activityLogRepository,
                       FeishuBaseService feishuBaseService,
                       SyncQueueService syncQueueService,
-                      SystemConfigRepository systemConfigRepository) {
+                      SystemConfigRepository systemConfigRepository,
+                      PlatformTransactionManager transactionManager) {
         this.syncQueueRepository = syncQueueRepository;
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
@@ -56,6 +60,7 @@ public class SyncWorker {
         this.feishuBaseService = feishuBaseService;
         this.syncQueueService = syncQueueService;
         this.systemConfigRepository = systemConfigRepository;
+        this.itemTransaction = transactionManager == null ? null : new TransactionTemplate(transactionManager);
     }
 
     /** 保留单元测试和旧调用方的构造签名；生产由 Spring 注入配置仓库。 */
@@ -67,12 +72,11 @@ public class SyncWorker {
                       FeishuBaseService feishuBaseService,
                       SyncQueueService syncQueueService) {
         this(syncQueueRepository, projectRepository, subTaskRepository, scoringRepository,
-                activityLogRepository, feishuBaseService, syncQueueService, null);
+                activityLogRepository, feishuBaseService, syncQueueService, null, null);
     }
 
     /** 每 30 秒消费队列 */
     @Scheduled(fixedDelay = 30_000)
-    @Transactional(transactionManager = "transactionManager")
     public void processQueue() {
         if (!syncLock.tryLock()) {
             log.debug("飞书同步队列跳过：已有同步轮次正在执行");
@@ -95,55 +99,73 @@ public class SyncWorker {
         log.info("飞书同步队列: {} 条待处理", items.size());
 
         for (SyncQueue item : items) {
-            try {
-                item.setStatus("processing");
-                syncQueueRepository.saveQueue(item);
+            processItemInTransaction(item);
+        }
+    }
 
-                switch (item.getEntityType()) {
-                    case "project" -> {
-                        if ("delete".equals(item.getAction())) {
-                            deleteProject(item.getEntityId());
-                        } else {
-                            syncProject(item.getEntityId());
-                        }
+    /**
+     * 每条任务在独立主库短事务中执行「读业务数据 + 处理 + 保存队列状态」，
+     * 避免整轮循环（20 条 × 飞书 HTTP 调用）横跨单个长事务持有主库连接数分钟
+     * 触发 prod 连接池 leak-detection 误报。队列状态更新经后台连接池独立提交，
+     * 崩溃后可被 recoverStuckItems 恢复，调度与重试语义保持不变。
+     */
+    private void processItemInTransaction(SyncQueue item) {
+        if (itemTransaction != null) {
+            itemTransaction.executeWithoutResult(status -> processSingleItem(item));
+        } else {
+            processSingleItem(item);
+        }
+    }
+
+    private void processSingleItem(SyncQueue item) {
+        try {
+            item.setStatus("processing");
+            syncQueueRepository.saveQueue(item);
+
+            switch (item.getEntityType()) {
+                case "project" -> {
+                    if ("delete".equals(item.getAction())) {
+                        deleteProject(item.getEntityId());
+                    } else {
+                        syncProject(item.getEntityId());
                     }
-                    case "sub_task" -> {
-                        if ("delete".equals(item.getAction())) {
-                            deleteSubTask(item.getEntityId());
-                        } else {
-                            syncSubTask(item.getEntityId());
-                        }
-                    }
-                    case "scoring_record" -> {
-                        if ("delete".equals(item.getAction())) {
-                            deleteScoring(item.getEntityId());
-                        } else {
-                            syncScoring(item.getEntityId());
-                        }
-                    }
-                    case "activity_log" -> syncActivityLog(item.getEntityId());
-                    default -> log.warn("未知同步类型: {}", item.getEntityType());
                 }
-
-                item.setStatus("done");
-                item.setErrorMsg(null);
-                item.setNextRetryAt(null);
-                log.debug("同步成功: {} {}", item.getEntityType(), item.getEntityId());
-
-            } catch (Exception e) {
-                item.setRetryCount(item.getRetryCount() + 1);
-                item.setErrorMsg(e.getMessage() != null ? e.getMessage().substring(0, Math.min(500, e.getMessage().length())) : "未知错误");
-                if (item.getRetryCount() >= 3) {
-                    item.setStatus("fail");
-                    log.warn("同步失败(已重试3次): {} {} - {}", item.getEntityType(), item.getEntityId(), e.getMessage());
-                } else {
-                    item.setStatus("pending");
-                    item.setNextRetryAt(LocalDateTime.now().plusSeconds(Math.min(900, 30L << Math.min(item.getRetryCount(), 4))));
-                    log.warn("同步失败(将重试 {}/3): {} {} - {}", item.getRetryCount(), item.getEntityType(), item.getEntityId(), e.getMessage());
+                case "sub_task" -> {
+                    if ("delete".equals(item.getAction())) {
+                        deleteSubTask(item.getEntityId());
+                    } else {
+                        syncSubTask(item.getEntityId());
+                    }
                 }
-            } finally {
-                syncQueueRepository.saveQueue(item);
+                case "scoring_record" -> {
+                    if ("delete".equals(item.getAction())) {
+                        deleteScoring(item.getEntityId());
+                    } else {
+                        syncScoring(item.getEntityId());
+                    }
+                }
+                case "activity_log" -> syncActivityLog(item.getEntityId());
+                default -> log.warn("未知同步类型: {}", item.getEntityType());
             }
+
+            item.setStatus("done");
+            item.setErrorMsg(null);
+            item.setNextRetryAt(null);
+            log.debug("同步成功: {} {}", item.getEntityType(), item.getEntityId());
+
+        } catch (Exception e) {
+            item.setRetryCount(item.getRetryCount() + 1);
+            item.setErrorMsg(e.getMessage() != null ? e.getMessage().substring(0, Math.min(500, e.getMessage().length())) : "未知错误");
+            if (item.getRetryCount() >= 3) {
+                item.setStatus("fail");
+                log.warn("同步失败(已重试3次): {} {} - {}", item.getEntityType(), item.getEntityId(), e.getMessage());
+            } else {
+                item.setStatus("pending");
+                item.setNextRetryAt(LocalDateTime.now().plusSeconds(Math.min(900, 30L << Math.min(item.getRetryCount(), 4))));
+                log.warn("同步失败(将重试 {}/3): {} {} - {}", item.getRetryCount(), item.getEntityType(), item.getEntityId(), e.getMessage());
+            }
+        } finally {
+            syncQueueRepository.saveQueue(item);
         }
     }
 

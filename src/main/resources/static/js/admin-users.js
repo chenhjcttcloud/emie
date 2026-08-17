@@ -7,6 +7,7 @@ const isModalOpen = (...args) => EMIE.actions.isModalOpen(...args);
 const submitGuard = (...args) => EMIE.actions.submitGuard(...args);
 const apiDelete = (...args) => EMIE.actions.apiDelete(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
+const escJsString = (...args) => EMIE.actions.escJsString(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
 
 const adminUserRoleLabels = { pending: '待分配', sales: '销售', planner: '产品企划', designer: '设计师', supplychain: '供应链', promotion: '产品推广', admin: '管理员' };
@@ -100,13 +101,13 @@ async function renderAdminUsers(container, page = 0, filters = {}) {
                   <td>${escHtml(u.email || '-')}</td>
                   <td>
                     <div class="admin-user-actions">
-                      <button class="btn-edit-user" data-emie-onclick="openEditUserModal(JSON.parse(decodeURIComponent('${encodeURIComponent(JSON.stringify(u))}'))) ">✏️ 编辑</button>
-                      <button class="btn-edit-role" data-emie-onclick="openChangeRoleModal(${u.id}, ${JSON.stringify(u.role || '').replace(/"/g, '&quot;')}, ${JSON.stringify(u.name || '').replace(/"/g, '&quot;')})">${u.status === 'pending' ? '✅ 分配角色' : '🔄 角色'}</button>
-                      ${u.status === 'pending' ? '' : `<button class="btn-reset-pwd" data-emie-onclick="openResetPwdModal(${u.id}, ${JSON.stringify(u.name || '').replace(/"/g, '&quot;')})">🔑 密码</button>`}
+                      <button class="btn-edit-user" data-emie-onclick="openEditUserModal({id:${u.id},userId:'${escHtml(escJsString(u.userId))}',name:'${escHtml(escJsString(u.name || ''))}',phone:'${escHtml(escJsString(u.phone || ''))}',email:'${escHtml(escJsString(u.email || ''))}',role:'${escHtml(escJsString(u.role || ''))}',status:'${escHtml(escJsString(u.status || 'active'))}'})">✏️ 编辑</button>
+                      <button class="btn-edit-role" data-emie-onclick="openChangeRoleModal(${u.id}, '${escHtml(escJsString(u.role || ''))}', '${escHtml(escJsString(u.name || ''))}')">${u.status === 'pending' ? '✅ 分配角色' : '🔄 角色'}</button>
+                      ${u.status === 'pending' ? '' : `<button class="btn-reset-pwd" data-emie-onclick="openResetPwdModal(${u.id}, '${escHtml(escJsString(u.name || ''))}')">🔑 密码</button>`}
                       ${u.userId !== EMIE.state.authUser.userId
-                        ? `<button class="btn-status" data-emie-onclick="toggleUserStatus(${u.id}, ${JSON.stringify(u.name || '').replace(/"/g, '&quot;')}, ${JSON.stringify(u.status || 'active').replace(/"/g, '&quot;')})">${(u.status === 'disabled') ? '✅ 启用' : '⛔ 停用'}</button>`
+                        ? `<button class="btn-status" data-emie-onclick="toggleUserStatus(${u.id}, '${escHtml(escJsString(u.name || ''))}', '${escHtml(escJsString(u.status || 'active'))}')">${(u.status === 'disabled') ? '✅ 启用' : '⛔ 停用'}</button>`
                         : ''}
-                      ${u.userId !== EMIE.state.authUser.userId ? `<button class="btn-delete" data-emie-onclick="confirmDeleteUser(${u.id}, ${JSON.stringify(u.name || '').replace(/"/g, '&quot;')})">🗑️ 删除</button>` : ''}
+                      ${u.userId !== EMIE.state.authUser.userId ? `<button class="btn-delete" data-emie-onclick="confirmDeleteUser(${u.id}, '${escHtml(escJsString(u.name || ''))}')">🗑️ 删除</button>` : ''}
                     </div>
                   </td>
                 </tr>
@@ -184,7 +185,7 @@ function openEditUserModal(userData) {
         </div>
         <div style="background:var(--gray-50);padding:12px 16px;border-radius:8px;margin-top:8px;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <span style="font-size:13px;color:var(--gray-500);">当前角色：<span class="admin-user-role-badge role-${adminUserRoleClass(userData.role)}">${adminUserRoleLabels[adminUserRoleKey(userData.role)] || userData.role}</span></span>
+            <span style="font-size:13px;color:var(--gray-500);">当前角色：<span class="admin-user-role-badge role-${adminUserRoleClass(userData.role)}">${escHtml(adminUserRoleLabels[adminUserRoleKey(userData.role)] || userData.role)}</span></span>
             <span style="font-size:13px;color:var(--gray-500);">当前状态：<span class="admin-user-status-badge status-${userData.status || 'active'}">${adminUserStatusLabel(userData.status)}</span></span>
           </div>
         </div>
@@ -269,7 +270,7 @@ async function openChangeRoleModal(userId, existingRole, userName) {
       <div class="modal-body">
         <div class="form-group">
           <label class="form-label">当前角色</label>
-          <div><span class="admin-user-role-badge role-${adminUserRoleClass(existingRole)}">${adminUserRoleLabels[adminUserRoleKey(existingRole)] || existingRole}</span></div>
+          <div><span class="admin-user-role-badge role-${adminUserRoleClass(existingRole)}">${escHtml(adminUserRoleLabels[adminUserRoleKey(existingRole)] || existingRole)}</span></div>
         </div>
         <div class="form-group">
           <label class="form-label">新角色</label>

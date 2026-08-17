@@ -129,9 +129,9 @@ async function addSubTask(pid) {
           <div class="form-row">
           </div>
           <div class="form-row">
-            <div class="form-group"><label class="form-label">积分规则（正式运行后必填）</label>
-              <select class="form-select" name="pointRuleCode"><option value="">暂不设置积分规则</option>${renderPointRuleOptions(pointRules, '').replace('<option value="" selected disabled>请选择积分规则</option>', '')}</select>
-              <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">A：常规设计；B：复杂/重点设计；E：简单辅助；S：特殊专项。创建时锁定基础分，后续调整规则不会影响该任务。</div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 积分规则</label>
+              <select class="form-select" name="pointRuleCode" required>${renderPointRuleOptions(pointRules, '')}</select>
+              <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">正式运行后必须选择积分规则。A：常规设计；B：复杂/重点设计；E：简单辅助；S：特殊专项。创建时锁定基础分，后续调整规则不会影响该任务。</div>
             </div>
             <div class="form-group"><label class="form-label">难度档位（未启用时可留空）</label>
               <select class="form-select" name="difficultyCode"><option value="" selected>暂不设置难度</option>${renderDifficultyOptions(pointDifficulties, '').replace(/ selected/g, '')}</select>
@@ -303,6 +303,11 @@ async function submitAddSubTask(pid) {
     showError('designerId', '请选择子任务负责人');
     hasErr = true;
   }
+  // 积分模式正式运行后必选积分规则，未选择时阻止提交并给出明确提示
+  if (!data.pointRuleCode) {
+    showError('pointRuleCode', '正式运行后必须选择积分规则');
+    hasErr = true;
+  }
   if (hasErr) return;
 
   data.currentUser = getCurrentUserName();
@@ -395,9 +400,9 @@ function editTask(pid, tid) {
             </div>
             <input type="hidden" name="requiredSkillTagsText" value="">
             <div class="form-row">
-              <div class="form-group"><label class="form-label">积分规则</label>
+              <div class="form-group"><label class="form-label">${task.status === 'pending' ? '<span class="required">*</span>' : ''}积分规则</label>
                 <select class="form-select" name="pointRuleCode" ${task.status !== 'pending' ? 'disabled' : ''}>${renderPointRuleOptions(rules, task.pointRuleCode)}</select>
-                ${task.status !== 'pending' ? '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">任务已开始，积分规则快照不可修改。</div>' : ''}
+                ${task.status !== 'pending' ? '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">任务已开始，积分规则快照不可修改。</div>' : '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">正式运行后必须选择积分规则，任务开始后不可修改。</div>'}
               </div>
               <div class="form-group"><label class="form-label">难度档位</label>
                 <select class="form-select" name="difficultyCode" ${task.status !== 'pending' ? 'disabled' : ''}>${renderDifficultyOptions(difficulties, task.difficultyCode)}</select>
@@ -488,6 +493,13 @@ async function submitEditTask(pid, tid) {
     }
   }
 
+  // 待执行任务编辑时积分规则必选：未选择时阻止提交，避免后端 ACTIVE 模式报错
+  const editRuleSelect = document.querySelector('#editTaskForm [name="pointRuleCode"]');
+  if (editRuleSelect && !editRuleSelect.disabled && !editRuleSelect.value) {
+    window.EMIE.actions.showSystemAlert('正式运行后必须选择积分规则');
+    return;
+  }
+
   data.currentUser = getCurrentUserName();
   data.currentRole = EMIE.state.currentRole;
   // 始终提交当前图片和附件列表（包含已有的和新上传的）
@@ -549,9 +561,9 @@ async function taskAccept(pid, tid, marketTask = null) {
     modal.innerHTML = `
       <button class="modal-close-float" data-emie-onclick="closeM('taskAcceptModal')">✕</button>
       <div class="modal">
-        <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✅ 接单：${task.name}</div></div></div>
+        <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✅ 接单：${escHtml(task.name)}</div></div></div>
         <div class="modal-body">
-          ${marketTask ? '' : `<p style="margin-bottom:12px;color:var(--gray-500);">负责人：<strong>${task.designerName || '未指定'}</strong></p>`}
+          ${marketTask ? '' : `<p style="margin-bottom:12px;color:var(--gray-500);">负责人：<strong>${escHtml(task.designerName || '未指定')}</strong></p>`}
           <form id="taskAcceptForm">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 计划完成时间</label>${renderDatePicker('plannedDate', {required:true, value: task.plannedDate || ''})}</div>
           </form>
@@ -623,7 +635,7 @@ async function taskDeliver(pid, tid) {
     modal.innerHTML = `
     <button class="modal-close-float" data-emie-onclick="closeM('taskDeliverModal')">✕</button>
       <div class="modal modal-lg">
-        <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📤 交付：${task.name}</div></div></div>
+        <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📤 交付：${escHtml(task.name)}</div></div></div>
         <div class="modal-body">
           <form id="taskDeliverForm">
             <input type="hidden" name="actualDate">
@@ -727,9 +739,9 @@ async function taskRedeliver(pid, tid) {
     modal.innerHTML = `
     <button class="modal-close-float" data-emie-onclick="closeM('taskRedeliverModal')">✕</button>
       <div class="modal modal-lg">
-        <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📤 重新交付：${task.name}</div></div></div>
+        <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📤 重新交付：${escHtml(task.name)}</div></div></div>
         <div class="modal-body">
-          ${task.reviewComments ? `<div class="review-box rejected" style="margin-bottom:16px;"><strong>驳回意见：</strong>${task.reviewComments}</div>` : ''}
+          ${task.reviewComments ? `<div class="review-box rejected" style="margin-bottom:16px;"><strong>驳回意见：</strong>${escHtml(task.reviewComments)}</div>` : ''}
           <form id="taskRedeliverForm">
             <input type="hidden" name="actualDate">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required style="min-height:100px;"></textarea></div>
@@ -891,7 +903,7 @@ function taskApprove(pid, tid, projectType) {
     modal.id = 'taskApproveModal';
     modal.innerHTML = `
       <div class="modal">
-        <div class="modal-header"><div class="modal-header-left"><div class="modal-title">${title}：${task.name}</div></div></div>
+        <div class="modal-header"><div class="modal-header-left"><div class="modal-title">${title}：${escHtml(task.name)}</div></div></div>
         <div class="modal-body">
           <p style="margin-bottom:12px;">${isSalesConfirm ? '销售确认该子任务通过并评分？' : (isAdminConfirm ? '管理确认该子任务通过并评分？' : (isChannel ? '企划确认该子任务通过并评分？之后需销售再次确认评分。' : '企划确认该子任务验收通过并评分？之后需管理再次确认。'))}</p>
           ${needsScore ? `
@@ -1005,10 +1017,10 @@ function openScoring(pid, tid) {
     modal.id = 'scoringModal';
     modal.innerHTML = `
       <div class="modal">
-        <div class="modal-header"><button class="modal-close" data-emie-onclick="closeM('scoringModal')">✕</button><div class="modal-header-left"><div class="modal-title">⭐ 评分：${task.name}</div></div></div>
+        <div class="modal-header"><button class="modal-close" data-emie-onclick="closeM('scoringModal')">✕</button><div class="modal-header-left"><div class="modal-title">⭐ 评分：${escHtml(task.name)}</div></div></div>
         <div class="modal-body">
-          <p style="margin-bottom:8px;color:var(--gray-500);">评分人：<strong>${roleLabel(EMIE.state.currentRole)}</strong>（${getCurrentUserName()}）</p>
-          <p style="margin-bottom:16px;color:var(--gray-500);">请对 <strong>${task.name}</strong> 进行评分（1-100分）</p>
+          <p style="margin-bottom:8px;color:var(--gray-500);">评分人：<strong>${escHtml(roleLabel(EMIE.state.currentRole))}</strong>（${escHtml(getCurrentUserName())}）</p>
+          <p style="margin-bottom:16px;color:var(--gray-500);">请对 <strong>${escHtml(task.name)}</strong> 进行评分（1-100分）</p>
           <div>
             <div class="form-group"><label class="form-label">⭐ 综合评分</label><input type="number" class="form-input" id="scoreValue" min="1" max="100" step="1" placeholder="1-100" value="${myRecord.score ?? ''}" style="font-size:24px;text-align:center;max-width:200px;margin:0 auto;"></div>
           </div>

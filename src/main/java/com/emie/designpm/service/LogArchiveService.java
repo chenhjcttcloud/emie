@@ -12,6 +12,7 @@ import java.nio.file.*;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -26,6 +27,8 @@ import java.util.zip.GZIPOutputStream;
 public class LogArchiveService {
 
     private final ActivityLogRepository activityLogRepository;
+    /** 归档互斥锁：串行化「读日志 → 写归档文件 → 删库」整段流程，防止并发归档互相覆盖损坏文件。 */
+    private final ReentrantLock archiveLock = new ReentrantLock();
 
     @Value("${app.log-archive.dir:logs/archive}")
     private String archiveDir;
@@ -62,17 +65,44 @@ public class LogArchiveService {
      * 归档指定月份的所有日志
      */
     public boolean archiveMonth(YearMonth yearMonth) {
+        archiveLock.lock();
+        try {
+            return archiveMonthLocked(yearMonth);
+        } finally {
+            archiveLock.unlock();
+        }
+    }
+
+    private boolean archiveMonthLocked(YearMonth yearMonth) {
         LocalDateTime start = yearMonth.atDay(1).atStartOfDay();
         LocalDateTime end = yearMonth.atEndOfMonth().atTime(LocalTime.MAX);
-
-        List<ActivityLog> logs = activityLogRepository.findByTimeBetween(start, end);
-        if (logs.isEmpty()) return false;
 
         String fileName = "logs_" + yearMonth.format(FILE_DTF) + ".json.gz";
         Path filePath = Path.of(archiveDir, fileName);
 
+        List<ActivityLog> logs = activityLogRepository.findByTimeBetween(start, end);
+        // 幂等检查仅对「rename 完成的最终文件」生效：最终文件已存在说明该月已归档成功
+        // （或上次写盘成功但删库失败），此时不再重复写盘，只兜底清理残留的数据库记录。
+        // 写盘中途崩溃/磁盘满只会留下 .tmp 临时文件，不会触发幂等，下次可重新完整写入。
+        // 用 isRegularFile 而非 exists：与最终文件名同名的目录（异常/误操作创建）不能当作
+        // “已归档”标志，否则会误判已归档并删库丢数据；isRegularFile 会走正常写盘，
+        // rename 遇到同名目录时失败抛异常（归档日志失败），库记录保留可重试。
+        if (Files.isRegularFile(filePath)) {
+            if (!logs.isEmpty()) {
+                activityLogRepository.deleteAll(logs);
+                activityLogRepository.flush();
+            }
+            return false;
+        }
+        if (logs.isEmpty()) return false;
+
+        // 先写临时文件，全部写完后再原子 rename 到最终路径；临时文件命名带线程 id 与
+        // 纳秒时间戳，避免并发/崩溃残留的临时文件互相冲突（残留临时文件可被安全覆盖重写）。
+        Path tmpPath = filePath.resolveSibling(
+                fileName + ".tmp." + Thread.currentThread().getId() + "." + System.nanoTime());
+
         try {
-            // 转为 JSON 并压缩写入
+            // 转为 JSON 并压缩写入临时文件
             StringBuilder json = new StringBuilder("[");
             boolean first = true;
             for (ActivityLog l : logs) {
@@ -89,8 +119,16 @@ public class LogArchiveService {
             }
             json.append("]");
 
-            try (GZIPOutputStream gz = new GZIPOutputStream(new FileOutputStream(filePath.toFile()))) {
+            try (GZIPOutputStream gz = new GZIPOutputStream(Files.newOutputStream(tmpPath))) {
                 gz.write(json.toString().getBytes("UTF-8"));
+            }
+
+            // 原子 rename：同一文件系统内的 rename 原子完成，最终文件要么完整存在要么不存在，
+            // 不存在“残缺最终文件”被误判为已归档的状态；个别文件系统不支持 ATOMIC_MOVE 时回退普通 move。
+            try {
+                Files.move(tmpPath, filePath, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException unsupported) {
+                Files.move(tmpPath, filePath, StandardCopyOption.REPLACE_EXISTING);
             }
 
             // 删除已归档的数据库记录
@@ -99,6 +137,8 @@ public class LogArchiveService {
 
             return true;
         } catch (IOException e) {
+            // 清理本次临时文件（尽力而为）；残留临时文件不影响下次重新归档
+            try { Files.deleteIfExists(tmpPath); } catch (IOException ignored) { /* ignore */ }
             throw new RuntimeException("归档日志失败: " + e.getMessage(), e);
         }
     }
@@ -131,7 +171,8 @@ public class LogArchiveService {
         while (!current.isAfter(endMonth)) {
             String fileName = "logs_" + current.format(FILE_DTF) + ".json.gz";
             Path filePath = Path.of(archiveDir, fileName);
-            if (Files.exists(filePath)) {
+            // 仅读取常规归档文件；同名目录（异常/误操作）不作为归档数据读取
+            if (Files.isRegularFile(filePath)) {
                 try {
                     List<Map<String, Object>> archivedLogs = readArchiveFile(filePath, start, end);
                     result.addAll(archivedLogs);

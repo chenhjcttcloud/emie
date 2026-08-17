@@ -59,7 +59,7 @@ async function openFilePreview(fileUrl, fileName, fileSize, retry = false) {
         <span class="file-preview-tip">PPT/PPTX 以静态幻灯片形式预览</span>
         <div class="file-preview-footer-actions">
           <button class="btn btn-outline btn-sm" id="openPreviewWindowBtn" data-emie-onclick="openPreviewInNewWindow()" disabled>↗ 新窗口打开</button>
-          <button class="btn btn-primary btn-sm" data-emie-onclick="doDirectDownload('${escJsString(authenticatedFileUrl(normalizedUrl))}')">⬇ 下载原文件</button>
+          <button class="btn btn-primary btn-sm" data-emie-onclick="doDirectDownload('${escHtml(escJsString(authenticatedFileUrl(normalizedUrl)))}')">⬇ 下载原文件</button>
         </div>
       </div>
     </div>`;
@@ -159,25 +159,23 @@ function showDownloadOptions(fileUrl, fileName, fileSize) {
       </div>
       <div style="padding:0 24px 24px;">
         <div style="display:grid;grid-template-columns:repeat(${canPreview ? 3 : 2},1fr);gap:10px;margin-bottom:16px;">
-          ${canPreview ? `<button data-emie-onclick="closeDownloadOptions();openFilePreview('${escJsString(fileUrl)}','${escJsString(fileName)}',${fileSize || 0});"
+          ${canPreview ? `<button data-emie-onclick="closeDownloadOptions();openFilePreview('${escHtml(escJsString(fileUrl))}','${escHtml(escJsString(fileName))}',${fileSize || 0});"
             style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 6px;border-radius:10px;border:1px solid #c7d2fe;background:#eef2ff;cursor:pointer;font-size:13px;color:#3730a3;transition:background 0.15s;">
             <span style="font-size:18px;">👁</span> 在线预览
           </button>` : ''}
-          <button data-emie-onclick="doDirectDownload('${escJsString(fullUrl)}');closeDownloadOptions();"
-            style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 6px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:13px;color:#1f2937;transition:background 0.15s;"
-            onmouseenter="this.style.background='#f9fafb'" onmouseleave="this.style.background='#fff'">
+          <button class="file-dl-btn" data-emie-onclick="doDirectDownload('${escHtml(escJsString(fullUrl))}');closeDownloadOptions();"
+            style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 6px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:13px;color:#1f2937;">
             <span style="font-size:18px;">⬇️</span> 直接下载
           </button>
-          <button data-emie-onclick="doCopyDownloadLink('${escJsString(fullUrl)}', this);"
-            style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 6px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:13px;color:#1f2937;transition:background 0.15s;"
-            onmouseenter="this.style.background='#f9fafb'" onmouseleave="this.style.background='#fff'">
+          <button class="file-dl-btn" data-emie-onclick="doCopyDownloadLink('${escHtml(escJsString(fullUrl))}', this);"
+            style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 6px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:13px;color:#1f2937;">
             <span style="font-size:18px;">🔗</span> <span id="copyBtnLabel">复制下载地址</span>
           </button>
         </div>
         <div style="padding:10px 14px;background:#f9fafb;border-radius:10px;font-size:12px;color:#9ca3af;display:flex;align-items:center;gap:8px;">
           <span style="flex-shrink:0;">🔗</span>
           <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(fullUrl)}">${escHtml(fullUrl)}</span>
-          <button data-emie-onclick="copyUrlOnly('${escJsString(fullUrl)}', this)" style="background:none;border:none;cursor:pointer;font-size:12px;color:#3370FF;padding:2px 6px;border-radius:4px;flex-shrink:0;">复制</button>
+          <button data-emie-onclick="copyUrlOnly('${escHtml(escJsString(fullUrl))}', this)" style="background:none;border:none;cursor:pointer;font-size:12px;color:#3370FF;padding:2px 6px;border-radius:4px;flex-shrink:0;">复制</button>
         </div>
       </div>
     </div>`;
@@ -252,7 +250,7 @@ async function copyUrlOnly(url, btn) {
 /** 生成文件操作按钮 HTML（用于嵌入到列表/卡片中） */
 function renderFileActions(fileUrl, fileName, fileSize) {
   const fullUrl = fileUrl.startsWith('http') ? fileUrl : window.location.origin + fileUrl;
-  return `<button class="btn btn-outline btn-sm" data-emie-onclick="showDownloadOptions('${escJsString(fullUrl)}','${escJsString(fileName || '')}',${fileSize || 0})" title="下载选项">⬇️</button>`;
+  return `<button class="btn btn-outline btn-sm" data-emie-onclick="showDownloadOptions('${escHtml(escJsString(fullUrl))}','${escHtml(escJsString(fileName || ''))}',${fileSize || 0})" title="下载选项">⬇️</button>`;
 }
 
 

@@ -3,6 +3,7 @@ package com.emie.designpm.service;
 import com.emie.designpm.controller.AuthController;
 import com.emie.designpm.entity.DesignRequirement;
 import com.emie.designpm.entity.DesignRequirementScore;
+import com.emie.designpm.repository.DesignRequirementRepository;
 import com.emie.designpm.repository.DesignRequirementScoreRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,9 +14,17 @@ import java.util.*;
 @Service
 public class DesignRequirementScoringService {
     private final DesignRequirementScoreRepository scores;
+    private final DesignRequirementRepository requirements;
 
     public DesignRequirementScoringService(DesignRequirementScoreRepository scores) {
+        this(scores, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DesignRequirementScoringService(DesignRequirementScoreRepository scores,
+                                           DesignRequirementRepository requirements) {
         this.scores = scores;
+        this.requirements = requirements;
     }
 
     @Transactional
@@ -55,6 +64,7 @@ public class DesignRequirementScoringService {
         if (!Objects.equals(d.getDesignerId(), session.userId()) || !"designer".equals(normalizeRole(session.role()))) {
             throw new IllegalArgumentException("仅该需求的设计师可以自评");
         }
+        DesignRequirement locked = lockRequirement(d);
         DesignRequirementScore self = ownPending(d, session, "self");
         complete(self, session, score);
         List<DesignRequirementScore> records = scores.findByRequirementIdOrderByIdAsc(d.getId());
@@ -65,16 +75,38 @@ public class DesignRequirementScoringService {
         });
         scores.saveAll(records);
         d.setStatus("pending_review");
+        persistLockedStatus(d, locked);
     }
 
     @Transactional
     public void submitReview(DesignRequirement d, AuthController.AuthSession session, int score) {
+        // 对需求行加锁（FOR UPDATE）后重算两位复评人状态：并发提交时双方若都读到
+        // 对方尚未完成的状态，会双双落入 pending_review，丢失“全部完成→自动结束”判定
+        // 导致需求永久卡在处理中（P2-15）。行锁将两位复评人的提交串行化，后者必然看到前者已完成。
+        DesignRequirement locked = lockRequirement(d);
         DesignRequirementScore record = ownPending(d, session, "review");
         complete(record, session, score);
         boolean allDone = scores.findByRequirementIdOrderByIdAsc(d.getId()).stream()
                 .filter(s -> "review".equals(s.getStage()))
                 .allMatch(s -> "completed".equals(s.getStatus()));
         d.setStatus(allDone ? "completed" : "pending_review");
+        persistLockedStatus(d, locked);
+    }
+
+    /** 需求行锁；单元测试（requirements 为 null）时退化为直接使用传入实体。 */
+    private DesignRequirement lockRequirement(DesignRequirement d) {
+        if (requirements == null) return d;
+        return requirements.findByIdForUpdate(d.getId())
+                .orElseThrow(() -> new IllegalArgumentException("设计需求不存在"));
+    }
+
+    /** 若传入的是游离实体（如控制器先加载后传入），同步持久化锁内判定的状态，
+     *  避免调用方随后 save(d) 用过期状态覆盖“全部完成”结论。 */
+    private void persistLockedStatus(DesignRequirement d, DesignRequirement locked) {
+        if (locked != null && locked != d) {
+            locked.setStatus(d.getStatus());
+            requirements.save(locked);
+        }
     }
 
     public List<Map<String, Object>> pendingItems(String role, String userId) {

@@ -88,6 +88,30 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
+    void updateSubTaskNormalizesNullBlankAndAliasAssigneeRoleToDesigner() {
+        Project project = projectWithTask("regular", "pending");
+        when(users.getUserByUserId("designer-1")).thenReturn(com.emie.designpm.entity.User.builder()
+                .userId("designer-1").name("设计师甲").role("designer").status("active").build());
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Map<String, Object> nullRole = new java.util.HashMap<>(Map.of(
+                "currentRole", "admin", "currentUserId", "admin-1", "currentUser", "管理员甲"));
+        nullRole.put("assigneeRole", null);
+        service.updateSubTask(1L, 11L, nullRole);
+        assertEquals("designer", project.getTasks().get(0).getAssigneeRole());
+
+        service.updateSubTask(1L, 11L, Map.of(
+                "currentRole", "admin", "currentUserId", "admin-1", "currentUser", "管理员甲",
+                "assigneeRole", ""));
+        assertEquals("designer", project.getTasks().get(0).getAssigneeRole());
+
+        service.updateSubTask(1L, 11L, Map.of(
+                "currentRole", "admin", "currentUserId", "admin-1", "currentUser", "管理员甲",
+                "assigneeRole", "设计师"));
+        assertEquals("designer", project.getTasks().get(0).getAssigneeRole());
+    }
+
+    @Test
     void channelDeliveryCreatesPlannerAndSalesReviewRows() {
         Project project = projectWithTask("channel_custom", "accepted");
         when(projects.findById(1L)).thenReturn(Optional.of(project));
@@ -309,6 +333,93 @@ class ProjectReviewWorkflowTest {
         assertEquals(1, result.size());
         assertEquals(12L, result.getFirst().get("taskId"));
         assertEquals(true, result.getFirst().get("isPending"));
+    }
+
+    @Test
+    void scoringCenterFinalApprovalAwardsQualityCompletion() {
+        Project project = projectWithTask("regular", "planner_approved");
+        ScoringRecord secondReview = review(project.getTasks().get(0), "admin", "second");
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scoring.findBySubTaskIdAndRole(11L, "admin")).thenReturn(Optional.of(secondReview));
+
+        service.submitScoring(1L, 11L, Map.of(
+                "role", "admin",
+                "currentRole", "admin",
+                "currentUserId", "admin-1",
+                "currentUser", "管理员甲",
+                "score", 91
+        ));
+
+        // 与任务详情入口一致：最终验收通过必须发放质量加分
+        assertEquals("completed", project.getTasks().get(0).getStatus());
+        verify(points).awardQualityCompletion(project.getTasks().get(0));
+    }
+
+    @Test
+    void scoringCenterChannelSalesFinalApprovalAwardsQualityCompletion() {
+        Project project = projectWithTask("channel_custom", "planner_approved");
+        ScoringRecord secondReview = review(project.getTasks().get(0), "sales", "second");
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scoring.findBySubTaskIdAndRole(11L, "sales")).thenReturn(Optional.of(secondReview));
+
+        service.submitScoring(1L, 11L, Map.of(
+                "role", "sales",
+                "currentRole", "sales",
+                "currentUserId", "sales-1",
+                "currentUser", "销售甲",
+                "score", 88
+        ));
+
+        assertEquals("completed", project.getTasks().get(0).getStatus());
+        verify(points).awardQualityCompletion(project.getTasks().get(0));
+    }
+
+    @Test
+    void scoringCenterFirstReviewDoesNotAwardBeforeTaskCompleted() {
+        Project project = projectWithTask("regular", "submitted_for_review");
+        ScoringRecord firstReview = review(project.getTasks().get(0), "planner", "first");
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scoring.findBySubTaskIdAndRole(11L, "planner")).thenReturn(Optional.of(firstReview));
+        when(scoring.findBySubTaskIdAndRole(11L, "admin")).thenReturn(Optional.empty());
+
+        service.submitScoring(1L, 11L, Map.of(
+                "role", "planner",
+                "currentRole", "planner",
+                "currentUserId", "planner-1",
+                "currentUser", "企划甲",
+                "score", 82
+        ));
+
+        // 一审通过只是中间态，未到最终验收，不得发放质量加分
+        assertEquals("planner_approved", project.getTasks().get(0).getStatus());
+        verify(points, never()).awardQualityCompletion(any());
+    }
+
+    @Test
+    void taskDetailFinalApprovalAwardsQualityCompletion() {
+        Project project = projectWithTask("regular", "planner_approved");
+        ScoringRecord secondReview = review(project.getTasks().get(0), "admin", "second");
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scoring.findBySubTaskIdAndRole(11L, "admin")).thenReturn(Optional.of(secondReview));
+
+        service.taskApprove(1L, 11L, Map.of(
+                "currentRole", "admin",
+                "currentUserId", "admin-1",
+                "currentUser", "管理员甲",
+                "comments", "二审通过",
+                "score", 91
+        ));
+
+        assertEquals("completed", project.getTasks().get(0).getStatus());
+        verify(points).awardQualityCompletion(project.getTasks().get(0));
     }
 
     private Project projectWithTask(String type, String taskStatus) {

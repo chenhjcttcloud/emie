@@ -49,6 +49,8 @@ public class NotificationRetryService implements NotificationRetryOperations {
 
     @Scheduled(fixedDelayString = "${notification.retry-delay-ms:30000}")
     public void retryDueDeliveries() {
+        // 先恢复崩溃残留的认领（长时间停留在 processing 的投递），避免永久滞留。
+        deliveries.recoverStuckClaims(LocalDateTime.now().minusMinutes(10), LocalDateTime.now());
         List<NotificationDelivery> due = deliveries
                 .findTop50ByStatusInAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(
                         List.of("failed", "pending"), LocalDateTime.now());
@@ -58,7 +60,14 @@ public class NotificationRetryService implements NotificationRetryOperations {
         Map<String, User> userById = users.findByUserIdIn(notificationById.values().stream()
                 .map(Notification::getRecipientUserId).filter(java.util.Objects::nonNull).distinct().toList())
                 .stream().collect(java.util.stream.Collectors.toMap(User::getUserId, u -> u));
-        for (NotificationDelivery delivery : due) retry(delivery, notificationById, userById);
+        for (NotificationDelivery delivery : due) {
+            // 认领（CAS：failed/pending -> processing）；并发调度轮次/多实例下只有一个能成功，
+            // 防止同一投递被多轮重复发送飞书消息。认领失败说明其它轮次正在处理，跳过。
+            if (deliveries.claimForRetry(delivery.getId(), LocalDateTime.now()) == 0) {
+                continue;
+            }
+            retry(delivery, notificationById, userById);
+        }
     }
 
     public List<Map<String, Object>> recentFailures() {

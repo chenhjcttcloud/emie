@@ -184,12 +184,12 @@ function renderScoringCards(tasks) {
         <div class="subtask-header">
           <div class="subtask-name">
             <span class="subtask-number" style="background:${isPending ? 'var(--warning)' : 'var(--success)'};">${statusIcon}</span>
-            ${t.name}
+            ${escHtml(t.name)}
           </div>
           <span class="badge ${statusCls}">${statusText}</span>
         </div>
         <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
-          📁 ${t.projectType === 'design_requirement' ? '需求' : '项目'} #${t.projectId} ${t.projectType === 'channel_custom' ? '📦 渠道定制' : t.projectType === 'design_requirement' ? '🎨 设计/送审' : '🏭 常规品'} — ${t.projectName || ''}
+          📁 ${t.projectType === 'design_requirement' ? '需求' : '项目'} #${t.projectId} ${t.projectType === 'channel_custom' ? '📦 渠道定制' : t.projectType === 'design_requirement' ? '🎨 设计/送审' : '🏭 常规品'} — ${escHtml(t.projectName || '')}
           ${t.plannerName ? ` · 👤 产品企划：${escHtml(t.plannerName)}` : ''}
           ${t.plannedDate ? ` · 📅 ${formatDate(t.plannedDate)}` : ''}
         </div>

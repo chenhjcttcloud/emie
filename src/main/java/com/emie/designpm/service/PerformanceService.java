@@ -17,6 +17,7 @@ public class PerformanceService {
     private final PointAdjustmentLedgerRepository adjustments;
     private final UserRepository users;
     private final StandardPointConfigRepository standards;
+    private final MonthlyPerformanceConfigRepository months;
     private final SystemConfigRepository configs;
     private MonthlyUserPointTargetRepository userTargets;
 
@@ -24,7 +25,7 @@ public class PerformanceService {
                               UserRepository users, StandardPointConfigRepository standards,
                               MonthlyPerformanceConfigRepository months, SystemConfigRepository configs) {
         this.ledgers = ledgers; this.adjustments = adjustments; this.users = users;
-        this.standards = standards; this.configs = configs;
+        this.standards = standards; this.months = months; this.configs = configs;
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -38,14 +39,18 @@ public class PerformanceService {
         Map<String, Double> sums = new HashMap<>();
         ledgers.sumPerformancePointsByMonth(month, from, to).forEach(row ->
                 sums.put((String) row[0], ((Number) row[1]).doubleValue()));
-        adjustments.sumPointsByPeriod(from, to).forEach(row ->
+        // P1-4：调账与流水统一按 accounting_month 归月，月度统计/排行榜口径一致。
+        // 调账缺省即入账当月（APPEAL 异议调账、TASK_WITHDRAWAL 退单扣分为当月事件，
+        // 实体 @PrePersist 兜底）；PO_PROGRESS 履职积分按进展所属月 month_key 落账。
+        adjustments.sumPointsByMonth(month, from, to).forEach(row ->
                 sums.merge((String) row[0], ((Number) row[1]).doubleValue(), Double::sum));
         // 保留对旧仓储 mock/自定义实现的兼容；正常 JPA 实现会走上面的聚合查询。
         if (sums.isEmpty()) {
             ledgers.findAll().stream().filter(PointLedger::isCountInPerformance)
                     .filter(item -> selected == null ? within(item.getCreatedAt(), from, to) : month.equals(item.getAccountingMonth()))
                     .forEach(item -> sums.merge(item.getUserId(), item.getPoints() == null ? 0d : item.getPoints(), Double::sum));
-            adjustments.findAll().stream().filter(item -> within(item.getCreatedAt(), from, to))
+            adjustments.findAll().stream()
+                    .filter(item -> selected == null ? within(item.getCreatedAt(), from, to) : month.equals(item.getAccountingMonth()))
                     .forEach(item -> sums.merge(item.getUserId(), item.getPoints() == null ? 0d : item.getPoints().doubleValue(), Double::sum));
         }
         return sums.entrySet().stream().sorted(Map.Entry.<String, Double>comparingByValue().reversed()).map(entry -> {
@@ -70,6 +75,7 @@ public class PerformanceService {
                 : userTargets.findByUserId(userId).orElse(null);
         int target = assignedTarget != null ? assignedTarget.getTargetPoints()
                 : personal != null ? personal.getPoints() : 0;
+        // 待接入 V25 档位：绩效工资由管理员线下计算，系数暂恒为 1.0（不依赖销售额档位匹配）。
         double companyCoefficient = 1d;
         double attainmentRate = target > 0 ? (double) points / target : 0d;
         double performanceBase = personal == null || personal.getPerformanceBase() == null ? 0d : personal.getPerformanceBase();
@@ -170,5 +176,36 @@ public class PerformanceService {
 
     private void validateMonth(String month) {
         if (month == null || !month.matches("\\d{4}-\\d{2}")) throw new IllegalArgumentException("月份格式应为YYYY-MM");
+    }
+
+    /** 月度绩效配置（供单不足标记/目标积分/销售额/系数）列表，供管理端维护入口展示。 */
+    @Transactional(readOnly = true)
+    public List<MonthlyPerformanceConfig> monthlyConfigs() {
+        return months.findAll().stream()
+                .sorted(Comparator.comparing(MonthlyPerformanceConfig::getMonthKey).reversed())
+                .toList();
+    }
+
+    /** 新增或更新某月的绩效配置；核心是供单不足（supplyShortage）标记，供月度归档保护计算使用。 */
+    public MonthlyPerformanceConfig saveMonthlyConfig(String month, Integer targetPoints, Double multiplier,
+                                                      Double salesAmount, Boolean supplyShortage) {
+        validateMonth(month);
+        MonthlyPerformanceConfig config = months.findByMonthKey(month).orElseGet(() -> {
+            MonthlyPerformanceConfig created = new MonthlyPerformanceConfig();
+            created.setMonthKey(month);
+            return created;
+        });
+        if (targetPoints != null) {
+            if (targetPoints < 0) throw new IllegalArgumentException("目标积分不能小于0");
+            config.setTargetPoints(targetPoints);
+        }
+        if (multiplier != null) {
+            if (multiplier < 0) throw new IllegalArgumentException("绩效系数不能小于0");
+            config.setMultiplier(multiplier);
+        }
+        if (salesAmount != null && salesAmount < 0) throw new IllegalArgumentException("销售额不能小于0");
+        config.setSalesAmount(salesAmount);
+        if (supplyShortage != null) config.setSupplyShortage(supplyShortage);
+        return months.save(config);
     }
 }

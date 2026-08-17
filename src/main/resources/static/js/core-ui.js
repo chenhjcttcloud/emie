@@ -83,8 +83,11 @@ function renderDatePicker(name, opts = {}) {
   const req = opts.required ? 'required' : '';
   const ph = opts.placeholder || 'yyyy-mm-dd';
   const inputId = `date_${name}_${Math.random().toString(36).slice(2, 8)}`;
+  // min 用本地日期（yyyy-MM-dd），避免 toISOString() 的 UTC 偏差导致 UTC+8 早 8 点前差一天
+  const now = new Date();
+  const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   return `<div class="date-picker" style="position:relative;">
-    <input id="${inputId}" type="date" class="form-input" name="${name}" value="${val}" ${req} min="${new Date().toISOString().split('T')[0]}" aria-label="${ph}" autocomplete="off" style="min-height:38px;cursor:pointer;" data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">
+    <input id="${inputId}" type="date" class="form-input" name="${name}" value="${val}" ${req} min="${localToday}" aria-label="${ph}" autocomplete="off" style="min-height:38px;cursor:pointer;" data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">
   </div>`;
 }
 

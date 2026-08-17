@@ -7,6 +7,7 @@ const isModalOpen = (...args) => EMIE.actions.isModalOpen(...args);
 const submitGuard = (...args) => EMIE.actions.submitGuard(...args);
 const apiDelete = (...args) => EMIE.actions.apiDelete(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
+const escJsString = (...args) => EMIE.actions.escJsString(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
 
 function adminOrgRoleClass(role) {
@@ -75,7 +76,7 @@ async function renderAdminOrg(container) {
               ${!d.active ? `<span style="color:var(--danger);font-size:12px;margin-left:8px;">⛔ 已停用</span>` : ''}
             </div>
             <div style="display:flex;gap:6px;">
-              <button class="btn btn-outline btn-sm" data-emie-onclick="editDept(${JSON.stringify(d).replace(/"/g,"'")})">✏️ 编辑</button>
+              <button class="btn btn-outline btn-sm" data-emie-onclick="editDept({id:${d.id},name:'${escHtml(escJsString(d.name || ''))}',role:'${escHtml(escJsString(d.role || ''))}',headUserId:'${escHtml(escJsString(d.headUserId || ''))}',active:${!!d.active}})">✏️ 编辑</button>
               <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-emie-onclick="deleteDept(${d.id})">🗑️ 删除</button>
             </div>
           </div>
@@ -89,7 +90,7 @@ async function renderAdminOrg(container) {
               const isHeadUser = d.headUserId === u.userId;
               return `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;font-size:12px;">
                 ${escHtml(u.name)}${titleLevelLabel}
-                ${isHeadUser ? '<span style="color:var(--gray-300);font-size:11px;" title="部门负责人不可移出">🔒</span>' : `<span style="cursor:pointer;color:var(--gray-400);font-size:11px;" data-emie-onclick="removeUserFromDept('${u.userId}')" title="移出部门">✕</span>`}
+                ${isHeadUser ? '<span style="color:var(--gray-300);font-size:11px;" title="部门负责人不可移出">🔒</span>' : `<span style="cursor:pointer;color:var(--gray-400);font-size:11px;" data-emie-onclick="removeUserFromDept('${escHtml(escJsString(u.userId))}')" title="移出部门">✕</span>`}
               </span>`;
             }).join('')}
           </div>` : '<div style="font-size:12px;color:var(--gray-400);">暂无成员</div>'}
@@ -101,7 +102,7 @@ async function renderAdminOrg(container) {
       ${allUsers.filter(u => !u.departmentId).map(u =>
         `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;font-size:12px;margin:3px;">
           ${escHtml(u.name)}（${escHtml(roleLabels[u.role] || u.role)}）
-          <span style="cursor:pointer;color:var(--primary);font-size:11px;" data-emie-onclick="openAssignUserDept('${u.userId}')" title="分配到部门">📂</span>
+          <span style="cursor:pointer;color:var(--primary);font-size:11px;" data-emie-onclick="openAssignUserDept('${escHtml(escJsString(u.userId))}')" title="分配到部门">📂</span>
         </span>`
       ).join('') || '<span style="font-size:12px;color:var(--gray-400);">全部已分配</span>'}
     </div>
@@ -280,14 +281,14 @@ async function openAssignUserDept(userId) {
           ${roleDepts.map(d => `
             <label style="display:flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid var(--gray-200);border-radius:8px;cursor:pointer;">
               <input type="radio" name="deptId" value="${d.id}">
-              <div><strong>${escHtml(d.name)}</strong><div style="font-size:12px;color:var(--gray-500);">负责人：${allUsers.find(u2 => u2.userId === d.headUserId)?.name || '未设置'}</div></div>
+              <div><strong>${escHtml(d.name)}</strong><div style="font-size:12px;color:var(--gray-500);">负责人：${escHtml(allUsers.find(u2 => u2.userId === d.headUserId)?.name || '未设置')}</div></div>
             </label>
           `).join('')}
         </div>`}
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" data-emie-onclick="closeM('assignDeptModal')">取消</button>
-        ${roleDepts.length > 0 ? `<button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitAssignDept('${userId}'))">确认分配</button>` : ''}
+        ${roleDepts.length > 0 ? `<button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitAssignDept('${escHtml(escJsString(userId))}'))">确认分配</button>` : ''}
       </div>
     </div>`;
   document.body.appendChild(modal);

@@ -1,0 +1,97 @@
+/* ==================== 公开分享页统一样式 ====================
+ * 由 PublicShareController 渲染的 /share/** 页面引用。
+ * 配合 CSP default-src 'self'，不使用任何内联样式/脚本。
+ * 版本号：页面内 <link href="/css/share.css?v=N"> 手动维护。
+ */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f3f4f6;
+  color: #1f2937;
+  line-height: 1.6;
+}
+
+/* 密码页 / 错误页整体居中 */
+body.centered {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+/* 顶部栏 */
+.top-bar { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 12px 24px;
+           display: flex; justify-content: space-between; align-items: center; }
+.top-bar .logo { font-size: 14px; font-weight: 600; color: #374151; }
+.top-bar .meta { font-size: 12px; color: #9ca3af; }
+
+.container { max-width: 800px; margin: 24px auto; padding: 0 16px; }
+.container.narrow { max-width: 700px; }
+
+.card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 16px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #111827; }
+.card-title { margin-bottom: 4px; }
+.card-subtitle { color: #6b7280; font-size: 13px; margin-bottom: 16px; }
+.created-at { margin-left: 8px; }
+
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.info-item label { font-size: 12px; color: #9ca3af; display: block; margin-bottom: 2px; }
+.info-item .value { font-size: 14px; color: #1f2937; }
+
+.tag { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; }
+.tag-draft { background: #f3f4f6; color: #6b7280; }
+.tag-pending_planner, .tag-pending { background: #fef3c7; color: #92400e; }
+.tag-planner_accepted, .tag-accepted { background: #dbeafe; color: #1e40af; }
+.tag-in_progress { background: #dbeafe; color: #1e40af; }
+.tag-planner_approved, .tag-sales_approved, .tag-admin_approved, .tag-completed, .tag-approved { background: #d1fae5; color: #065f46; }
+.tag-scoring_planner { background: #fef3c7; color: #92400e; }
+.tag-delivered { background: #fef3c7; color: #92400e; }
+.tag-rejected { background: #fee2e2; color: #991b1b; }
+.tag-pending_terminate { background: #fee2e2; color: #991b1b; }
+.tag-paused { background: #f3f4f6; color: #6b7280; }
+.tag-terminated { background: #fee2e2; color: #991b1b; }
+
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; padding: 8px 12px; font-size: 12px; color: #6b7280;
+     border-bottom: 1px solid #e5e7eb; font-weight: 500; }
+td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #f3f4f6; }
+.empty-row { text-align: center; color: #9ca3af; padding: 24px; }
+
+.desc-box { background: #f9fafb; border-radius: 8px; padding: 16px;
+            font-size: 13px; color: #374151; line-height: 1.7; white-space: pre-wrap; }
+
+.footer { text-align: center; padding: 24px; font-size: 12px; color: #9ca3af; }
+
+/* 密码页 */
+.pwd-card { background: #fff; border-radius: 16px; padding: 40px; width: 360px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08); text-align: center; }
+.pwd-emoji { font-size: 36px; margin-bottom: 16px; }
+.pwd-card h1 { font-size: 18px; color: #1f2937; margin-bottom: 8px; }
+.pwd-card p { font-size: 13px; color: #6b7280; margin-bottom: 24px; }
+.pwd-card input { width: 100%; padding: 10px 16px; border: 1px solid #d1d5db;
+                  border-radius: 8px; font-size: 14px; text-align: center;
+                  outline: none; margin-bottom: 16px; }
+.pwd-card input:focus { border-color: #3370FF; box-shadow: 0 0 0 3px rgba(51,112,255,0.1); }
+.pwd-card button { width: 100%; padding: 10px; background: #3370FF; color: #fff;
+                   border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
+.pwd-card button:hover { background: #2860E0; }
+.pwd-card .error { color: #dc2626; font-size: 13px; margin-top: 12px; }
+
+/* 错误页 */
+.err-card { background: #fff; border-radius: 16px; padding: 40px; width: 400px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08); text-align: center; }
+.err-emoji { font-size: 48px; margin-bottom: 16px; }
+.err-card h1 { font-size: 18px; color: #1f2937; margin-bottom: 8px; }
+.err-card p { font-size: 14px; color: #6b7280; }
+
+.back-link { display: inline-block; margin-bottom: 16px; color: #3370FF;
+             text-decoration: none; font-size: 13px; }
+
+@media (max-width: 640px) {
+  .info-grid { grid-template-columns: 1fr; }
+  .container { padding: 0 8px; }
+  .card { padding: 16px; }
+}

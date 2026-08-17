@@ -52,6 +52,9 @@ async function updateBadges(role, uid) {
 
 // ==================== 工作台 ====================
 async function renderDashboard(main, role, uid) {
+  // 渲染序列校验：render() 已自增 renderId；独立调用路径（changePlannerBoardScope）自行自增后进入。
+  // 这里只捕获当前序列号，await 期间若发生新导航/渲染则本次结果作废，避免旧数据覆盖新页面。
+  const renderId = EMIE.state.renderId;
   if (role === 'planner' && plannerScopeUserId !== uid) {
     plannerScopeUserId = uid;
     plannerBoardScope = 'mine';
@@ -63,6 +66,7 @@ async function renderDashboard(main, role, uid) {
     () => apiGet(`/dashboard/full?role=${role}&userId=${uid}&scope=${scopeParam}&includeRoleStatus=false`),
     30000
   );
+  if (EMIE.state.renderId !== renderId) return;
 
   const orders = data.orders || [];
   const stats = data.stats || {};
@@ -276,6 +280,8 @@ async function changePlannerBoardScope(scope) {
   EMIE.projectListPreset = null;
   const main = document.querySelector('main');
   if (main) {
+    // 独立重绘路径：自增渲染序列，使先前渲染中尚未完成的异步继续写入作废。
+    EMIE.state.renderId = (EMIE.state.renderId || 0) + 1;
     main.innerHTML = '<div class="loading">正在更新企划范围…</div>';
     await renderDashboard(main, EMIE.state.currentRole, getCurrentUserId());
   }
@@ -628,10 +634,10 @@ function renderProjectSummary(projects, title) {
           return `<tr style="cursor:pointer;" data-emie-onclick="openProjectDetail(${o.id})">
             <td><strong>${escHtml(o.projectCode || ('#' + o.id))}</strong></td>
             <td>${escHtml(displayText(o.productName, '未设置'))}</td>
-            <td>${o.salesName || '-'}</td>
-            <td>${o.plannerName || '<span style="color:var(--gray-400);">未指定</span>'}</td>
-            <td>${o.productCategory || '-'}</td>
-            <td>${o.targetMarket ? (() => { try { return JSON.parse(o.targetMarket).join('/'); } catch(e) { return o.targetMarket; } })() : '-'}</td>
+            <td>${o.salesName ? escHtml(o.salesName) : '-'}</td>
+            <td>${o.plannerName ? escHtml(o.plannerName) : '<span style="color:var(--gray-400);">未指定</span>'}</td>
+            <td>${o.productCategory ? escHtml(o.productCategory) : '-'}</td>
+            <td>${o.targetMarket ? (() => { try { return JSON.parse(o.targetMarket).map(escHtml).join('/'); } catch(e) { return escHtml(o.targetMarket); } })() : '-'}</td>
             <td>${o.taskCount}（完成${o.approvedTaskCount}）</td>
             <td><div class="progress-bar" style="width:80px;"><div class="progress-fill" style="width:${o.progressPercent}%;"></div></div></td>
             <td>${renderScore(o.score)}</td>

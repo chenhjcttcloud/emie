@@ -2,6 +2,7 @@ package com.emie.designpm.controller;
 
 import com.emie.designpm.entity.IpOption;
 import com.emie.designpm.repository.IpOptionRepository;
+import com.emie.designpm.util.SecurityUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -87,8 +88,9 @@ public class IpOptionController {
 
     private static String normalizeName(String value) {
         if (value == null || value.isBlank()) return null;
-        String name = value.trim();
-        return name.length() <= 100 ? name : null;
+        // 原始用户输入入库前清洗（列长 100，与 IpOption.name 的 @Column(length=100) 一致）
+        String name = SecurityUtil.sanitizeText(value, 100);
+        return name.isBlank() ? null : name;
     }
 
     private static int parseSortOrder(String value) {
