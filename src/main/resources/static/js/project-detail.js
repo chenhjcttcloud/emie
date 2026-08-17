@@ -601,6 +601,10 @@ function normalizeFileUrl(fileOrUrl) {
     ? fileOrUrl.storedName
     : raw.split('?')[0].split('/').pop();
   if (!storedName) return raw;
+  // 历史数据可能把原始文件名直接写进 url；交给后端按 originalName 找回真实存储名。
+  if (typeof fileOrUrl === 'object' && !fileOrUrl?.storedName && fileOrUrl?.name && storedName === fileOrUrl.name) {
+    return '/api/files/download-by-original?name=' + encodeURIComponent(fileOrUrl.name);
+  }
   return '/api/files/download/' + encodeURIComponent(storedName);
 }
 
@@ -609,6 +613,14 @@ function storedNameFromFile(fileOrUrl) {
   const normalized = normalizeFileUrl(fileOrUrl).split('?')[0];
   const rawName = normalized.split('/').pop() || '';
   try { return decodeURIComponent(rawName); } catch (e) { return rawName; }
+}
+
+function originalFileUrl(fileOrUrl, kind) {
+  const name = typeof fileOrUrl === 'object' ? (fileOrUrl?.name || '') : '';
+  if (name && typeof fileOrUrl === 'object' && !fileOrUrl?.storedName) {
+    return '/api/files/' + kind + '-by-original?name=' + encodeURIComponent(name);
+  }
+  return '/api/files/' + kind + '/' + encodeURIComponent(storedNameFromFile(fileOrUrl));
 }
 
 function protectedFileUrl(url) {
@@ -643,7 +655,7 @@ function renderProjectReferenceImages(detail) {
   try { imgs = JSON.parse(detail.referenceImagesJson); } catch(e) { return ''; }
   if (!imgs || !imgs.length) return '';
   const authUrl = u => normalizeFileUrl(u);
-  const thumbUrl = u => protectedFileUrl('/api/files/thumbnail/' + encodeURIComponent(storedNameFromFile(u)));
+  const thumbUrl = u => protectedFileUrl(originalFileUrl(u, 'thumbnail'));
   return `<div style="margin-top:8px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => isRasterImageFile(img.name || storedNameFromFile(img)) ? `<div style="position:relative;display:inline-block;">
@@ -660,7 +672,7 @@ function renderSubTaskImages(jsonStr) {
   try { imgs = JSON.parse(jsonStr); } catch(e) { return ''; }
   if (!imgs || !imgs.length) return '';
   const authUrl = u => normalizeFileUrl(u);
-  const thumbUrl = u => protectedFileUrl('/api/files/thumbnail/' + encodeURIComponent(storedNameFromFile(u)));
+  const thumbUrl = u => protectedFileUrl(originalFileUrl(u, 'thumbnail'));
   return `<div style="margin-top:8px;padding-left:4px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => isRasterImageFile(img.name || storedNameFromFile(img)) ? `<div style="position:relative;display:inline-block;">
@@ -698,7 +710,7 @@ function renderTaskAttachments(jsonStr) {
 
   let html = '';
   const authUrl = u => normalizeFileUrl(u);
-  const thumbUrl = u => protectedFileUrl('/api/files/thumbnail/' + encodeURIComponent(storedNameFromFile(u)));
+  const thumbUrl = u => protectedFileUrl(originalFileUrl(u, 'thumbnail'));
   // 图片预览
   if (images.length) {
     html += `<div style="margin-top:8px;"><div class="detail-label">🖼️ 交付图片</div>

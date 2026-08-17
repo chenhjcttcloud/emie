@@ -25,6 +25,8 @@ public interface FileRecordRepository extends JpaRepository<FileRecord, Long> {
 
     Optional<FileRecord> findByStoredName(String storedName);
 
+    Optional<FileRecord> findTopByOriginalNameOrderByCreatedAtDesc(String originalName);
+
     List<FileRecord> findByStorageTierAndCreatedAtBefore(String storageTier, LocalDateTime before);
 
     List<FileRecord> findByStorageTierOrderByCreatedAtDesc(String storageTier);

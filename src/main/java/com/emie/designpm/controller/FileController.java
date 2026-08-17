@@ -150,6 +150,14 @@ public class FileController {
         }
     }
 
+    /** 兼容历史记录：仅保存了原始文件名、未保存 storedName 的图片。 */
+    @GetMapping("/thumbnail-by-original")
+    public ResponseEntity<Object> thumbnailByOriginal(@RequestParam String name, HttpServletRequest request) {
+        return fileRecordRepository.findTopByOriginalNameOrderByCreatedAtDesc(name)
+                .map(record -> thumbnail(record.getStoredName(), request))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     @PostConstruct
     public void init() {
         uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
@@ -269,6 +277,17 @@ public class FileController {
         } catch (IOException e) {
             return ResponseEntity.internalServerError().build();
         }
+    }
+
+    /** 兼容历史记录：仅保存了原始文件名、未保存 storedName 的文件。 */
+    @GetMapping("/download-by-original")
+    public ResponseEntity<Object> downloadByOriginal(
+            @RequestParam String name,
+            @RequestParam(value = "download", required = false, defaultValue = "false") boolean forceDownload,
+            HttpServletRequest request) {
+        return fileRecordRepository.findTopByOriginalNameOrderByCreatedAtDesc(name)
+                .map(record -> downloadFile(record.getStoredName(), forceDownload, request))
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     private ResponseEntity<Object> serveFile(Path filePath, String fileName, boolean forceDownload) throws IOException {
