@@ -70,11 +70,16 @@ function taskCollaborationSummary(task) {
 
 function renderProjectRelatedRoles(detail) {
   const groups = { designer: [], supplychain: [], promotion: [] };
+  const seen = { designer: new Set(), supplychain: new Set(), promotion: new Set() };
   (detail.tasks || []).forEach(task => {
     const role = String(task.assigneeRole || 'designer').toLowerCase();
     if (!groups[role]) return;
     const name = task.designerName || task.designerId;
-    if (name && !groups[role].includes(name)) groups[role].push(name);
+    const key = String(task.designerId || name || '').trim();
+    if (name && key && !seen[role].has(key)) {
+      seen[role].add(key);
+      groups[role].push(name);
+    }
   });
   const entries = [];
   groups.designer.forEach((name, index) => entries.push({ label: `设计师${index + 1}`, name, tone: 'blue' }));
