@@ -239,7 +239,12 @@ function previewImage(src, name) {
 document.addEventListener('click', function(e) {
   const img = e.target.closest('.img-clickable');
   if (img) {
-    previewImage(img.dataset.fullSrc || img.src, img.alt || img.title || '');
+    const source = img.dataset.fullSrc || img.src;
+    const token = localStorage.getItem('design_pm_token');
+    const authenticatedSource = token && source.startsWith('/api/')
+      ? source + (source.includes('?') ? '&' : '?') + 'access_token=' + encodeURIComponent(token)
+      : source;
+    previewImage(authenticatedSource, img.alt || img.title || '');
   }
 });
 
