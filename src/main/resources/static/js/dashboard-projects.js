@@ -1,5 +1,6 @@
 const EMIE = window.EMIE;
 const renderAdmin = (...args) => EMIE.actions.renderAdmin(...args);
+const renderAdminWorkload = (...args) => EMIE.actions.renderAdminWorkload(...args);
 const getCurrentUserId = (...args) => EMIE.actions.getCurrentUserId(...args);
 const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const getProjectStatusInfo = (...args) => EMIE.actions.getProjectStatusInfo(...args);
@@ -192,6 +193,11 @@ async function render() {
     if (EMIE.state.renderId !== renderId) return;
     if (view === 'dashboard') {
       await renderDashboard(main, role, uid);
+    } else if (view === 'workload') {
+      main.innerHTML = '<div class="admin-section-heading" style="margin-bottom:16px;"><span>📈</span><div><h3>工作量分析</h3><p>按时间范围查看员工项目与子任务工作量</p></div></div>';
+      const workloadContent = document.createElement('div');
+      main.appendChild(workloadContent);
+      await renderAdminWorkload(workloadContent);
     } else if (view === 'orders') {
       await renderOrderList(main, null, role, uid, '', '/projects/page', renderId);
     } else if (view === 'channel') {

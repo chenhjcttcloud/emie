@@ -102,14 +102,9 @@ async function renderDashboard(main, role, uid) {
     <div id="dashboardDesignRequirements"><div class="empty" style="padding:20px;"><p>正在加载设计/送审需求…</p></div></div>
     ${!executionRole && orders.length === 0 ? `<div class="empty"><div class="empty-icon">📭</div><p>暂无您负责的项目</p></div>` : ''}
     ${role === 'planner' ? '<div id="dashboardPlannerTasks"><div class="empty" style="padding:24px;"><p>正在加载子任务面板…</p></div></div>' + renderProjectSummary(channel, '📦 渠道定制单') + renderProjectSummary(regular, '🏭 公司常规品') : executionRole ? '<div id="dashboardExecutionTasks"><div class="empty" style="padding:24px;"><p>正在加载关联子任务…</p></div></div>' : renderProjectSummary(channel, '📦 渠道定制单') + renderProjectSummary(regular, '🏭 公司常规品')}
-    <div id="dashboardWorkloadSection"></div>
   `;
   const plannerScopeSelect = main.querySelector('select.form-input');
   if (plannerScopeSelect) plannerScopeSelect.addEventListener('change', e => changePlannerBoardScope(e.target.value));
-  // 仅 admin 可见工作量概览
-  if (EMIE.state.currentRole === 'admin') {
-    loadDashboardWorkloadSection();
-  }
   loadDashboardRoleStatus(role, uid, myDept);
   loadDashboardDesignRequirements(uid, role);
   if (role === 'planner') loadDashboardPlannerTasks(uid);
@@ -252,15 +247,18 @@ async function loadDashboardRoleStatus(role, uid, myDept) {
     const roleStatus = response || {};
     let html = '';
     if (EMIE.state.currentRole === 'admin') {
-      html = renderRolePanelFromData(roleStatus.sales || {}, 'sales')
+      html = '<div class="dashboard-role-panels-grid">' + renderRolePanelFromData(roleStatus.sales || {}, 'sales')
         + renderRolePanelFromData(roleStatus.planner || {}, 'planner')
         + renderRolePanelFromData(roleStatus.supplychain || {}, 'supplychain')
-        + renderRolePanelFromData(roleStatus.designer || {}, 'designer');
+        + renderRolePanelFromData(roleStatus.designer || {}, 'designer') + '</div>';
     } else if (EMIE.state.currentRole === 'planner') {
       // 企划状态看板统一展示全部产品企划，包含部门负责人和当前用户。
-      html = renderRolePanelFromData(roleStatus.planner || {}, 'planner')
+      html = '<div class="dashboard-role-panels-grid dashboard-role-panels-masonry"><div class="dashboard-role-panel-column">'
+        + renderRolePanelFromData(roleStatus.planner || {}, 'planner')
+        + renderRolePanelFromData(roleStatus.supplychain || {}, 'supplychain')
+        + '</div><div class="dashboard-role-panel-column">'
         + renderRolePanelFromData(roleStatus.designer || {}, 'designer')
-        + renderRolePanelFromData(roleStatus.supplychain || {}, 'supplychain');
+        + '</div></div>';
     } else if (myDept) {
       html = renderRolePanelFromData(roleStatus[myDept.role] || {}, myDept.role, myDept.id, uid);
     }
@@ -326,29 +324,39 @@ async function loadDashboardWorkloadSection() {
       const r = data[role];
       if (!r || !r.users || r.users.length === 0) continue;
       const w = isWorker(role);
+      const roleTone = { sales: ['#2563EB', '#EFF6FF'], planner: ['#D97706', '#FFFBEB'], designer: ['#7C3AED', '#F5F3FF'], supplychain: ['#0F766E', '#F0FDFA'] }[role] || ['#475569', '#F8FAFC'];
+      const roleTotal = r.users.reduce((sum, u) => sum + Number(u.created || u.assigned || 0), 0);
+      const roleDone = r.users.reduce((sum, u) => sum + Number(u.completed || 0), 0);
+      const roleChannel = r.users.reduce((sum, u) => sum + Number(u.channelCustomProjects || 0), 0);
+      const roleRegular = r.users.reduce((sum, u) => sum + Number(u.regularProjects || 0), 0);
+      const completedRoleChannel = r.users.reduce((sum, u) => sum + Number(u.completedChannelProjects || 0), 0);
+      const completedRoleRegular = r.users.reduce((sum, u) => sum + Number(u.completedRegularProjects || 0), 0);
+      const categoryHeader = `<span style="flex:1;color:#7C3AED;font-weight:600;">${w ? '渠道定制任务' : '渠道定制'}</span><span style="flex:1;color:#B45309;font-weight:600;">${w ? '常规品任务' : '公司常规品'}</span>`;
       html += `<div class="card" style="margin-bottom:12px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--gray-200);">
-          <div><span style="font-size:15px;margin-right:4px;">${r.icon||'👤'}</span><strong style="font-size:14px;">${r.label||role}</strong>
-          <span style="font-size:12px;color:var(--gray-400);margin-left:6px;">${r.totalUsers} 人</span></div>
+        <div style="display:grid;grid-template-columns:120px repeat(5,minmax(0,1fr)) 140px;gap:12px;align-items:center;padding:14px 16px;border-top:3px solid ${roleTone[0]};border-bottom:1px solid var(--gray-200);background:linear-gradient(90deg,${roleTone[1]},#fff 55%);">
+          <div style="display:flex;align-items:center;gap:10px;"><span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:10px;background:${roleTone[1]};color:${roleTone[0]};font-size:18px;">${r.icon||'👤'}</span><div><strong style="font-size:15px;color:#1f2937;">${r.label||role}</strong><div style="font-size:11px;color:#94a3b8;margin-top:2px;">成员工作量分布 · ${r.totalUsers}人</div></div></div>
+          <div style="grid-column:2 / span 5;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:center;font-size:12px;color:#64748B;text-align:center;"><span>总量 <strong style="color:#2563EB;font-size:15px;">${roleTotal}</strong></span><span>${w ? '渠道定制任务' : '渠道定制项目'} <strong style="color:#7C3AED;font-size:15px;">${roleChannel}</strong></span><span>${w ? '常规品任务' : '公司常规品项目'} <strong style="color:#B45309;font-size:15px;">${roleRegular}</strong></span><span style="white-space:nowrap;">完成 <strong style="color:#047857;font-size:15px;">${roleDone}</strong><small style="font-size:11px;color:#64748B;">（${w ? '渠道定制任务' : '渠道定制项目'}：${completedRoleChannel}个、${w ? '常规品任务' : '公司常规品项目'}：${completedRoleRegular}个）</small></span><span></span></div>
         </div>
-        <div style="display:flex;padding:6px 16px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-100);">
-          <div style="min-width:120px;">姓名</div>
-          <div style="flex:1;display:flex;gap:12px;"><span style="width:50px;">${w?'新分配':'新建'}</span><span style="width:50px;">完成</span><span style="width:50px;">完成率</span></div>
+        <div style="display:grid;grid-template-columns:120px repeat(5,minmax(0,1fr)) 140px;gap:12px;padding:6px 16px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-100);">
+          <div>姓名</div>
+          <div style="grid-column:2 / span 5;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;text-align:center;"><span style="color:#2563EB;font-weight:600;">${w?'新分配':'新建'}</span>${categoryHeader}<span style="color:#047857;font-weight:600;">完成</span><span style="color:#475569;font-weight:600;">完成率</span></div>
         </div>`;
       for (const u of r.users) {
         const cr = u.created || u.assigned || 0;
         const cp = u.completed || 0;
         const rate = cr > 0 ? Math.round((cp / cr) * 100) + '%' : '-';
-        html += `<div style="display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid var(--gray-100);">
-          <div style="min-width:120px;flex-shrink:0;">
+        html += `<div style="display:grid;grid-template-columns:120px repeat(5,minmax(0,1fr)) 140px;gap:12px;align-items:center;padding:8px 16px;border-bottom:1px solid var(--gray-100);">
+          <div>
             <div style="font-size:13px;font-weight:500;color:#1f2937;">${escHtml(u.name)}</div>
           </div>
-          <div style="flex:1;display:flex;gap:12px;align-items:center;">
-            <span style="width:50px;font-size:13px;font-weight:600;">${cr}</span>
-            <span style="width:50px;font-size:13px;font-weight:600;color:#065F46;">${cp}</span>
-            <span style="width:50px;font-size:12px;color:${rate === '-' ? 'var(--gray-400)' : '#374151'};">${rate}</span>
+          <div style="grid-column:2 / span 5;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:center;text-align:center;">
+            <span style="font-size:13px;font-weight:700;color:#2563EB;background:#EFF6FF;border-radius:6px;padding:3px 8px;">${cr}</span>
+            <span style="font-size:13px;font-weight:700;color:#6D28D9;background:#F5F3FF;border-radius:6px;padding:3px 8px;">${u.channelCustomProjects || 0}</span>
+            <span style="font-size:13px;font-weight:700;color:#B45309;background:#FFFBEB;border-radius:6px;padding:3px 8px;">${u.regularProjects || 0}</span>
+            <span style="font-size:13px;font-weight:700;color:#047857;background:#ECFDF5;border-radius:6px;padding:3px 8px;white-space:nowrap;">${cp}<small style="font-size:10px;font-weight:500;color:#64748B;margin-left:4px;">（${w ? '渠道定制任务' : '渠道定制项目'}：${u.completedChannelProjects || 0}个、${w ? '常规品任务' : '公司常规品项目'}：${u.completedRegularProjects || 0}个）</small></span>
+            <span style="font-size:12px;font-weight:600;color:${rate === '-' ? 'var(--gray-400)' : '#475569'};">${rate}</span>
           </div>
-          <div style="flex:1;max-width:100px;background:var(--gray-200);border-radius:4px;height:6px;overflow:hidden;">
+          <div style="background:var(--gray-200);border-radius:4px;height:6px;overflow:hidden;">
             <div style="background:#639922;width:${cr > 0 ? Math.min(100, (cp / cr) * 100) : 0}%;height:100%;border-radius:4px;"></div>
           </div>
         </div>`;
@@ -515,7 +523,7 @@ function renderRolePanelFromData(statusData, role, deptId, excludeUserId) {
     bodyHtml = `<div class="designer-grid">${users.map(u => renderUserCard(u, role)).join('')}</div>`;
   }
 
-  return `<div class="designer-status-panel">
+  return `<div class="designer-status-panel role-${role}">
     <div class="card-header">
       <div class="card-title">${roleEmoji[role] || '👤'} ${roleLabel_[role] || role}状态看板</div>
       <div style="display:flex;gap:12px;font-size:13px;">

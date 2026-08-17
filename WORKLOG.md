@@ -14,6 +14,8 @@
 
 ## 最近完成
 
+- 工作台状态面板自适应布局（2026-08-17）：优化产品企划、供应链、设计状态看板的排版。状态卡片按人员数量和内容高度自然伸缩；产品企划与供应链在左列独立纵向排列，设计状态在右列独立计算高度，避免少量人员面板被大量空白撑高；窄屏自动切换为单列。相关文件：`src/main/resources/static/js/dashboard-home.js`、`src/main/resources/static/css/app.css`。已通过 `./scripts/test-update.sh`（容器重建、健康检查、入口冒烟、弹窗与响应式回归）。
+
 - 管理员手动调账（2026-08-16）：积分纠错新入口（无需用户提异议）。
   - 后端 POST /api/point-governance/manual-adjustment：admin 角色校验；userId 必须存在；points 非零整数且 |points|≤100000；reason 必填 ≤500 字；写 point_adjustment_ledgers（sourceType=MANUAL，sourceId 取 MAX+1，(source_type,source_id) 唯一索引兜底并发冲突转 409；createdBy 审计；accountingMonth 缺省入账当月）。
   - 前端管理端「积分与绩效配置」新增手动调账卡片+弹窗（成员下拉仅列启用成员、正负积分提示、备注必填 500 字内、前端校验、后端 error 文案透出）；用户积分页「调账与 PO 积分」MANUAL 来源显示为「管理员调账」。

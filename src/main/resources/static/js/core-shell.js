@@ -4,6 +4,7 @@ const hasPermission = (...args) => EMIE.actions.hasPermission(...args);
 
 const NAV_DEFINITIONS = [
   { view: 'dashboard', icon: '📊', label: '工作台', permission: 'page.dashboard.view' },
+  { view: 'workload', icon: '📈', label: '工作量', permission: 'page.admin.view' },
   { view: 'orders', icon: '📋', label: '全部项目', permission: 'page.projects.view' },
   { view: 'channel', icon: '📦', label: '渠道定制单', permission: 'page.projects.channel.view' },
   { view: 'regular', icon: '🏭', label: '公司常规品', permission: 'page.projects.regular.view' },
@@ -21,6 +22,7 @@ function canNavigateTo(view) {
   if (!nav || !hasPermission(nav.permission)) return false;
   if (view === 'points' && !['planner', 'designer', 'admin'].includes(EMIE.state.currentRole)) return false;
   if (view === 'task-market' && !['designer', 'planner', 'admin'].includes(EMIE.state.currentRole)) return false;
+  if (view === 'workload' && EMIE.state.currentRole !== 'admin') return false;
   return view !== 'other-tasks' || canViewOtherTasksNav();
 }
 
