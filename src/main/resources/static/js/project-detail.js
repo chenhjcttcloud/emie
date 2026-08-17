@@ -654,7 +654,7 @@ function renderProjectReferenceImages(detail) {
   let imgs;
   try { imgs = JSON.parse(detail.referenceImagesJson); } catch(e) { return ''; }
   if (!imgs || !imgs.length) return '';
-  const authUrl = u => protectedFileUrl(normalizeFileUrl(u));
+  const authUrl = u => normalizeFileUrl(u);
   const thumbUrl = u => protectedFileUrl(originalFileUrl(u, 'thumbnail'));
   return `<div style="margin-top:8px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
@@ -671,7 +671,7 @@ function renderSubTaskImages(jsonStr) {
   let imgs;
   try { imgs = JSON.parse(jsonStr); } catch(e) { return ''; }
   if (!imgs || !imgs.length) return '';
-  const authUrl = u => protectedFileUrl(normalizeFileUrl(u));
+  const authUrl = u => normalizeFileUrl(u);
   const thumbUrl = u => protectedFileUrl(originalFileUrl(u, 'thumbnail'));
   return `<div style="margin-top:8px;padding-left:4px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
@@ -709,7 +709,7 @@ function renderTaskAttachments(jsonStr) {
   const files = atts.filter(a => !a.name || !a.name.match(/\.(png|jpe?g|gif|webp|svg|bmp)$/i));
 
   let html = '';
-  const authUrl = u => protectedFileUrl(normalizeFileUrl(u));
+  const authUrl = u => normalizeFileUrl(u);
   const thumbUrl = u => protectedFileUrl(originalFileUrl(u, 'thumbnail'));
   // 图片预览
   if (images.length) {
