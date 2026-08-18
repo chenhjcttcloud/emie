@@ -9,8 +9,10 @@ const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const taskAccept = (...args) => EMIE.actions.taskAccept(...args);
 const taskDeliver = (...args) => EMIE.actions.taskDeliver(...args);
 const taskRedeliver = (...args) => EMIE.actions.taskRedeliver(...args);
+const submitTaskReview = (...args) => EMIE.actions.submitTaskReview(...args);
 const taskConfirmRevision = (...args) => EMIE.actions.taskConfirmRevision(...args);
 const openScoring = (...args) => EMIE.actions.openScoring(...args);
+const taskApprove = (...args) => EMIE.actions.taskApprove(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const matchesSearchText = (...args) => EMIE.actions.matchesSearchText(...args);
 const isDateInRange = (...args) => EMIE.actions.isDateInRange(...args);
@@ -122,6 +124,20 @@ function resetDesignerTaskFilters() {
 }
 
 function renderDesignerTaskCards(tasks, readOnly = false) {
+  if (!tasks.length) return `<div class="empty"><div class="empty-icon">🎉</div><p>暂无子任务</p></div>`;
+  const groups = [
+    { icon: '📥', label: '待接单', cls: 'task-group-pending', open: true, statuses: ['pending'] },
+    { icon: '🔄', label: '进行中', cls: 'task-group-active', open: true, statuses: ['accepted', 'rejected'] },
+    { icon: '📤', label: '待送审', cls: 'task-group-delivered', open: true, statuses: ['delivered', 'planner_approved', 'sales_approved', 'admin_approved'] },
+    { icon: '🔎', label: '送审中', cls: 'task-group-submitted', open: true, statuses: ['submitted_for_review'] },
+    { icon: '✅', label: '已完成', cls: 'task-group-done', open: false, statuses: ['approved', 'completed'] },
+  ];
+  const visibleGroups = groups.map(group => ({ ...group, tasks: tasks.filter(task => group.statuses.includes(task.status)) })).filter(group => group.tasks.length);
+  return `<div class="designer-task-summary">${visibleGroups.map(group => `<div class="designer-task-summary-item ${group.cls}"><span>${group.icon}</span><strong>${group.tasks.length}</strong><small>${group.label}</small></div>`).join('')}</div>
+    <div class="designer-task-groups">${visibleGroups.map(group => `<details class="designer-task-group ${group.cls}" ${group.open ? 'open' : ''}><summary><span class="designer-task-group-title">${group.icon} ${group.label}</span><span class="designer-task-group-count">${group.tasks.length} 个</span><span class="designer-task-group-chevron">⌄</span></summary><div class="designer-task-group-body">${renderDesignerTaskCardsFlat(group.tasks, readOnly)}</div></details>`).join('')}</div>`;
+}
+
+function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
   if (!tasks.length) return `<div class="empty"><div class="empty-icon">🎉</div><p>暂无子任务</p></div>`;
   const plannerView = EMIE.state.currentRole === 'planner';
   return `<div class="subtask-list">
@@ -239,7 +255,8 @@ function openPublishedSubTaskDetail(taskId) {
       <div class="modal-footer">
         <button class="btn btn-outline" data-emie-onclick="openProjectDetail(${task.projectId})">查看所属项目</button>
         ${EMIE.state.currentRole === 'designer' && task.status === 'pending' ? `<button class="btn btn-primary" data-emie-onclick="taskAccept(${task.projectId},${task.id})">✅ 接单</button>` : ''}
-        ${EMIE.state.currentRole === 'designer' && task.status === 'accepted' ? `<button class="btn btn-primary" data-emie-onclick="taskDeliver(${task.projectId},${task.id})">📤 交付成果</button>` : ''}
+        ${EMIE.state.currentRole === 'planner' && task.status === 'delivered' ? `<button class="btn btn-primary" data-emie-onclick="submitTaskReview(${task.projectId},${task.id})">📤 送审</button>` : ''}
+        ${EMIE.state.currentRole === 'planner' && task.status === 'submitted_for_review' ? `<button class="btn btn-success" data-emie-onclick="taskApprove(${task.projectId},${task.id},'${task.projectType || 'regular'}')">✅ 通过并评分</button>` : ''}
         <button class="btn btn-primary" data-emie-onclick="closeM('publishedSubTaskDetailModal')">关闭</button>
       </div>
     </div>`;

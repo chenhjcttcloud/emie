@@ -418,6 +418,7 @@ public class DesignRequirementController {
             default -> "badge-progress";
         });
         row.put("productName", d.getName()); row.put("salesName", d.getOwnerName());
+        row.put("responsibleName", d.getResponsibleName());
         row.put("plannerName", d.getPlannerName());
         row.put("customerName", d.getCustomerName()); row.put("deadline", d.getDeadline());
         row.put("productRequirements", d.getRequirements()); row.put("taskCount", 0);

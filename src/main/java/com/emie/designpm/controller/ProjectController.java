@@ -782,7 +782,7 @@ public class ProjectController {
         if (session == null) return ResponseEntity.status(401).build();
         boolean allowed = "admin".equals(session.role())
                 || Objects.equals(session.role(), role)
-                || ("planner".equals(session.role()) && Set.of("planner", "designer", "supplychain").contains(role));
+                || ("planner".equals(session.role()) && Set.of("planner", "promotion", "designer", "supplychain").contains(role));
         if (!allowed) {
             return ResponseEntity.status(403).body(Map.of("error", "无权查看该角色的状态看板"));
         }

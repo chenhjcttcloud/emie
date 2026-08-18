@@ -24,7 +24,16 @@ function retryFilePreview() {
 }
 
 function authenticatedFileUrl(url) {
-  return url;
+  const token = localStorage.getItem('design_pm_token');
+  if (!token || !url) return url;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    if (parsed.origin !== window.location.origin) return url;
+    if (!parsed.searchParams.has('access_token')) parsed.searchParams.set('access_token', token);
+    return parsed.pathname + parsed.search + parsed.hash;
+  } catch (e) {
+    return url;
+  }
 }
 
 async function openFilePreview(fileUrl, fileName, fileSize, retry = false) {

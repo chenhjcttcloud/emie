@@ -16,8 +16,9 @@ let _roleSwitcherRenderToken = 0;
 
 function normalizeIdentityRole(role) {
   if (!role) return '';
-  if (['Promotion', 'product_promotion', 'product-promotion'].includes(role)) return 'promotion';
-  return role;
+  const normalized = String(role).trim().toLowerCase();
+  if (['promotion', 'product_promotion', 'product-promotion'].includes(normalized)) return 'promotion';
+  return normalized;
 }
 
 function identityRoleLabel(role) {
@@ -57,7 +58,7 @@ async function renderRoleSwitcher() {
   _identityRoleLabels = { ...ROLE_LABELS };
   roles.forEach(role => {
     const key = normalizeIdentityRole(role.name);
-    if (key) _identityRoleLabels[key] = role.displayName || role.name;
+    if (key) _identityRoleLabels[key] = roleDisplayName(key, role.displayName || role.name);
   });
 
   // 构建所有用户列表；后端为历史兼容可能同时返回 promotion/Promotion，按 userId 去重。
@@ -123,6 +124,11 @@ async function renderRoleSwitcher() {
   } else {
     headerRight.appendChild(container);
   }
+}
+
+function roleDisplayName(role, configuredName) {
+  const standard = { admin: '管理员', sales: '销售', planner: '产品企划', designer: '设计师', supplychain: '供应链', promotion: '产品推广' };
+  return standard[role] || configuredName;
 }
 
 function renderUserList(users) {

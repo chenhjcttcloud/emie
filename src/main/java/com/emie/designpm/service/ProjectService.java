@@ -1954,7 +1954,7 @@ public class ProjectService {
         }
         Map<String, Object> result = new LinkedHashMap<>();
 
-        if ("designer".equals(role) || "supplychain".equals(role)) {
+        if ("designer".equals(role) || "supplychain".equals(role) || "promotion".equals(role)) {
             // 批量查询所有用户的子任务（一次 SQL 替代 N 次）
             List<String> userIds = users.stream().map(User::getUserId).collect(Collectors.toList());
             List<SubTask> allTasks = userIds.isEmpty() ? List.of() : subTaskRepository.findByDesignerIds(userIds);
@@ -1987,7 +1987,7 @@ public class ProjectService {
                 }).collect(Collectors.toList()));
                 info.put("completedTasks", completedTasks.size());
                 info.put("busy", !activeTasks.isEmpty());
-                info.put("label", "designer".equals(role) ? "设计师" : "供应链");
+                info.put("label", "designer".equals(role) ? "设计师" : ("promotion".equals(role) ? "产品推广" : "供应链"));
                 result.put(u.getUserId(), info);
             }
         } else if ("sales".equals(role) || "planner".equals(role)) {

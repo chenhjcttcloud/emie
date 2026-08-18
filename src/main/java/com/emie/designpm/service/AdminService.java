@@ -923,6 +923,8 @@ public class AdminService {
     private List<User> workloadUsers() {
         return Stream.of("sales", "planner", "designer", "supplychain")
                 .flatMap(role -> userRepository.findByRole(role).stream())
+                // 冒烟测试账号只用于回归，不应进入管理工作量统计。
+                .filter(u -> u.getUserId() == null || !u.getUserId().startsWith("smoke_"))
                 .filter(u -> u.getStatus() == null || "active".equalsIgnoreCase(u.getStatus()))
                 .toList();
     }
@@ -965,7 +967,7 @@ public class AdminService {
             for (User u : users) {
                 Map<String, Object> us = new LinkedHashMap<>();
                 us.put("userId", u.getUserId());
-                us.put("name", u.getName());
+                us.put("name", TextEncodingUtil.repairUtf8Mojibake(u.getName()));
                 us.put("title", u.getTitle() != null ? u.getTitle() : "");
 
                 // 按角色类型聚合
@@ -1048,6 +1050,7 @@ public class AdminService {
             case "quarter" -> LocalDateTime.now().minusDays(90);
             case "half-year" -> LocalDateTime.now().minusDays(180);
             case "year" -> LocalDateTime.now().minusDays(365);
+            case "all" -> LocalDateTime.of(1970, 1, 1, 0, 0);
             default -> LocalDateTime.now().minusDays(30);
         };
 
@@ -1071,17 +1074,31 @@ public class AdminService {
         Map<String, long[]> projectTimelineBySales = workloadTimelineCounts(
                 "SELECT sales_id, SUM(CASE WHEN created_at >= ?1 THEN 1 ELSE 0 END), "
                         + "SUM(CASE WHEN status = 'completed' AND updated_at >= ?1 THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN type = 'channel_custom' AND created_at >= ?1 THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN type <> 'channel_custom' AND created_at >= ?1 THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN status = 'completed' AND type = 'channel_custom' AND updated_at >= ?1 THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN status = 'completed' AND type <> 'channel_custom' AND updated_at >= ?1 THEN 1 ELSE 0 END) "
                         + "FROM projects WHERE created_at >= ?1 OR updated_at >= ?1 GROUP BY sales_id", cutoff);
         Map<String, long[]> projectTimelineByPlanner = workloadTimelineCounts(
                 "SELECT planner_id, SUM(CASE WHEN created_at >= ?1 THEN 1 ELSE 0 END), "
                         + "SUM(CASE WHEN status = 'completed' AND updated_at >= ?1 THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN type = 'channel_custom' AND created_at >= ?1 THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN type <> 'channel_custom' AND created_at >= ?1 THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN status = 'completed' AND type = 'channel_custom' AND updated_at >= ?1 THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN status = 'completed' AND type <> 'channel_custom' AND updated_at >= ?1 THEN 1 ELSE 0 END) "
                         + "FROM projects WHERE created_at >= ?1 OR updated_at >= ?1 GROUP BY planner_id", cutoff);
         Map<String, long[]> taskTimelineByDesigner = workloadTimelineCounts(
-                "SELECT designer_id, COUNT(*), SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) "
-                        + "FROM sub_tasks WHERE created_at >= ?1 AND (assignee_role = 'designer' OR assignee_role IS NULL) GROUP BY designer_id", cutoff);
+                "SELECT s.designer_id, COUNT(*), SUM(CASE WHEN s.status = 'approved' THEN 1 ELSE 0 END), "
+                        + "SUM(CASE WHEN p.type = 'channel_custom' THEN 1 ELSE 0 END), "
+                        + "SUM(CASE WHEN p.type <> 'channel_custom' OR p.type IS NULL THEN 1 ELSE 0 END), SUM(CASE WHEN s.status = 'approved' AND p.type = 'channel_custom' THEN 1 ELSE 0 END), SUM(CASE WHEN s.status = 'approved' AND (p.type <> 'channel_custom' OR p.type IS NULL) THEN 1 ELSE 0 END) "
+                        + "FROM sub_tasks s LEFT JOIN projects p ON p.id = s.project_id "
+                        + "WHERE s.created_at >= ?1 AND (s.assignee_role = 'designer' OR s.assignee_role IS NULL) GROUP BY s.designer_id", cutoff);
         Map<String, long[]> taskTimelineBySupplychain = workloadTimelineCounts(
-                "SELECT designer_id, COUNT(*), SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) "
-                        + "FROM sub_tasks WHERE created_at >= ?1 AND assignee_role = 'supplychain' GROUP BY designer_id", cutoff);
+                "SELECT s.designer_id, COUNT(*), SUM(CASE WHEN s.status = 'approved' THEN 1 ELSE 0 END), "
+                        + "SUM(CASE WHEN p.type = 'channel_custom' THEN 1 ELSE 0 END), "
+                        + "SUM(CASE WHEN p.type <> 'channel_custom' OR p.type IS NULL THEN 1 ELSE 0 END), SUM(CASE WHEN s.status = 'approved' AND p.type = 'channel_custom' THEN 1 ELSE 0 END), SUM(CASE WHEN s.status = 'approved' AND (p.type <> 'channel_custom' OR p.type IS NULL) THEN 1 ELSE 0 END) "
+                        + "FROM sub_tasks s LEFT JOIN projects p ON p.id = s.project_id "
+                        + "WHERE s.created_at >= ?1 AND s.assignee_role = 'supplychain' GROUP BY s.designer_id", cutoff);
 
         for (Map.Entry<String, List<User>> entry : byRole.entrySet()) {
             String role = entry.getKey();
@@ -1091,31 +1108,40 @@ public class AdminService {
             for (User u : users) {
                 Map<String, Object> us = new LinkedHashMap<>();
                 us.put("userId", u.getUserId());
-                us.put("name", u.getName());
+                us.put("name", TextEncodingUtil.repairUtf8Mojibake(u.getName()));
                 us.put("title", u.getTitle() != null ? u.getTitle() : "");
 
                 switch (role) {
                     case "sales" -> {
-                        long[] counts = projectTimelineBySales.getOrDefault(u.getUserId(), new long[2]);
+                        long[] counts = projectTimelineBySales.getOrDefault(u.getUserId(), new long[6]);
                         long created = counts[0];
                         long completed = counts[1];
                         us.put("created", created);
                         us.put("completed", completed);
+                        us.put("channelCustomProjects", counts[2]);
+                        us.put("regularProjects", counts[3]);
+                        us.put("completedChannelProjects", counts[4]); us.put("completedRegularProjects", counts[5]);
                     }
                     case "planner" -> {
-                        long[] counts = projectTimelineByPlanner.getOrDefault(u.getUserId(), new long[2]);
+                        long[] counts = projectTimelineByPlanner.getOrDefault(u.getUserId(), new long[6]);
                         long created = counts[0];
                         long completed = counts[1];
                         us.put("created", created);
                         us.put("completed", completed);
+                        us.put("channelCustomProjects", counts[2]);
+                        us.put("regularProjects", counts[3]);
+                        us.put("completedChannelProjects", counts[4]); us.put("completedRegularProjects", counts[5]);
                     }
                     case "designer", "supplychain" -> {
                         long[] counts = ("supplychain".equals(role) ? taskTimelineBySupplychain : taskTimelineByDesigner)
-                                .getOrDefault(u.getUserId(), new long[2]);
+                                .getOrDefault(u.getUserId(), new long[6]);
                         long assigned = counts[0];
                         long completed = counts[1];
                         us.put("assigned", assigned);
                         us.put("completed", completed);
+                        us.put("channelCustomProjects", counts[2]);
+                        us.put("regularProjects", counts[3]);
+                        us.put("completedChannelProjects", counts[4]); us.put("completedRegularProjects", counts[5]);
                     }
                 }
                 userStats.add(us);
@@ -1156,6 +1182,7 @@ public class AdminService {
             case "quarter" -> "本季度";
             case "half-year" -> "本半年";
             case "year" -> "本年度";
+            case "all" -> "全部时间";
             default -> range;
         });
         summary.put("cutoff", cutoff.toString());
@@ -1178,10 +1205,9 @@ public class AdminService {
         for (Object[] row : (List<Object[]>) entityManager.createNativeQuery(sql)
                 .setParameter(1, cutoff).getResultList()) {
             if (row[0] == null) continue;
-            result.put(String.valueOf(row[0]), new long[]{
-                    ((Number) row[1]).longValue(),
-                    ((Number) row[2]).longValue()
-            });
+            long[] counts = new long[Math.max(2, row.length - 1)];
+            for (int i = 1; i < row.length; i++) counts[i - 1] = numberOrZero(row[i]);
+            result.put(String.valueOf(row[0]), counts);
         }
         return result;
     }

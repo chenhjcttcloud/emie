@@ -708,7 +708,19 @@ async function submitTaskReview(pid, tid) {
     await apiPost(`/projects/${pid}/tasks/${tid}/submit-review`, {
       currentUser: getCurrentUserName(), currentRole: EMIE.state.currentRole, currentUserId: getCurrentUserId()
     });
-    await refreshAfterMutation(pid);
+    // 送审后只更新当前详情弹窗，避免整个工作台重渲染导致用户滚动位置和上下文丢失。
+    const detail = await apiGet(`/projects/${pid}`);
+    const updatedTask = (detail.tasks || []).find(task => Number(task.id) === Number(tid));
+    if (updatedTask) {
+      const cache = EMIE.dashboardState.designerTaskCache || [];
+      EMIE.dashboardState.designerTaskCache = cache.map(task => Number(task.id) === Number(tid) ? { ...task, ...updatedTask } : task);
+    }
+    closeM('publishedSubTaskDetailModal');
+    setTimeout(() => EMIE.actions.openPublishedSubTaskDetail?.(tid), 0);
+    // 同步主页的子任务分组：只重载任务区域，不刷新整个工作台。
+    if (EMIE.state.currentRole === 'planner') {
+      await EMIE.actions.loadDashboardPlannerTasks?.(getCurrentUserId());
+    }
   } catch (e) { window.EMIE.actions.showSystemAlert('送审失败: ' + e.message); }
 }
 

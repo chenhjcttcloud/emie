@@ -99,9 +99,8 @@ async function renderDashboard(main, role, uid) {
       <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigatePendingScoring()"><div class="stat-icon yellow">⭐</div><div><div class="stat-value">${stats.pendingScore}</div><div class="stat-label">待评分</div></div></div>
     </div>` : ''}
     ${rolePanelsHtml}
-    <div id="dashboardDesignRequirements"><div class="empty" style="padding:20px;"><p>正在加载设计/送审需求…</p></div></div>
     ${!executionRole && orders.length === 0 ? `<div class="empty"><div class="empty-icon">📭</div><p>暂无您负责的项目</p></div>` : ''}
-    ${role === 'planner' ? '<div id="dashboardPlannerTasks"><div class="empty" style="padding:24px;"><p>正在加载子任务面板…</p></div></div>' + renderProjectSummary(channel, '📦 渠道定制单') + renderProjectSummary(regular, '🏭 公司常规品') : executionRole ? '<div id="dashboardExecutionTasks"><div class="empty" style="padding:24px;"><p>正在加载关联子任务…</p></div></div>' : renderProjectSummary(channel, '📦 渠道定制单') + renderProjectSummary(regular, '🏭 公司常规品')}
+    ${role === 'planner' ? '<section class="dashboard-zone dashboard-task-zone"><div class="dashboard-zone-heading"><div><h3>🧩 我的子任务</h3><p>P2 / P3 · 按状态处理具体执行事项</p></div></div><div id="dashboardPlannerTasks"><div class="empty" style="padding:24px;"><p>正在加载子任务面板…</p></div></div></section><section class="dashboard-zone dashboard-project-zone"><div class="dashboard-zone-heading"><div><h3>📁 我的项目</h3><p>P1 · 查看项目整体进度与协作状态</p></div></div><div id="dashboardDesignRequirements"><div class="empty" style="padding:20px;"><p>正在加载设计/送审需求…</p></div></div>' + renderProjectSummary(channel, '📦 渠道定制单') + renderProjectSummary(regular, '🏭 公司常规品') + '</section>' : executionRole ? '<section class="dashboard-zone dashboard-task-zone"><div class="dashboard-zone-heading"><div><h3>🧩 我的子任务</h3><p>P2 / P3 · 按状态处理具体执行事项</p></div></div><div id="dashboardExecutionTasks"><div class="empty" style="padding:24px;"><p>正在加载关联子任务…</p></div></div><div id="dashboardDesignRequirements"><div class="empty" style="padding:20px;"><p>正在加载设计/送审需求…</p></div></div></section>' : '<section class="dashboard-zone dashboard-project-zone"><div class="dashboard-zone-heading"><div><h3>📁 我的项目</h3><p>P1 · 查看项目整体进度与协作状态</p></div></div><div id="dashboardDesignRequirements"><div class="empty" style="padding:20px;"><p>正在加载设计/送审需求…</p></div></div>' + renderProjectSummary(channel, '📦 渠道定制单') + renderProjectSummary(regular, '🏭 公司常规品') + '</section>'}
   `;
   const plannerScopeSelect = main.querySelector('select.form-input');
   if (plannerScopeSelect) plannerScopeSelect.addEventListener('change', e => changePlannerBoardScope(e.target.value));
@@ -125,6 +124,7 @@ async function loadDashboardDesignRequirements(uid, role) {
     });
     if (!actionable.length) {
       container.innerHTML = '';
+      syncExecutionTaskZoneVisibility();
       return;
     }
     const labels = {
@@ -134,18 +134,28 @@ async function loadDashboardDesignRequirements(uid, role) {
     container.innerHTML = `<div class="type-section"><div class="card" style="padding:0;">
       <div style="padding:20px 20px 0;"><div class="type-section-title">🎨 设计/送审需求 <span class="count">共 ${actionable.length} 个</span></div></div>
       <div style="padding:0 20px 20px;"><div class="table-wrap"><table>
-        <thead><tr><th>需求</th><th>设计师</th><th>产品企划</th><th>要求完成</th><th>状态</th><th>操作</th></tr></thead>
+        <thead><tr><th>需求</th><th>需求负责人</th><th>设计师</th><th>产品企划</th><th>要求完成时间</th><th>状态</th></tr></thead>
         <tbody>${actionable.slice(0, 8).map(item => `<tr style="cursor:pointer" data-emie-onclick="openDesignRequirementDetail(${item.id})">
           <td><strong>${escHtml(item.productName || '-')}</strong><div style="font-size:11px;color:var(--gray-400)">${escHtml(item.projectCode || ('#' + item.id))}</div></td>
-          <td>${escHtml(item.designerName || '-')}</td><td>${escHtml(item.plannerName || '-')}</td>
+          <td>${escHtml(item.responsibleName || item.ownerName || '-')}</td><td>${escHtml(item.designerName || '-')}</td><td>${escHtml(item.plannerName || '-')}</td>
           <td>${formatDate(item.deadline)}</td><td><span class="badge ${item.status === 'rejected' ? 'badge-rejected' : 'badge-progress'}">${escHtml(labels[item.status] || item.status)}</span></td>
-          <td><button class="btn btn-outline btn-sm" data-emie-onclick="event.stopPropagation();openDesignRequirementDetail(${item.id})">查看并处理</button></td>
         </tr>`).join('')}</tbody></table></div>
         ${actionable.length > 8 ? '<div style="text-align:center;margin-top:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="navigate(\'design-needs\')">查看全部设计需求 →</button></div>' : ''}
       </div></div></div>`;
+    syncExecutionTaskZoneVisibility();
   } catch (error) {
     container.innerHTML = `<div class="empty"><p>设计需求加载失败：${escHtml(error.message)}</p></div>`;
   }
+}
+
+function syncExecutionTaskZoneVisibility() {
+  const task = document.getElementById('dashboardExecutionTasks');
+  const requirements = document.getElementById('dashboardDesignRequirements');
+  const zone = task?.closest('.dashboard-task-zone');
+  if (!zone) return;
+  const hasTaskContent = Boolean(task.innerHTML.trim());
+  const hasRequirementContent = Boolean(requirements?.innerHTML.trim());
+  zone.style.display = hasTaskContent || hasRequirementContent ? '' : 'none';
 }
 
 async function loadDashboardPlannerTasks(uid) {
@@ -165,7 +175,7 @@ async function loadDashboardPlannerTasks(uid) {
     const grouped = key => tasks.filter(t => key === 'active' ? ['accepted', 'rejected'].includes(t.status) : t.status === key);
     const renderGroup = ([key, title, label]) => {
       const list = grouped(key);
-      return `<div class="type-section"><div class="card" style="padding:0;"><div style="padding:16px 20px 0;"><div class="type-section-title">${title} <span class="count">共 ${list.length} 个</span></div></div><div style="padding:0 20px 16px;">${list.length ? `<div class="table-wrap"><table><thead><tr><th>子任务</th><th>所属项目</th><th>负责人</th><th>要求完成</th><th>状态</th></tr></thead><tbody>${list.slice(0, 8).map(t => `<tr style="cursor:pointer" data-emie-onclick="openPublishedSubTaskDetail(${t.id})"><td><strong>${escHtml(t.name || '-')}</strong><div style="font-size:11px;color:var(--gray-400)">#${t.id}</div></td><td>${escHtml(t.projectName || '-')}</td><td>${escHtml(t.designerName || t.assigneeName || '待接单')}</td><td>${formatDate(t.plannedDate)}</td><td><span class="badge ${getTaskStatusInfo(t.status).cls}">${label}</span></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state" style="padding:14px">暂无子任务</div>'}</div></div></div>`;
+      return `<div class="type-section"><div class="card" style="padding:0;"><div style="padding:16px 20px 0;"><div class="type-section-title">${title} <span class="count">共 ${list.length} 个</span></div></div><div style="padding:0 20px 16px;">${list.length ? `<div class="table-wrap"><table class="dashboard-uniform-task-table"><thead><tr><th>子任务</th><th>所属项目</th><th>负责人</th><th>要求完成时间</th><th>状态</th></tr></thead><tbody>${list.slice(0, 8).map(t => `<tr style="cursor:pointer" data-emie-onclick="openPublishedSubTaskDetail(${t.id})"><td><strong>${escHtml(t.name || '-')}</strong><div style="font-size:11px;color:var(--gray-400)">#${t.id}</div></td><td>${escHtml(t.projectName || '-')}</td><td>${escHtml(t.designerName || t.assigneeName || '待接单')}</td><td>${formatDate(t.plannedDate)}</td><td><span class="badge ${getTaskStatusInfo(t.status).cls}">${label}</span></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state" style="padding:14px">暂无子任务</div>'}</div></div></div>`;
     };
     container.innerHTML = groups.map(renderGroup).join('');
   } catch (error) { container.innerHTML = `<div class="empty"><p>子任务面板加载失败：${escHtml(error.message)}</p></div>`; }
@@ -189,9 +199,15 @@ async function loadDashboardExecutionTasks(uid, role) {
     tasks.sort(EMIE.actions.compareTaskPriority);
     EMIE.dashboardState.designerTaskCache = tasks;
     if (!tasks.length) {
-      container.innerHTML = '<div class="empty"><div class="empty-icon">🎉</div><p>当前没有需要处理的关联子任务</p></div>';
+      container.innerHTML = '';
+      const taskHeading = container.closest('.dashboard-task-zone')?.querySelector('.dashboard-zone-heading');
+      if (taskHeading) taskHeading.style.display = 'none';
+      syncExecutionTaskZoneVisibility();
       return;
     }
+    const taskHeading = container.closest('.dashboard-task-zone')?.querySelector('.dashboard-zone-heading');
+    if (taskHeading) taskHeading.style.display = '';
+    syncExecutionTaskZoneVisibility();
     const renderGroup = (groupTasks, title) => {
       if (!groupTasks.length) return '';
       const display = groupTasks.slice(0, 5);
@@ -203,7 +219,7 @@ async function loadDashboardExecutionTasks(uid, role) {
             </div>
             <div style="padding:0 20px 20px;">
               <div class="table-wrap"><table>
-                <thead><tr><th>子任务</th><th>所属项目</th><th>发布人</th><th>要求完成</th><th>状态</th><th>驳回意见</th><th>操作</th></tr></thead>
+                <thead><tr><th>子任务</th><th>所属项目</th><th>发布人</th><th>要求完成时间</th><th>状态</th><th>驳回意见</th><th>操作</th></tr></thead>
                 <tbody>${display.map(t => {
                   const statusInfo = getTaskStatusInfo(t.status);
                   if (String(role || '').toLowerCase().replace(/[-_]/g, '') === 'supplychain'
@@ -247,14 +263,19 @@ async function loadDashboardRoleStatus(role, uid, myDept) {
     const roleStatus = response || {};
     let html = '';
     if (EMIE.state.currentRole === 'admin') {
-      html = '<div class="dashboard-role-panels-grid">' + renderRolePanelFromData(roleStatus.sales || {}, 'sales')
+      html = '<div class="dashboard-role-panels-grid dashboard-role-panels-masonry"><div class="dashboard-role-panel-column">'
+        + renderRolePanelFromData(roleStatus.sales || {}, 'sales')
+        + renderRolePanelFromData(roleStatus.promotion || {}, 'promotion')
+        + renderRolePanelFromData(roleStatus.designer || {}, 'designer')
+        + '</div><div class="dashboard-role-panel-column">'
         + renderRolePanelFromData(roleStatus.planner || {}, 'planner')
         + renderRolePanelFromData(roleStatus.supplychain || {}, 'supplychain')
-        + renderRolePanelFromData(roleStatus.designer || {}, 'designer') + '</div>';
+        + '</div></div>';
     } else if (EMIE.state.currentRole === 'planner') {
       // 企划状态看板统一展示全部产品企划，包含部门负责人和当前用户。
       html = '<div class="dashboard-role-panels-grid dashboard-role-panels-masonry"><div class="dashboard-role-panel-column">'
         + renderRolePanelFromData(roleStatus.planner || {}, 'planner')
+        + renderRolePanelFromData(roleStatus.promotion || {}, 'promotion')
         + renderRolePanelFromData(roleStatus.supplychain || {}, 'supplychain')
         + '</div><div class="dashboard-role-panel-column">'
         + renderRolePanelFromData(roleStatus.designer || {}, 'designer')
@@ -379,8 +400,8 @@ function switchDashWorkload(range) {
  *  @param {string|null} excludeUserId - 可选，排除某个用户ID（如部门负责人不显示自己）
  */
 async function renderRolePanel(role, deptId, excludeUserId) {
-  const roleEmoji = { sales: '💼', planner: '📋', supplychain: '🛒', designer: '👥' };
-  const roleLabel_ = { sales: '销售', planner: '产品企划', supplychain: '供应链', designer: '设计师' };
+  const roleEmoji = { sales: '💼', planner: '📋', promotion: '📣', supplychain: '🛒', designer: '👥' };
+  const roleLabel_ = { sales: '销售', planner: '产品企划', promotion: '产品推广', supplychain: '供应链', designer: '设计师' };
   try {
     const status = await apiGet(`/projects/role-status?role=${role}`);
     let users = Object.values(status);
@@ -469,8 +490,8 @@ async function renderRolePanel(role, deptId, excludeUserId) {
 
 /** 从预取数据渲染角色面板（替代 API 调用） */
 function renderRolePanelFromData(statusData, role, deptId, excludeUserId) {
-  const roleEmoji = { sales: '💼', planner: '📋', supplychain: '🛒', designer: '👥' };
-  const roleLabel_ = { sales: '销售', planner: '产品企划', supplychain: '供应链', designer: '设计师' };
+  const roleEmoji = { sales: '💼', planner: '📋', promotion: '📣', supplychain: '🛒', designer: '👥' };
+  const roleLabel_ = { sales: '销售', planner: '产品企划', promotion: '产品推广', supplychain: '供应链', designer: '设计师' };
   let users = Object.values(statusData);
 
   // 过滤部门
@@ -485,6 +506,9 @@ function renderRolePanelFromData(statusData, role, deptId, excludeUserId) {
   if (excludeUserId) {
     users = users.filter(u => u.id !== excludeUserId);
   }
+
+  // 没有可展示成员时不渲染空面板，避免工作台出现大块无效留白。
+  if (!users.length) return '';
 
   const busy = users.filter(u => u.busy);
   const idle = users.filter(u => !u.busy);
@@ -636,7 +660,7 @@ function renderProjectSummary(projects, title) {
         </div>
         <div style="padding:0 20px 20px 20px;">
           <div class="table-wrap"><table>
-        <thead><tr><th>项目编号</th><th>产品名称</th><th>需求方</th><th>产品企划</th><th>产品类目</th><th>目标市场</th><th>子任务数</th><th>进度</th><th>评分</th><th>要求时间</th><th>状态</th><th>操作</th></tr></thead>
+        <thead><tr><th>项目编号</th><th>产品名称</th><th>需求方</th><th>产品企划</th><th>产品类目</th><th>目标市场</th><th>子任务数</th><th>进度</th><th>评分</th><th>要求完成时间</th><th>状态</th></tr></thead>
         <tbody>${display.map(o => {
           const st = getProjectStatusInfo(o.status);
           return `<tr style="cursor:pointer;" data-emie-onclick="openProjectDetail(${o.id})">
@@ -651,7 +675,6 @@ function renderProjectSummary(projects, title) {
             <td>${renderScore(o.score)}</td>
             <td>${formatDate(o.deadline)}</td>
             <td><span class="badge ${st.cls}">${st.label}</span></td>
-            <td><button class="btn btn-outline btn-sm" data-emie-onclick="event.stopPropagation();openProjectDetail(${o.id})">查看</button></td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>
@@ -666,6 +689,8 @@ EMIE.registerActions({
   updateBadges,
   renderDashboard,
   loadDashboardWorkloadSection,
+  loadDashboardPlannerTasks,
+  loadDashboardExecutionTasks,
   switchDashWorkload,
   renderRolePanel,
   renderRolePanelFromData,
@@ -685,6 +710,8 @@ EMIE.registerModule('dashboardHome', {
   updateBadges,
   renderDashboard,
   loadDashboardWorkloadSection,
+  loadDashboardPlannerTasks,
+  loadDashboardExecutionTasks,
   switchDashWorkload,
   renderRolePanel,
   renderUserCard,

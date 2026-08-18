@@ -33,7 +33,7 @@ public class DashboardController {
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     // 角色状态面板所需角色列表
-    private static final List<String> ALL_ROLES = List.of("sales", "planner", "supplychain", "designer");
+    private static final List<String> ALL_ROLES = List.of("sales", "planner", "promotion", "supplychain", "designer");
 
     public DashboardController(ProjectRepository projectRepository,
                                ScoringRepository scoringRepository,

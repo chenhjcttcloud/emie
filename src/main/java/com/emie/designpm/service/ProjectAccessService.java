@@ -125,7 +125,9 @@ public class ProjectAccessService {
 
     /** 返回状态看板允许展示的用户；普通成员只有自己，部门负责人包含本部门同角色成员。 */
     public List<User> visibleUsers(String viewerRole, String viewerUserId, String requestedRole) {
-        if ("admin".equals(viewerRole)) return userRepository.findByRole(requestedRole);
+        if ("admin".equals(viewerRole)) return userRepository.findByRole(requestedRole).stream()
+                .filter(user -> user.getStatus() == null || "active".equalsIgnoreCase(user.getStatus()))
+                .toList();
         // 所有产品企划使用统一项目视角，不再按部门负责人或所属部门切分项目范围。
         // 写入/编辑权限仍由 ProjectService 按项目负责人单独校验。
         if ("planner".equals(viewerRole) && "planner".equals(requestedRole)) {
@@ -134,7 +136,8 @@ public class ProjectAccessService {
                     .toList();
         }
         // 产品企划需要查看执行团队状态面板；这里仅开放状态看板读取，不改变项目编辑权限。
-        if ("planner".equals(viewerRole) && ("designer".equals(requestedRole) || "supplychain".equals(requestedRole))) {
+        if ("planner".equals(viewerRole) && ("promotion".equals(requestedRole)
+                || "designer".equals(requestedRole) || "supplychain".equals(requestedRole))) {
             return userRepository.findByRole(requestedRole).stream()
                     .filter(user -> user.getStatus() == null || "active".equalsIgnoreCase(user.getStatus()))
                     .toList();
