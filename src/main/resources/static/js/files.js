@@ -28,7 +28,9 @@ function authenticatedFileUrl(url) {
   if (!token || !url) return url;
   try {
     const parsed = new URL(url, window.location.origin);
-    if (parsed.origin !== window.location.origin) return url;
+    // 历史数据可能保存了旧端口（例如 production:9001）。只要主机仍是当前
+    // 站点，就降级为同源相对地址，避免浏览器原生请求绕过当前认证上下文。
+    if (parsed.hostname !== window.location.hostname) return url;
     if (!parsed.searchParams.has('access_token')) parsed.searchParams.set('access_token', token);
     return parsed.pathname + parsed.search + parsed.hash;
   } catch (e) {

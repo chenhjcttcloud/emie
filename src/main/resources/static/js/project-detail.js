@@ -629,9 +629,18 @@ function originalFileUrl(fileOrUrl, kind) {
 }
 
 function protectedFileUrl(url) {
+  // 缩略图和交付图片由 img 标签直接请求，必须复用与下载/预览相同的
+  // URL 规范化逻辑；同时兼容历史数据中的旧生产端口。
   const token = localStorage.getItem('design_pm_token');
-  if (!token) return url;
-  return url + (url.includes('?') ? '&' : '?') + 'access_token=' + encodeURIComponent(token);
+  if (!token || !url) return url;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    if (parsed.hostname !== window.location.hostname) return url;
+    if (!parsed.searchParams.has('access_token')) parsed.searchParams.set('access_token', token);
+    return parsed.pathname + parsed.search + parsed.hash;
+  } catch (e) {
+    return url;
+  }
 }
 
 function isPreviewableFile(fileName) {
