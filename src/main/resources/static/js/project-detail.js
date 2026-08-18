@@ -625,7 +625,11 @@ function originalFileUrl(fileOrUrl, kind) {
   if (name && typeof fileOrUrl === 'object' && !fileOrUrl?.storedName) {
     return '/api/files/' + kind + '-by-original?name=' + encodeURIComponent(name);
   }
-  return '/api/files/' + kind + '/' + encodeURIComponent(storedNameFromFile(fileOrUrl));
+  const storedName = storedNameFromFile(fileOrUrl);
+  if (!storedName || storedName === 'download-by-original') {
+    return name ? '/api/files/' + kind + '-by-original?name=' + encodeURIComponent(name) : '';
+  }
+  return '/api/files/' + kind + '/' + encodeURIComponent(storedName);
 }
 
 function protectedFileUrl(url) {

@@ -150,7 +150,8 @@ function showDownloadOptions(fileUrl, fileName, fileSize) {
 
   const ext = fileName ? fileName.split('.').pop().toUpperCase() : '';
   const canPreview = isPreviewableFile(fileName);
-  const fullUrl = fileUrl.startsWith('http') ? fileUrl : window.location.origin + fileUrl;
+  // 所有下载出口都必须使用带认证参数的规范化地址。
+  const fullUrl = authenticatedFileUrl(fileUrl.startsWith('http') ? fileUrl : window.location.origin + fileUrl);
 
   const panel = document.createElement('div');
   panel.id = 'downloadOptionPanel';
