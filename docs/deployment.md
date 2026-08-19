@@ -6,6 +6,21 @@
 
 生产发布的完整检查、推送、迁移、验证和回滚流程见 [`release-runbook.md`](release-runbook.md)，每次实际操作必须追加到 [`release-records.md`](release-records.md)。本文件只维护相对稳定的环境与服务信息，不记录任何真实密码。
 
+## 固定仓库分支约定
+
+这是固定规则，后续不得混用：
+
+- Gitee（远端 `emie`）只推送 `master`；
+- GitHub（远端 `github`）只推送 `main`；
+- 生产发布前使用业务分支 `project_manager_system` 进行构建和验证，发布完成后再将同一提交同步到上述两个主分支。
+
+示例：
+
+```bash
+git push emie project_manager_system:master
+git push github project_manager_system:main
+```
+
 生产应用必须显式启用 `prod` profile，并提供 `DESIGNPM_DB_HOST`、`DESIGNPM_DB_NAME`、`DESIGNPM_DB_USER`、`DESIGNPM_DB_PASSWORD`。仓库不再为这些变量提供可连接数据库的默认值；缺少任意变量时应让部署失败，不得回退到其他数据库。`DESIGNPM_DB_USE_SSL` 默认建议保持为 `true`，只有已确认的受保护内网环境才可按实际情况调整。
 
 应用容器 JVM 固定使用 `Asia/Shanghai`（UTC+8），由 `JAVA_TOOL_OPTIONS=-Duser.timezone=Asia/Shanghai` 和 `TZ=Asia/Shanghai` 注入，确保日志与业务时间一致。

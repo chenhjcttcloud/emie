@@ -118,7 +118,7 @@ set +a
 
 ## 分支与发布
 
-当前业务分支为 `project_manager_system`，Git 远端名称为 `emie`。远端默认分支不是业务发布分支，拉取和推送时必须显式指定 `project_manager_system`。
+当前业务分支为 `project_manager_system`。固定推送规则如下：Gitee 远端 `emie` 推送到 `master`，GitHub 远端 `github` 推送到 `main`；生产发布前使用 `project_manager_system` 完成构建和验证。
 
 任何提交、推送、数据库迁移或生产部署操作都必须遵循 [RTK.md](RTK.md) 和 [发布操作手册](docs/release-runbook.md)。
 
