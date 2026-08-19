@@ -98,6 +98,15 @@ async function refreshPointsMonth(month) {
   }
 }
 
+function renderAdminAppealPanel(appealList) {
+  return '';
+}
+
+function renderAdjustmentLedger(adjustments) {
+  if (!adjustments.length) return '';
+  return `<div class="card adjustment-ledger-card" style="margin-bottom:18px;"><div class="card-header"><div><h3>调账与 PO 积分</h3><span style="font-size:12px;color:var(--gray-500);">补充台账记录，不修改原始积分明细</span></div><span class="points-ledger-count">${adjustments.length} 条记录</span></div><div class="adjustment-ledger-list">${adjustments.map(item => { const points = Number(item.points || 0); const source = item.sourceType === 'PO_PROGRESS' ? 'PO月度履职' : item.sourceType === 'APPEAL' ? '积分异议' : item.sourceType === 'MANUAL' ? '管理员调账' : String(item.sourceType || '其他'); return `<div class="adjustment-ledger-row"><div class="adjustment-ledger-source"><span class="adjustment-source-icon">${item.sourceType === 'APPEAL' ? '⚖' : item.sourceType === 'PO_PROGRESS' ? '📅' : '✦'}</span><div><strong>${escHtml(source)}</strong><small>${escHtml(String(item.createdAt || '-').replace('T', ' ').slice(0, 19))}</small></div></div><div class="adjustment-ledger-reason">${escHtml(item.reason || '—')}</div><strong class="adjustment-ledger-points ${points >= 0 ? 'is-positive' : 'is-negative'}">${points >= 0 ? '+' : ''}${formatPoints(points)} 分</strong></div>`; }).join('')}</div></div>`;
+}
+
 async function renderPointsView(main) {
   main.innerHTML = '<div class="loading">正在加载积分…</div>';
   try {
@@ -106,6 +115,7 @@ async function renderPointsView(main) {
       apiGet('/point-governance/po/me'), apiGet('/point-governance/archives'), apiGet('/point-program/proposals'),
     ]);
     const plannerMode = EMIE.state.currentRole === 'planner';
+    const isAdminView = EMIE.state.currentRole === 'admin';
     const isDesignerView = EMIE.state.currentRole === 'designer';
     const plannerTasks = plannerMode ? await apiGet('/projects/my-subtasks') : [];
     const issuedTasks = (Array.isArray(plannerTasks) ? plannerTasks : [])
@@ -129,15 +139,16 @@ async function renderPointsView(main) {
     const poProgress = Array.isArray(poData?.progress) ? poData.progress : [];
     const archiveList = Array.isArray(archives) ? archives : [];
     const proposalList = Array.isArray(proposals) ? proposals : [];
-    const canPlannerProcessAppeals = EMIE.state.currentRole === 'planner';
+    const canPlannerProcessAppeals = false;
     const month = currentMonthKey();
     main.innerHTML = `
       <div class="points-page">
       <section class="points-hero"><div class="points-hero-copy"><span class="points-eyebrow">${plannerMode ? 'PLANNER POINTS' : 'MY PERFORMANCE'}</span><h2>${plannerMode ? '发放任务与积分' : '积分与绩效中心'}</h2><p>${plannerMode ? '查看你发放的子任务及其实际积分入账情况' : '每一次交付都有记录，每一份成长都清晰可见'}</p><div class="points-hero-stats"><div><strong>${plannerMode ? issuedTasks.length : formatPoints(mine.balance)}</strong><span>${plannerMode ? '已发放子任务' : '累计积分'}</span></div><i></i><div><strong>${plannerMode ? formatPoints(issuedPoints) : (mine.ledgerTotal + adjustments.length)}</strong><span>${plannerMode ? '已入账积分' : '已入账记录'}</span></div></div></div></section>
+      ${isAdminView ? renderAdminAppealPanel(appealList) : ''}
       <div class="points-dashboard-grid">${isDesignerView ? '<section class="points-panel"><div class="points-section-head"><div><span class="points-section-icon purple">↗</span><div><h3>月度绩效</h3><p>目标、积分与绩效结果一目了然</p></div></div><label class="points-month-picker"><span>查询月份</span><input id="pointsMonthFilter" class="points-month-input points-month-inline" type="month" value="' + month + '" data-emie-onchange="refreshPointsMonth(this.value)"></label></div><div id="pointsPerformancePreview" class="points-panel-body"></div></section>' : ''}<section class="points-panel"><div class="points-section-head"><div><span class="points-section-icon amber">★</span><div><h3>积分排行榜</h3><p>所选月份的团队积分排名</p></div></div></div><div id="pointsLeaderboardBody" class="points-rank-list"></div></section></div>
-      <div class="card" style="margin-bottom:18px;"><div class="card-header"><h3>我的积分明细</h3><span style="font-size:12px;color:var(--gray-400);">如分值有误，可对具体记录发起异议</span></div>${ledger.length ? `<div class="table-wrap"><table><thead><tr><th>任务</th><th>任务类别 / 积分阶段</th><th>归属月</th><th>积分</th><th>入账时间</th><th>操作</th></tr></thead><tbody>${ledger.map(item => { const pending = appealList.some(appeal => Number(appeal.pointLedgerId) === Number(item.id) && ['SUBMITTED', 'PLANNER_PROCESSED'].includes(appeal.status)); const code=String(item.ruleCode||'-'); const stage=code.endsWith(':BASE')?'基础积分':code.endsWith(':QUALITY')?'质量加分':'积分'; return `<tr><td>#${escHtml(String(item.subTaskId || '-'))}</td><td><strong>${escHtml(pointRuleTaskLabel(code))}</strong><div style="font-size:12px;color:var(--gray-400);">${escHtml(code.replace(/:(BASE|QUALITY)$/,''))} · ${stage}</div></td><td>${escHtml(item.accountingMonth || '-')}</td><td style="color:var(--success);font-weight:700;">+${formatPoints(item.points)}</td><td>${escHtml(String(item.createdAt || '-').replace('T', ' ').slice(0, 19))}</td><td>${pending ? '<span class="badge badge-pending">异议处理中</span>' : `<button class="btn btn-outline btn-sm" data-emie-onclick="submitPointAppeal(${Number(item.id)})">发起异议</button>`}</td></tr>`; }).join('')}</tbody></table></div>${ledgerPages > 1 ? `<div class="pagination"><button class="btn btn-outline btn-sm" ${pointsLedgerPage <= 0 ? 'disabled' : ''} data-emie-onclick="changePointsLedgerPage(${pointsLedgerPage - 1})">上一页</button><span>第 ${pointsLedgerPage + 1} / ${ledgerPages} 页</span><button class="btn btn-outline btn-sm" ${pointsLedgerPage >= ledgerPages - 1 ? 'disabled' : ''} data-emie-onclick="changePointsLedgerPage(${pointsLedgerPage + 1})">下一页</button></div>` : ''}` : '<div class="empty-state">暂无积分记录</div>'}</div>
-      ${adjustments.length ? `<div class="card" style="margin-bottom:18px;"><div class="card-header"><h3>调账与 PO 积分</h3><span style="font-size:12px;color:var(--gray-400);">不可变更的补充台账</span></div><div class="table-wrap"><table><thead><tr><th>来源</th><th>说明</th><th>积分</th><th>入账时间</th></tr></thead><tbody>${adjustments.map(item => `<tr><td>${item.sourceType === 'PO_PROGRESS' ? 'PO月度履职' : item.sourceType === 'APPEAL' ? '异议调账' : item.sourceType === 'MANUAL' ? '管理员调账' : escHtml(item.sourceType || '-')}</td><td>${escHtml(item.reason || '-')}</td><td style="font-weight:700;color:${Number(item.points || 0) >= 0 ? 'var(--success)' : 'var(--danger)'};">${Number(item.points || 0) >= 0 ? '+' : ''}${formatPoints(item.points)}</td><td>${escHtml(String(item.createdAt || '-').replace('T', ' ').slice(0, 19))}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
-      ${appealList.length ? `<div class="card" style="margin-bottom:18px;"><div class="card-header"><h3>积分异议记录</h3></div><div class="table-wrap"><table><thead><tr><th>积分记录</th><th>类型</th><th>原因</th><th>状态</th><th>处理意见</th>${canPlannerProcessAppeals ? '<th>企划处理</th>' : ''}</tr></thead><tbody>${appealList.map(appeal => `<tr><td>#${Number(appeal.pointLedgerId || 0)}</td><td>${escHtml(pointAppealTypeLabel(appeal.type))}</td><td>${escHtml(appeal.reason || '-')}</td><td>${escHtml(pointAppealStatusLabel(appeal.status))}</td><td>${escHtml(appeal.adminComment || appeal.plannerComment || '-')}</td>${canPlannerProcessAppeals ? `<td>${appeal.status === 'SUBMITTED' ? `<button class="btn btn-success btn-sm" data-emie-onclick="processPointAppeal(${Number(appeal.id)},true)">通过初审</button> <button class="btn btn-danger btn-sm" data-emie-onclick="processPointAppeal(${Number(appeal.id)},false)">驳回初审</button>` : '-'}</td>` : ''}</tr>`).join('')}</tbody></table></div></div>` : ''}
+      <div class="card" style="margin-bottom:18px;"><div class="card-header"><h3>我的积分明细</h3><span style="font-size:12px;color:var(--gray-400);">如需调整积分，请直接与管理员沟通</span></div>${ledger.length ? `<div class="table-wrap"><table><thead><tr><th>任务</th><th>任务类别 / 积分阶段</th><th>归属月</th><th>积分</th><th>入账时间</th><th>操作</th></tr></thead><tbody>${ledger.map(item => { const code=String(item.ruleCode||'-'); const stage=code.endsWith(':BASE')?'基础积分':code.endsWith(':QUALITY')?'质量加分':'积分'; return `<tr><td>#${escHtml(String(item.subTaskId || '-'))}</td><td><strong>${escHtml(pointRuleTaskLabel(code))}</strong><div style="font-size:12px;color:var(--gray-400);">${escHtml(code.replace(/:(BASE|QUALITY)$/,''))} · ${stage}</div></td><td>${escHtml(item.accountingMonth || '-')}</td><td style="color:var(--success);font-weight:700;">+${formatPoints(item.points)}</td><td>${escHtml(String(item.createdAt || '-').replace('T', ' ').slice(0, 19))}</td><td>-</td></tr>`; }).join('')}</tbody></table></div>${ledgerPages > 1 ? `<div class="pagination"><button class="btn btn-outline btn-sm" ${pointsLedgerPage <= 0 ? 'disabled' : ''} data-emie-onclick="changePointsLedgerPage(${pointsLedgerPage - 1})">上一页</button><span>第 ${pointsLedgerPage + 1} / ${ledgerPages} 页</span><button class="btn btn-outline btn-sm" ${pointsLedgerPage >= ledgerPages - 1 ? 'disabled' : ''} data-emie-onclick="changePointsLedgerPage(${pointsLedgerPage + 1})">下一页</button></div>` : ''}` : '<div class="empty-state">暂无积分记录</div>'}</div>
+      ${renderAdjustmentLedger(adjustments)}
+      ${false && appealList.length ? '<div></div>' : ''}
       ${poProjects.length ? `<div class="card" style="margin-bottom:18px;"><div class="card-header"><h3>PO 月度履职</h3></div><div class="table-wrap"><table><thead><tr><th>PO 项目</th><th>月度积分</th><th>本月状态</th><th>操作</th></tr></thead><tbody>${poProjects.map(project => { const progress = poProgress.find(item => Number(item.poProjectId) === Number(project.id) && item.monthKey === month); return `<tr><td>${escHtml(project.name || '-')}</td><td>${formatPoints(project.monthlyPoints)}</td><td>${progress ? escHtml(poProgressStatusLabel(progress.status)) : '未提交'}</td><td>${progress ? '-' : `<button class="btn btn-primary btn-sm" data-emie-onclick="submitPoProgress(${Number(project.id)},'${month}')">提交本月进展</button>`}</td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
       ${archiveList.length ? `<div class="card" style="margin-bottom:18px;"><div class="card-header"><h3>月度归档</h3></div><div class="table-wrap"><table><thead><tr><th>月份</th><th>获得积分</th><th>目标积分</th><th>供单积分</th><th>供单保护</th><th>状态</th></tr></thead><tbody>${archiveList.map(item => `<tr><td>${escHtml(item.monthKey || '-')}</td><td>${formatPoints(item.earnedPoints)}</td><td>${formatPoints(item.targetPoints)}</td><td>${formatPoints(item.suppliedPoints)}</td><td>${item.insufficientSupplyProtection ? '已启用' : '未启用'}</td><td>${item.status === 'ARCHIVED' ? '已归档' : '待确认'}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
       <div class="card points-rules-card"><div class="card-header"><div><h3>当前生效规则</h3><span id="pointsRulesCount" class="points-rules-count">当前分类 ${initialCategoryRules.length} 条规则</span></div>${enabledRules.length ? `<label class="points-rule-filter"><span>规则分类</span><select data-emie-onchange="filterPointsRules(this.value)">${ruleCategories.map(category => `<option value="${escHtml(category)}">${escHtml(pointRuleCategoryLabel(category))}</option>`).join('')}</select><input id="pointsRuleSearch" class="form-input" placeholder="全类别搜索规则编号/说明" data-emie-oninput="filterPointsRules()" style="width:180px;"></label>` : ''}</div>${enabledRules.length ? `<div class="table-wrap points-rules-scroll"><table><thead><tr><th>类别</th><th>规则</th><th>基础分</th><th>难度</th><th>质量加分</th></tr></thead><tbody id="pointsRulesBody">${renderPointRuleRows(initialCategoryRules)}</tbody></table></div>` : '<div class="empty-state">暂无生效积分规则</div>'}</div></div>`;
@@ -152,7 +163,7 @@ function pointAppealTypeLabel(type) {
 }
 
 function pointAppealStatusLabel(status) {
-  return { SUBMITTED: '待企划处理', PLANNER_PROCESSED: '待管理复核', APPROVED: '异议通过', REJECTED: '异议驳回' }[status] || status || '-';
+  return { SUBMITTED: '待管理员处理', PLANNER_PROCESSED: '待管理员处理', APPROVED: '异议通过', REJECTED: '异议驳回' }[status] || status || '-';
 }
 
 function poProgressStatusLabel(status) {
@@ -165,10 +176,21 @@ async function rerenderPointsView() {
 }
 
 async function submitPointAppeal(ledgerId) {
-  const reason = await window.EMIE.actions.showSystemInput('请填写积分异议理由和依据', '', '提交异议说明');
-  if (!reason) return;
+  const values = await window.EMIE.actions.showSystemForm([
+    { label: '正确分数（0-100，最多一位小数）', type: 'number', min: 0, max: 100, step: 0.1 },
+    { label: '问题描述', multiline: true, placeholder: '请描述分数不正确的原因' },
+    { label: '参考图片（非必填，最多6张）', type: 'file', accept: EMIE.fileAccept?.reference || 'image/*', multiple: true, maxCount: 6, fileKind: 'reference', required: false },
+    { label: '附件（非必填，最多5个）', type: 'file', accept: EMIE.fileAccept?.attachment || '*/*', multiple: true, maxCount: 5, fileKind: 'attachment', required: false },
+  ], '提交积分异议');
+  if (!values) return;
+  const correctedScore = Number(values[0]);
+  if (!Number.isFinite(correctedScore) || correctedScore < 0 || correctedScore > 100 || Math.round(correctedScore * 10) !== correctedScore * 10) { window.EMIE.actions.showSystemAlert('正确分数必须在0到100之间，最多保留一位小数'); return; }
+  if ((values[2] || []).length > 6) { window.EMIE.actions.showSystemAlert('参考图片最多上传6张'); return; }
+  if ((values[3] || []).length > 5) { window.EMIE.actions.showSystemAlert('附件最多上传5个'); return; }
+  const uploads = [];
+  for (const [files, kind] of [[values[2] || [], '图片'], [values[3] || [], '附件']]) for (const file of files) { if (kind === '图片' && !file.type.startsWith('image/')) { window.EMIE.actions.showSystemAlert('参考图片只能上传图片'); return; } if (file.size > 200 * 1024 * 1024) { window.EMIE.actions.showSystemAlert(`单个${kind}不能超过200MB`); return; } try { uploads.push(await uploadFile(file)); } catch (e) { window.EMIE.actions.showSystemAlert(`${kind}上传失败：` + e.message); return; } }
   try {
-    await apiPost('/point-governance/appeals', { pointLedgerId: ledgerId, type: 'OTHER', reason: reason.trim() });
+    await apiPost('/point-governance/appeals', { pointLedgerId: ledgerId, type: 'OTHER', reason: values[1].trim(), correctedScore, attachmentsJson: JSON.stringify(uploads) });
     window.EMIE.actions.showSystemAlert('积分异议已提交');
     await rerenderPointsView();
   } catch (error) { window.EMIE.actions.showSystemAlert('提交失败：' + (error.message || '请稍后重试')); }

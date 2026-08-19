@@ -18,6 +18,7 @@ const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const displayText = (...args) => EMIE.actions.displayText(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
 const refreshAfterMutation = (...args) => EMIE.actions.refreshAfterMutation(...args);
+const clearSWRCache = (...args) => EMIE.actions.clearSWRCache(...args);
 const renderProjectDetailContent = (...args) => EMIE.actions.renderProjectDetailContent(...args);
 const renderProjectActions = (...args) => EMIE.actions.renderProjectActions(...args);
 const switchAssigneeType = (...args) => EMIE.actions.switchAssigneeType(...args);
@@ -708,7 +709,9 @@ async function submitTaskReview(pid, tid) {
     await apiPost(`/projects/${pid}/tasks/${tid}/submit-review`, {
       currentUser: getCurrentUserName(), currentRole: EMIE.state.currentRole, currentUserId: getCurrentUserId()
     });
-    // 送审后只更新当前详情弹窗，避免整个工作台重渲染导致用户滚动位置和上下文丢失。
+    // 送审后统一清理缓存并刷新项目详情，避免项目详情页继续显示送审前的状态。
+    clearSWRCache();
+    await refreshAfterMutation(pid);
     const detail = await apiGet(`/projects/${pid}`);
     const updatedTask = (detail.tasks || []).find(task => Number(task.id) === Number(tid));
     if (updatedTask) {

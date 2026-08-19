@@ -29,6 +29,8 @@ public class PointAppeal {
     @Column(name="applicant_name", nullable=false, length=100) private String applicantName;
     @Column(nullable=false, length=40) private String type;
     @Column(nullable=false, length=1000) private String reason;
+    @Column(name="corrected_score") private Double correctedScore;
+    @Column(name="attachments_json", columnDefinition="TEXT") private String attachmentsJson;
     @Column(nullable=false, length=32) private String status = "SUBMITTED";
     @Column(name="planner_decision", length=20) private String plannerDecision;
     @Column(name="planner_comment", length=1000) private String plannerComment;

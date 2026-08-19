@@ -282,7 +282,7 @@ function renderSubTaskCard(detail, task, idx) {
 
     ${task.reviewComments ? `<div class="review-box ${task.status === 'rejected' ? 'rejected' : 'approved'}"><strong>${task.status === 'rejected' ? '驳回意见' : '验收意见'}：</strong>${escHtml(task.reviewComments)}</div>` : ''}
 
-    ${task.scoringRecords && ['planner_approved', 'sales_approved', 'admin_approved', 'approved', 'completed'].includes(task.status) ? renderScoringMini(task, isDone) : ''}
+    ${task.scoringRecords && ['delivered', 'submitted_for_review', 'planner_approved', 'sales_approved', 'admin_approved', 'approved', 'completed'].includes(task.status) ? renderScoringMini(task, isDone) : ''}
 
     <div class="subtask-actions">
       ${/* 企划验收（首轮）：常规品直接通过；渠道定制单进入企划确认状态 */''}
@@ -298,7 +298,7 @@ function renderSubTaskCard(detail, task, idx) {
         <button class="btn btn-danger btn-sm" data-emie-onclick="taskReject(${detail.id},${task.id})">↩️ 驳回</button>
       ` : ''}
       ${EMIE.state.currentRole === 'admin' && detail.type !== 'channel_custom' && task.status === 'planner_approved' ? `
-        <button class="btn btn-success btn-sm" data-emie-onclick="taskApprove(${detail.id},${task.id},'regular')">✅ 管理确认通过</button>
+        <button class="btn btn-success btn-sm" data-emie-onclick="taskApprove(${detail.id},${task.id},'regular')">✅ 通过并评分</button>
         <button class="btn btn-danger btn-sm" data-emie-onclick="taskReject(${detail.id},${task.id})">↩️ 驳回</button>
       ` : ''}
       ${myTask && task.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskAccept(${detail.id},${task.id})">✅ 接单</button>` : ''}
@@ -310,7 +310,9 @@ function renderSubTaskCard(detail, task, idx) {
         <button class="btn btn-outline btn-sm" data-emie-onclick="editTask(${detail.id},${task.id})">✏️ 编辑</button>
         <button class="btn btn-outline btn-sm" data-emie-onclick="deleteTask(${detail.id},${task.id})" style="color:var(--danger);border-color:var(--danger);">🗑️ 删除</button>
       ` : ''}
-      ${needScore && !(isPlanner && ['delivered', 'submitted_for_review'].includes(task.status)) ? `<button class="btn btn-warning btn-sm" data-emie-onclick="openScoring(${detail.id},${task.id})">⭐ 评分</button>` : ''}
+      ${needScore && EMIE.state.currentRole !== 'admin'
+        && !(isPlanner && ['delivered', 'submitted_for_review'].includes(task.status))
+        ? `<button class="btn btn-warning btn-sm" data-emie-onclick="openScoring(${detail.id},${task.id})">⭐ 评分</button>` : ''}
     </div>
   </div>`;
 }

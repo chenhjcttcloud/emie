@@ -1064,7 +1064,7 @@ public class ProjectController {
                 m.put("comment", sr.getComment());
                 m.put("aesthetics", sr.getAesthetics());
                 m.put("innovation", sr.getInnovation());
-                m.put("weight", sr.getWeight());
+                m.put("weight", projectService.currentScoringWeight(p.getType(), sr.getRole()));
                 scoringMap.computeIfAbsent(sr.getSubTask().getId(), k -> new java.util.ArrayList<>()).add(m);
             });
         }
@@ -1158,6 +1158,7 @@ public class ProjectController {
             m.put("comment", sr.getComment());
             m.put("aesthetics", sr.getAesthetics());
             m.put("innovation", sr.getInnovation());
+            // 此处批量查询未携带项目实体，保持评分记录快照权重，避免触发懒加载。
             m.put("weight", sr.getWeight());
             scoringMap.computeIfAbsent(sr.getSubTask().getId(), ignored -> new ArrayList<>()).add(m);
         });

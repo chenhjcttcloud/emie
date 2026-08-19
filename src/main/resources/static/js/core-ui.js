@@ -397,6 +397,70 @@ function showSystemInput(message, value = '', title = '请输入') {
     const input=overlay.querySelector('#systemInputValue'); const finish=v=>{overlay.remove();doneOpenModal(id);resolve(v);}; overlay.querySelector('[data-action="cancel"]').onclick=()=>finish(null); overlay.querySelector('.modal-close').onclick=()=>finish(null); overlay.querySelector('[data-action="ok"]').onclick=()=>finish(input.value); input.addEventListener('keydown',e=>{if(e.key==='Enter')finish(input.value);}); requestAnimationFrame(()=>input.focus());
   });
 }
+function renderSystemFormFiles(input, field, container) {
+  if (!container) return;
+  container.innerHTML = '';
+  container.style = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;';
+  Array.from(input.files || []).slice(0, field.maxCount || 6).forEach((file, index) => {
+    const item = document.createElement('div');
+    item.className = field.fileKind === 'reference' ? 'system-file-preview' : 'file-item';
+    item.style = field.fileKind === 'reference'
+      ? 'position:relative;flex:0 0 88px;width:88px;height:88px;'
+      : 'width:100%;display:flex;align-items:center;gap:8px;';
+    if (field.fileKind === 'reference') {
+      const image = document.createElement('img');
+      image.src = URL.createObjectURL(file);
+      image.alt = file.name;
+      image.style = 'width:88px;height:88px;object-fit:cover;border:1px solid var(--gray-200);border-radius:6px;';
+      item.appendChild(image);
+    } else {
+      item.innerHTML = `<span class="file-item-name">📎 ${escHtml(file.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(file.size)}</span>`;
+    }
+    const download = document.createElement('button');
+    download.type = 'button';
+    download.textContent = '⬇';
+    download.title = '下载';
+    download.style = field.fileKind === 'reference'
+      ? 'position:absolute;bottom:2px;right:2px;width:20px;height:20px;border:0;border-radius:4px;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;'
+      : 'border:0;background:transparent;color:var(--primary);cursor:pointer;';
+    download.onclick = event => {
+      event.stopPropagation();
+      const reader = new FileReader();
+      reader.onload = () => { const link = document.createElement('a'); link.href = reader.result; link.download = file.name; link.click(); };
+      reader.readAsDataURL(file);
+    };
+    item.appendChild(download);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = '✕';
+    remove.title = '删除';
+    remove.style = field.fileKind === 'reference'
+      ? 'position:absolute;top:-6px;right:-6px;width:20px;height:20px;border:0;border-radius:50%;background:var(--danger);color:#fff;cursor:pointer;'
+      : 'margin-left:auto;border:0;background:transparent;color:var(--danger);cursor:pointer;';
+    remove.onclick = event => {
+      event.stopPropagation();
+      const transfer = new DataTransfer();
+      Array.from(input.files || []).forEach((candidate, candidateIndex) => { if (candidateIndex !== index) transfer.items.add(candidate); });
+      input.files = transfer.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    item.appendChild(remove);
+    container.appendChild(item);
+  });
+}
+function showSystemForm(fields = [], title = '请填写') {
+  return new Promise(resolve => {
+    const id='systemFormModal'; document.getElementById(id)?.remove(); const overlay=document.createElement('div'); overlay.className='modal-overlay'; overlay.id=id; overlay.style.zIndex='450'; document.body.appendChild(overlay);
+    overlay.innerHTML=`<div class="modal" style="max-width:500px;"><div class="modal-header"><div class="modal-header-left"><div class="modal-title">✎ ${escHtml(title)}</div></div><button class="modal-close" aria-label="关闭">✕</button></div><div class="modal-body" style="padding:22px 24px;">${fields.map((field,index)=>`<div class="form-group" style="${field.type === 'file' ? 'margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);' : ''}"><label class="form-label" for="systemFormValue${index}">${escHtml(field.label)}${field.required === false ? '' : ' *'}</label>${field.multiline ? `<textarea class="form-textarea" id="systemFormValue${index}" rows="4" placeholder="${escHtml(field.placeholder || '')}"></textarea>` : field.type === 'file' ? `<div class="upload-area" data-file-picker="systemFormValue${index}"><div>📁 ${field.fileKind === 'reference' ? '拖拽图片到此处，或点击选择图片' : '拖拽文件到此处，或点击选择文件'}</div><div class="upload-hint">${field.fileKind === 'reference' ? '支持 JPG、PNG、GIF、BMP、WebP；最多6张，单个文件不超过200MB' : '支持项目附件格式；最多5个，单个文件不超过200MB'}</div><input class="form-input" id="systemFormValue${index}" type="file" style="display:none" min="${field.min ?? ''}" max="${field.max ?? ''}" step="${field.step ?? ''}" ${field.multiple ? 'multiple' : ''} accept="${escHtml(field.accept || '')}" value="${escHtml(field.value || '')}" placeholder="${escHtml(field.placeholder || '')}" autocomplete="off"></div><div class="file-list system-file-previews" id="systemFormFileList${index}"></div>` : `<input class="form-input" id="systemFormValue${index}" type="${field.type || 'text'}" min="${field.min ?? ''}" max="${field.max ?? ''}" step="${field.step ?? ''}" ${field.multiple ? 'multiple' : ''} accept="${escHtml(field.accept || '')}" value="${escHtml(field.value || '')}" placeholder="${escHtml(field.placeholder || '')}" autocomplete="off">`}</div>`).join('')}<div id="systemFormError" style="display:none;color:var(--danger);font-size:12px;margin-top:4px;"></div></div><div class="modal-footer"><button class="btn btn-outline" data-action="cancel">取消</button><button class="btn btn-primary" data-action="ok">确定</button></div></div>`;
+    overlay.querySelectorAll('[data-file-picker]').forEach(zone=>{zone.onclick=()=>overlay.querySelector('#'+zone.dataset.filePicker)?.click();});
+    overlay.querySelectorAll('input[type="file"]').forEach(input=>input.onchange=()=>{const zone=input.closest('[data-file-picker]');if(zone){const field=fields[Number(input.id.replace('systemFormValue',''))]||{};zone.querySelector('.upload-hint').textContent=input.files.length?`已选择 ${input.files.length} 个文件`:`支持多选，${field.maxCount || 3}个以内`;const previews=overlay.querySelector(`#systemFormFileList${input.id.replace('systemFormValue','')}`);if(!previews||field.fileKind==='attachment')return;previews.innerHTML='';previews.style='display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;';Array.from(input.files).slice(0,field.maxCount || 6).forEach(file=>{if(!file.type.startsWith('image/'))return;const item=document.createElement('div');item.style='position:relative;flex:0 0 88px;width:88px;height:88px;';const placeholder=document.createElement('div');placeholder.textContent='图片加载中…';placeholder.style='display:flex;align-items:center;justify-content:center;width:88px;height:88px;color:var(--gray-400);font-size:12px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;';item.appendChild(placeholder);previews.appendChild(item);const reader=new FileReader();reader.onload=()=>{const image=document.createElement('img');image.src=reader.result;image.alt='已选择图片';image.style='width:88px;height:88px;object-fit:cover;border-radius:6px;border:1px solid var(--gray-200);';item.replaceChildren(image);};reader.onerror=()=>{placeholder.textContent='图片预览失败';placeholder.style.color='var(--danger)';};reader.readAsDataURL(file);});}});
+    overlay.querySelectorAll('input[type="file"]').forEach(input=>input.addEventListener('change',()=>{const index=Number(input.id.replace('systemFormValue',''));const field=fields[index]||{};renderSystemFormFiles(input,field,overlay.querySelector(`#systemFormFileList${index}`));}));
+    const finish=v=>{overlay.remove();doneOpenModal(id);resolve(v);};
+    overlay.querySelector('[data-action="cancel"]').onclick=()=>finish(null); overlay.querySelector('.modal-close').onclick=()=>finish(null);
+    overlay.querySelector('[data-action="ok"]').onclick=()=>{const values=fields.map((field,index)=>{const el=overlay.querySelector(`#systemFormValue${index}`);return field.type==='file' ? Array.from(el.files || []) : el.value;});const error=overlay.querySelector('#systemFormError');let message='';fields.forEach((field,index)=>{const value=values[index];if(!message&&field.required!==false&&(!value||!String(value).trim()))message=`请填写${field.label}`;if(!message&&field.type==='number'&&String(value).trim()){const number=Number(value);if(!Number.isFinite(number)||field.min!=null&&number<field.min||field.max!=null&&number>field.max)message=`${field.label}范围为${field.min}至${field.max}`;else if(field.step===0.1&&Math.round(number*10)!==number*10)message=`${field.label}最多保留一位小数`;}});if(message){error.textContent=message;error.style.display='block';return;}finish(values);};
+    requestAnimationFrame(()=>overlay.querySelector('input,textarea')?.focus());
+  });
+}
 function showSystemSelect(message, options = [], title = '请选择') {
   return new Promise(resolve => { const id='systemSelectModal'; document.getElementById(id)?.remove(); const overlay=document.createElement('div'); overlay.className='modal-overlay'; overlay.id=id; overlay.style.zIndex='450'; document.body.appendChild(overlay); overlay.innerHTML=`<div class="modal" style="max-width:460px;"><div class="modal-header"><div class="modal-header-left"><div class="modal-title">☷ ${escHtml(title)}</div></div><button class="modal-close">✕</button></div><div class="modal-body" style="padding:22px 24px;"><label class="form-label" style="display:block;margin-bottom:8px;">${escHtml(message)}</label><select class="form-select" id="systemSelectValue"><option value="">请选择成员</option>${options.map(o=>`<option value="${escHtml(o.value)}">${escHtml(o.label)}</option>`).join('')}</select></div><div class="modal-footer"><button class="btn btn-outline" data-action="cancel">取消</button><button class="btn btn-primary" data-action="ok">确定</button></div></div>`; const select=overlay.querySelector('#systemSelectValue'); const finish=v=>{overlay.remove();doneOpenModal(id);resolve(v);}; overlay.querySelector('[data-action="cancel"]').onclick=()=>finish(null); overlay.querySelector('.modal-close').onclick=()=>finish(null); overlay.querySelector('[data-action="ok"]').onclick=()=>finish(select.value||null); requestAnimationFrame(()=>select.focus()); });
 }
@@ -481,6 +545,7 @@ EMIE.registerActions({
   showSaveConfirmModal,
   showSystemAlert,
   showSystemInput,
+  showSystemForm,
   showSystemSelect,
   saveCreateDraft,
   discardCreateDraft,
@@ -507,6 +572,7 @@ EMIE.registerModule('coreUi', {
   showSaveConfirmModal,
   showSystemAlert,
   showSystemInput,
+  showSystemForm,
   showSystemSelect,
   saveCreateDraft,
   discardCreateDraft,

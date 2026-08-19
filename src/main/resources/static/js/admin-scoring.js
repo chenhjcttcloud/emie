@@ -129,7 +129,8 @@ async function renderAdminPoints(container) {
     const designerTargetList = Array.isArray(designerTargets) ? designerTargets : [];
     const configuredStandardIds = new Set(standardList.map(item => String(item.configCode || '')));
     const availableDesigners = designerTargetList;
-    const appealList = Array.isArray(appeals) ? appeals : [];
+    // 复核区只展示待处理异议，已通过/已驳回记录保留在数据库审计链中，不再占用待办列表。
+    const appealList = Array.isArray(appeals) ? appeals.filter(item => ['SUBMITTED', 'PLANNER_PROCESSED'].includes(item.status)) : [];
     const poProgressList = Array.isArray(poProgress) ? poProgress : [];
     const archiveList = Array.isArray(archives) ? archives : [];
     const proposalList = Array.isArray(proposals) ? proposals : [];
@@ -164,7 +165,7 @@ async function renderAdminPoints(container) {
         <p style="font-size:12px;color:var(--gray-500);">月度目标与系数用于排行榜及个人绩效预览，最终结果以月度归档为准。</p>
         <div class="table-wrap"><table><thead><tr><th>月份</th><th>目标积分</th><th>公司销售额（万元）</th><th>手动系数</th><th>供单不足</th><th>操作</th></tr></thead><tbody>${monthList.length ? monthList.map((item, index) => `<tr><td><input class="form-input" type="month" id="mp_month_${index}" value="${escHtml(item.monthKey || '')}" ${item.id ? 'disabled' : ''}></td><td><input class="form-input" type="number" min="0" id="mp_target_${index}" value="${Number(item.targetPoints || 0)}"></td><td><input class="form-input" type="number" min="0" step="0.01" id="mp_sales_${index}" value="${item.salesAmount ?? ''}" placeholder="填写后自动匹配档位"></td><td><input class="form-input" type="number" min="0" step="0.01" id="mp_multiplier_${index}" value="${Number(item.multiplier || 1)}"></td><td><input type="checkbox" id="mp_shortage_${index}" ${item.supplyShortage ? 'checked' : ''}></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="saveMonthlyPerformanceConfig(${index})">保存</button></td></tr>`).join('') : '<tr><td colspan="6"><div class="empty-state">暂无月度配置，可点击右上角配置当前月</div></td></tr>'}</tbody></table></div>
       </div>
-      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>积分异议复核</h3></div>${appealList.length ? `<div class="table-wrap"><table><thead><tr><th>申请人</th><th>记录</th><th>类型与原因</th><th>状态</th><th>操作</th></tr></thead><tbody>${appealList.map(item => `<tr><td>${escHtml(item.applicantName || item.applicantUserId || '-')}</td><td>#${Number(item.pointLedgerId || 0)}</td><td>${escHtml(item.type || '-')}<div style="font-size:12px;color:var(--gray-500);">${escHtml(item.reason || '')}</div></td><td>${escHtml(item.status || '-')}</td><td>${item.status === 'PLANNER_PROCESSED' ? `<button class="btn btn-success btn-sm" data-emie-onclick="reviewPointAppeal(${Number(item.id)},true)">通过</button> <button class="btn btn-danger btn-sm" data-emie-onclick="reviewPointAppeal(${Number(item.id)},false)">驳回</button>` : '-'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无积分异议</div>'}</div>
+      ${false && appealList.length ? '<div></div>' : ''}
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>手动调账</h3><p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">管理员主动补分/扣分，必填备注并记入调账台账，展示在成员积分页。</p></div><button class="btn btn-primary btn-sm" data-emie-onclick="openManualAdjustmentModal()">＋ 手动调账</button></div></div>
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>PO 月度积分</h3><button class="btn btn-outline btn-sm" data-emie-onclick="createPoPointProject()">＋ 新增 PO 产品</button></div>${poProgressList.length ? `<div class="table-wrap"><table><thead><tr><th>月份</th><th>项目ID</th><th>进展</th><th>状态</th><th>操作</th></tr></thead><tbody>${poProgressList.map(item => `<tr><td>${escHtml(item.monthKey || '-')}</td><td>#${Number(item.poProjectId || 0)}</td><td>${escHtml(item.summary || '-')}</td><td>${escHtml(item.status || '-')}</td><td>${item.status === 'SUBMITTED' ? `<button class="btn btn-success btn-sm" data-emie-onclick="reviewPoProgress(${Number(item.id)},true)">确认入账</button> <button class="btn btn-danger btn-sm" data-emie-onclick="reviewPoProgress(${Number(item.id)},false)">驳回</button>` : '-'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无 PO 月度进展</div>'}</div>
       <div class="card governance-card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>接单治理</h3></div><div class="governance-section"><div class="card-header"><h3>成员接单资格</h3><button class="btn btn-outline btn-sm" data-emie-onclick="configureMarketEligibility()">暂停/恢复接单资格</button></div><p style="font-size:12px;color:var(--gray-500);">管理员可手动暂停或恢复成员的接单资格。</p></div>
@@ -178,6 +179,9 @@ async function renderAdminPoints(container) {
       checkbox.addEventListener('change', () => saveStandardPointConfig(index));
     });
     EMIE.adminState.designerTargets = designerTargetList;
+    const appealCard = [...container.querySelectorAll('.card')].find(card => card.textContent.includes('积分异议复核'));
+    const appealRows = appealCard ? appealCard.querySelectorAll('tbody tr') : [];
+    appealList.forEach((item, index) => { const descriptionCell = appealRows[index]?.children?.[3]; if (descriptionCell && item.attachmentsJson) descriptionCell.insertAdjacentHTML('beforeend', renderAppealImages(item.attachmentsJson)); });
   } catch (e) { container.innerHTML = `<div class="empty">积分规则加载失败：${escHtml(e.message || '')}</div>`; }
 }
 
@@ -200,6 +204,12 @@ function renderProposalDesignFiles(value) {
     const authenticatedUrl = url ? (EMIE.actions.authenticatedFileUrl ? EMIE.actions.authenticatedFileUrl(url) : url) : '';
     return storedName ? `<a class="btn btn-outline btn-sm" href="${escHtml(authenticatedUrl)}" download="${escHtml(file.name || storedName)}" rel="noopener">下载设计图 · ${escHtml(file.name || '附件')}</a>` : '';
   }).join('')}</div>`;
+}
+
+function renderAppealImages(value) {
+  let files = []; try { files = JSON.parse(value || '[]'); } catch (_) { return ''; }
+  if (!Array.isArray(files) || !files.length) return '';
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${files.slice(0, 3).map(file => { const storedName = String(file.storedName || '').replace(/[^a-zA-Z0-9._-]/g, ''); const url = storedName ? `/api/files/download/${encodeURIComponent(storedName)}` : ''; const authenticatedUrl = url && EMIE.actions.authenticatedFileUrl ? EMIE.actions.authenticatedFileUrl(url) : url; return authenticatedUrl ? `<a href="${escHtml(authenticatedUrl)}" target="_blank" rel="noopener"><img src="${escHtml(authenticatedUrl)}" style="width:56px;height:56px;object-fit:cover;border:1px solid var(--gray-200);border-radius:6px;" alt="相关图片"></a>` : ''; }).join('')}</div>`;
 }
 
 async function loadDesignerTargetMonth(month) {
@@ -298,16 +308,23 @@ async function saveMonthlyPerformanceConfig(index) {
 }
 
 async function reviewPointAppeal(id, approve) {
-  const comment = window.prompt(approve ? '请输入复核通过说明' : '请输入驳回说明');
-  if (!comment) return;
   let adjustmentPoints = null;
+  let comment;
   if (approve) {
-    const raw = window.prompt('请输入本次调账积分（增加填正数，扣减填负数，不调账填0）', '0');
-    if (raw === null) return;
-    adjustmentPoints = Number(raw);
-    if (!Number.isInteger(adjustmentPoints)) { window.EMIE.actions.showSystemAlert('调账积分必须是整数'); return; }
+    const values = await window.EMIE.actions.showSystemForm([
+      { label: '更正后的最终分数（0-100，最多一位小数）', type: 'number', min: 0, max: 100, step: 0.1 },
+      { label: '备注（选填）', multiline: true, required: false, placeholder: '可填写为什么需要这样更正分数' },
+    ], '异议处理');
+    if (!values) return;
+    adjustmentPoints = Number(values[0]);
+    comment = values[1];
+    if (!Number.isFinite(adjustmentPoints) || adjustmentPoints < 0 || adjustmentPoints > 100 || Math.round(adjustmentPoints * 10) !== adjustmentPoints * 10) { window.EMIE.actions.showSystemAlert('更正后的分数必须在0到100之间，最多保留一位小数'); return; }
+  } else {
+    comment = await window.EMIE.actions.showSystemInput('请输入驳回备注', '', '填写驳回备注');
+    if (comment === null || !comment.trim()) return;
   }
-  try { await apiPost(`/point-governance/appeals/${id}/admin-review`, { decision: approve ? 'APPROVE' : 'REJECT', comment, adjustmentPoints }); await renderAdminPoints(document.getElementById('adminContent')); }
+  const scrollTop = document.getElementById('adminContent')?.scrollTop || window.scrollY || 0;
+  try { await apiPost(`/point-governance/appeals/${id}/admin-review`, { decision: approve ? 'APPROVE' : 'REJECT', comment, adjustmentPoints }); if (EMIE.state.currentView === 'points') { await EMIE.actions.renderPointsView(document.getElementById('mainContent')); } else { await renderAdminPoints(document.getElementById('adminContent')); } requestAnimationFrame(() => { const el = document.getElementById('adminContent'); if (el) el.scrollTop = scrollTop; window.scrollTo({ top: scrollTop, behavior: 'instant' }); }); }
   catch (e) { window.EMIE.actions.showSystemAlert('处理失败：' + e.message); }
 }
 

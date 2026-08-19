@@ -308,10 +308,8 @@ function openCreateProject(type) {
             <div class="form-hint" id="ipSubOptionHint"></div>
           </div>
           <div class="form-group" style="${type === 'design_requirement' ? 'display:none;' : ''}"><label class="form-label"><span class="required">*</span> 参考零售价</label>
-            <div class="chip-group" id="priceRangeChips">
-              ${EMIE.state.priceRanges.map(p => `<span class="chip" data-value="${escHtml(p.name)}" data-emie-onclick="togglePriceRange(this)">${escHtml(p.name)}</span>`).join('')}
-            </div>
-            <input type="hidden" name="priceRange" id="priceRangeInput" value="">
+            <input class="form-input" type="number" name="priceRange" id="priceRangeInput" min="0" max="1000" step="0.01" inputmode="decimal" placeholder="请输入参考零售价" value="${escHtml(draft?.priceRange || '')}">
+            <div class="form-hint">请输入 0～1,000 的数字，支持两位小数</div>
           </div>
           <div class="form-group" style="${type === 'design_requirement' ? 'display:none;' : ''}"><label class="form-label"><span class="required">*</span> 目标市场<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选）</span></label>
             <div class="chip-group" id="marketChips">
@@ -406,11 +404,7 @@ function openCreateProject(type) {
       } catch(e) {}
     }
     if (draft.priceRange) {
-      const chip = document.querySelector(`#priceRangeChips .chip[data-value="${draft.priceRange}"]`);
-      if (chip) {
-        chip.classList.add('selected');
-        document.getElementById('priceRangeInput').value = draft.priceRange;
-      }
+      document.getElementById('priceRangeInput').value = draft.priceRange;
     }
   }
   EMIE.projectState.createInitialSnapshot = createProjectFormSnapshot();
@@ -483,8 +477,9 @@ async function submitCreateProject(type) {
   }
 
   // 参考零售价
-  if (type !== 'design_requirement' && !data.priceRange) {
-    addFieldError('priceRange', '请选择参考零售价');
+  if (type !== 'design_requirement') {
+    const price = Number(data.priceRange);
+    if (!data.priceRange || !Number.isFinite(price) || price < 0 || price > 1000 || Math.round(price * 100) !== price * 100) addFieldError('priceRange', '请输入 0～1,000 的数字，最多两位小数');
   }
 
   // 目标市场
@@ -618,7 +613,7 @@ function openEditProject(pid) {
               <select class="form-select" id="ipNameSelect" name="ipName" data-emie-onchange="onIpChange(this)"><option value="">无IP</option>${EMIE.state.ipOptions.map(ip => `<option value="${escHtml(ip.name)}" ${detail.ipName === ip.name ? 'selected' : ''}>${escHtml(ip.name)}</option>`).join('')}</select>
             </div>
             <div class="form-group" id="ipSubOptionGroup" style="display:none;"><label class="form-label">二级IP</label><div class="chip-group" id="ipSubOptionChips"></div><input type="hidden" name="ipSubOptions" id="ipSubOptionsInput" value="[]"><div class="form-hint" id="ipSubOptionHint"></div></div>
-            <div class="form-group"><label class="form-label"><span class="required">*</span> 参考零售价</label><div class="chip-group" id="priceRangeChips">${EMIE.state.priceRanges.map(p => `<span class="chip ${detail.priceRange === p.name ? 'selected' : ''}" data-value="${escHtml(p.name)}" data-emie-onclick="togglePriceRange(this)">${escHtml(p.name)}</span>`).join('')}</div><input type="hidden" name="priceRange" id="priceRangeInput" value="${escHtml(detail.priceRange || '')}"></div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 参考零售价</label><input class="form-input" type="number" name="priceRange" id="priceRangeInput" min="0" max="1000" step="0.01" inputmode="decimal" placeholder="请输入参考零售价" value="${escHtml(detail.priceRange || '')}"><div class="form-hint">请输入 0～1,000 的数字，支持两位小数</div></div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 目标市场<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选）</span></label><div class="chip-group" id="marketChips"><span class="chip" data-value="国内" data-emie-onclick="toggleMarket(this)">国内</span><span class="chip" data-value="海外" data-emie-onclick="toggleMarket(this)">海外</span></div><input type="hidden" name="targetMarket" id="targetMarketInput" value="${escHtml(detail.targetMarket || '[]')}"></div>
             <div class="form-group"><label class="form-label">合规处罚<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选）</span></label><div class="chip-group" id="complianceChips">${EMIE.state.complianceItems.map(c => `<span class="chip" data-value="${escHtml(c.name)}" data-emie-onclick="toggleCompliance(this)">${escHtml(c.name)}</span>`).join('')}</div><input type="hidden" name="complianceItems" id="complianceItemsInput" value="${escHtml(detail.complianceItems || '[]')}"></div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 要求完成时间</label>${renderDatePicker('deadline', {value: detail.deadline || ''})}</div>

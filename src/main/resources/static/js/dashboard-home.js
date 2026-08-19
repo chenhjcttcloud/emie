@@ -316,7 +316,7 @@ async function loadDashboardWorkloadSection() {
 
     const rangeOpts = [
       { k: 'day', l: '今日' }, { k: 'week', l: '本周' }, { k: 'month', l: '本月' },
-      { k: 'quarter', l: '本季度' }, { k: 'half-year', l: '本半年' }, { k: 'year', l: '本年度' }
+      { k: 'quarter', l: '本季度' }, { k: 'half-year', l: '本半年' }, { k: 'year', l: '本年度' }, { k: 'all', l: '总览' }
     ];
 
     const isWorker = r => r === 'designer' || r === 'supplychain';
@@ -324,7 +324,7 @@ async function loadDashboardWorkloadSection() {
 
     let html = `<div style="margin-top:24px;border-top:2px solid var(--gray-200);padding-top:20px;">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-        <span style="font-size:16px;font-weight:600;color:#1f2937;">📊 工作量概览</span>
+        <span style="font-size:16px;font-weight:600;color:#1f2937;">工作量概览</span>
         <span style="font-size:12px;color:var(--gray-400);margin-left:4px;">时间范围:</span>
         ${rangeOpts.map(o => `
           <button data-emie-onclick="switchDashWorkload('${o.k}')"
@@ -335,10 +335,10 @@ async function loadDashboardWorkloadSection() {
         `).join('')}
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;">
-        <div class="stat-card" style="cursor:default;"><div class="stat-icon blue">📁</div><div><div class="stat-value">${summary.totalProjectsCreated}</div><div class="stat-label">新建项目</div></div></div>
-        <div class="stat-card" style="cursor:default;"><div class="stat-icon green">✅</div><div><div class="stat-value">${summary.totalProjectsCompleted}</div><div class="stat-label">完成项目</div></div></div>
-        <div class="stat-card" style="cursor:default;"><div class="stat-icon blue">📌</div><div><div class="stat-value">${summary.totalTasksAssigned}</div><div class="stat-label">新分任务</div></div></div>
-        <div class="stat-card" style="cursor:default;"><div class="stat-icon green">✅</div><div><div class="stat-value">${summary.totalTasksCompleted}</div><div class="stat-label">完成任务</div></div></div>
+        <div class="stat-card" style="cursor:default;"><div><div class="stat-value">${summary.totalProjectsCreated}</div><div class="stat-label">新建项目</div></div></div>
+        <div class="stat-card" style="cursor:default;"><div><div class="stat-value">${summary.totalProjectsCompleted}</div><div class="stat-label">完成项目</div></div></div>
+        <div class="stat-card" style="cursor:default;"><div><div class="stat-value">${summary.totalTasksAssigned}</div><div class="stat-label">新分任务</div></div></div>
+        <div class="stat-card" style="cursor:default;"><div><div class="stat-value">${summary.totalTasksCompleted}</div><div class="stat-label">完成任务</div></div></div>
       </div>`;
 
     for (const role of roleOrder) {
@@ -355,7 +355,7 @@ async function loadDashboardWorkloadSection() {
       const categoryHeader = `<span style="flex:1;color:#7C3AED;font-weight:600;">${w ? '渠道定制任务' : '渠道定制'}</span><span style="flex:1;color:#B45309;font-weight:600;">${w ? '常规品任务' : '公司常规品'}</span>`;
       html += `<div class="card" style="margin-bottom:12px;">
         <div style="display:grid;grid-template-columns:120px repeat(5,minmax(0,1fr)) 140px;gap:12px;align-items:center;padding:14px 16px;border-top:3px solid ${roleTone[0]};border-bottom:1px solid var(--gray-200);background:linear-gradient(90deg,${roleTone[1]},#fff 55%);">
-          <div style="display:flex;align-items:center;gap:10px;"><span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:10px;background:${roleTone[1]};color:${roleTone[0]};font-size:18px;">${r.icon||'👤'}</span><div><strong style="font-size:15px;color:#1f2937;">${r.label||role}</strong><div style="font-size:11px;color:#94a3b8;margin-top:2px;">成员工作量分布 · ${r.totalUsers}人</div></div></div>
+          <div style="display:flex;align-items:center;gap:10px;"><div><strong style="font-size:15px;color:#1f2937;">${r.label||role}</strong><div style="font-size:11px;color:#94a3b8;margin-top:2px;">成员工作量分布 · ${r.totalUsers}人</div></div></div>
           <div style="grid-column:2 / span 5;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:center;font-size:12px;color:#64748B;text-align:center;"><span>总量 <strong style="color:#2563EB;font-size:15px;">${roleTotal}</strong></span><span>${w ? '渠道定制任务' : '渠道定制项目'} <strong style="color:#7C3AED;font-size:15px;">${roleChannel}</strong></span><span>${w ? '常规品任务' : '公司常规品项目'} <strong style="color:#B45309;font-size:15px;">${roleRegular}</strong></span><span style="white-space:nowrap;">完成 <strong style="color:#047857;font-size:15px;">${roleDone}</strong><small style="font-size:11px;color:#64748B;">（${w ? '渠道定制任务' : '渠道定制项目'}：${completedRoleChannel}个、${w ? '常规品任务' : '公司常规品项目'}：${completedRoleRegular}个）</small></span><span></span></div>
         </div>
         <div style="display:grid;grid-template-columns:120px repeat(5,minmax(0,1fr)) 140px;gap:12px;padding:6px 16px;font-size:11px;color:var(--gray-400);border-bottom:1px solid var(--gray-100);">

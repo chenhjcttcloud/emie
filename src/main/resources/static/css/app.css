@@ -1312,3 +1312,18 @@ html:has(.admin-page)::-webkit-scrollbar,body:has(.admin-page)::-webkit-scrollba
 /* 文件下载选项面板按钮：悬停背景由 CSS 承担（P3 内联事件迁移，配合 CSP script-src-attr 'none'） */
 .file-dl-btn { transition: background 0.15s; }
 .file-dl-btn:hover { background:#f9fafb; }
+
+.adjustment-ledger-card .card-header { align-items:center; }
+.points-ledger-count { padding:5px 9px; border-radius:999px; color:#5B51C8; background:#EEECFF; font-size:11px; white-space:nowrap; }
+.adjustment-ledger-list { padding:0 20px 8px; }
+.adjustment-ledger-row { display:grid; grid-template-columns:minmax(150px, .8fr) minmax(260px, 2fr) 110px; align-items:center; gap:18px; padding:15px 0; border-top:1px solid #EEF0F5; }
+.adjustment-ledger-source { display:flex; align-items:center; gap:10px; min-width:0; }
+.adjustment-source-icon { display:inline-flex; width:32px; height:32px; align-items:center; justify-content:center; border-radius:9px; color:#5B51C8; background:#F0EEFF; font-size:16px; }
+.adjustment-ledger-source strong, .adjustment-ledger-source small { display:block; }
+.adjustment-ledger-source strong { color:var(--points-ink); font-size:13px; }
+.adjustment-ledger-source small { margin-top:3px; color:var(--points-muted); font-size:11px; }
+.adjustment-ledger-reason { color:#4B5563; font-size:13px; line-height:1.6; }
+.adjustment-ledger-points { text-align:right; font-size:16px; white-space:nowrap; }
+.adjustment-ledger-points.is-positive { color:#059669; }
+.adjustment-ledger-points.is-negative { color:#DC2626; }
+@media (max-width:600px) { .adjustment-ledger-row { grid-template-columns:1fr auto; gap:10px; } .adjustment-ledger-reason { grid-column:1 / -1; order:3; } .adjustment-ledger-points { grid-column:2; grid-row:1; } }

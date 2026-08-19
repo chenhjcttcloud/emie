@@ -266,7 +266,8 @@ function openPublishedSubTaskDetail(taskId) {
 function renderScoringMini(task, isDone) {
   if (!task.scoringRecords || !task.scoringRecords.length) return '';
   const records = task.scoringRecords;
-      const allScored = records.filter(r => r.score != null).length;
+  const allScored = records.filter(r => r.score != null).length;
+  const allRolesScored = records.length > 0 && allScored === records.length;
   let ta = 0, tw = 0;
   records.forEach(r => {
     if (r.score != null) {
@@ -282,7 +283,7 @@ function renderScoringMini(task, isDone) {
       <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;">
         ${records.map(r => `<span style="background:#fff;padding:2px 8px;border-radius:4px;">${roleLabel(r.role)}: ${r.score != null ? `✅ ${r.score}分` : '<span style="color:var(--gray-400);">⏳ 待评</span>'}</span>`).join('')}
       </div>
-      ${overall ? `<div style="margin-top:8px;text-align:center;"><span style="font-size:12px;color:#15803D;">加权综合：</span><span style="font-size:24px;font-weight:700;color:#16A34A;">${overall}分</span></div>` : ''}
+      ${allRolesScored ? `<div style="margin-top:8px;text-align:center;"><span style="font-size:12px;color:#15803D;">加权综合：</span><span style="font-size:24px;font-weight:700;color:#16A34A;">${overall}分</span></div>` : '<div style="margin-top:8px;text-align:center;"><span style="font-size:12px;color:#15803D;">加权综合：</span><span style="font-size:24px;font-weight:700;color:#16A34A;">待评分</span></div>'}
     </div>`;
   }
 
@@ -291,7 +292,7 @@ function renderScoringMini(task, isDone) {
     <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;">
       ${records.map(r => `<span style="background:#fff;padding:2px 8px;border-radius:4px;">${roleLabel(r.role)}: ${r.score != null ? `✅ ${r.score}分` : '<span style="color:var(--gray-400);">⏳ 待评</span>'}</span>`).join('')}
     </div>
-    ${overall ? `<div style="margin-top:8px;text-align:center;"><span style="font-size:12px;color:var(--gray-500);">加权综合：</span><span style="font-size:24px;font-weight:700;color:var(--primary);">${overall}分</span></div>` : ''}
+    ${allRolesScored ? `<div style="margin-top:8px;text-align:center;"><span style="font-size:12px;color:var(--gray-500);">加权综合：</span><span style="font-size:24px;font-weight:700;color:var(--primary);">${overall}分</span></div>` : '<div style="margin-top:8px;text-align:center;"><span style="font-size:12px;color:var(--gray-500);">加权综合：</span><span style="font-size:24px;font-weight:700;color:var(--primary);">待评分</span></div>'}
   </div>`;
 }
 

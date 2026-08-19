@@ -15,7 +15,6 @@ import com.emie.designpm.repository.SystemConfigRepository;
 import com.emie.designpm.entity.SystemConfig;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -44,10 +43,6 @@ public class PointsService {
     private final PointDifficultyConfigRepository difficulties;
     private final SystemConfigRepository configs;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    /** 积分制度生效时间；发布前通过 POINTS_EFFECTIVE_AT 覆盖为正式上线时间。 */
-    @Value("${points.effective-at:2026-08-14T00:00:00}")
-    private String effectiveAtText = "2026-08-14T00:00:00";
-
     @Autowired
     public PointsService(PointRuleRepository rules, PointLedgerRepository ledgers, ScoringRepository scoring,
                          PointAdjustmentLedgerRepository adjustments, PointDifficultyConfigRepository difficulties,
@@ -119,16 +114,8 @@ public class PointsService {
         // 积分仅面向设计师任务（产品确认：供应链等其它负责人类型不参与积分）。
         // 写入端（addSubTask/updateSubTask）已把 null/''、别名归一化为 designer；历史 NULL/别名数据按不发分处理。
         if (!"designer".equals(task.getAssigneeRole())) return false;
-        // 持久化任务都会有创建时间；兼容旧的内存调用方/单元测试不阻断原有流程。
-        if (task.getCreatedAt() == null) return true;
-        try {
-            return !task.getCreatedAt().isBefore(java.time.LocalDateTime.parse(effectiveAtText));
-        } catch (Exception e) {
-            // 生效时间配置解析失败时不再静默：记录配置值与受影响任务，便于上线前排查。
-            log.warn("积分生效时间配置解析失败，跳过任务积分入账 effectiveAtText={} taskId={} detail={}",
-                    effectiveAtText, task.getId(), e.getMessage());
-            return false;
-        }
+        // 不按项目/任务创建时间限制积分；所有符合条件的正式送审任务均可入账。
+        return true;
     }
 
     private String completionMonth(SubTask task) {

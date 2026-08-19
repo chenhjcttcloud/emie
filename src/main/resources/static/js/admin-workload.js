@@ -10,29 +10,26 @@ async function renderAdminWorkload(container) {
   try {
     const data = await apiGet('/admin/workload/timeline?range=' + EMIE.adminState.workloadRange);
     const summary = data._summary || {};
-    const rangeLabel = summary.rangeLabel || '本月';
+    const rangeLabel = summary.rangeLabel || '今日';
     const rangeOptions = [
-      { key: 'day', label: '今日', icon: '☀️' },
-      { key: 'week', label: '本周', icon: '📅' },
-      { key: 'month', label: '本月', icon: '📆' },
-      { key: 'quarter', label: '本季度', icon: '🗓️' },
-      { key: 'half-year', label: '本半年', icon: '📋' },
-      { key: 'year', label: '本年度', icon: '📊' },
-      { key: 'all', label: '全部时间', icon: '🗂️' },
+      { key: 'day', label: '今日' }, { key: 'week', label: '本周' },
+      { key: 'month', label: '本月' }, { key: 'quarter', label: '本季度' },
+      { key: 'half-year', label: '本半年' }, { key: 'year', label: '本年度' },
+      { key: 'all', label: '总览' },
     ];
 
     const workloadQuery = EMIE.adminState.workloadQuery || '';
     const workloadSort = EMIE.adminState.workloadSort || 'default';
     container.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-        <span style="font-size:14px;font-weight:500;color:#374151;">📊 工作量看板</span>
+        <span style="font-size:14px;font-weight:500;color:#374151;">工作量看板</span>
         <span style="font-size:12px;color:var(--gray-400);margin-right:4px;">时间范围:</span>
         ${rangeOptions.map(o => `
           <button data-emie-onclick="switchWorkloadRange('${o.key}')"
             style="padding:5px 14px;border-radius:8px;border:${o.key === EMIE.adminState.workloadRange ? '2px solid #3370FF' : '1px solid var(--gray-200)'};
             background:${o.key === EMIE.adminState.workloadRange ? '#E6F1FB' : '#fff'};
             color:${o.key === EMIE.adminState.workloadRange ? '#1E40AF' : '#374151'};
-            font-size:13px;cursor:pointer;white-space:nowrap;">${o.icon} ${o.label}</button>
+            font-size:13px;cursor:pointer;white-space:nowrap;">${o.label}</button>
         `).join('')}
       </div>
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
@@ -46,32 +43,26 @@ async function renderAdminWorkload(container) {
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;">
         <div class="admin-stat-card">
-          <div class="admin-stat-icon">📁</div>
           <div class="admin-stat-value">${summary.totalProjectsCreated || 0}</div>
           <div class="admin-stat-label">新建项目</div>
         </div>
         <div class="admin-stat-card">
-          <div class="admin-stat-icon">✅</div>
           <div class="admin-stat-value">${summary.totalProjectsCompleted || 0}</div>
           <div class="admin-stat-label">完成项目</div>
         </div>
         <div class="admin-stat-card">
-          <div class="admin-stat-icon">📝</div>
           <div class="admin-stat-value">${summary.totalTasksAssigned || 0}</div>
           <div class="admin-stat-label">新分配子任务</div>
         </div>
         <div class="admin-stat-card">
-          <div class="admin-stat-icon">✅</div>
           <div class="admin-stat-value">${summary.totalTasksCompleted || 0}</div>
           <div class="admin-stat-label">完成任务</div>
         </div>
         <div class="admin-stat-card">
-          <div class="admin-stat-icon">⏳</div>
           <div class="admin-stat-value">${Math.max(0, (summary.totalProjectsCreated || 0) - (summary.totalProjectsCompleted || 0))}</div>
           <div class="admin-stat-label">未完成项目</div>
         </div>
         <div class="admin-stat-card">
-          <div class="admin-stat-icon">⏳</div>
           <div class="admin-stat-value">${Math.max(0, (summary.totalTasksAssigned || 0) - (summary.totalTasksCompleted || 0))}</div>
           <div class="admin-stat-label">未完成子任务</div>
         </div>
@@ -93,7 +84,7 @@ async function renderAdminWorkload(container) {
       const completedRoleRegular = r.users.reduce((sum, u) => sum + Number(u.completedRegularProjects || 0), 0);
       const isWorker = (role === 'designer' || role === 'supplychain');
       html += `<div style="display:grid;grid-template-columns:120px repeat(5,minmax(0,1fr)) 184px;gap:16px;align-items:center;padding:14px 16px;border-top:3px solid ${roleTone[0]};border-bottom:1px solid var(--gray-200);background:linear-gradient(90deg,${roleTone[1]},#fff 55%);">
-        <div style="display:flex;align-items:center;gap:10px;"><span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:10px;background:${roleTone[1]};color:${roleTone[0]};font-size:18px;">${r.icon || '👤'}</span><div><strong style="font-size:15px;color:#1f2937;">${r.label || role}</strong><div style="font-size:11px;color:#94a3b8;margin-top:2px;">成员工作量分布 · ${r.totalUsers}人</div></div></div><div style="grid-column:2 / span 5;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;align-items:center;font-size:12px;color:#64748B;text-align:center;"><span>总量 <strong style="color:#2563EB;font-size:15px;">${roleTotal}</strong></span><span>${isWorker ? '渠道定制任务' : '渠道定制项目'} <strong style="color:#7C3AED;font-size:15px;">${roleChannel}</strong></span><span>${isWorker ? '常规品任务' : '公司常规品项目'} <strong style="color:#B45309;font-size:15px;">${roleRegular}</strong></span><span style="white-space:nowrap;">完成 <strong style="color:#047857;font-size:15px;">${roleDone}</strong><small style="font-size:11px;color:#64748B;">（${isWorker ? '渠道定制任务' : '渠道定制项目'}：${completedRoleChannel}个、${isWorker ? '常规品任务' : '公司常规品项目'}：${completedRoleRegular}个）</small></span><span></span></div></div>`;
+        <div style="display:flex;align-items:center;gap:10px;"><div><strong style="font-size:15px;color:#1f2937;">${r.label || role}</strong><div style="font-size:11px;color:#94a3b8;margin-top:2px;">成员工作量分布 · ${r.totalUsers}人</div></div></div><div style="grid-column:2 / span 5;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;align-items:center;font-size:12px;color:#64748B;text-align:center;"><span>总量 <strong style="color:#2563EB;font-size:15px;">${roleTotal}</strong></span><span>${isWorker ? '渠道定制任务' : '渠道定制项目'} <strong style="color:#7C3AED;font-size:15px;">${roleChannel}</strong></span><span>${isWorker ? '常规品任务' : '公司常规品项目'} <strong style="color:#B45309;font-size:15px;">${roleRegular}</strong></span><span style="white-space:nowrap;">完成 <strong style="color:#047857;font-size:15px;">${roleDone}</strong><small style="font-size:11px;color:#64748B;">（${isWorker ? '渠道定制任务' : '渠道定制项目'}：${completedRoleChannel}个、${isWorker ? '常规品任务' : '公司常规品项目'}：${completedRoleRegular}个）</small></span><span></span></div></div>`;
       const roleUsers = (r.users || []).filter(u => !workloadQuery || String(u.name || '').toLowerCase().includes(workloadQuery.toLowerCase()));
       roleUsers.sort((a, b) => {
         if (workloadSort === 'total') return Number(b.created || b.assigned || 0) - Number(a.created || a.assigned || 0);
@@ -175,7 +166,7 @@ async function renderAdminWorkload(container) {
       container.innerHTML += html;
     }
   } catch (e) {
-    container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${escHtml(e.message)}</p></div>`;
+    container.innerHTML = `<div class="empty"><p>加载失败: ${escHtml(e.message)}</p></div>`;
   }
 }
 

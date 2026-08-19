@@ -26,6 +26,16 @@ import org.springframework.data.domain.Pageable;
 @Service
 @Transactional
 public class ProjectService {
+    private void validateCustomPriceRange(String value) {
+        try {
+            double price = Double.parseDouble(value.trim());
+            if (!Double.isFinite(price) || price < 0 || price > 1000 || Math.round(price * 100) != price * 100) {
+                throw new IllegalArgumentException("参考零售价必须在0到1,000之间，最多两位小数");
+            }
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("参考零售价必须在0到1,000之间，最多两位小数");
+        }
+    }
     private static final Logger log = LoggerFactory.getLogger(ProjectService.class);
     private static final Object PROJECT_CODE_LOCK = new Object();
 
@@ -360,7 +370,8 @@ public class ProjectService {
         }
         String priceRangeStr = (String) body.get("priceRange");
         if (priceRangeStr != null && !priceRangeStr.isBlank()) {
-            p.setPriceRange(priceRangeStr);
+            validateCustomPriceRange(priceRangeStr);
+            p.setPriceRange(priceRangeStr.trim());
         }
         String ipName = SecurityUtil.sanitizeText((String) body.get("ipName"), 100);
         if (ipName != null && !ipName.isBlank()) {
@@ -471,7 +482,9 @@ public class ProjectService {
         p.setProductCategoryNote(SecurityUtil.sanitizeText((String) body.getOrDefault("productCategoryNote", ""), 500));
         p.setTargetMarket(SecurityUtil.sanitizeText((String) body.getOrDefault("targetMarket", ""), 100));
         p.setComplianceItems(SecurityUtil.sanitizeText((String) body.getOrDefault("complianceItems", ""), 500));
-        p.setPriceRange(SecurityUtil.sanitizeText((String) body.getOrDefault("priceRange", ""), 100));
+        String priceRange = SecurityUtil.sanitizeText((String) body.getOrDefault("priceRange", ""), 100);
+        if (priceRange != null && !priceRange.isBlank()) validateCustomPriceRange(priceRange);
+        p.setPriceRange(priceRange);
 
         String ipName = SecurityUtil.sanitizeText((String) body.getOrDefault("ipName", ""), 100);
         if (ipName == null || ipName.isBlank()) {
@@ -1246,6 +1259,7 @@ public class ProjectService {
         if (!List.of("designer", "supplychain").contains(task.getAssigneeRole())) throw new RuntimeException("仅设计师和供应链子任务需要送审");
         if (!"delivered".equals(task.getStatus())) throw new RuntimeException("当前子任务不在待送审状态");
         task.setStatus("submitted_for_review");
+        task.setSubmittedForReviewAt(LocalDateTime.now());
         if (pointsService != null && !task.isSelfInitiated()) pointsService.awardBaseSubmission(task);
         String user = (String) body.getOrDefault("currentUser", "");
         p.getLogs().add(new ActivityLog("子任务送审：" + task.getName(), user, role, p));
@@ -1493,6 +1507,22 @@ public class ProjectService {
             record.setSubTask(task);
             scoringRepository.save(record);
         }
+        // 设计师自评分纳入统一评分链路，使用系统设置中的设计师权重参与综合分。
+        if ("designer".equalsIgnoreCase(task.getAssigneeRole())) {
+            ScoringRecord self = scoringRepository.findBySubTaskIdAndRole(task.getId(), "designer")
+                    .orElseGet(ScoringRecord::new);
+            self.setRole("designer");
+            self.setScoreType("self");
+            self.setReviewStage("self");
+            self.setReviewStatus(task.getSelfScore() == null ? "pending" : "approved");
+            self.setReviewerId(task.getDesignerId());
+            self.setReviewerName(task.getDesignerName());
+            self.setReviewedAt(task.getSelfScore() == null ? null : LocalDateTime.now());
+            self.setScore(task.getSelfScore() == null ? null : task.getSelfScore().intValue());
+            self.setWeight(getScoringPct(projectType(task), "designer") / 100.0);
+            self.setSubTask(task);
+            scoringRepository.save(self);
+        }
     }
 
     /** 审核通过时更新对应阶段记录（单维度：总分100分）。 */
@@ -1585,6 +1615,19 @@ public class ProjectService {
         return systemConfigRepository.findByConfigKey(key)
             .map(c -> { try { return Double.parseDouble(c.getConfigValue()); } catch (Exception e) { return 25.0; } })
             .orElse(25.0);
+    }
+
+    /** 当前系统设置中的角色权重（小数形式），用于历史评分重新核算。 */
+    public double currentScoringWeight(String projectType, String role) {
+        return getScoringPct(projectType, role) / 100.0;
+    }
+
+    private Map<String, Double> scoringWeightMap(String projectType) {
+        Map<String, Double> weights = new HashMap<>();
+        for (String role : List.of("planner", "sales", "designer", "admin")) {
+            weights.put(role, getScoringPct(projectType, role) / 100.0);
+        }
+        return weights;
     }
 
     /** 从 SystemConfig 读取评分权重，不存在则返回 1.0 */
@@ -2109,7 +2152,7 @@ public class ProjectService {
         if (!List.of("completed", "approved").contains(task.getStatus())) {
             return false;
         }
-        List<String> requiredRoles = getRequiredScoringRoles(task.getProject() != null ? task.getProject().getType() : "regular");
+        List<String> requiredRoles = getRequiredScoringRoles(task);
         if (requiredRoles.isEmpty()) {
             return true;
         }
@@ -2127,6 +2170,7 @@ public class ProjectService {
     public Double computeProjectScore(Project project) {
         List<SubTask> tasks = project.getTasks();
         if (tasks == null || tasks.isEmpty()) return null;
+        Map<String, Double> weights = scoringWeightMap(project.getType());
         Map<Long, List<ScoringRecord>> recordsByTask = scoringRepository.findBySubTaskIds(
                         tasks.stream().map(SubTask::getId).toList())
                 .stream().collect(Collectors.groupingBy(sr -> sr.getSubTask().getId()));
@@ -2141,8 +2185,9 @@ public class ProjectService {
             for (ScoringRecord sr : records) {
                 Double normalizedScore = toHundredPointScore(sr);
                 if (normalizedScore != null) {
-                    weightedSum += normalizedScore * sr.getWeight();
-                    totalWeight += sr.getWeight();
+                    double weight = weights.getOrDefault(sr.getRole(), 0.25);
+                    weightedSum += normalizedScore * weight;
+                    totalWeight += weight;
                 }
             }
             if (totalWeight > 0) {
@@ -2159,6 +2204,9 @@ public class ProjectService {
      */
     public Map<Long, Double> computeProjectScoresBatch(List<Project> projects) {
         if (projects == null || projects.isEmpty()) return Collections.emptyMap();
+        Map<String, Map<String, Double>> weightsByType = projects.stream()
+                .map(Project::getType).filter(Objects::nonNull).distinct()
+                .collect(Collectors.toMap(type -> type, this::scoringWeightMap));
         List<Long> projectIds = projects.stream().map(Project::getId).collect(Collectors.toList());
         // 一次 SQL 查全部
         List<ScoringRecord> allRecords = scoringRepository.findByProjectIds(projectIds);
@@ -2186,8 +2234,11 @@ public class ProjectService {
                 for (ScoringRecord sr : taskRecords) {
                     Double normalizedScore = toHundredPointScore(sr);
                     if (normalizedScore != null) {
-                        weightedSum += normalizedScore * sr.getWeight();
-                        totalWeight += sr.getWeight();
+                        Map<String, Double> weights = weightsByType.get(task.getProject().getType());
+                        if (weights == null) weights = scoringWeightMap("regular");
+                        double weight = weights.getOrDefault(sr.getRole(), 0.25);
+                        weightedSum += normalizedScore * weight;
+                        totalWeight += weight;
                     }
                 }
                 if (totalWeight > 0) {
@@ -2257,7 +2308,7 @@ public class ProjectService {
                     m.put("score", sr.getScore());
                     m.put("aesthetics", sr.getAesthetics());
                     m.put("innovation", sr.getInnovation());
-                    m.put("weight", sr.getWeight());
+                    m.put("weight", getScoringPct(p.getType(), sr.getRole()) / 100.0);
                     return m;
                 }).collect(Collectors.toList()));
                 result.add(item);
@@ -2313,6 +2364,15 @@ public class ProjectService {
         return "channel_custom".equals(projectType)
                 ? List.of("planner", "sales")
                 : List.of("planner", "admin");
+    }
+
+    private List<String> getRequiredScoringRoles(SubTask task) {
+        List<String> roles = new ArrayList<>(getRequiredScoringRoles(
+                task.getProject() != null ? task.getProject().getType() : "regular"));
+        if ("designer".equalsIgnoreCase(task.getAssigneeRole()) && task.getSelfScore() != null) {
+            roles.add("designer");
+        }
+        return roles;
     }
 
     private boolean isScoringRecordCompleted(ScoringRecord record) {

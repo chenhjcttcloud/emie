@@ -1182,7 +1182,7 @@ public class AdminService {
             case "quarter" -> "本季度";
             case "half-year" -> "本半年";
             case "year" -> "本年度";
-            case "all" -> "全部时间";
+            case "all" -> "总览";
             default -> range;
         });
         summary.put("cutoff", cutoff.toString());

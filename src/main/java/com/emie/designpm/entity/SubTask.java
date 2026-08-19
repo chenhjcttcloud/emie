@@ -81,6 +81,9 @@ public class SubTask {
     private LocalDateTime marketPublishedAt;
     private LocalDateTime claimedAt;
 
+    /** 最近一次正式送审时间，用于按送审时点判断积分制度是否生效。 */
+    private LocalDateTime submittedForReviewAt;
+
     /** 创建并派发该子任务的用户。用于“我的子任务”同时覆盖负责人与发布人。 */
     private String publisherId;
     private String publisherName;

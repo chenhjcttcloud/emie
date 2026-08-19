@@ -6,7 +6,9 @@ public class PointAdjustmentLedger {
  @Column(name="user_id",nullable=false,length=100) private String userId;
  @Column(name="source_type",nullable=false,length=40) private String sourceType;
  @Column(name="source_id",nullable=false) private Long sourceId;
- @Column(nullable=false) private Integer points;
+ @Column(nullable=false, columnDefinition="DECIMAL(12,2)") private Double points;
+ public void setPoints(Integer points){this.points=points==null?null:points.doubleValue();}
+ public void setPoints(Double points){this.points=points;}
  @Column(nullable=false,length=500) private String reason;
  @Column(name="created_by",nullable=false,length=100) private String createdBy;
  @Column(name="created_at",nullable=false) private LocalDateTime createdAt;

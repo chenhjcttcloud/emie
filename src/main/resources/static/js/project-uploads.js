@@ -404,8 +404,8 @@ function renderFileList(list, typeLabel) {
   if (!c) return;
   if (!list.length) { c.innerHTML = ''; return; }
 
-  // 同源 HttpOnly Cookie 会随图片请求自动发送认证信息。
-  const authUrl = u => u;
+  // 图片标签无法像 fetch/XHR 一样自动携带 X-Auth-Token，必须使用带认证参数的地址。
+  const authUrl = u => EMIE.actions.authenticatedFileUrl ? EMIE.actions.authenticatedFileUrl(u) : u;
   const canRenderAsImage = file => /\.(png|jpe?g|gif|webp|bmp)$/i.test(file?.name || file?.url || '');
 
   if (isImage) {
@@ -413,7 +413,7 @@ function renderFileList(list, typeLabel) {
       ? `<div style="position:relative;display:inline-block;">
         <img src="${escHtml(authUrl(img.url))}" alt="${escHtml(img.name)}" class="img-clickable" draggable="true" loading="lazy" decoding="async" style="width:180px;height:180px;object-fit:contain;border-radius:6px;border:1px solid var(--gray-200);cursor:grab;background:#fff;">
         <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escHtml(escJsString(img.url))}','${escHtml(escJsString(img.name))}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:20px;height:20px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
-        <button style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button>
+        <button style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button>
       </div>`
       : `<div class="file-item" style="width:100%;"><span class="file-item-name">📐 ${escHtml(img.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(img.size)}</span>${renderAttachmentActions(img, true)}<button class="remove-file" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button></div>`).join('')}</div>`;
   } else {
