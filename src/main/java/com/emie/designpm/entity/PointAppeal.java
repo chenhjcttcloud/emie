@@ -3,6 +3,8 @@ package com.emie.designpm.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -29,6 +31,7 @@ public class PointAppeal {
     @Column(name="applicant_name", nullable=false, length=100) private String applicantName;
     @Column(nullable=false, length=40) private String type;
     @Column(nullable=false, length=1000) private String reason;
+    @JdbcTypeCode(SqlTypes.DECIMAL)
     @Column(name="corrected_score", precision=12, scale=1) private Double correctedScore;
     @Column(name="attachments_json", columnDefinition="TEXT") private String attachmentsJson;
     @Column(nullable=false, length=32) private String status = "SUBMITTED";
