@@ -111,33 +111,25 @@ async function renderAdminPoints(container) {
   container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--gray-400);">加载积分规则…</div>';
   try {
     const targetMonth = new Date().toISOString().slice(0, 7);
-    const [rules, difficulties, standards, designerTargets, appeals, poProgress, archives, proposals, systemConfigs, monthlyConfigs] = await Promise.all([
+    const [rules, difficulties, appeals, poProgress, proposals, systemConfigs] = await Promise.all([
       apiGet('/points/rules'),
       apiGet('/points/difficulties'),
-      apiGet('/performance/standard'),
-      apiGet('/performance/designer-targets?month=' + encodeURIComponent(targetMonth)),
       apiGet('/point-governance/appeals'),
       apiGet('/point-governance/po/progress'),
-      apiGet('/point-governance/archives'),
       apiGet('/point-program/proposals'), apiGet('/admin/configs'),
-      apiGet('/performance/monthly'),
     ]);
     const ruleList = (Array.isArray(rules) ? rules : []).slice().sort(compareRuleCodes);
     const difficultyList = Array.isArray(difficulties) ? difficulties : [];
-    const standardList = Array.isArray(standards) ? standards : [];
-    const monthList = Array.isArray(monthlyConfigs) ? monthlyConfigs : [];
-    const designerTargetList = Array.isArray(designerTargets) ? designerTargets : [];
-    const configuredStandardIds = new Set(standardList.map(item => String(item.configCode || '')));
-    const availableDesigners = designerTargetList;
     // 复核区只展示待处理异议，已通过/已驳回记录保留在数据库审计链中，不再占用待办列表。
     const appealList = Array.isArray(appeals) ? appeals.filter(item => ['SUBMITTED', 'PLANNER_PROCESSED'].includes(item.status)) : [];
     const poProgressList = Array.isArray(poProgress) ? poProgress : [];
-    const archiveList = Array.isArray(archives) ? archives : [];
     const proposalList = Array.isArray(proposals) ? proposals : [];
     const governanceConfig = Object.fromEntries((systemConfigs?.business || []).filter(x => String(x.configKey || '').startsWith('points.withdrawal.')).map(x => [x.configKey, x.configValue || '']));
     container.innerHTML = `<div class="admin-points-config" style="max-width:1100px;margin:0 auto;">
-      <div style="margin-bottom:18px;"><h2 style="font-size:18px;margin:0 0 4px;">🏅 积分与绩效配置</h2><p style="color:var(--gray-500);font-size:13px;margin:0;">规则修改只影响后续入账，历史积分台账不会重算。</p></div>
-      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>积分规则</h3><button class="btn btn-primary btn-sm" data-emie-onclick="createPointRule()">＋ 新增规则</button></div>${ruleList.length ? ruleList.map((rule, index) => `<div style="padding:16px 0;${index ? 'border-top:1px solid var(--gray-200);' : ''}">
+      <div class="admin-points-page-head" style="margin-bottom:18px;"><div><h2 style="font-size:18px;margin:0 0 4px;">🏅 积分与绩效配置</h2><p style="color:var(--gray-500);font-size:13px;margin:0;">规则修改只影响后续入账，历史积分台账不会重算。</p></div></div>
+      <div class="card admin-point-rules-card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>积分规则</h3><p class="admin-section-hint">共 ${ruleList.length} 条，列表显示 5 条，可滚动查看</p></div><button class="btn btn-primary btn-sm" data-emie-onclick="createPointRule()">＋ 新增规则</button></div>
+        <div class="admin-point-rule-filters"><div class="admin-filter-card"><span class="admin-filter-title">筛选规则</span><input class="form-input" id="adminPointRuleSearch" placeholder="搜索规则编号或说明"><select class="form-select" id="adminPointRuleCategory"><option value="">全部类别</option>${[...new Set(ruleList.map(rule => String(rule.category || '').trim()).filter(Boolean))].sort().map(category => `<option value="${escHtml(category)}">${escHtml(category)}</option>`).join('')}</select><select class="form-select" id="adminPointRuleStatus"><option value="">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select><button class="btn btn-primary btn-sm" data-emie-onclick="filterAdminPointRules()">查询</button><button class="btn btn-outline btn-sm" data-emie-onclick="resetAdminPointRuleFilters()">重置</button></div></div>
+        ${ruleList.length ? `<div class="admin-point-rules-scroll">${ruleList.map((rule, index) => `<div class="admin-point-rule-item" data-rule-code="${escHtml(String(rule.ruleCode || '').toLowerCase())}" data-rule-description="${escHtml(String(rule.description || '').toLowerCase())}" data-rule-category="${escHtml(String(rule.category || ''))}" data-rule-enabled="${rule.enabled === false ? 'disabled' : 'enabled'}" style="${index ? 'border-top:1px solid var(--gray-200);' : ''}">
         <div style="display:grid;grid-template-columns:1.1fr 1fr .8fr .9fr .9fr;gap:10px;align-items:end;">
           <label class="form-label">规则编号<input class="form-input" value="${escHtml(rule.ruleCode || '')}" disabled></label>
           <label class="form-label">类别<input class="form-input" id="pr_category_${index}" value="${escHtml(rule.category || '')}" placeholder="如 A / B / E / S"></label>
@@ -151,38 +143,33 @@ async function renderAdminPoints(container) {
           <button class="btn btn-primary btn-sm" data-emie-onclick="savePointRule('${escHtml(escJsString(rule.ruleCode))}',${index})">保存规则</button>
           <button class="btn btn-danger btn-sm" data-emie-onclick="deletePointRule('${escHtml(escJsString(rule.ruleCode))}')">移除</button>
         </div>
-      </div>`).join('') : '<div class="empty-state">暂无积分规则</div>'}</div>
-      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>设计师本月目标</h3><p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">管理员按月份为每位设计师单独设置目标积分。</p></div><input class="form-input" type="month" id="designerTargetMonth" value="${targetMonth}" data-emie-onchange="loadDesignerTargetMonth(this.value)" style="width:160px;"></div>
-        <div class="table-wrap"><table><thead><tr><th>设计师</th><th>用户 ID</th><th>目标积分</th><th>状态</th><th>操作</th></tr></thead><tbody id="designerTargetBody">${renderDesignerTargetRows(designerTargetList)}</tbody></table></div>
-      </div>
+      </div>`).join('')}</div><div class="admin-point-rule-empty empty-state" hidden>没有符合条件的积分规则</div>` : '<div class="empty-state">暂无积分规则</div>'}</div>
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>难度档位</h3></div><div class="table-wrap"><table><thead><tr><th>档位</th><th>系数</th><th>说明</th><th>启用</th><th>操作</th></tr></thead><tbody>${difficultyList.map((item,index)=>`<tr><td><strong>${escHtml(item.difficultyCode || '-')}</strong></td><td><input class="form-input" type="number" min="0.1" max="10" step="0.1" id="pd_multiplier_${index}" value="${Number(item.multiplier || 1)}"></td><td><input class="form-input" id="pd_desc_${index}" value="${escHtml(item.description || '')}"></td><td><input type="checkbox" id="pd_enabled_${index}" ${item.enabled === false ? '' : 'checked'}></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="savePointDifficulty('${escHtml(escJsString(item.difficultyCode))}',${index})">保存</button></td></tr>`).join('')}</tbody></table></div></div>
-      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>设计师个人绩效配置</h3></div>
-        <p style="font-size:12px;color:var(--gray-500);">仅支持设计师，用于配置个人标准积分与绩效基数。</p>
-        <div class="admin-inline-note" style="margin:14px 0 18px;padding:10px 12px;border:1px dashed #D9D6FF;border-radius:9px;background:#F8F7FF;color:#6258B8;font-size:12px;">设计师入职后会自动出现在下方配置列表，无需手动添加。</div>
-        <div class="table-wrap"><table><thead><tr><th>设计师</th><th>用户 ID</th><th>标准积分</th><th>绩效基数</th><th>说明</th><th>状态</th><th>操作</th></tr></thead><tbody>${standardList.length ? standardList.map((item, index) => { const matched = availableDesigners.find(u => String(u.userId || '') === String(item.configCode || '')); return `<tr><td><strong>${escHtml(matched?.userName || '未命名')}</strong></td><td><input class="form-input" id="sp_code_${index}" value="${escHtml(item.configCode || '')}" ${item.id ? 'disabled' : ''}></td><td><input class="form-input" type="number" min="0" id="sp_points_${index}" value="${Number(item.points || 0)}"></td><td><input class="form-input" type="number" min="0" step="0.01" id="sp_base_${index}" value="${Number(item.performanceBase || 0)}"></td><td><input class="form-input" id="sp_desc_${index}" value="${escHtml(item.description || '')}"></td><td><label class="checkbox-item ${item.enabled === false ? '' : 'checked'}"><input type="checkbox" id="sp_enabled_${index}" ${item.enabled === false ? '' : 'checked'}> 启用</label></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="saveStandardPointConfig(${index})">保存</button></td></tr>`; }).join('') : '<tr><td colspan="7"><div class="empty-state">暂无个人标准积分配置，可点击上方添加</div></td></tr>'}</tbody></table></div>
-      </div>
-      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>月度绩效配置</h3><p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">供单不足标记用于月度归档保护计算；目标积分与系数供排行榜及绩效预览参考。</p></div><div style="display:flex;gap:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="saveMonthlyPerformanceConfig(-1)">＋ 配置当前月</button></div></div>
-        <p style="font-size:12px;color:var(--gray-500);">月度目标与系数用于排行榜及个人绩效预览，最终结果以月度归档为准。</p>
-        <div class="table-wrap"><table><thead><tr><th>月份</th><th>目标积分</th><th>公司销售额（万元）</th><th>手动系数</th><th>供单不足</th><th>操作</th></tr></thead><tbody>${monthList.length ? monthList.map((item, index) => `<tr><td><input class="form-input" type="month" id="mp_month_${index}" value="${escHtml(item.monthKey || '')}" ${item.id ? 'disabled' : ''}></td><td><input class="form-input" type="number" min="0" id="mp_target_${index}" value="${Number(item.targetPoints || 0)}"></td><td><input class="form-input" type="number" min="0" step="0.01" id="mp_sales_${index}" value="${item.salesAmount ?? ''}" placeholder="填写后自动匹配档位"></td><td><input class="form-input" type="number" min="0" step="0.01" id="mp_multiplier_${index}" value="${Number(item.multiplier || 1)}"></td><td><input type="checkbox" id="mp_shortage_${index}" ${item.supplyShortage ? 'checked' : ''}></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="saveMonthlyPerformanceConfig(${index})">保存</button></td></tr>`).join('') : '<tr><td colspan="6"><div class="empty-state">暂无月度配置，可点击右上角配置当前月</div></td></tr>'}</tbody></table></div>
-      </div>
-      ${false && appealList.length ? '<div></div>' : ''}
-      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>手动调账</h3><p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">管理员主动补分/扣分，必填备注并记入调账台账，展示在成员积分页。</p></div><button class="btn btn-primary btn-sm" data-emie-onclick="openManualAdjustmentModal()">＋ 手动调账</button></div></div>
-      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>PO 月度积分</h3><button class="btn btn-outline btn-sm" data-emie-onclick="createPoPointProject()">＋ 新增 PO 产品</button></div>${poProgressList.length ? `<div class="table-wrap"><table><thead><tr><th>月份</th><th>项目ID</th><th>进展</th><th>状态</th><th>操作</th></tr></thead><tbody>${poProgressList.map(item => `<tr><td>${escHtml(item.monthKey || '-')}</td><td>#${Number(item.poProjectId || 0)}</td><td>${escHtml(item.summary || '-')}</td><td>${escHtml(item.status || '-')}</td><td>${item.status === 'SUBMITTED' ? `<button class="btn btn-success btn-sm" data-emie-onclick="reviewPoProgress(${Number(item.id)},true)">确认入账</button> <button class="btn btn-danger btn-sm" data-emie-onclick="reviewPoProgress(${Number(item.id)},false)">驳回</button>` : '-'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无 PO 月度进展</div>'}</div>
-      <div class="card governance-card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>接单治理</h3></div><div class="governance-section"><div class="card-header"><h3>成员接单资格</h3><button class="btn btn-outline btn-sm" data-emie-onclick="configureMarketEligibility()">暂停/恢复接单资格</button></div><p style="font-size:12px;color:var(--gray-500);">管理员可手动暂停或恢复成员的接单资格。</p></div>
-      <div class="governance-section" style="margin-top:18px;padding-top:18px;border-top:1px solid #EEF0F5;"><div class="card-header"><h3>退单处罚规则</h3><button class="btn btn-primary btn-sm" data-emie-onclick="saveWithdrawalGovernanceConfig()">保存规则</button></div></div><p style="font-size:12px;color:var(--gray-500);">按任务基础分比例扣分；首次超时退单按基础比例计算，后续每次按累计次数递增。</p><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;"><label class="form-label">免罚时长（分钟）<input class="form-input" type="number" min="0" id="withdraw_free_minutes" value="${Number(governanceConfig['points.withdrawal.free_minutes'] || 60)}"></label><label class="form-label">暂停阈值（次）<input class="form-input" type="number" min="1" id="withdraw_suspend_count" value="${Number(governanceConfig['points.withdrawal.suspend_count'] || 3)}"></label><label class="form-label">每次扣分比例（%）<input class="form-input" type="number" min="0" max="100" id="withdraw_penalty_rate" value="${Number(governanceConfig['points.withdrawal.penalty_rate'] || 10)}"></label><label class="form-label">暂停天数<input class="form-input" type="number" min="1" id="withdraw_suspend_days" value="${Number(governanceConfig['points.withdrawal.suspend_days'] || 7)}"></label></div></div>
-      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>自主开发提案</h3></div>${proposalList.length?proposalList.map(item=>`<div style="padding:10px 0;border-bottom:1px solid var(--gray-100);"><strong>${escHtml(item.title)}</strong> · ${escHtml(item.applicantName)} · ${escHtml(item.status)} ${item.status==='SUBMITTED'?`<button class="btn btn-success btn-sm" data-emie-onclick="reviewSelfProposal(${item.id},true)">立项</button> <button class="btn btn-danger btn-sm" data-emie-onclick="reviewSelfProposal(${item.id},false)">驳回</button>`:''}<div style="font-size:12px;color:var(--gray-500);">${escHtml(item.description||'')}</div>${renderProposalDesignFiles(item.referenceImagesJson)}</div>`).join(''):'<div class="empty-state">暂无提案</div>'}</div>
-      <div class="card" style="padding:16px;"><div class="card-header"><h3>月度积分归档</h3><div style="display:flex;gap:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="preparePointArchive()">自动生成草稿</button><button class="btn btn-outline btn-sm" data-emie-onclick="savePointArchiveDraft()">手工调整草稿</button><button class="btn btn-primary btn-sm" data-emie-onclick="archivePointMonth()">归档指定月份</button></div></div>${archiveList.length ? `<div class="table-wrap"><table><thead><tr><th>月份</th><th>用户</th><th>获得 / 目标 / 供单</th><th>保护</th><th>季度均值</th><th>状态</th></tr></thead><tbody>${archiveList.map(item => `<tr><td>${escHtml(item.monthKey || '-')}</td><td>${escHtml(item.userId || '-')}</td><td>${Number(item.earnedPoints || 0)} / ${Number(item.targetPoints || 0)} / ${Number(item.suppliedPoints || 0)}</td><td>${item.insufficientSupplyProtection ? '已启用' : '否'}</td><td>${Number(item.quarterlyAveragePoints || 0)}</td><td>${item.status === 'ARCHIVED' ? '已归档' : '草稿'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无月度归档草稿，可自动生成后统一归档。</div>'}</div>
     </div>`;
-    EMIE.adminState.pointStandards = standardList;
-    EMIE.adminState.pointMonths = monthList;
-    document.querySelectorAll('[id^="sp_enabled_"]').forEach((checkbox, index) => {
-      checkbox.addEventListener('change', () => saveStandardPointConfig(index));
-    });
-    EMIE.adminState.designerTargets = designerTargetList;
     const appealCard = [...container.querySelectorAll('.card')].find(card => card.textContent.includes('积分异议复核'));
     const appealRows = appealCard ? appealCard.querySelectorAll('tbody tr') : [];
     appealList.forEach((item, index) => { const descriptionCell = appealRows[index]?.children?.[3]; if (descriptionCell && item.attachmentsJson) descriptionCell.insertAdjacentHTML('beforeend', renderAppealImages(item.attachmentsJson)); });
   } catch (e) { container.innerHTML = `<div class="empty">积分规则加载失败：${escHtml(e.message || '')}</div>`; }
+}
+
+function filterAdminPointRules() {
+  const search = String(document.getElementById('adminPointRuleSearch')?.value || '').trim().toLowerCase();
+  const category = String(document.getElementById('adminPointRuleCategory')?.value || '');
+  const status = String(document.getElementById('adminPointRuleStatus')?.value || '');
+  let visible = 0;
+  document.querySelectorAll('.admin-point-rule-item').forEach(item => {
+    const matches = (!search || item.dataset.ruleCode.includes(search) || item.dataset.ruleDescription.includes(search)) &&
+      (!category || item.dataset.ruleCategory === category) && (!status || item.dataset.ruleEnabled === status);
+    item.hidden = !matches;
+    if (matches) visible++;
+  });
+  const empty = document.querySelector('.admin-point-rule-empty');
+  if (empty) empty.hidden = visible > 0;
+}
+
+function resetAdminPointRuleFilters() {
+  ['adminPointRuleSearch', 'adminPointRuleCategory', 'adminPointRuleStatus'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  filterAdminPointRules();
 }
 
 async function saveWithdrawalGovernanceConfig() {
@@ -381,7 +368,16 @@ async function submitManualAdjustment(button) {
 
 async function createPoPointProject() {
   if (document.getElementById('poPointProjectModal')) return;
-  const designers = EMIE.adminState.designerTargets || [];
+  let designers = Array.isArray(EMIE.adminState.designerTargets) ? EMIE.adminState.designerTargets : [];
+  if (!designers.length) {
+    try {
+      const rows = await apiGet('/performance/designer-targets?month=' + encodeURIComponent(new Date().toISOString().slice(0, 7)));
+      designers = Array.isArray(rows) ? rows : [];
+      EMIE.adminState.designerTargets = designers;
+    } catch (error) {
+      designers = [];
+    }
+  }
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'poPointProjectModal';
@@ -493,6 +489,8 @@ EMIE.registerActions({
   saveScoringWeights,
   resetScoringWeights,
   renderAdminPoints,
+  filterAdminPointRules,
+  resetAdminPointRuleFilters,
   savePointRule,
   createPointRule, deletePointRule, loadDesignerTargetMonth, saveDesignerTarget,
   savePointDifficulty,
@@ -521,6 +519,8 @@ EMIE.registerModule('adminScoring', {
   saveScoringWeights,
   resetScoringWeights,
   renderAdminPoints,
+  filterAdminPointRules,
+  resetAdminPointRuleFilters,
   savePointRule,
   createPointRule, deletePointRule, loadDesignerTargetMonth, saveDesignerTarget,
   savePointDifficulty,
