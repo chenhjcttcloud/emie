@@ -1165,4 +1165,4 @@
 - `PointAppealService.adminReview` 现明确拒绝负数更正分数，保持业务规则“更正后的分数不能为负数”。
 - `PointGovernanceServicesTest` 已改为断言负数抛出 `IllegalArgumentException`，且不创建调账记录。
 - 本地 `./mvnw -B clean package` 通过：231 项测试全部通过；`./scripts/test-update.sh` 通过，测试容器和浏览器冒烟检查正常。
-- 当前工作区包含本次修复及静态资源版本号更新，准备提交、推送两个远端并发布生产。
+- 提交 `5751556950a2b56a59538e3f8cda45522d52cd29` 已推送 Gitee 和 GitHub，并已发布生产；生产预检显示运行 SHA 一致、版本 `1.6.8`、公网 HTTP 200。
