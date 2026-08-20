@@ -1160,3 +1160,9 @@
 - 验证：Java 21 `clean package` 成功，121 项测试通过，`git diff --check` 通过；提交 `27818b0ed699175a96710d3b16419907b37fb900` 已推送并部署生产。
 - 说明：Worker 当前在一个事务中依次写入 `processing` 和最终状态，因此管理概览可能观察不到短暂的处理中数量；这不再影响任务领取和实际同步。
 - 生产：版本 `1.2.9`，数据库备份 `/home/emie/emie-deploy-backups/20260807_171158`；容器 running、restart=0、OOM=false，健康接口和公网 HTTP 200，启动后 Worker 已成功领取 20 条待处理任务。
+# 2026-08-20 积分异议负数校验修复（待发布）
+
+- `PointAppealService.adminReview` 现明确拒绝负数更正分数，保持业务规则“更正后的分数不能为负数”。
+- `PointGovernanceServicesTest` 已改为断言负数抛出 `IllegalArgumentException`，且不创建调账记录。
+- 本地 `./mvnw -B clean package` 通过：231 项测试全部通过；`./scripts/test-update.sh` 通过，测试容器和浏览器冒烟检查正常。
+- 当前工作区包含本次修复及静态资源版本号更新，准备提交、推送两个远端并发布生产。

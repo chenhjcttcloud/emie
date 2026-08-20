@@ -22,7 +22,7 @@ class PointGovernanceServicesTest {
   PointAppeal processed=service.plannerProcess(1L,"APPROVE","规则归类有误",session("planner-1","planner"));assertEquals("PLANNER_PROCESSED",processed.getStatus());assertNotNull(processed.getPlannerProcessedAt());
   PointAppeal reviewed=service.adminReview(1L,"REJECT","维持原积分",null,session("admin-1","admin"));assertEquals("REJECTED",reviewed.getStatus());assertNotNull(reviewed.getAdminReviewedAt());
   PointAppeal approved=new PointAppeal();approved.setId(2L);approved.setApplicantUserId("designer-1");approved.setStatus("PLANNER_PROCESSED");when(appeals.findById(2L)).thenReturn(Optional.of(approved));when(adjustments.findBySourceTypeAndSourceId("APPEAL",2L)).thenReturn(Optional.empty());
-  assertEquals("APPROVED",service.adminReview(2L,"APPROVE","补记漏算积分",-5,session("admin-1","admin")).getStatus());verify(adjustments).save(argThat(x->x.getPoints()==-5&&"APPEAL".equals(x.getSourceType())));
+  IllegalArgumentException negativeScore=assertThrows(IllegalArgumentException.class,()->service.adminReview(2L,"APPROVE","补记漏算积分",-5,session("admin-1","admin")));assertEquals("更正后的分数不能为负数",negativeScore.getMessage());verify(adjustments,never()).save(any());
  }
 
  @Test void approvedAppealBlocksResubmissionForSameLedger(){

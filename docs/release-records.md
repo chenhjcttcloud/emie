@@ -1584,3 +1584,9 @@
 最终结论：
 
 - 快速切换页面渲染竞态修复已成功部署生产。
+# 2026-08-20 积分异议禁止负数修复（待发布）
+
+- 修复内容：管理终审拒绝负数更正分数；对应单元测试验证异常和不产生调账记录。
+- 变更文件：`PointAppealService.java`、`PointGovernanceServicesTest.java`、静态资源版本号及交接记录。
+- 发布前验证：`./mvnw -B clean package` 通过，231 项测试全部通过；`./scripts/test-update.sh` 通过。
+- 推送与生产状态：待本次发布完成后补充提交 SHA、两个远端 SHA、生产备份和公网验证结果。
