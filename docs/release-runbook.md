@@ -16,7 +16,9 @@
 ## 2. 当前发布基线
 
 - 代码托管：Gitee `https://gitee.com/Lucascloud/emie`
-- 当前业务分支：`project_manager_system`
+- 本地开发/生产构建分支：`project_manager_system`
+- Gitee 发布分支：`master`
+- GitHub 发布分支：`main`
 - 目标生产应用：Spring Boot 3.2、Java 21（当前生产切换前仍为 Java 17）
 - 生产数据库：MySQL
 - 生产运行方式：Docker Compose
@@ -25,7 +27,7 @@
 - 应用端口：`8080`
 - 预览服务端口：仅监听 `127.0.0.1:3000`
 
-注意：远端默认分支目前是 `master`，实际业务代码位于 `project_manager_system`。未完成分支治理前，所有推送和部署命令必须显式指定业务分支，禁止依赖默认分支。
+注意：推送时必须进行分支映射：本地 `project_manager_system` → Gitee `master`、GitHub `main`。生产发布前以 Gitee `master` 校验精确提交。
 
 ## 3. 发布权限和安全边界
 
@@ -53,7 +55,7 @@
 ```bash
 git fetch emie
 git status --short --branch
-git rev-list --left-right --count HEAD...emie/project_manager_system
+git rev-list --left-right --count HEAD...emie/master
 ```
 
 推送前必须确认不存在未处理的远端新提交。若分支已分叉，先检查差异，不直接覆盖远端。
@@ -91,7 +93,7 @@ git diff
 ./scripts/publish.sh --all          # 先推送仓库，再执行生产原子发布
 ```
 
-发布脚本会拒绝非 `project_manager_system` 分支和脏工作区，不会自动提交未经确认的改动。生产发布仍由 `release-production.sh` 完成候选容器预检、数据库备份、原子切换、健康检查和失败回滚；本地测试脚本与发布脚本互不调用。
+发布脚本会拒绝非 `project_manager_system` 分支和脏工作区，并将其映射推送到 Gitee `master`、GitHub `main`，不会自动提交未经确认的改动。生产发布仍由 `release-production.sh` 完成候选容器预检、数据库备份、原子切换、健康检查和失败回滚；本地测试脚本与发布脚本互不调用。
 
 只暂存明确属于本次发布的文件：
 
@@ -101,14 +103,16 @@ git diff --cached --check
 git diff --cached --stat
 git diff --cached
 git commit -m "<类型>: <清晰说明>"
-git push emie HEAD:project_manager_system
+git push emie HEAD:master
+git push github HEAD:main
 ```
 
 推送后执行：
 
 ```bash
 git rev-parse HEAD
-git ls-remote emie refs/heads/project_manager_system
+git ls-remote emie refs/heads/master
+git ls-remote github refs/heads/main
 ```
 
 两个提交号必须一致，并把提交号写入发布记录。
@@ -169,7 +173,7 @@ free -h
 脚本执行顺序：
 
 1. 读取被 Git 忽略的 `.server.production.local.env`，要求 `SERVER_ROLE=production-local`，验证 SSH、sudo、当前容器、本机健康接口和外网 HTTPS；
-2. 要求当前分支为 `project_manager_system`、工作区干净，且本地完整 SHA 与 Gitee 业务分支一致；
+2. 要求当前分支为 `project_manager_system`、工作区干净，且本地完整 SHA 与 Gitee `master` 一致；
 3. 执行 `./mvnw clean package`，记录本地 JAR SHA-256；
 4. 优先以服务器当前版本化 JAR 作为 rsync 基础，增量上传新 JAR 并再次校验 SHA-256；
 5. 服务器生成并校验数据库备份；首次迁移到版本化 JAR 时额外备份旧容器内 JAR；

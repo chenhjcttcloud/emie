@@ -2,9 +2,9 @@ name: Java 21 CI
 
 on:
   push:
-    branches: [project_manager_system]
+    branches: [main]
   pull_request:
-    branches: [project_manager_system]
+    branches: [main]
 
 permissions:
   contents: read

@@ -17,14 +17,14 @@
 - 技术栈：Java 21、Spring Boot 3.2、Maven、MySQL、原生 HTML/CSS/JavaScript。
 - 本地构建入口：`./mvnw`。
 - 生产运行方式：Docker Compose。
-- 业务分支：`project_manager_system`。
+- 本地开发/生产构建分支：`project_manager_system`；Gitee 发布分支：`master`；GitHub 发布分支：`main`。
 - Git 远端：`emie`。
 - 生产 Spring profile：`prod`。
 - 生产数据库结构策略：`spring.jpa.hibernate.ddl-auto=validate`。
 - 应用容器：`emie-app`。
 - 演示文稿预览容器：`emie-preview-converter`。
 
-远端默认分支目前不是实际业务发布分支。所有拉取、推送和部署命令必须显式指定 `project_manager_system`，不得依赖远端默认分支。
+所有远端操作必须显式指定目标分支：Gitee `emie` 使用 `master`，GitHub `github` 使用 `main`；生产发布在本地 `project_manager_system` 分支完成构建，并校验 Gitee `master` 与本地提交一致。
 
 ## 3. 开始工作前
 
@@ -33,7 +33,7 @@
 ```bash
 git status --short --branch
 git fetch emie
-git rev-list --left-right --count HEAD...emie/project_manager_system
+git rev-list --left-right --count HEAD...emie/master
 ```
 
 要求：
@@ -125,14 +125,16 @@ git diff --cached
 6. 推送必须显式指定远端和业务分支：
 
 ```bash
-git push emie HEAD:project_manager_system
+git push emie HEAD:master
+git push github HEAD:main
 ```
 
 7. 推送后核对本地与远端 SHA：
 
 ```bash
 git rev-parse HEAD
-git ls-remote emie refs/heads/project_manager_system
+git ls-remote emie refs/heads/master
+git ls-remote github refs/heads/main
 ```
 
 8. 将提交 SHA、推送时间和结果写入 `docs/release-records.md`。

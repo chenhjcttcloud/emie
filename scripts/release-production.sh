@@ -136,7 +136,7 @@ printf "阶段 2/5：核对业务分支和精确提交...\n"
   { echo "工作区存在未提交改动，禁止生产发布。" >&2; exit 1; }
 git fetch emie
 target_sha="$(git rev-parse HEAD)"
-remote_sha="$(git ls-remote emie refs/heads/project_manager_system | awk '{print $1}')"
+remote_sha="$(git ls-remote emie refs/heads/master | awk '{print $1}')"
 [[ "$target_sha" == "$remote_sha" ]] ||
   { echo "本地提交与远端业务分支不一致，禁止生产发布。" >&2; exit 1; }
 if [[ "$target_sha" == "$remote_current_sha" ]]; then

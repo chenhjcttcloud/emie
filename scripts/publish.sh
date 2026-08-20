@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 标准发布编排：先将已提交代码推送仓库，再按需调用生产原子发布脚本。
+# 标准发布编排：将本地业务提交映射推送到 Gitee master 和 GitHub main，再按需调用生产原子发布脚本。
 set -Eeuo pipefail
 
 cd "$(dirname "$0")/.."
@@ -11,14 +11,16 @@ branch="$(git branch --show-current)"
 target="${1:---repository}"
 case "$target" in
   --repository)
-    git push emie "$branch"
-    printf 'repository_pushed=%s\n' "$(git rev-parse HEAD)"
+    git push emie "$branch:master"
+    git push github "$branch:main"
+    printf 'repository_pushed=%s gitee=master github=main\n' "$(git rev-parse HEAD)"
     ;;
   --production)
     "$ROOT/scripts/release-production.sh"
     ;;
   --all)
-    git push emie "$branch"
+    git push emie "$branch:master"
+    git push github "$branch:main"
     "$ROOT/scripts/release-production.sh"
     ;;
   *) echo '用法：./scripts/publish.sh [--repository|--production|--all]' >&2; exit 2 ;;
