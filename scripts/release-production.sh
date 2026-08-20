@@ -130,8 +130,8 @@ if [[ "$PREFLIGHT_ONLY" == "true" ]]; then
 fi
 
 printf "阶段 2/5：核对业务分支和精确提交...\n"
-[[ "$(git branch --show-current)" == "project_manager_system" ]] ||
-  { echo "当前不是 project_manager_system 分支。" >&2; exit 1; }
+[[ "$(git branch --show-current)" == "master" ]] ||
+  { echo "当前不是 master 分支。" >&2; exit 1; }
 [[ -z "$(git status --porcelain)" ]] ||
   { echo "工作区存在未提交改动，禁止生产发布。" >&2; exit 1; }
 git fetch emie

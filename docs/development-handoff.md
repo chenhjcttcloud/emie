@@ -1168,7 +1168,7 @@
 - 提交 `5751556950a2b56a59538e3f8cda45522d52cd29` 已推送 Gitee 和 GitHub，并已发布生产；生产预检显示运行 SHA 一致、版本 `1.6.8`、公网 HTTP 200。
 # 2026-08-20 发布分支映射规则统一（待提交）
 
-- 固定规则：本地生产构建仍使用 `project_manager_system`；Gitee 远端 `emie` 只接收 `master`；GitHub 远端 `github` 只接收 `main`。
+- 固定规则：本地生产构建改用 `master`；Gitee 远端 `emie` 只接收 `master`；GitHub 远端 `github` 只接收 `main`。
 - `scripts/publish.sh` 已改为将本地业务分支映射推送到两个目标分支；`scripts/release-production.sh` 改为校验 Gitee `master`。
 - GitHub Actions 已改为仅监听 `main` 的 push/pull_request，避免旧业务分支触发 CI。
 - 本轮只修改规则和脚本，尚未提交、推送或改变远端分支内容。

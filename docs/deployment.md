@@ -12,7 +12,7 @@
 
 - Gitee（远端 `emie`）只推送 `master`；
 - GitHub（远端 `github`）只推送 `main`；
-- 生产发布前使用业务分支 `project_manager_system` 进行构建和验证，发布完成后再将同一提交同步到上述两个主分支。
+- 生产发布前使用本地 `master` 分支进行构建和验证，再将同一提交推送到 Gitee `master` 和 GitHub `main`。
 
 示例：
 

@@ -17,14 +17,14 @@
 - 技术栈：Java 21、Spring Boot 3.2、Maven、MySQL、原生 HTML/CSS/JavaScript。
 - 本地构建入口：`./mvnw`。
 - 生产运行方式：Docker Compose。
-- 本地开发/生产构建分支：`project_manager_system`；Gitee 发布分支：`master`；GitHub 发布分支：`main`。
+- 本地开发/生产构建分支：`master`；Gitee 发布分支：`master`；GitHub 发布分支：`main`。
 - Git 远端：`emie`。
 - 生产 Spring profile：`prod`。
 - 生产数据库结构策略：`spring.jpa.hibernate.ddl-auto=validate`。
 - 应用容器：`emie-app`。
 - 演示文稿预览容器：`emie-preview-converter`。
 
-所有远端操作必须显式指定目标分支：Gitee `emie` 使用 `master`，GitHub `github` 使用 `main`；生产发布在本地 `project_manager_system` 分支完成构建，并校验 Gitee `master` 与本地提交一致。
+所有远端操作必须显式指定目标分支：Gitee `emie` 使用 `master`，GitHub `github` 使用 `main`；生产发布在本地 `master` 分支完成构建，并校验 Gitee `master` 与本地提交一致。
 
 ## 3. 开始工作前
 

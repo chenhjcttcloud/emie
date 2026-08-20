@@ -5,7 +5,7 @@ set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd -P)"
 branch="$(git branch --show-current)"
-[[ "$branch" == "project_manager_system" ]] || { echo '必须在 project_manager_system 分支发布。' >&2; exit 1; }
+[[ "$branch" == "master" ]] || { echo '必须在 master 分支发布。' >&2; exit 1; }
 [[ -z "$(git status --porcelain)" ]] || { echo '工作区有未提交改动，请先提交后再发布。' >&2; exit 1; }
 
 target="${1:---repository}"
