@@ -25,6 +25,7 @@
 ## 开发与仓库
 
 - [开发指南](development.md)：环境变量、本地启动、代码结构、构建和调试。
+- [MacBook Air 异地开发指南](mac-remote-development.md)：换设备接手、测试容器、Bug 修复和双远端同步。
 - [开发交接状态](development-handoff.md)：当前进度、验证结果、运行状态、工作区风险和下一步。
 - [设备迁移交接](device-migration-handoff.md)：当前设备基线、本机数据清单、加密迁移和新设备验收步骤。
 - [仓库目录规范](repository-structure.md)：目录职责、Git 跟踪边界和整理检查。
