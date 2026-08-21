@@ -30,6 +30,28 @@ DELETE FROM point_task_proposals;
 DROP TABLE point_task_proposals;
 SET FOREIGN_KEY_CHECKS = 1;
 
-ALTER TABLE sub_tasks
-  DROP COLUMN IF EXISTS self_initiated,
-  DROP COLUMN IF EXISTS self_initiated_approved;
+SET @drop_self_initiated = (
+  SELECT IF(COUNT(*) > 0,
+    'ALTER TABLE sub_tasks DROP COLUMN self_initiated',
+    'SELECT 1')
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'sub_tasks'
+    AND column_name = 'self_initiated'
+);
+PREPARE drop_self_initiated_stmt FROM @drop_self_initiated;
+EXECUTE drop_self_initiated_stmt;
+DEALLOCATE PREPARE drop_self_initiated_stmt;
+
+SET @drop_self_initiated_approved = (
+  SELECT IF(COUNT(*) > 0,
+    'ALTER TABLE sub_tasks DROP COLUMN self_initiated_approved',
+    'SELECT 1')
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'sub_tasks'
+    AND column_name = 'self_initiated_approved'
+);
+PREPARE drop_self_initiated_approved_stmt FROM @drop_self_initiated_approved;
+EXECUTE drop_self_initiated_approved_stmt;
+DEALLOCATE PREPARE drop_self_initiated_approved_stmt;
