@@ -5,11 +5,13 @@ CREATE TABLE IF NOT EXISTS point_task_proposals (
   project_id BIGINT NULL,
   created_task_id BIGINT NULL
 );
+DROP TEMPORARY TABLE IF EXISTS retired_self_proposal_projects;
 CREATE TEMPORARY TABLE retired_self_proposal_projects AS
 SELECT DISTINCT project_id AS id
 FROM point_task_proposals
 WHERE project_id IS NOT NULL;
 
+DROP TEMPORARY TABLE IF EXISTS retired_self_proposal_tasks;
 CREATE TEMPORARY TABLE retired_self_proposal_tasks AS
 SELECT DISTINCT created_task_id AS id
 FROM point_task_proposals
@@ -29,5 +31,5 @@ DROP TABLE point_task_proposals;
 SET FOREIGN_KEY_CHECKS = 1;
 
 ALTER TABLE sub_tasks
-  DROP COLUMN self_initiated,
-  DROP COLUMN self_initiated_approved;
+  DROP COLUMN IF EXISTS self_initiated,
+  DROP COLUMN IF EXISTS self_initiated_approved;
