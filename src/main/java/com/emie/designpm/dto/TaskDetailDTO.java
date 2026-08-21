@@ -30,8 +30,6 @@ public class TaskDetailDTO {
     private String collaboratorAllocationsJson;
     private String milestoneMonth;
     private String assignmentReason;
-    private boolean selfInitiated;
-    private boolean selfInitiatedApproved;
     private Boolean countInPerformanceSnapshot;
     private String requiredSkillTagsJson;
     private String allocationStatus;

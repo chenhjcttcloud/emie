@@ -271,7 +271,6 @@ async function submitAddSubTask(pid) {
     }));
   } catch (_) { showError('collaboratorAllocationsText', '格式应为 用户ID:比例，多个用逗号分隔'); return; }
   delete data.collaboratorAllocationsText;
-  data.selfInitiated = data.selfInitiated === 'true';
   let hasErr = false;
 
   if (!data.name) { showError('name', '请填写子任务名称'); hasErr = true; }

@@ -66,8 +66,6 @@ public class SubTask {
 
     @Column(length = 500)
     private String assignmentReason;
-    @Column(nullable = false) private boolean selfInitiated = false;
-    @Column(nullable = false) private boolean selfInitiatedApproved = false;
     private Boolean countInPerformanceSnapshot;
 
     /** 接单所需能力标签，JSON 字符串数组。 */

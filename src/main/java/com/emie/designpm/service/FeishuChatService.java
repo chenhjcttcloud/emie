@@ -25,7 +25,7 @@ public class FeishuChatService {
 
     public FeishuChatService(SystemConfigRepository configs) { this.configs = configs; }
 
-    public boolean enabled() { return !cfg("feishu.appId").isBlank() && !cfg("feishu.appSecret").isBlank(); }
+    public boolean enabled() { return !cfg("feishu.ssoAppId").isBlank() && !cfg("feishu.ssoAppSecret").isBlank(); }
 
     public String createChat(String name, Collection<String> openIds) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
@@ -62,7 +62,7 @@ public class FeishuChatService {
 
     private synchronized String token() throws Exception {
         if (cachedToken != null && tokenExpiresAt > System.currentTimeMillis() + 60_000) return cachedToken;
-        String body = json.writeValueAsString(Map.of("app_id", cfg("feishu.appId"), "app_secret", cfg("feishu.appSecret")));
+        String body = json.writeValueAsString(Map.of("app_id", cfg("feishu.ssoAppId"), "app_secret", cfg("feishu.ssoAppSecret")));
         HttpRequest request = HttpRequest.newBuilder(URI.create(API + "/auth/v3/tenant_access_token/internal")).timeout(Duration.ofSeconds(15)).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
         JsonNode root = json.readTree(http.send(request, HttpResponse.BodyHandlers.ofString()).body());
         if (root.path("code").asInt(0) != 0) throw new IllegalStateException("获取飞书访问令牌失败：" + root.path("msg").asText());

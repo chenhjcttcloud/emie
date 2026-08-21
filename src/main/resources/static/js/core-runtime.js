@@ -66,6 +66,11 @@ EMIE.dashboardState = Object.assign({
   designerTaskCache: [],
   taskProjectsCache: [],
 }, EMIE.dashboardState || {});
+
+EMIE.materialState = Object.assign({
+  items: [],
+}, EMIE.materialState || {});
+
 EMIE.projectState = Object.assign({
   createRefImages: [],
   createAttachments: [],
@@ -81,6 +86,8 @@ EMIE.projectState = Object.assign({
   editProjectAttachments: [],
   rejectionImages: [],
   rejectionAttachments: [],
+  materialRefImages: [],
+  materialAttachments: [],
   createProjectType: 'channel_custom',
 }, EMIE.projectState || {});
 EMIE.adminState = Object.assign({

@@ -7,7 +7,6 @@ import com.emie.designpm.service.NotificationBroadcastJobService;
 import com.emie.designpm.service.NotificationTestService;
 import com.emie.designpm.service.NotificationRetryOperations;
 import com.emie.designpm.service.PermissionManagementService;
-import com.emie.designpm.service.PermissionGovernanceService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.CacheControl;
 import org.springframework.web.bind.annotation.*;
@@ -30,19 +29,16 @@ public class AdminController {
     private final NotificationBroadcastJobService notificationBroadcastJobService;
     private final NotificationRetryOperations notificationRetryService;
     private final PermissionManagementService permissionManagementService;
-    private final PermissionGovernanceService permissionGovernanceService;
 
     public AdminController(AdminService adminService, NotificationTestService notificationTestService,
                            NotificationBroadcastJobService notificationBroadcastJobService,
                            NotificationRetryOperations notificationRetryService,
-                           PermissionManagementService permissionManagementService,
-                           PermissionGovernanceService permissionGovernanceService) {
+                           PermissionManagementService permissionManagementService) {
         this.adminService = adminService;
         this.notificationTestService = notificationTestService;
         this.notificationBroadcastJobService = notificationBroadcastJobService;
         this.notificationRetryService = notificationRetryService;
         this.permissionManagementService = permissionManagementService;
-        this.permissionGovernanceService = permissionGovernanceService;
     }
 
     // ==================== 公开配置 ====================
@@ -329,53 +325,6 @@ public class AdminController {
         try {
             permissionManagementService.deleteRole(id, permissionActor(token, reason, request));
             return ResponseEntity.ok(Map.of("message", "角色已删除"));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    @GetMapping("/permissions/history")
-    public ResponseEntity<List<Map<String, Object>>> permissionHistory(
-            @RequestParam(required = false) String role) {
-        return ResponseEntity.ok(permissionGovernanceService.history(role));
-    }
-
-    @GetMapping("/permissions/preview")
-    public ResponseEntity<?> permissionPreview(@RequestParam String userId) {
-        try {
-            return ResponseEntity.ok(permissionGovernanceService.previewUser(userId));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    @PostMapping("/permissions/simulate")
-    public ResponseEntity<?> simulatePermission(@RequestBody Map<String, Object> body) {
-        try {
-            String userId = Objects.toString(body.get("userId"), "");
-            String permission = Objects.toString(body.get("permission"), "");
-            Long projectId = body.get("projectId") == null || body.get("projectId").toString().isBlank()
-                    ? null : Long.valueOf(body.get("projectId").toString());
-            return ResponseEntity.ok(permissionGovernanceService.simulate(userId, permission, projectId));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    @GetMapping("/permissions/anomalies")
-    public ResponseEntity<List<Map<String, Object>>> permissionAnomalies() {
-        return ResponseEntity.ok(permissionGovernanceService.anomalies());
-    }
-
-    @PostMapping("/roles/{id}/rollback")
-    public ResponseEntity<?> rollbackRole(@PathVariable Long id,
-                                          @RequestBody Map<String, Object> body,
-                                          @RequestHeader("X-Auth-Token") String token,
-                                          HttpServletRequest request) {
-        try {
-            Long auditId = Long.valueOf(Objects.toString(body.get("auditId"), ""));
-            return ResponseEntity.ok(permissionGovernanceService.rollback(id, auditId,
-                    permissionActor(token, Objects.toString(body.get("reason"), ""), request)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

@@ -2,9 +2,6 @@ package com.emie.designpm.controller;
 import com.emie.designpm.service.PointProgramOperationsService;import jakarta.servlet.http.HttpServletRequest;import org.springframework.http.*;import org.springframework.web.bind.annotation.*;import java.util.*;
 @RestController @RequestMapping("/api/point-program") public class PointProgramOperationsController{
  private final PointProgramOperationsService service;public PointProgramOperationsController(PointProgramOperationsService s){service=s;}
- @GetMapping("/proposals")ResponseEntity<?>proposals(HttpServletRequest r){return call(()->service.proposals(session(r)));}
- @PostMapping("/proposals")ResponseEntity<?>submit(@RequestBody Map<String,Object>b,HttpServletRequest r){return call(()->service.submitProposal(str(b,"title"),str(b,"description"),str(b,"referenceImagesJson"),str(b,"plannedDate"),session(r)));}
- @PostMapping("/proposals/{id}/review")ResponseEntity<?>review(@PathVariable Long id,@RequestBody Map<String,Object>b,HttpServletRequest r){return call(()->service.reviewProposal(id,bool(b,"approve"),str(b,"comment"),session(r)));}
  @GetMapping("/forecasts")ResponseEntity<?>forecasts(HttpServletRequest r){return call(()->service.forecasts(session(r)));}
  @PostMapping("/forecasts")ResponseEntity<?>save(@RequestBody Map<String,Object>b,HttpServletRequest r){return call(()->service.saveForecast(b.get("id") instanceof Number n?n.longValue():null,str(b,"monthKey"),str(b,"title"),str(b,"description"),str(b,"pointRuleCode"),b.get("estimatedCount") instanceof Number n?n.intValue():null,session(r)));}
  @PostMapping("/forecasts/{id}/publish")ResponseEntity<?>publish(@PathVariable Long id,HttpServletRequest r){return call(()->service.publish(id,session(r)));}

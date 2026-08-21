@@ -114,9 +114,8 @@ public class DepartmentController {
     /** 部门负责人必须与部门关联角色一致；管理员可跨部门担任负责人。 */
     private boolean isValidHeadRole(String departmentRole, String headUserId) {
         if (headUserId == null || headUserId.isBlank()) return true;
-        if (departmentRole == null || departmentRole.isBlank()) return false;
         User user = userService.getUserByUserId(headUserId);
-        return user != null && (departmentRole.equals(user.getRole()) || "admin".equals(user.getRole()));
+        return user != null && !"admin".equals(user.getRole());
     }
 
     /** 删除部门 */

@@ -1199,8 +1199,6 @@ public class ProjectController {
         dto.setCollaboratorAllocationsJson(t.getCollaboratorAllocationsJson());
         dto.setMilestoneMonth(t.getMilestoneMonth());
         dto.setAssignmentReason(t.getAssignmentReason());
-        dto.setSelfInitiated(t.isSelfInitiated());
-        dto.setSelfInitiatedApproved(t.isSelfInitiatedApproved());
         dto.setCountInPerformanceSnapshot(t.getCountInPerformanceSnapshot());
         dto.setRequiredSkillTagsJson(t.getRequiredSkillTagsJson());
         dto.setAllocationStatus(t.getAllocationStatus());

@@ -67,9 +67,9 @@ public class Project {
     private String salesName;
 
     // 产品企划
-    @Column(nullable = false)
+    @Column(nullable = true)
     private String plannerId;
-    @Column(nullable = false)
+    @Column(nullable = true)
     private String plannerName;
 
     /** 产品名称（新建项目必填；历史项目允许为空以兼容存量数据） */
@@ -123,6 +123,10 @@ public class Project {
     /** 已选二级 IP，JSON 数组；保留历史项目的完整一级/二级 IP 归属。 */
     @Column(columnDefinition = "TEXT")
     private String ipSubOptions;
+
+    @Column(length=100) private String creativeAuthorId;
+    @Column(length=200) private String creativeAuthorName;
+    @Column(length=50) private String source;
 
     /** 终止请求发起方（用于双方确认终止流程） */
     private String terminateRequester;

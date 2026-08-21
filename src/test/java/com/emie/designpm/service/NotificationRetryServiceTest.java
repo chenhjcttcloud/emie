@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -125,6 +126,17 @@ class NotificationRetryServiceTest {
                 "cutoff 应为 10 分钟前，实际: " + cutoff.getValue());
     }
 
+    @Test
+    void testRecipientOverridePreventsHistoricalRetriesFromReachingOriginalRecipients() {
+        Dependencies deps = new Dependencies();
+        when(deps.router.isTestOverrideEnabled()).thenReturn(true);
+
+        deps.service.retryDueDeliveries();
+
+        verifyNoInteractions(deps.deliveries, deps.notifications, deps.users, deps.feishu, deps.audits);
+        assertThrows(IllegalStateException.class, () -> deps.service.retryNow(1L, "admin-1"));
+    }
+
     private NotificationDelivery delivery(long id, String status) {
         return NotificationDelivery.builder()
                 .id(id)
@@ -144,7 +156,8 @@ class NotificationRetryServiceTest {
         private final NotificationAuditLogRepository audits = mock(NotificationAuditLogRepository.class);
         private final FeishuBaseService feishu = mock(FeishuBaseService.class);
         private final NotificationEventRepository events = mock(NotificationEventRepository.class);
+        private final NotificationRecipientRouter router = mock(NotificationRecipientRouter.class);
         private final NotificationRetryService service = new NotificationRetryService(
-                deliveries, notifications, users, audits, feishu, events);
+                deliveries, notifications, users, audits, feishu, events, router);
     }
 }

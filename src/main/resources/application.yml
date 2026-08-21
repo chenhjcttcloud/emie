@@ -50,6 +50,9 @@ spring:
     time-zone: Asia/Shanghai
 
 app:
+  notification:
+    # 仅 dev/local profile 读取；prod profile 即使设置该变量也不会改写业务收件人。
+    test-recipient-user-id: ${APP_NOTIFICATION_TEST_RECIPIENT_USER_ID:}
   db:
     pool:
       isolation:

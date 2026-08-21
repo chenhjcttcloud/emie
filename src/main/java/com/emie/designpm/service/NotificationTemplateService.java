@@ -38,6 +38,7 @@ public class NotificationTemplateService {
 
         return switch (eventType) {
             case "PROJECT_ASSIGNED" -> create(eventType, "有新的项目待接单", "“{{projectName}}”已由{{actorName}}指定给你，请及时接单并安排任务。", "high", true, projectLink(context), project, "项目待接单", deadline, actor, context);
+            case "MATERIAL_MARKET_PLANNER_PENDING" -> create(eventType, "素材广场有新的待接单项目", "销售{{actorName}}已从素材广场选中“{{projectName}}”，请及时接单并安排任务。", "high", true, projectLink(context), project, "素材广场待接单", deadline, actor, context);
             case "DESIGN_REQUIREMENT_ASSIGNED" -> create(eventType, "有新的设计/送审需求", "“{{projectName}}”已由{{actorName}}创建并指定给你，请及时查看并跟进。", "high", true, projectLink(context), project, "设计/送审需求待跟进", deadline, actor, context);
             case "DESIGN_REQUIREMENT_DESIGNER_ASSIGNED" -> create(eventType, "有新的设计需求待交付", "“{{projectName}}”已由{{actorName}}指派给你，请在{{deadline}}前完成设计交付。", "high", true, projectLink(context), project, "设计需求待交付", deadline, actor, context);
             case "TASK_ASSIGNED", "TASK_REASSIGNED" -> create(eventType, "有新的子任务待处理", "子任务“{{taskName}}”已指派给你，所属项目：{{projectName}}；计划完成：{{deadline}}。", "high", true, taskLink(context), project, "子任务待处理：" + task, deadline, actor, context);
@@ -94,7 +95,14 @@ public class NotificationTemplateService {
         }
     }
 
-    private String projectLink(Map<String, String> context) { return value(context, "projectLink", "/"); }
+    private String projectLink(Map<String, String> context) {
+        String link = value(context, "projectLink", "/");
+        // 兼容旧版本已保存的 /projects/{id} 深链接，统一交给前端 SPA 打开项目详情。
+        if (link.matches("/projects/\\d+/?")) {
+            return "/?projectId=" + link.replaceAll("^/projects/|/$", "");
+        }
+        return link;
+    }
     private String taskLink(Map<String, String> context) { return value(context, "taskLink", projectLink(context)); }
     private String reviewLink(Map<String, String> context) { return value(context, "reviewLink", taskLink(context)); }
     private String value(Map<String, String> context, String key, String fallback) {

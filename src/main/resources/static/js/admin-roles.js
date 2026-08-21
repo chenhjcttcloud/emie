@@ -24,11 +24,9 @@ async function refreshCurrentCapabilities() {
 // ===== Admin: 角色管理 =====
 async function renderAdminRoles(container) {
   container.innerHTML = `<div class="loading">加载中</div>`;
-  let [roles, permDefs, anomalies, history] = await Promise.all([
+  let [roles, permDefs] = await Promise.all([
     apiGet('/admin/roles').catch(() => []),
     apiGet('/admin/permission-defs').catch(() => []),
-    apiGet('/admin/permissions/anomalies').catch(() => []),
-    apiGet('/admin/permissions/history').catch(() => []),
   ]);
   EMIE.adminState.permissionRoles = roles;
 
@@ -40,23 +38,6 @@ async function renderAdminRoles(container) {
   });
 
   container.innerHTML = `
-    <div class="config-card" style="margin-bottom:16px;">
-      <div class="config-card-header"><h3>🛡️ 权限治理</h3></div>
-      <div class="config-card-body">
-        <div class="form-row">
-          <div class="form-group"><label class="form-label">用户 ID</label><input id="permissionSimUser" class="form-input" placeholder="例如 sales_001"></div>
-          <div class="form-group"><label class="form-label">权限编码</label><input id="permissionSimCode" class="form-input" placeholder="例如 project.channel.edit"></div>
-          <div class="form-group"><label class="form-label">项目 ID（可选）</label><input id="permissionSimProject" class="form-input" placeholder="具体项目 ID"></div>
-        </div>
-        <button class="btn btn-primary btn-sm" data-emie-onclick="runPermissionSimulation()">运行权限模拟</button>
-        <div id="permissionSimulationResult" style="margin-top:12px;"></div>
-        <div style="margin-top:18px;font-weight:600;">风险检测 <span class="badge ${anomalies.length ? 'badge-danger' : 'badge-success'}">${anomalies.length}</span></div>
-        <div style="margin-top:8px;">${anomalies.length ? anomalies.map(a => `<div style="padding:8px 10px;margin-bottom:6px;border-radius:6px;background:${a.severity === 'high' ? '#FEF2F2' : '#FFFBEB'};font-size:12px;">${escHtml(a.displayName)}：${escHtml(a.message)}</div>`).join('') : '<span style="font-size:12px;color:var(--success);">未发现权限配置异常</span>'}</div>
-        <details style="margin-top:14px;"><summary style="cursor:pointer;font-weight:600;">最近权限变更（${history.length}）</summary>
-          <div style="margin-top:8px;">${history.slice(0, 20).map(h => `<div style="padding:8px 0;border-bottom:1px solid var(--gray-100);font-size:12px;"><strong>${escHtml(h.targetKey)}</strong> · ${escHtml(h.action)} · ${escHtml(h.actorName)} · ${escHtml(h.reason)} ${h.afterData ? `<button class="btn btn-outline btn-sm" style="float:right;" data-emie-onclick="rollbackPermissionVersion('${escHtml(escJsString(h.targetKey))}', ${h.id})">回滚到此版本</button>` : ''}</div>`).join('') || '暂无记录'}</div>
-        </details>
-      </div>
-    </div>
     <div class="config-card">
       <div class="config-card-header">
         <h3>🔐 角色管理 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">共 ${roles.length} 个角色</span></h3>
@@ -263,38 +244,6 @@ function collectPermissionScopes() {
   return result;
 }
 
-async function runPermissionSimulation() {
-  const userId = document.getElementById('permissionSimUser')?.value.trim();
-  const permission = document.getElementById('permissionSimCode')?.value.trim();
-  const projectId = document.getElementById('permissionSimProject')?.value.trim();
-  const resultEl = document.getElementById('permissionSimulationResult');
-  if (!userId || !permission) {
-    resultEl.innerHTML = '<span style="color:var(--danger);">请填写用户 ID 和权限编码</span>'; return;
-  }
-  try {
-    const result = await apiPost('/admin/permissions/simulate', { userId, permission, projectId: projectId || null });
-    resultEl.innerHTML = `<div style="padding:12px;border-radius:8px;background:${result.allowed ? '#ECFDF5' : '#FEF2F2'};color:${result.allowed ? '#065F46' : '#991B1B'};"><strong>${result.allowed ? '允许' : '拒绝'}</strong><div style="margin-top:6px;font-size:12px;">${result.reasonChain.map(escHtml).join(' → ')}</div><div style="margin-top:4px;font-size:12px;">范围：${(result.scopes || []).map(escHtml).join('、') || '无'}</div></div>`;
-  } catch (e) {
-    resultEl.innerHTML = `<span style="color:var(--danger);">${escHtml(e.message)}</span>`;
-  }
-}
-
-async function rollbackPermissionVersion(roleName, auditId) {
-  const role = (EMIE.adminState.permissionRoles || []).find(item => item.name === roleName);
-  if (!role) return showAdminToast('找不到对应角色', 'error');
-  const reason = prompt('请输入回滚原因（该操作也会生成新的审计版本）：');
-  if (!reason?.trim()) return;
-  if (!confirm(`确定将「${role.displayName}」回滚到所选版本吗？`)) return;
-  try {
-    await apiPost(`/admin/roles/${role.id}/rollback`, { auditId, reason: reason.trim() });
-    showAdminToast('✅ 权限版本已回滚', 'success');
-    await refreshCurrentCapabilities();
-    await renderAdminContent();
-  } catch (e) {
-    showAdminToast('❌ 回滚失败：' + e.message, 'error');
-  }
-}
-
 function confirmDeleteRole(roleId, displayName) {
   if (!confirm(`⚠️ 确定要删除角色「${displayName}」吗？\n删除后该角色下所有用户将失去对应权限。`)) return;
   const reason = prompt('请输入删除角色的原因（将写入权限审计日志）：');
@@ -325,8 +274,6 @@ EMIE.registerActions({
   submitEditRole,
   confirmDeleteRole,
   submitDeleteRole,
-  runPermissionSimulation,
-  rollbackPermissionVersion,
 });
 
 EMIE.registerModule('adminRoles', {

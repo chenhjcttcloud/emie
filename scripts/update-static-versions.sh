@@ -20,6 +20,7 @@ files=()
 files+=("$@")
 if [[ ${#files[@]} -eq 0 ]]; then
   while IFS= read -r file; do files+=("$file"); done < <(git diff --name-only --diff-filter=ACMR -- src/main/resources/static/js)
+  while IFS= read -r file; do files+=("$file"); done < <(git ls-files --others --exclude-standard -- src/main/resources/static/js)
 fi
 
 for file in "${files[@]-}"; do
@@ -27,6 +28,16 @@ for file in "${files[@]-}"; do
   [[ "$module" == *.js && -f "$ROOT/src/main/resources/static/js/$module" ]] || continue
   [[ "$module" == "bootstrap.js" ]] || increment_import "$module" "$file"
 done
+
+# app.css 与 JavaScript 模块一样会被浏览器强缓存；样式变更时同步更新入口版本号。
+if ! git diff --quiet -- src/main/resources/static/css/app.css; then
+  current="$(sed -n 's#.*<link rel="stylesheet" href="/css/app.css?v=\([0-9][0-9]*\)">.*#\1#p' "$INDEX" | head -1)"
+  if [[ -n "$current" ]]; then
+    next=$((current + 1))
+    sed -i '' "s#app.css?v=${current}#app.css?v=${next}#" "$INDEX"
+    printf 'cache_bump=app.css v%s->v%s\n' "$current" "$next"
+  fi
+fi
 
 # bootstrap 本身是唯一入口；任一模块版本变化后，入口也必须更新，确保浏览器不复用旧 import 图。
 current="$(sed -n 's#.*<script type="module" src="/js/bootstrap.js?v=\([0-9][0-9]*\)"></script>.*#\1#p' "$INDEX" | head -1)"

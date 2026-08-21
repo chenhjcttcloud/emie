@@ -7,7 +7,6 @@ const uploadFile = (...args) => EMIE.actions.uploadFile(...args);
 let pointsRulesCache = [];
 let pointsLedgerPage = 0;
 const pointsLedgerSize = 20;
-let selfProposalDesignFiles = [];
 
 function currentMonthKey() {
   const now = new Date();
@@ -108,27 +107,42 @@ function renderAdminGovernance(configs) {
   return `<div class="card governance-card points-admin-governance-card"><div class="governance-card-heading"><div><h3>⚙️ 接单治理</h3><p>规则触发后自动生成积分调账记录，并同步更新成员接单资格。</p></div></div><div class="governance-section governance-eligibility"><div class="governance-section-heading"><div><h4>成员接单资格</h4><p>管理员可手动暂停或恢复成员的接单资格。</p></div><button class="btn btn-outline btn-sm" data-emie-onclick="configureMarketEligibility()">暂停/恢复接单资格</button></div></div><div class="governance-section governance-penalty"><div class="governance-section-heading"><div><h4>退单处罚规则</h4><p>设计师退单超过免罚时长后，系统按累计次数计算扣分并自动写入积分记录。</p></div><button class="btn btn-primary btn-sm" data-emie-onclick="saveWithdrawalGovernanceConfig()">保存规则</button></div><div class="governance-settings-grid"><label class="governance-setting"><span>免罚时长<small>分钟</small></span><input class="form-input" type="number" min="0" id="withdraw_free_minutes" value="${Number(values['points.withdrawal.free_minutes'] || 60)}"></label><label class="governance-setting"><span>暂停阈值<small>次</small></span><input class="form-input" type="number" min="1" id="withdraw_suspend_count" value="${Number(values['points.withdrawal.suspend_count'] || 3)}"></label><label class="governance-setting"><span>每次扣分比例<small>%</small></span><input class="form-input" type="number" min="0" max="100" id="withdraw_penalty_rate" value="${Number(values['points.withdrawal.penalty_rate'] || 10)}"></label><label class="governance-setting"><span>暂停天数<small>天</small></span><input class="form-input" type="number" min="1" id="withdraw_suspend_days" value="${Number(values['points.withdrawal.suspend_days'] || 7)}"></label></div></div></div></div>`;
 }
 
-function renderAdminPrograms(poProgress, proposals) {
+function renderAdminPrograms(poProgress) {
   const progress = Array.isArray(poProgress) ? poProgress : [];
-  const proposalList = Array.isArray(proposals) ? proposals : [];
-  return `<div class="points-admin-program-grid"><div class="card points-admin-program-card"><div class="card-header"><div><h3>📅 PO 月度积分</h3><span class="points-ledger-hint">审核 PO 月度履职后自动入账</span></div><button class="btn btn-outline btn-sm" data-emie-onclick="createPoPointProject()">＋ 新增 PO 产品</button></div>${progress.length ? `<div class="table-wrap"><table><thead><tr><th>月份</th><th>项目ID</th><th>进展</th><th>状态</th><th>操作</th></tr></thead><tbody>${progress.map(item => `<tr><td>${escHtml(item.monthKey || '-')}</td><td>#${Number(item.poProjectId || 0)}</td><td>${escHtml(item.summary || '-')}</td><td>${escHtml(item.status || '-')}</td><td>${item.status === 'SUBMITTED' ? `<button class="btn btn-success btn-sm" data-emie-onclick="reviewPoProgress(${Number(item.id)},true)">确认入账</button> <button class="btn btn-danger btn-sm" data-emie-onclick="reviewPoProgress(${Number(item.id)},false)">驳回</button>` : '-'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无 PO 月度进展</div>'}</div><div class="card points-admin-program-card"><div class="card-header"><div><h3>💡 自主开发提案</h3><span class="points-ledger-hint">审核通过后进入项目流程</span></div></div>${proposalList.length ? proposalList.map(item => `<div class="admin-proposal-row"><div><strong>${escHtml(item.title || '-')}</strong><span>${escHtml(item.applicantName || '-')} · ${escHtml(item.status || '-')}</span><p>${escHtml(item.description || '')}</p></div>${item.status === 'SUBMITTED' ? `<div class="admin-proposal-actions"><button class="btn btn-success btn-sm" data-emie-onclick="reviewSelfProposal(${Number(item.id)},true)">立项</button><button class="btn btn-danger btn-sm" data-emie-onclick="reviewSelfProposal(${Number(item.id)},false)">驳回</button></div>` : ''}</div>`).join('') : '<div class="empty-state">暂无提案</div>'}</div></div>`;
+  return `<div class="points-admin-program-grid"><div class="card points-admin-program-card"><div class="card-header"><div><h3>📅 PO 月度积分</h3><span class="points-ledger-hint">审核 PO 月度履职后自动入账</span></div><button class="btn btn-outline btn-sm" data-emie-onclick="createPoPointProject()">＋ 新增 PO 产品</button></div>${progress.length ? `<div class="table-wrap"><table><thead><tr><th>月份</th><th>项目ID</th><th>进展</th><th>状态</th><th>操作</th></tr></thead><tbody>${progress.map(item => `<tr><td>${escHtml(item.monthKey || '-')}</td><td>#${Number(item.poProjectId || 0)}</td><td>${escHtml(item.summary || '-')}</td><td>${escHtml(item.status || '-')}</td><td>${item.status === 'SUBMITTED' ? `<button class="btn btn-success btn-sm" data-emie-onclick="reviewPoProgress(${Number(item.id)},true)">确认入账</button> <button class="btn btn-danger btn-sm" data-emie-onclick="reviewPoProgress(${Number(item.id)},false)">驳回</button>` : '-'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">暂无 PO 月度进展</div>'}</div></div>`;
 }
 
-function renderAdjustmentLedger(adjustments) {
-  adjustments = adjustments.filter(item => item.sourceType !== 'APPEAL');
-  if (!adjustments.length) return '';
-  return `<div class="card adjustment-ledger-card" style="margin-bottom:18px;"><div class="card-header"><div><h3>调账与 PO 积分</h3><span style="font-size:12px;color:var(--gray-500);">补充台账记录，不修改原始积分明细</span></div><span class="points-ledger-count">${adjustments.length} 条记录</span></div><div class="adjustment-ledger-list">${adjustments.map(item => { const points = Number(item.points || 0); const source = item.sourceType === 'PO_PROGRESS' ? 'PO月度履职' : item.sourceType === 'APPEAL' ? '积分异议' : item.sourceType === 'MANUAL' ? '管理员调账' : String(item.sourceType || '其他'); return `<div class="adjustment-ledger-row"><div class="adjustment-ledger-source"><span class="adjustment-source-icon">${item.sourceType === 'APPEAL' ? '⚖' : item.sourceType === 'PO_PROGRESS' ? '📅' : '✦'}</span><div><strong>${escHtml(source)}</strong><small>${escHtml(String(item.createdAt || '-').replace('T', ' ').slice(0, 19))}</small></div></div><div class="adjustment-ledger-reason">${escHtml(item.reason || '—')}</div><strong class="adjustment-ledger-points ${points >= 0 ? 'is-positive' : 'is-negative'}">${points >= 0 ? '+' : ''}${formatPoints(points)} 分</strong></div>`; }).join('')}</div></div>`;
+function adjustmentSourceLabel(sourceType) {
+  return {
+    MATERIAL_MARKET: '素材广场立项奖励',
+    PO_PROGRESS: 'PO 月度履职',
+    MANUAL: '管理员调账',
+    TASK_WITHDRAWAL: '退单积分调整',
+  }[sourceType] || '其他积分调整';
+}
+
+function renderPointsLedger(ledger, adjustments, ledgerPages) {
+  const visibleAdjustments = adjustments.filter(item => item.sourceType !== 'APPEAL');
+  const rows = [
+    ...ledger.map(item => {
+      const code = String(item.ruleCode || '-');
+      const stage = code.endsWith(':BASE') ? '基础积分' : code.endsWith(':QUALITY') ? '质量加分' : '积分';
+      return { createdAt: item.createdAt, source: `任务 #${item.subTaskId || '-'}`, detail: pointRuleTaskLabel(code), meta: `${code.replace(/:(BASE|QUALITY)$/, '')} · ${stage}`, accountingMonth: item.accountingMonth || '-', points: Number(item.points || 0) };
+    }),
+    ...visibleAdjustments.map(item => ({ createdAt: item.createdAt, source: adjustmentSourceLabel(item.sourceType), detail: item.reason || '—', meta: item.sourceType === 'MATERIAL_MARKET' ? '素材被销售立项后自动奖励' : String(item.sourceType || '积分调整'), accountingMonth: item.accountingMonth || '-', points: Number(item.points || 0) })),
+  ].sort((left, right) => String(right.createdAt || '').localeCompare(String(left.createdAt || '')));
+  const visibleCount = Number(ledger.length || 0) + visibleAdjustments.length;
+  return `<div class="card points-ledger-card" style="margin-bottom:18px;"><div class="card-header"><div><h3>我的积分明细</h3><span class="points-ledger-hint">任务积分、素材广场奖励和其他积分调整均按入账时间排列</span></div><span class="points-ledger-count">${visibleCount} 条记录</span></div>${rows.length ? `<div class="table-wrap"><table class="points-ledger-table"><thead><tr><th>来源</th><th>积分明细</th><th>归属月</th><th>积分</th><th>入账时间</th></tr></thead><tbody>${rows.map(item => `<tr><td><strong>${escHtml(item.source)}</strong></td><td><strong>${escHtml(item.detail)}</strong><div style="font-size:12px;color:var(--gray-400);">${escHtml(item.meta)}</div></td><td>${escHtml(item.accountingMonth)}</td><td style="color:${item.points >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:700;">${item.points >= 0 ? '+' : ''}${formatPoints(item.points)}</td><td>${escHtml(String(item.createdAt || '-').replace('T', ' ').slice(0, 19))}</td></tr>`).join('')}</tbody></table></div>${ledgerPages > 1 ? `<div class="pagination"><button class="btn btn-outline btn-sm" ${pointsLedgerPage <= 0 ? 'disabled' : ''} data-emie-onclick="changePointsLedgerPage(${pointsLedgerPage - 1})">上一页</button><span>任务积分第 ${pointsLedgerPage + 1} / ${ledgerPages} 页</span><button class="btn btn-outline btn-sm" ${pointsLedgerPage >= ledgerPages - 1 ? 'disabled' : ''} data-emie-onclick="changePointsLedgerPage(${pointsLedgerPage + 1})">下一页</button></div>` : ''}` : '<div class="empty-state">暂无积分记录</div>'}</div>`;
 }
 
 async function renderPointsView(main) {
   main.innerHTML = '<div class="loading">正在加载积分…</div>';
   try {
-    const [mine, rules, appeals, poData, archives, proposals, adminConfigs, adminProgress, adminProposals] = await Promise.all([
+    const [mine, rules, appeals, poData, archives, adminConfigs, adminProgress] = await Promise.all([
       apiGet(`/points/me?page=${pointsLedgerPage}&size=${pointsLedgerSize}`), apiGet('/points/rules'), apiGet('/point-governance/appeals'),
-      apiGet('/point-governance/po/me'), apiGet('/point-governance/archives'), apiGet('/point-program/proposals'),
+      apiGet('/point-governance/po/me'), apiGet('/point-governance/archives'),
       EMIE.state.currentRole === 'admin' ? apiGet('/admin/configs') : Promise.resolve({}),
       EMIE.state.currentRole === 'admin' ? apiGet('/point-governance/po/progress') : Promise.resolve([]),
-      EMIE.state.currentRole === 'admin' ? apiGet('/point-program/proposals') : Promise.resolve([]),
     ]);
     const plannerMode = EMIE.state.currentRole === 'planner';
     const isAdminView = EMIE.state.currentRole === 'admin';
@@ -141,6 +155,7 @@ async function renderPointsView(main) {
     const ledger = Array.isArray(mine.ledger) ? mine.ledger : [];
     const ledgerPages = Number(mine.ledgerPages || 0);
     const adjustments = Array.isArray(mine.adjustmentLedger) ? mine.adjustmentLedger : [];
+    const visibleAdjustments = adjustments.filter(item => item.sourceType !== 'APPEAL');
     const enabledRules = (Array.isArray(rules) ? rules : [])
       .filter(rule => rule.enabled !== false)
       .sort(comparePointRuleCodes);
@@ -154,19 +169,17 @@ async function renderPointsView(main) {
     const poProjects = Array.isArray(poData?.projects) ? poData.projects : [];
     const poProgress = Array.isArray(poData?.progress) ? poData.progress : [];
     const archiveList = Array.isArray(archives) ? archives : [];
-    const proposalList = Array.isArray(proposals) ? proposals : [];
     const canPlannerProcessAppeals = false;
-    const ledgerSection = isAdminView ? '' : `<div class="card points-ledger-card" style="margin-bottom:18px;"><div class="card-header"><div><h3>我的积分明细</h3><span class="points-ledger-hint">积分记录按入账时间排列</span></div><span style="font-size:12px;color:var(--gray-400);">如需调整积分，请直接与管理员沟通</span></div>${ledger.length ? `<div class="table-wrap"><table class="points-ledger-table"><thead><tr><th>任务</th><th>任务类别 / 积分阶段</th><th>归属月</th><th>积分</th><th>入账时间</th></tr></thead><tbody>${ledger.map(item => { const code=String(item.ruleCode||'-'); const stage=code.endsWith(':BASE')?'基础积分':code.endsWith(':QUALITY')?'质量加分':'积分'; return `<tr><td>#${escHtml(String(item.subTaskId || '-'))}</td><td><strong>${escHtml(pointRuleTaskLabel(code))}</strong><div style="font-size:12px;color:var(--gray-400);">${escHtml(code.replace(/:(BASE|QUALITY)$/,''))} · ${stage}</div></td><td>${escHtml(item.accountingMonth || '-')}</td><td style="color:var(--success);font-weight:700;">+${formatPoints(item.points)}</td><td>${escHtml(String(item.createdAt || '-').replace('T', ' ').slice(0, 19))}</td></tr>`; }).join('')}</tbody></table></div>${ledgerPages > 1 ? `<div class="pagination"><button class="btn btn-outline btn-sm" ${pointsLedgerPage <= 0 ? 'disabled' : ''} data-emie-onclick="changePointsLedgerPage(${pointsLedgerPage - 1})">上一页</button><span>第 ${pointsLedgerPage + 1} / ${ledgerPages} 页</span><button class="btn btn-outline btn-sm" ${pointsLedgerPage >= ledgerPages - 1 ? 'disabled' : ''} data-emie-onclick="changePointsLedgerPage(${pointsLedgerPage + 1})">下一页</button></div>` : ''}` : '<div class="empty-state">暂无积分记录</div>'}</div>`;
+    const ledgerSection = isAdminView ? '' : renderPointsLedger(ledger, adjustments, ledgerPages);
     const month = currentMonthKey();
     main.innerHTML = `
       <div class="points-page">
-      <section class="points-hero"><div class="points-hero-copy"><span class="points-eyebrow">${plannerMode ? 'PLANNER POINTS' : isAdminView ? 'ADMIN POINTS' : 'MY PERFORMANCE'}</span><h2>${plannerMode ? '发放任务与积分' : isAdminView ? '设计师积分总览' : '积分与绩效中心'}</h2><p>${plannerMode ? '查看你发放的子任务及其实际积分入账情况' : isAdminView ? '查看所有设计师积分情况，快速完成积分调整' : '每一次交付都有记录，每一份成长都清晰可见'}</p>${isAdminView ? '<button class="btn btn-light points-admin-adjust-btn" data-emie-onclick="openManualAdjustmentModal()">＋ 调整积分</button>' : `<div class="points-hero-stats"><div><strong>${plannerMode ? issuedTasks.length : formatPoints(mine.balance)}</strong><span>${plannerMode ? '已发放子任务' : '累计积分'}</span></div><i></i><div><strong>${plannerMode ? formatPoints(issuedPoints) : (mine.ledgerTotal + adjustments.length)}</strong><span>${plannerMode ? '已入账积分' : '已入账记录'}</span></div></div>`}</div></section>
+      <section class="points-hero"><div class="points-hero-copy"><span class="points-eyebrow">${plannerMode ? 'PLANNER POINTS' : isAdminView ? 'ADMIN POINTS' : 'MY PERFORMANCE'}</span><h2>${plannerMode ? '发放任务与积分' : isAdminView ? '设计师积分总览' : '积分与绩效中心'}</h2><p>${plannerMode ? '查看你发放的子任务及其实际积分入账情况' : isAdminView ? '查看所有设计师积分情况，快速完成积分调整' : '每一次交付都有记录，每一份成长都清晰可见'}</p>${isAdminView ? '<button class="btn btn-light points-admin-adjust-btn" data-emie-onclick="openManualAdjustmentModal()">＋ 调整积分</button>' : `<div class="points-hero-stats"><div><strong>${plannerMode ? issuedTasks.length : formatPoints(mine.balance)}</strong><span>${plannerMode ? '已发放子任务' : '累计积分'}</span></div><i></i><div><strong>${plannerMode ? formatPoints(issuedPoints) : (mine.ledgerTotal + visibleAdjustments.length)}</strong><span>${plannerMode ? '已入账积分' : '已入账记录'}</span></div></div>`}</div></section>
       ${isAdminView ? renderAdminAppealPanel(appealList) : ''}
       ${isAdminView ? renderAdminGovernance(adminConfigs) : ''}
-      ${isAdminView ? renderAdminPrograms(adminProgress, adminProposals) : ''}
+      ${isAdminView ? renderAdminPrograms(adminProgress) : ''}
       <div class="points-dashboard-grid">${isDesignerView ? '<section class="points-panel"><div class="points-section-head"><div><span class="points-section-icon purple">↗</span><div><h3>月度绩效</h3><p>目标、积分与绩效结果一目了然</p></div></div><label class="points-month-picker"><span>查询月份</span><input id="pointsMonthFilter" class="points-month-input points-month-inline" type="month" value="' + month + '" data-emie-onchange="refreshPointsMonth(this.value)"></label></div><div id="pointsPerformancePreview" class="points-panel-body"></div></section>' : ''}<section class="points-panel ${isAdminView ? 'points-admin-leaderboard-panel' : ''}"><div class="points-section-head"><div><span class="points-section-icon amber">★</span><div><h3>${isAdminView ? '设计师积分排名' : '积分排行榜'}</h3><p>${isAdminView ? '按当前月份查看所有设计师的积分情况' : '所选月份的团队积分排名'}</p></div></div>${isAdminView ? '<label class="points-month-picker"><span>查询月份</span><input class="points-month-input points-month-inline" type="month" value="' + month + '" data-emie-onchange="refreshPointsMonth(this.value)"></label>' : ''}</div><div id="pointsLeaderboardBody" class="points-rank-list"></div></section></div>
       ${ledgerSection}
-      ${renderAdjustmentLedger(adjustments)}
       ${false && appealList.length ? '<div></div>' : ''}
       ${poProjects.length ? `<div class="card" style="margin-bottom:18px;"><div class="card-header"><h3>PO 月度履职</h3></div><div class="table-wrap"><table><thead><tr><th>PO 项目</th><th>月度积分</th><th>本月状态</th><th>操作</th></tr></thead><tbody>${poProjects.map(project => { const progress = poProgress.find(item => Number(item.poProjectId) === Number(project.id) && item.monthKey === month); return `<tr><td>${escHtml(project.name || '-')}</td><td>${formatPoints(project.monthlyPoints)}</td><td>${progress ? escHtml(poProgressStatusLabel(progress.status)) : '未提交'}</td><td>${progress ? '-' : `<button class="btn btn-primary btn-sm" data-emie-onclick="submitPoProgress(${Number(project.id)},'${month}')">提交本月进展</button>`}</td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
       ${archiveList.length ? `<div class="card" style="margin-bottom:18px;"><div class="card-header"><h3>月度归档</h3></div><div class="table-wrap"><table><thead><tr><th>月份</th><th>获得积分</th><th>目标积分</th><th>供单积分</th><th>供单保护</th><th>状态</th></tr></thead><tbody>${archiveList.map(item => `<tr><td>${escHtml(item.monthKey || '-')}</td><td>${formatPoints(item.earnedPoints)}</td><td>${formatPoints(item.targetPoints)}</td><td>${formatPoints(item.suppliedPoints)}</td><td>${item.insufficientSupplyProtection ? '已启用' : '未启用'}</td><td>${item.status === 'ARCHIVED' ? '已归档' : '待确认'}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
@@ -241,80 +254,5 @@ async function submitPoProgress(projectId, month) {
   } catch (error) { window.EMIE.actions.showSystemAlert('提交失败：' + (error.message || '请稍后重试')); }
 }
 
-async function submitSelfTaskProposal() {
-  if (document.getElementById('selfTaskProposalModal')) return;
-  const today = new Date().toISOString().slice(0, 10);
-  selfProposalDesignFiles = [];
-  const modal = document.createElement('div');
-  modal.className = 'modal-overlay';
-  modal.id = 'selfTaskProposalModal';
-  modal.innerHTML = `<div class="modal" style="max-width:680px;">
-    <div class="modal-header"><div class="modal-header-left"><div class="modal-title">提交自主开发提案</div><div class="modal-subtitle">填写完整信息后提交管理层审核</div></div><button class="modal-close" data-emie-onclick="closeM('selfTaskProposalModal')">✕</button></div>
-    <div class="modal-body">
-      <div class="form-group"><label class="form-label">提案名称</label><input class="form-input" id="selfProposalTitle" maxlength="100" placeholder="例如：节日限定包装自主开发"></div>
-      <div class="form-group"><label class="form-label">产品构想、价值和交付范围</label><textarea class="form-input" id="selfProposalDescription" rows="4" maxlength="1000" placeholder="说明为什么要做、预期价值以及计划交付内容"></textarea></div>
-      <div class="form-group"><label class="form-label">附件设计图 <span style="color:var(--danger);">*</span></label><div class="upload-area" data-emie-onclick="document.getElementById('selfProposalDesignInput').click()"><div>📁 点击选择设计图，支持一次上传多张</div><input type="file" id="selfProposalDesignInput" multiple accept="${EMIE.fileAccept?.reference || 'image/*'}" style="display:none" data-emie-onchange="handleSelfProposalDesignFiles(this)"></div><div class="file-list" id="selfProposalDesignFileList"></div></div>
-      <div class="form-group"><label class="form-label">计划完成日期</label><input class="form-input" type="date" min="${today}" id="selfProposalDate"></div>
-      <div id="selfProposalError" style="display:none;color:var(--danger);font-size:13px;"></div>
-    </div>
-    <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('selfTaskProposalModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitSelfTaskProposalForm(this)">提交提案</button></div>
-  </div>`;
-  document.body.appendChild(modal);
-}
-
-async function submitSelfTaskProposalForm(button) {
-  const payload = {
-    title: document.getElementById('selfProposalTitle')?.value.trim(),
-    description: document.getElementById('selfProposalDescription')?.value.trim(),
-    referenceImagesJson: JSON.stringify(selfProposalDesignFiles),
-    plannedDate: document.getElementById('selfProposalDate')?.value,
-  };
-  const error = document.getElementById('selfProposalError');
-  if (!payload.title || !payload.description || !payload.plannedDate || !selfProposalDesignFiles.length) {
-    if (error) { error.textContent = '请完整填写所有提案信息。'; error.style.display = 'block'; }
-    return;
-  }
-  if (button) { button.disabled = true; button.textContent = '提交中…'; }
-  try {
-    await apiPost('/point-program/proposals', payload);
-    closeM('selfTaskProposalModal');
-    await rerenderPointsView();
-  } catch (e) {
-    if (error) { error.textContent = '提交失败：' + (e.message || '请稍后重试'); error.style.display = 'block'; }
-    if (button) { button.disabled = false; button.textContent = '提交提案'; }
-  }
-}
-
-function renderSelfProposalDesignFiles() {
-  const list = document.getElementById('selfProposalDesignFileList');
-  if (!list) return;
-  list.innerHTML = selfProposalDesignFiles.map((file, index) => `<div class="file-item"><span class="file-item-name">🖼️ ${escHtml(file.name || '设计图')}</span><button type="button" class="remove-file" data-emie-onclick="removeSelfProposalDesignFile(${index})">✕</button></div>`).join('');
-}
-
-async function handleSelfProposalDesignFiles(input) {
-  const error = document.getElementById('selfProposalError');
-  const files = Array.from(input?.files || []);
-  if (selfProposalDesignFiles.length + files.length > 6) {
-    if (error) { error.textContent = '设计图最多上传 6 张。'; error.style.display = 'block'; }
-    if (input) input.value = '';
-    return;
-  }
-  for (const file of files) {
-    try {
-      const result = await uploadFile(file);
-      selfProposalDesignFiles.push({ name: result.name, url: result.url, size: result.size, storedName: result.storedName });
-      renderSelfProposalDesignFiles();
-    } catch (e) {
-      if (error) { error.textContent = `${file.name} 上传失败：${e.message || '请稍后重试'}`; error.style.display = 'block'; }
-    }
-  }
-  if (input) input.value = '';
-}
-
-function removeSelfProposalDesignFile(index) {
-  selfProposalDesignFiles.splice(index, 1);
-  renderSelfProposalDesignFiles();
-}
-
-EMIE.registerActions({ refreshPointsMonth, filterPointsRules, submitPointAppeal, processPointAppeal, submitPoProgress, submitSelfTaskProposal, submitSelfTaskProposalForm, handleSelfProposalDesignFiles, removeSelfProposalDesignFile });
-EMIE.registerModule('dashboardPoints', { renderPointsView, refreshPointsMonth, filterPointsRules, submitPointAppeal, processPointAppeal, submitPoProgress, submitSelfTaskProposal, submitSelfTaskProposalForm, handleSelfProposalDesignFiles, removeSelfProposalDesignFile });
+EMIE.registerActions({ refreshPointsMonth, filterPointsRules, submitPointAppeal, processPointAppeal, submitPoProgress });
+EMIE.registerModule('dashboardPoints', { renderPointsView, refreshPointsMonth, filterPointsRules, submitPointAppeal, processPointAppeal, submitPoProgress });

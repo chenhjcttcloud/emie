@@ -604,7 +604,7 @@ public class ProjectService {
         task.setPublisherId((String) body.get("currentUserId"));
         task.setPublisherName((String) body.getOrDefault("currentUser", ""));
         task.setPublisherRole(role);
-        if (pointsService != null && !Boolean.TRUE.equals(body.get("selfInitiated"))) {
+        if (pointsService != null) {
             pointsService.bindRuleSnapshot(task, (String) body.get("pointRuleCode"),
                     (String) body.get("difficultyCode"));
         }
@@ -612,8 +612,6 @@ public class ProjectService {
         task.setCollaboratorAllocationsJson(validateCollaboratorAllocations(body.get("collaboratorAllocations"), designerId));
         task.setMilestoneMonth(validateMilestoneMonth(body.get("milestoneMonth")));
         task.setAssignmentReason(SecurityUtil.sanitizeText((String) body.get("assignmentReason"), 500));
-        task.setSelfInitiated(Boolean.TRUE.equals(body.get("selfInitiated")));
-        task.setSelfInitiatedApproved(task.isSelfInitiated());
         // 设置负责人角色类型（designer / supplychain / planner / sales），默认 designer
         String assigneeRole = (String) body.get("assigneeRole");
         task.setAssigneeRole(assigneeRole != null && !assigneeRole.isBlank() ? assigneeRole : "designer");
@@ -818,7 +816,6 @@ public class ProjectService {
         data.put("collaboratorAllocationsJson", task.getCollaboratorAllocationsJson());
         data.put("milestoneMonth", task.getMilestoneMonth());
         data.put("assignmentReason", task.getAssignmentReason());
-        data.put("selfInitiated", task.isSelfInitiated());
         data.put("countInPerformanceSnapshot", task.getCountInPerformanceSnapshot());
         data.put("requiredSkillTagsJson", task.getRequiredSkillTagsJson());
         data.put("assigneeRole", task.getAssigneeRole());
@@ -1260,7 +1257,7 @@ public class ProjectService {
         if (!"delivered".equals(task.getStatus())) throw new RuntimeException("当前子任务不在待送审状态");
         task.setStatus("submitted_for_review");
         task.setSubmittedForReviewAt(LocalDateTime.now());
-        if (pointsService != null && !task.isSelfInitiated()) pointsService.awardBaseSubmission(task);
+        if (pointsService != null) pointsService.awardBaseSubmission(task);
         String user = (String) body.getOrDefault("currentUser", "");
         p.getLogs().add(new ActivityLog("子任务送审：" + task.getName(), user, role, p));
         Project saved = projectRepository.saveAndFlush(p);
@@ -1678,7 +1675,7 @@ public class ProjectService {
      */
     private void finalizeTaskApproval(SubTask task, Project project) {
         checkTaskCompletion(task, project);
-        if ("completed".equals(task.getStatus()) && pointsService != null && !task.isSelfInitiated()) {
+        if ("completed".equals(task.getStatus()) && pointsService != null) {
             pointsService.awardQualityCompletion(task);
         }
     }

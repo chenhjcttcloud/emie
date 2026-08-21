@@ -5,6 +5,7 @@ import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.repository.DesignRequirementRepository;
 import com.emie.designpm.repository.FileRecordRepository;
 import com.emie.designpm.repository.ProjectRepository;
+import com.emie.designpm.repository.MaterialMarketItemRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.FileArchiveService;
 import com.emie.designpm.service.FilePreviewService;
@@ -60,6 +61,7 @@ public class FileController {
     private final FileArchiveService fileArchiveService;
     private final FileRecordRepository fileRecordRepository;
     private final ProjectRepository projectRepository;
+    private final MaterialMarketItemRepository materialMarketRepository;
     private final ProjectAccessService projectAccessService;
     private final SubTaskRepository subTaskRepository;
     private final DesignRequirementRepository designRequirementRepository;
@@ -74,7 +76,8 @@ public class FileController {
                           FilePreviewService filePreviewService,
                           FileThumbnailService fileThumbnailService,
                           DesignRequirementRepository designRequirementRepository,
-                          ProjectRepository projectRepository) {
+                          ProjectRepository projectRepository,
+                          MaterialMarketItemRepository materialMarketRepository) {
         this.fileArchiveService = fileArchiveService;
         this.fileRecordRepository = fileRecordRepository;
         this.projectAccessService = projectAccessService;
@@ -83,6 +86,7 @@ public class FileController {
         this.fileThumbnailService = fileThumbnailService;
         this.designRequirementRepository = designRequirementRepository;
         this.projectRepository = projectRepository;
+        this.materialMarketRepository = materialMarketRepository;
     }
 
     /** 保留旧测试/嵌入式调用方的构造器兼容性。 */
@@ -94,7 +98,7 @@ public class FileController {
                           FileThumbnailService fileThumbnailService,
                           DesignRequirementRepository designRequirementRepository) {
         this(fileArchiveService, fileRecordRepository, projectAccessService, subTaskRepository,
-                filePreviewService, fileThumbnailService, designRequirementRepository, null);
+                filePreviewService, fileThumbnailService, designRequirementRepository, null, null);
     }
 
     /** 保留旧测试/嵌入式调用方的构造器兼容性。 */
@@ -105,7 +109,7 @@ public class FileController {
                           FilePreviewService filePreviewService,
                           FileThumbnailService fileThumbnailService) {
         this(fileArchiveService, fileRecordRepository, projectAccessService, subTaskRepository,
-                filePreviewService, fileThumbnailService, null, null);
+                filePreviewService, fileThumbnailService, null, null, null);
     }
 
     /** 保留旧测试/嵌入式调用方的构造器兼容性。 */
@@ -115,7 +119,7 @@ public class FileController {
                           SubTaskRepository subTaskRepository,
                           FilePreviewService filePreviewService) {
         this(fileArchiveService, fileRecordRepository, projectAccessService, subTaskRepository,
-                filePreviewService, new FileThumbnailService(fileArchiveService), null, null);
+                filePreviewService, new FileThumbnailService(fileArchiveService), null, null, null);
     }
 
     /** 读取受权限保护的缩略图；原图仅用于点击后的大图预览。 */
@@ -431,13 +435,16 @@ public class FileController {
                     if (record.getTargetType() == null && record.getTargetId() == null) {
                         return (record.getOwnerUserId() != null && session.userId().equals(record.getOwnerUserId()))
                                 || isFileVisibleInAccessibleProjects(session, storedName, relativePath)
+                                || isFileVisibleInMaterialMarket(storedName)
                                 || isFileVisibleInAccessibleDesignRequirements(session, storedName);
                     }
                     return canAccessBoundTarget(session, record.getTargetType(), record.getTargetId())
                             || isFileVisibleInAccessibleProjects(session, storedName, relativePath)
+                            || isFileVisibleInMaterialMarket(storedName)
                             || isFileVisibleInAccessibleDesignRequirements(session, storedName);
                 })
                 .orElseGet(() -> isFileVisibleInAccessibleProjects(session, storedName, relativePath)
+                        || isFileVisibleInMaterialMarket(storedName)
                         || isFileVisibleInAccessibleDesignRequirements(session, storedName));
     }
 
@@ -458,6 +465,7 @@ public class FileController {
             case "project" -> visibleProjectIds.contains(targetId);
             case "sub_task" -> subTaskRepository.findProjectIdById(targetId)
                     .map(visibleProjectIds::contains).orElse(false);
+            case "material_market" -> materialMarketRepository != null && materialMarketRepository.existsById(targetId);
             case "admin" -> false;
             default -> false;
         };
@@ -487,6 +495,10 @@ public class FileController {
                                                                  String storedName) {
         return designRequirementRepository != null
                 && designRequirementRepository.countVisibleFileReferences(session.userId(), storedName) > 0;
+    }
+
+    private boolean isFileVisibleInMaterialMarket(String storedName) {
+        return materialMarketRepository != null && materialMarketRepository.countFileReferencesByStoredName(storedName) > 0;
     }
 
     private boolean jsonContainsFile(String json, String storedName, String relativePath) {

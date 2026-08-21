@@ -97,6 +97,9 @@ public class UserController {
         if (u == null) return ResponseEntity.notFound().build();
         if (body.containsKey("departmentId")) {
             Object v = body.get("departmentId");
+            if (v != null && "admin".equals(u.getRole())) {
+                return ResponseEntity.badRequest().body(Map.of("error", "管理员无需分配部门"));
+            }
             // 部门负责人不能被移出部门
             if (v == null && departmentRepository.findByHeadUserId(userId).isPresent()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "该用户是部门负责人，无法移出。请先更换部门负责人。"));

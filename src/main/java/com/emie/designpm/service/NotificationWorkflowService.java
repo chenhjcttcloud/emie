@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -27,21 +28,26 @@ public class NotificationWorkflowService {
     private final UserRepository users;
     private final SystemConfigRepository configs;
     private final FeishuBaseService feishu;
+    private final NotificationRecipientRouter recipientRouter;
     private final TransactionTemplate requiresNew;
 
     public NotificationWorkflowService(NotificationOutboxService outbox, NotificationTemplateService templates,
             NotificationRepository notifications, NotificationDeliveryRepository deliveries,
             NotificationAuditLogRepository audits, UserRepository users, SystemConfigRepository configs, FeishuBaseService feishu,
+            NotificationRecipientRouter recipientRouter,
             @Qualifier("transactionManager") PlatformTransactionManager transactionManager) {
         this.outbox = outbox; this.templates = templates; this.notifications = notifications; this.deliveries = deliveries;
-        this.audits = audits; this.users = users; this.configs = configs; this.feishu = feishu;
+        this.audits = audits; this.users = users; this.configs = configs; this.feishu = feishu; this.recipientRouter = recipientRouter;
         this.requiresNew = new TransactionTemplate(transactionManager);
         this.requiresNew.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     public void notifyUser(String eventType, String recipientUserId, String aggregateType, Long aggregateId,
                            String actorUserId, Map<String, String> context) {
-        if (recipientUserId == null || recipientUserId.isBlank() || recipientUserId.equals(actorUserId)) return;
+        if (recipientUserId == null || recipientUserId.isBlank()) return;
+        String routedRecipientUserId = recipientRouter.route(recipientUserId);
+        if (routedRecipientUserId == null || routedRecipientUserId.isBlank()
+                || (!recipientRouter.isTestOverrideEnabled() && routedRecipientUserId.equals(actorUserId))) return;
         if (aggregateId == null) {
             throw new IllegalArgumentException("通知业务对象 ID 不能为空");
         }
@@ -49,7 +55,7 @@ public class NotificationWorkflowService {
         NotificationBundle bundle = requiresNew.execute(status -> {
             NotificationEvent event = outbox.publish(eventType, aggregateType, aggregateId, 1, actorUserId,
                     eventType + ":" + aggregateType + ":" + aggregateId + ":" + UUID.randomUUID(), t.content());
-            Notification n = notifications.save(Notification.builder().eventId(event.getId()).recipientUserId(recipientUserId)
+            Notification n = notifications.save(Notification.builder().eventId(event.getId()).recipientUserId(routedRecipientUserId)
                     .category("workflow").priority(t.priority()).mandatory(t.mandatory()).title(t.title()).content(t.content())
                     .deepLink(t.deepLink()).aggregateType(aggregateType).aggregateId(aggregateId).status("unread").createdAt(LocalDateTime.now()).build());
             NotificationDelivery inApp = deliveries.save(NotificationDelivery.builder().notificationId(n.getId()).channel("in_app")
@@ -58,7 +64,7 @@ public class NotificationWorkflowService {
             return new NotificationBundle(event, n);
         });
         if (!enabled("notification.feishuEnabled")) return;
-        users.findByUserId(recipientUserId).ifPresent(user -> sendFeishu(bundle.event(), bundle.notification(), user, t, actorUserId));
+        users.findByUserId(routedRecipientUserId).ifPresent(user -> sendFeishu(bundle.event(), bundle.notification(), user, t, actorUserId));
     }
 
     private record NotificationBundle(NotificationEvent event, Notification notification) {}
@@ -91,48 +97,75 @@ public class NotificationWorkflowService {
     /** 向指定角色的全部有效用户发送同一业务通知，并为每位收件人保留独立审计记录。 */
     public void notifyRole(String eventType, String role, String aggregateType, Long aggregateId,
                            String actorUserId, Map<String, String> context) {
-        users.findByRole(role).stream()
+        List<String> recipients = users.findByRole(role).stream()
                 .filter(user -> user.getStatus() == null || "active".equalsIgnoreCase(user.getStatus()))
                 .map(User::getUserId)
-                .filter(id -> id != null && !id.isBlank())
+                .toList();
+        recipientRouter.routeAll(recipients)
                 .forEach(id -> notifyUser(eventType, id, aggregateType, aggregateId, actorUserId, context));
     }
 
+    /** 与 {@link #notifyRole} 一致，但等业务事务提交成功后才创建通知。 */
+    public void notifyRoleAfterCommit(String eventType, String role, String aggregateType, Long aggregateId,
+                                      String actorUserId, Map<String, String> context) {
+        List<String> recipients = users.findByRole(role).stream()
+                .filter(user -> user.getStatus() == null || "active".equalsIgnoreCase(user.getStatus()))
+                .map(User::getUserId)
+                .toList();
+        recipientRouter.routeAll(recipients)
+                .forEach(id -> notifyUserAfterCommit(eventType, id, aggregateType, aggregateId, actorUserId, context));
+    }
+
     private void sendFeishu(NotificationEvent event, Notification n, User user, NotificationTemplateService.Template t, String actor) {
-        NotificationDelivery d = deliveries.save(NotificationDelivery.builder().notificationId(n.getId()).channel("feishu").status("pending").retryCount(0).createdAt(LocalDateTime.now()).cardPayload(t.feishuCardJson()).build());
-        d.setFirstAttemptAt(LocalDateTime.now()); d.setLastAttemptAt(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        // 此方法会在业务事务提交后运行。投递台账必须使用独立事务，否则会在 afterCommit
+        // 阶段静默丢失，导致实际调用了飞书却没有可重试、可审计的失败记录。
+        NotificationDelivery d = requiresNew.execute(status -> deliveries.save(NotificationDelivery.builder()
+                .notificationId(n.getId()).channel("feishu").status("pending").retryCount(0).createdAt(now)
+                .firstAttemptAt(now).lastAttemptAt(now).cardPayload(t.feishuCardJson()).build()));
         if (user.getFeishuOpenId() == null || user.getFeishuOpenId().isBlank()) {
             d.setStatus("blocked");
             d.setFailedAt(LocalDateTime.now());
             d.setErrorMsg("收件人未绑定飞书 Open ID");
             d.setNextRetryAt(null);
-            deliveries.save(d);
-            audit(event, n, d, "feishu_blocked", actor, "收件人未绑定飞书 Open ID，等待绑定后手动重试");
+            saveFeishuOutcome(event, n, d, "feishu_blocked", actor, "收件人未绑定飞书 Open ID，等待绑定后手动重试");
             return;
         }
         try {
             d.setExternalMessageId(feishu.sendInteractiveMessage(user.getFeishuOpenId(), t.feishuCardJson())); d.setStatus("delivered"); d.setDeliveredAt(LocalDateTime.now());
-            deliveries.save(d); audit(event, n, d, "feishu_delivered", actor, "工作流飞书通知已投递");
+            saveFeishuOutcome(event, n, d, "feishu_delivered", actor, "工作流飞书通知已投递");
         } catch (Exception e) {
             String cardError = limit(e.getMessage());
             try {
                 d.setExternalMessageId(feishu.sendTextMessage(user.getFeishuOpenId(), t.content()));
                 d.setStatus("delivered"); d.setDeliveredAt(LocalDateTime.now());
                 d.setErrorMsg("卡片发送失败，已降级为文本：" + cardError);
-                deliveries.save(d);
-                audit(event, n, d, "feishu_text_fallback_delivered", actor, "卡片解析失败，已降级为文本通知：" + cardError);
+                saveFeishuOutcome(event, n, d, "feishu_text_fallback_delivered", actor, "卡片解析失败，已降级为文本通知：" + cardError);
             } catch (Exception fallbackError) {
                 d.setStatus("failed");
                 d.setFailedAt(LocalDateTime.now());
                 d.setRetryCount((d.getRetryCount() == null ? 0 : d.getRetryCount()) + 1);
                 d.setNextRetryAt(LocalDateTime.now().plusSeconds(30));
                 d.setErrorMsg(limit(cardError + "；文本降级也失败：" + fallbackError.getMessage()));
-                deliveries.save(d);
-                audit(event, n, d, "feishu_failed", actor, "卡片和文本通知均失败：" + limit(d.getErrorMsg()));
+                saveFeishuOutcome(event, n, d, "feishu_failed", actor, "卡片和文本通知均失败：" + limit(d.getErrorMsg()));
             }
         }
     }
-    private boolean enabled(String key) { return configs.findByConfigKey(key).map(SystemConfig::getConfigValue).map("true"::equalsIgnoreCase).orElse(false); }
+    private void saveFeishuOutcome(NotificationEvent event, Notification notification, NotificationDelivery delivery,
+                                   String action, String actor, String detail) {
+        requiresNew.execute(status -> {
+            NotificationDelivery saved = deliveries.save(delivery);
+            audit(event, notification, saved, action, actor, detail);
+            return null;
+        });
+    }
+    private boolean enabled(String key) {
+        return configs.findByConfigKey(key).map(SystemConfig::getConfigValue).map("true"::equalsIgnoreCase)
+                // 兼容旧环境：早期版本只保存了飞书登录开关，尚未初始化独立的通知开关。
+                .orElseGet(() -> "notification.feishuEnabled".equals(key)
+                        && configs.findByConfigKey("feishu.enabled").map(SystemConfig::getConfigValue)
+                        .map("true"::equalsIgnoreCase).orElse(false));
+    }
     private void audit(NotificationEvent e, Notification n, NotificationDelivery d, String action, String actor, String detail) { audits.save(NotificationAuditLog.builder().eventId(e.getId()).notificationId(n.getId()).deliveryId(d.getId()).action(action).operatorUserId(actor).detail(detail).createdAt(LocalDateTime.now()).build()); }
     private String limit(String s) { return s == null ? "未知错误" : s.substring(0, Math.min(s.length(), 1000)); }
 }

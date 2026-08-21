@@ -6,6 +6,8 @@ import com.emie.designpm.entity.FileRecord;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.repository.FileRecordRepository;
 import com.emie.designpm.repository.DesignRequirementRepository;
+import com.emie.designpm.repository.MaterialMarketItemRepository;
+import com.emie.designpm.repository.ProjectRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.FileArchiveService;
 import com.emie.designpm.service.FilePreviewService;
@@ -246,6 +248,37 @@ class FileAccessRegressionTest {
         when(access.findVisibleProjectsWithTasks(session)).thenReturn(List.of());
         when(requirements.countVisibleFileReferences("planner-1", storedName)).thenReturn(1L);
 
+        Boolean allowed = ReflectionTestUtils.invokeMethod(controller, "canAccessFile",
+                session, storedName, storedName);
+
+        assertTrue(allowed);
+    }
+
+    @Test
+    void plannerCanOpenReferenceImagePublishedToMaterialMarket() {
+        String storedName = "market-reference.png";
+        FileRecordRepository records = mock(FileRecordRepository.class);
+        ProjectAccessService access = mock(ProjectAccessService.class);
+        SubTaskRepository tasks = mock(SubTaskRepository.class);
+        MaterialMarketItemRepository materials = mock(MaterialMarketItemRepository.class);
+        FileController controller = new FileController(mock(FileArchiveService.class), records, access, tasks,
+                mock(FilePreviewService.class), mock(com.emie.designpm.service.FileThumbnailService.class),
+                mock(DesignRequirementRepository.class), mock(ProjectRepository.class), materials);
+
+        FileRecord referenceImage = FileRecord.builder()
+                .storedName(storedName)
+                .originalName("参考图.png")
+                .fileSize(1_430_008L)
+                .ownerUserId("designer-1")
+                .targetType("material_market")
+                .targetId(19L)
+                .storageTier("local")
+                .build();
+
+        when(records.findByStoredName(storedName)).thenReturn(Optional.of(referenceImage));
+        when(materials.countFileReferencesByStoredName(storedName)).thenReturn(1L);
+
+        AuthController.AuthSession session = new AuthController.AuthSession("planner-1", "planner", "产品企划");
         Boolean allowed = ReflectionTestUtils.invokeMethod(controller, "canAccessFile",
                 session, storedName, storedName);
 

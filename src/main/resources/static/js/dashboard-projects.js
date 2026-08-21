@@ -24,6 +24,7 @@ const pauseProject = (...args) => EMIE.actions.pauseProject(...args);
 const resumeProject = (...args) => EMIE.actions.resumeProject(...args);
 const plannerAcceptFromList = (...args) => EMIE.actions.plannerAcceptFromList(...args);
 const clearSWRCache = (...args) => EMIE.actions.clearSWRCache(...args);
+const renderMaterialMarket = (...args) => EMIE.actions.renderMaterialMarket(...args);
 
 // EMIE 工作台：主渲染、状态看板、项目列表、任务列表与待评分视图
 /** 左侧导航只允许由此函数写入，避免页面缓存、详情操作和工作台互相覆盖数据。 */
@@ -55,7 +56,7 @@ async function refreshAfterMutation(pid) {
 
     // 按当前视图刷新
     (async () => {
-      if (['home', 'dashboard', 'orders', 'channel', 'regular', 'design-needs', 'tasks', 'task-market', 'scoring', 'points'].includes(EMIE.state.currentView)) {
+      if (['home', 'dashboard', 'orders', 'channel', 'regular', 'design-needs', 'tasks', 'task-market', 'materials', 'scoring', 'points'].includes(EMIE.state.currentView)) {
         await render();
       } else if (pid) {
         try {
@@ -210,6 +211,8 @@ async function render() {
       await renderMyTasks(main, role, uid, EMIE.state.taskBucket || 'all');
     } else if (view === 'task-market') {
       await renderTaskMarket(main, role, uid);
+    } else if (view === 'materials') {
+      await renderMaterialMarket(main);
     } else if (view === 'other-tasks') {
       await renderDepartmentTasks(main, role, uid, EMIE.state.taskBucket || 'all');
     } else if (view === 'scoring') {

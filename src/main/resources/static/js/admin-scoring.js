@@ -108,22 +108,21 @@ const resetScoringWeights = async function() {
 };
 
 async function renderAdminPoints(container) {
+  if (!container) return;
   container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--gray-400);">加载积分规则…</div>';
   try {
     const targetMonth = new Date().toISOString().slice(0, 7);
-    const [rules, difficulties, appeals, poProgress, proposals, systemConfigs] = await Promise.all([
+    const [rules, difficulties, appeals, poProgress, systemConfigs] = await Promise.all([
       apiGet('/points/rules'),
       apiGet('/points/difficulties'),
       apiGet('/point-governance/appeals'),
-      apiGet('/point-governance/po/progress'),
-      apiGet('/point-program/proposals'), apiGet('/admin/configs'),
+      apiGet('/point-governance/po/progress'), apiGet('/admin/configs'),
     ]);
     const ruleList = (Array.isArray(rules) ? rules : []).slice().sort(compareRuleCodes);
     const difficultyList = Array.isArray(difficulties) ? difficulties : [];
     // 复核区只展示待处理异议，已通过/已驳回记录保留在数据库审计链中，不再占用待办列表。
     const appealList = Array.isArray(appeals) ? appeals.filter(item => ['SUBMITTED', 'PLANNER_PROCESSED'].includes(item.status)) : [];
     const poProgressList = Array.isArray(poProgress) ? poProgress : [];
-    const proposalList = Array.isArray(proposals) ? proposals : [];
     const governanceConfig = Object.fromEntries((systemConfigs?.business || []).filter(x => String(x.configKey || '').startsWith('points.withdrawal.')).map(x => [x.configKey, x.configValue || '']));
     container.innerHTML = `<div class="admin-points-config" style="max-width:1100px;margin:0 auto;">
       <div class="admin-points-page-head" style="margin-bottom:18px;"><div><h2 style="font-size:18px;margin:0 0 4px;">🏅 积分与绩效配置</h2><p style="color:var(--gray-500);font-size:13px;margin:0;">规则修改只影响后续入账，历史积分台账不会重算。</p></div></div>
@@ -139,7 +138,7 @@ async function renderAdminPoints(container) {
         </div>
         <div style="display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap;">
           <input class="form-input" id="pr_desc_${index}" value="${escHtml(rule.description || '')}" placeholder="规则说明" style="flex:1;min-width:240px;">
-          <label class="checkbox-item ${rule.enabled === false ? '' : 'checked'}"><input type="checkbox" id="pr_enabled_${index}" ${rule.enabled === false ? '' : 'checked'}> 启用</label>
+          <label class="checkbox-item ${rule.enabled === false ? '' : 'checked'}"><input type="checkbox" id="pr_enabled_${index}" ${rule.enabled === false ? '' : 'checked'} data-emie-onchange="this.closest('.checkbox-item')?.classList.toggle('checked', this.checked)"> 启用</label>
           <button class="btn btn-primary btn-sm" data-emie-onclick="savePointRule('${escHtml(escJsString(rule.ruleCode))}',${index})">保存规则</button>
           <button class="btn btn-danger btn-sm" data-emie-onclick="deletePointRule('${escHtml(escJsString(rule.ruleCode))}')">移除</button>
         </div>
@@ -227,7 +226,10 @@ async function createPointRule() {
   const description = (window.prompt('规则说明', '') || '').trim();
   try {
     await apiPost('/points/rules', { ruleCode, category, points, description });
-    await renderAdminPoints(document.getElementById('adminContent'));
+    const pointsContainer = EMIE.state.currentView === 'points'
+      ? document.getElementById('mainContent')
+      : document.getElementById('adminContent');
+    await renderAdminPoints(pointsContainer);
   } catch (e) { window.EMIE.actions.showSystemAlert('新增失败：' + e.message); }
 }
 
@@ -239,7 +241,16 @@ async function deletePointRule(code) {
 
 async function savePointRule(code, index) {
   try {
-    await apiPut('/points/rules/' + encodeURIComponent(code), { points: Number(document.getElementById('pr_points_' + index).value), category: document.getElementById('pr_category_' + index).value.trim(), qualityBonusThreshold: Number(document.getElementById('pr_threshold_' + index).value), qualityBonusRatio: Number(document.getElementById('pr_ratio_' + index).value), qualityTopThreshold: Number(document.getElementById('pr_top_threshold_' + index).value), qualityTopRatio: Number(document.getElementById('pr_top_ratio_' + index).value), maxTotalMultiplier: Number(document.getElementById('pr_cap_' + index).value), description: document.getElementById('pr_desc_' + index).value.trim(), enabled: document.getElementById('pr_enabled_' + index).checked });
+    const value = id => document.getElementById(id)?.value ?? '';
+    const checked = id => Boolean(document.getElementById(id)?.checked);
+    await apiPut('/points/rules/' + encodeURIComponent(code), {
+      points: Number(value('pr_points_' + index)), category: value('pr_category_' + index).trim(),
+      qualityBonusThreshold: Number(value('pr_threshold_' + index)), qualityBonusRatio: Number(value('pr_ratio_' + index)),
+      qualityTopThreshold: Number(value('pr_top_threshold_' + index) || 0), qualityTopRatio: Number(value('pr_top_ratio_' + index) || 0),
+      // The current rule editor does not expose a cap input. Keep the backend's
+      // required minimum at 1 instead of accidentally submitting 0.
+      maxTotalMultiplier: Number(value('pr_cap_' + index) || 1), description: value('pr_desc_' + index).trim(), enabled: checked('pr_enabled_' + index)
+    });
     window.EMIE.actions.showSystemAlert('积分规则已保存');
   } catch (e) { window.EMIE.actions.showSystemAlert('保存失败：' + e.message); }
 }
@@ -271,7 +282,10 @@ async function saveStandardPointConfig(index) {
   try {
     await apiPut('/performance/standard', { id: current?.id || null, configCode, points, performanceBase, departmentType, description, enabled });
     showAdminToast('标准积分配置已保存', 'success');
-    await renderAdminPoints(document.getElementById('adminContent'));
+    const pointsContainer = EMIE.state.currentView === 'points'
+      ? document.getElementById('mainContent')
+      : document.getElementById('adminContent');
+    await renderAdminPoints(pointsContainer);
     requestAnimationFrame(() => { const el = document.getElementById('adminContent'); if (el) el.scrollTop = scrollTop; });
   } catch (e) { showAdminToast('保存失败：' + e.message, 'error'); }
 }
@@ -465,7 +479,6 @@ async function preparePointArchive() {
   try { await apiPost(`/point-governance/archives/${encodeURIComponent(month)}/prepare`, {}); window.EMIE.actions.showSystemAlert('已根据积分、个人标准和供单状态生成草稿'); await renderAdminPoints(document.getElementById('adminContent')); }
   catch (e) { window.EMIE.actions.showSystemAlert('生成失败：' + e.message); }
 }
-async function reviewSelfProposal(id,approve){const comment=prompt(approve?'请输入立项意见':'请输入驳回原因');if(!comment)return;try{await apiPost(`/point-program/proposals/${id}/review`,{approve,comment});await renderAdminPoints(document.getElementById('adminContent'));}catch(e){window.EMIE.actions.showSystemAlert('处理失败：'+e.message);}}
 async function savePointArchiveDraft() {
   const month = window.prompt('归档月份（YYYY-MM）'); if (!/^\d{4}-\d{2}$/.test(month || '')) { if (month) window.EMIE.actions.showSystemAlert('月份格式应为 YYYY-MM'); return; }
   const userId = window.prompt('成员用户 ID'); if (!userId) return;
@@ -507,7 +520,6 @@ EMIE.registerActions({
   configureMarketEligibility,
   saveWithdrawalGovernanceConfig,
   preparePointArchive,
-  reviewSelfProposal,
   savePointArchiveDraft,
   archivePointMonth,
 });
@@ -537,7 +549,6 @@ EMIE.registerModule('adminScoring', {
   configureMarketEligibility,
   saveWithdrawalGovernanceConfig,
   preparePointArchive,
-  reviewSelfProposal,
   savePointArchiveDraft,
   archivePointMonth,
 });

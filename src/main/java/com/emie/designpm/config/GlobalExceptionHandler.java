@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 
 import java.util.LinkedHashMap;
@@ -44,6 +45,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AsyncRequestTimeoutException.class)
     public ResponseEntity<Map<String, Object>> handleAsyncTimeout() {
         return ResponseEntity.noContent().build();
+    }
+
+    /** Preserve deliberate HTTP status responses (for example, unauthenticated API calls). */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatus(ResponseStatusException ex,
+                                                                     HttpServletRequest request) {
+        String traceId = traceId();
+        log.warn("请求返回状态码 traceId={} path={} status={}", traceId, request.getRequestURI(), ex.getStatusCode());
+        String message = ex.getReason() == null || ex.getReason().isBlank() ? "请求无法完成" : ex.getReason();
+        return response(HttpStatus.valueOf(ex.getStatusCode().value()), message, null, traceId);
     }
 
     @ExceptionHandler(Exception.class)

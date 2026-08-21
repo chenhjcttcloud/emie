@@ -358,39 +358,40 @@ function removeProgress(progId) {
 
 async function handleFileUpload(input, list, maxCount, typeLabel, isImage) {
   const files = input?.files || input || [];
-  if (list.length + files.length > maxCount) {
+  const pendingCount = list._pendingUploadCount || 0;
+  if (list.length + pendingCount + files.length > maxCount) {
     window.EMIE.actions.showSystemAlert(typeLabel + '最多上传' + maxCount + '个');
     if (input?.value !== undefined) input.value = '';
     return;
   }
+  list._pendingUploadCount = pendingCount + files.length;
   const maxBytes = 200 * 1024 * 1024;
   const blocked = ['.sql', '.sh', '.bat', '.cmd', '.exe', '.dll', '.so', '.jar', '.war', '.php', '.asp', '.jsp', '.py', '.vbs', '.ps1', '.msi', '.reg', '.scr'];
 
   for (const f of files) {
-    const ext = '.' + f.name.split('.').pop()?.toLowerCase();
-    if (blocked.includes(ext)) { window.EMIE.actions.showSystemAlert('不允许上传 ' + ext + ' 文件'); continue; }
-    if (f.size > maxBytes) { window.EMIE.actions.showSystemAlert('文件 ' + f.name + ' 超过大小限制'); continue; }
-
-    const suffix = typeLabel.includes('交付') ? 'Deliver' : 'Create';
-    const containerId = isImage ? (suffix + (isImage ? 'RefImageList' : 'AttachmentList')) : (suffix + (isImage ? 'RefImageList' : 'AttachmentList'));
-    const barId = showProgressBar(
-      isImage ? (suffix === 'Create' ? 'createRefImageList' : 'deliverImageList')
-              : (suffix === 'Create' ? 'createAttachmentList' : 'deliverAttachmentList'),
-      f.name
-    );
-    EMIE.projectState.uploadingCount++;
-
     try {
-      const result = await uploadFile(f, (pct) => updateProgress(barId, pct));
-      list.push({ name: result.name, url: result.url, size: result.size, storedName: result.storedName });
-      renderFileList(list, typeLabel);
-      formModified();
-      setTimeout(() => removeProgress(barId), 1500);
-    } catch (e) {
-      removeProgress(barId);
-      window.EMIE.actions.showSystemAlert('上传失败: ' + f.name + ' - ' + e.message);
+      const ext = '.' + f.name.split('.').pop()?.toLowerCase();
+      if (blocked.includes(ext)) { window.EMIE.actions.showSystemAlert('不允许上传 ' + ext + ' 文件'); continue; }
+      if (f.size > maxBytes) { window.EMIE.actions.showSystemAlert('文件 ' + f.name + ' 超过大小限制'); continue; }
+
+      const containerId = resolveFileListContext(list, isImage).containerId;
+      const barId = showProgressBar(containerId, f.name);
+      EMIE.projectState.uploadingCount++;
+      try {
+        const result = await uploadFile(f, (pct) => updateProgress(barId, pct));
+        list.push({ name: result.name, url: result.url, size: result.size, storedName: result.storedName });
+        renderFileList(list, typeLabel);
+        formModified();
+        setTimeout(() => removeProgress(barId), 1500);
+      } catch (e) {
+        removeProgress(barId);
+        window.EMIE.actions.showSystemAlert('上传失败: ' + f.name + ' - ' + e.message);
+      } finally {
+        EMIE.projectState.uploadingCount--;
+      }
+    } finally {
+      list._pendingUploadCount = Math.max(0, (list._pendingUploadCount || 1) - 1);
     }
-    EMIE.projectState.uploadingCount--;
   }
   if (input?.value !== undefined) input.value = '';
 }
@@ -436,6 +437,8 @@ function resolveFileListContext(list, isImage) {
   if (list === EMIE.projectState.editProjectAttachments) return { listKey: 'editProjectAttachment', containerId: 'editProjectAttachmentList' };
   if (list === EMIE.projectState.rejectionImages) return { listKey: 'rejectionImage', containerId: 'rejectImageList' };
   if (list === EMIE.projectState.rejectionAttachments) return { listKey: 'rejectionAttachment', containerId: 'rejectAttachmentList' };
+  if (list === EMIE.projectState.materialRefImages) return { listKey: 'materialRefImage', containerId: 'materialRefImageList' };
+  if (list === EMIE.projectState.materialAttachments) return { listKey: 'materialAttachment', containerId: 'materialAttachmentList' };
   return {
     listKey: isImage ? 'createRef' : 'createAttachment',
     containerId: isImage ? 'createRefImageList' : 'createAttachmentList'
@@ -455,7 +458,9 @@ function removeFileItem(listKey, idx) {
     editProjectRef: [EMIE.projectState.editProjectRefImages, '编辑项目参考图片'],
     editProjectAttachment: [EMIE.projectState.editProjectAttachments, '编辑项目附件'],
     rejectionImage: [EMIE.projectState.rejectionImages, '驳回参考图'],
-    rejectionAttachment: [EMIE.projectState.rejectionAttachments, '驳回附件']
+    rejectionAttachment: [EMIE.projectState.rejectionAttachments, '驳回附件'],
+    materialRefImage: [EMIE.projectState.materialRefImages, '参考图片'],
+    materialAttachment: [EMIE.projectState.materialAttachments, '附件']
   };
   const context = contexts[listKey];
   if (!context) return;
@@ -487,6 +492,8 @@ function handleUploadDrop(input, files) {
     deliverAttachmentInput: [EMIE.projectState.deliverAttachments, 5, '交付附件', false],
     rejectImageInput: [EMIE.projectState.rejectionImages, 6, '驳回参考图', true],
     rejectAttachmentInput: [EMIE.projectState.rejectionAttachments, 5, '驳回附件', false],
+    materialRefImageInput: [EMIE.projectState.materialRefImages, 6, '参考图片', true],
+    materialAttachmentInput: [EMIE.projectState.materialAttachments, 5, '附件', false],
   }[id];
   if (config) handleFileUpload(files, ...config);
 }

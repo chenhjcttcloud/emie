@@ -431,6 +431,7 @@ async function sendNotificationTest() {
 
 const NOTIFICATION_TEMPLATE_SCENARIOS = [
   ['PROJECT_ASSIGNED', '项目指派', '项目被指定给产品企划时'],
+  ['MATERIAL_MARKET_PLANNER_PENDING', '素材广场待企划接单', '销售从素材广场选材并生成待认领渠道定制单时'],
   ['TASK_ASSIGNED', '子任务派发', '子任务首次指派给负责人时'],
   ['TASK_REASSIGNED', '子任务改派', '子任务改派给新负责人时'],
   ['TASK_ACCEPTED', '子任务接单', '负责人确认接单时'],

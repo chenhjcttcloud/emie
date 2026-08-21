@@ -266,10 +266,10 @@ async function loadDashboardRoleStatus(role, uid, myDept) {
       html = '<div class="dashboard-role-panels-grid dashboard-role-panels-masonry"><div class="dashboard-role-panel-column">'
         + renderRolePanelFromData(roleStatus.sales || {}, 'sales')
         + renderRolePanelFromData(roleStatus.promotion || {}, 'promotion')
-        + renderRolePanelFromData(roleStatus.designer || {}, 'designer')
         + '</div><div class="dashboard-role-panel-column">'
         + renderRolePanelFromData(roleStatus.planner || {}, 'planner')
         + renderRolePanelFromData(roleStatus.supplychain || {}, 'supplychain')
+        + renderRolePanelFromData(roleStatus.designer || {}, 'designer')
         + '</div></div>';
     } else if (EMIE.state.currentRole === 'planner') {
       // 企划状态看板统一展示全部产品企划，包含部门负责人和当前用户。

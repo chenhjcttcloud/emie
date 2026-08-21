@@ -12,6 +12,7 @@ const NAV_DEFINITIONS = [
   { view: 'tasks', icon: '📌', label: '我的子任务', permission: 'page.subtasks.mine.view' },
   { view: 'other-tasks', icon: '🧭', label: '其他子任务', permission: 'page.subtasks.department.view' },
   { view: 'task-market', icon: '⚡', label: '接单市场', permission: 'page.subtasks.mine.view' },
+  { view: 'materials', icon: '🧺', label: '素材广场', permission: 'page.dashboard.view' },
   { view: 'scoring', icon: '⭐', label: '评分', permission: 'page.scoring.view' },
   { view: 'points', icon: '🏅', label: '积分', permission: 'page.points.view' },
   { view: 'admin', icon: '⚙️', label: '系统管理', permission: 'page.admin.view' },

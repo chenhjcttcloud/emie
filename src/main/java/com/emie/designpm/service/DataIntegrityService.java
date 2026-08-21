@@ -3,10 +3,12 @@ package com.emie.designpm.service;
 import com.emie.designpm.repository.DesignRequirementRepository;
 import com.emie.designpm.repository.FileRecordRepository;
 import com.emie.designpm.repository.ProjectRepository;
+import com.emie.designpm.repository.MaterialMarketItemRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -20,16 +22,28 @@ public class DataIntegrityService {
     private final SubTaskRepository subTaskRepository;
     private final DesignRequirementRepository requirementRepository;
     private final FileRecordRepository fileRecordRepository;
+    private final MaterialMarketItemRepository materialMarketRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Autowired
     public DataIntegrityService(ProjectRepository projectRepository,
                                 SubTaskRepository subTaskRepository,
                                 DesignRequirementRepository requirementRepository,
-                                FileRecordRepository fileRecordRepository) {
+                                FileRecordRepository fileRecordRepository,
+                                MaterialMarketItemRepository materialMarketRepository) {
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
         this.requirementRepository = requirementRepository;
         this.fileRecordRepository = fileRecordRepository;
+        this.materialMarketRepository = materialMarketRepository;
+    }
+
+    /** 保留既有单元测试和嵌入式调用方的构造器兼容性。 */
+    public DataIntegrityService(ProjectRepository projectRepository,
+                                SubTaskRepository subTaskRepository,
+                                DesignRequirementRepository requirementRepository,
+                                FileRecordRepository fileRecordRepository) {
+        this(projectRepository, subTaskRepository, requirementRepository, fileRecordRepository, null);
     }
 
     public Map<String, Object> scan() {
@@ -55,6 +69,12 @@ public class DataIntegrityService {
             scanJson("design_requirement#" + requirement.getId() + ".deliveryReferenceImagesJson", requirement.getDeliveryReferenceImagesJson(), knownFiles, referenced, missing, invalidJson, referenceCounts);
             scanJson("design_requirement#" + requirement.getId() + ".deliveryAttachmentsJson", requirement.getDeliveryAttachmentsJson(), knownFiles, referenced, missing, invalidJson, referenceCounts);
         }, DesignRequirementRepository.IntegrityRequirementProjection::getId);
+        if (materialMarketRepository != null) {
+            scanBatches(materialMarketRepository::findIntegrityMaterialsAfter, material -> {
+                scanJson("material_market#" + material.getId() + ".referenceImagesJson", material.getReferenceImagesJson(), knownFiles, referenced, missing, invalidJson, referenceCounts);
+                scanJson("material_market#" + material.getId() + ".materialFilesJson", material.getMaterialFilesJson(), knownFiles, referenced, missing, invalidJson, referenceCounts);
+            }, MaterialMarketItemRepository.IntegrityMaterialProjection::getId);
+        }
 
         List<String> duplicates = referenceCounts.entrySet().stream()
                 .filter(entry -> entry.getValue() > 1)

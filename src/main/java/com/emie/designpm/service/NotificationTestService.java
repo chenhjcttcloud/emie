@@ -35,6 +35,7 @@ public class NotificationTestService {
     private final UserRepository userRepository;
     private final SystemConfigRepository configRepository;
     private final FeishuBaseService feishuBaseService;
+    private final NotificationRecipientRouter recipientRouter;
 
     public NotificationTestService(NotificationOutboxService outboxService,
                                    NotificationRepository notificationRepository,
@@ -42,7 +43,8 @@ public class NotificationTestService {
                                    NotificationAuditLogRepository auditLogRepository,
                                    UserRepository userRepository,
                                    SystemConfigRepository configRepository,
-                                   FeishuBaseService feishuBaseService) {
+                                   FeishuBaseService feishuBaseService,
+                                   NotificationRecipientRouter recipientRouter) {
         this.outboxService = outboxService;
         this.notificationRepository = notificationRepository;
         this.deliveryRepository = deliveryRepository;
@@ -50,16 +52,18 @@ public class NotificationTestService {
         this.userRepository = userRepository;
         this.configRepository = configRepository;
         this.feishuBaseService = feishuBaseService;
+        this.recipientRouter = recipientRouter;
     }
 
     public Map<String, Object> sendTest(String userId) {
-        User user = userRepository.findByUserId(userId)
+        String routedUserId = recipientRouter.route(userId);
+        User user = userRepository.findByUserId(routedUserId)
                 .orElseThrow(() -> new IllegalArgumentException("当前登录用户不存在"));
         NotificationEvent event = outboxService.publish(
                 "NOTIFICATION_CHANNEL_TEST", "notification_test", user.getId(), 1, userId,
                 "notification-test-" + UUID.randomUUID(), "管理员发起通知渠道测试");
         Notification notification = notificationRepository.save(Notification.builder()
-                .eventId(event.getId()).recipientUserId(userId).category("system")
+                .eventId(event.getId()).recipientUserId(routedUserId).category("system")
                 .priority("normal").mandatory(false).title("通知渠道测试")
                 .content("这是一条由系统设置发起的测试通知。若你同时收到了飞书卡片，说明飞书通知已配置成功。")
                 .deepLink("/admin?tab=config").aggregateType("notification_test")
@@ -113,9 +117,16 @@ public class NotificationTestService {
 
     public Map<String, Object> sendTemporaryBroadcast(String title, String content, String operatorUserId) {
         validateTemporaryBroadcast(title, content);
+        List<User> activeUsers = userRepository.findAll().stream()
+                .filter(user -> user.getStatus() == null || !"disabled".equalsIgnoreCase(user.getStatus()))
+                .toList();
+        List<User> recipients = recipientRouter.routeAll(activeUsers.stream().map(User::getUserId).toList()).stream()
+                .map(recipientUserId -> activeUsers.stream().filter(user -> recipientUserId.equals(user.getUserId())).findFirst()
+                        .or(() -> userRepository.findByUserId(recipientUserId)))
+                .flatMap(java.util.Optional::stream)
+                .toList();
         int total = 0, delivered = 0, failed = 0, unbound = 0;
-        for (User user : userRepository.findAll()) {
-            if (user.getStatus() != null && "disabled".equalsIgnoreCase(user.getStatus())) continue;
+        for (User user : recipients) {
             total++;
             NotificationEvent event = outboxService.publish("TEMPORARY_FEISHU_BROADCAST", "temporary_broadcast",
                     user.getId(), 1, operatorUserId, "temporary-broadcast-" + UUID.randomUUID(), title);
@@ -168,7 +179,11 @@ public class NotificationTestService {
 
     private boolean isEnabled(String key) {
         return configRepository.findByConfigKey(key).map(SystemConfig::getConfigValue)
-                .map("true"::equalsIgnoreCase).orElse(false);
+                .map("true"::equalsIgnoreCase)
+                // 与业务通知使用同一兼容规则，避免测试页与真实通知的开关判断不一致。
+                .orElseGet(() -> "notification.feishuEnabled".equals(key)
+                        && configRepository.findByConfigKey("feishu.enabled").map(SystemConfig::getConfigValue)
+                        .map("true"::equalsIgnoreCase).orElse(false));
     }
 
     static String buildCard() throws Exception {

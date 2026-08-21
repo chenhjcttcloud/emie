@@ -22,8 +22,8 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 飞书多维表格（Base）同步服务
  *
- * 企业级方案：机器人通过 tenant_access_token 直接调用飞书 API，
- * 自动创建属于机器人自己的多维表格，无需用户授权。
+ * 企业级方案：统一飞书应用通过 tenant_access_token 直接调用飞书 API，
+ * 自动创建属于机器人的多维表格并发送通知，无需用户授权。
  */
 @Service
 public class FeishuBaseService {
@@ -200,16 +200,16 @@ public class FeishuBaseService {
         return tables;
     }
 
-    // ==================== Token 管理（纯机器人 token）====================
+    // ==================== Token 管理（统一飞书应用 token）====================
 
     private synchronized String getToken() throws Exception {
         if (cachedToken != null && System.currentTimeMillis() < tokenExpiresAt - 120_000) {
             return cachedToken;
         }
-        String appId = getCfg("feishu.appId");
-        String secret = getCfg("feishu.appSecret");
+        String appId = getCfg("feishu.ssoAppId");
+        String secret = getCfg("feishu.ssoAppSecret");
         if (appId.isBlank() || secret.isBlank()) {
-            throw new Exception("飞书 App ID/Secret 未配置");
+            throw new Exception("飞书统一应用 App ID/Secret 未配置");
         }
         ObjectNode body = json.createObjectNode();
         body.put("app_id", appId);
@@ -228,7 +228,7 @@ public class FeishuBaseService {
 
     /**
      * 向已绑定飞书 Open ID 的用户发送交互式卡片消息。
-     * 该能力与多维表格同步共用 tenant_access_token，避免在通知模块重复管理应用凭据。
+     * 该能力与多维表格同步共用统一应用的 tenant_access_token，避免在通知模块重复管理应用凭据。
      */
     public String sendInteractiveMessage(String openId, String cardContent) throws Exception {
         if (openId == null || openId.isBlank()) {
@@ -1075,10 +1075,21 @@ public class FeishuBaseService {
         HttpResponse<String> response = http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
         String responseBody = response.body();
         if (response.statusCode() / 100 != 2) {
-            log.warn("飞书 HTTP 请求失败: method={} status={}", method, response.statusCode());
-            throw new Exception("飞书 HTTP 请求失败: status=" + response.statusCode());
+            String diagnostic = httpErrorDiagnostic(responseBody);
+            log.warn("飞书 HTTP 请求失败: method={} status={} {}", method, response.statusCode(), diagnostic);
+            throw new Exception("飞书 HTTP 请求失败: status=" + response.statusCode() + " " + diagnostic);
         }
         return responseBody;
+    }
+
+    private String httpErrorDiagnostic(String responseBody) {
+        try {
+            JsonNode root = json.readTree(responseBody);
+            String code = root.path("code").asText();
+            String message = root.path("msg").asText();
+            if (!code.isBlank() || !message.isBlank()) return "code=" + code + " msg=" + message;
+        } catch (Exception ignored) { }
+        return "响应正文不可解析";
     }
 
     private String bearerGet(String url, String token) throws Exception {

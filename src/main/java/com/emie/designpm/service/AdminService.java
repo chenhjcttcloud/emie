@@ -121,15 +121,11 @@ public class AdminService {
             SystemConfig.builder().configKey("system.fileUploadMaxSize").configValue("1024").configGroup("system")
                 .description("文件上传最大限制（MB）").valueType("number").sortOrder(4).build(),
 
-            // ===== 飞书 SSO 登录 =====
-            SystemConfig.builder().configKey("feishu.appId").configValue("").configGroup("feishu")
-                .description("飞书应用 App ID").valueType("text").sortOrder(1).build(),
-            SystemConfig.builder().configKey("feishu.appSecret").configValue("").configGroup("feishu")
-                .description("飞书应用 App Secret").valueType("password").sortOrder(2).build(),
+            // ===== 飞书统一应用 =====
             SystemConfig.builder().configKey("feishu.ssoAppId").configValue("").configGroup("feishu")
-                .description("飞书 SSO 应用 App ID").valueType("text").sortOrder(4).build(),
+                .description("飞书统一应用 App ID（SSO、通知、多维表格）").valueType("text").sortOrder(1).build(),
             SystemConfig.builder().configKey("feishu.ssoAppSecret").configValue("").configGroup("feishu")
-                .description("飞书 SSO 应用 App Secret").valueType("password").sortOrder(5).build(),
+                .description("飞书统一应用 App Secret").valueType("password").sortOrder(2).build(),
             SystemConfig.builder().configKey("feishu.enabled").configValue("false").configGroup("feishu")
                 .description("启用飞书 SSO 登录").valueType("boolean").sortOrder(3).build(),
 
@@ -219,6 +215,7 @@ public class AdminService {
         String variables = "可用变量：{{projectName}}、{{taskName}}、{{actorName}}、{{deadline}}、{{reason}}、{{deliveryCount}}、{{reviewRole}}、{{targetName}}、{{message}}";
         String[][] templates = {
             {"PROJECT_ASSIGNED", "项目指派", "有新的项目待接单", "“{{projectName}}”已由{{actorName}}指定给你，请及时接单并安排任务。"},
+            {"MATERIAL_MARKET_PLANNER_PENDING", "素材广场待企划接单", "素材广场有新的待接单项目", "销售{{actorName}}已从素材广场选中“{{projectName}}”，请及时接单并安排任务。"},
             {"TASK_ASSIGNED", "子任务派发", "有新的子任务待处理", "子任务“{{taskName}}”已指派给你，所属项目：{{projectName}}；计划完成：{{deadline}}。"},
             {"DESIGN_REQUIREMENT_ASSIGNED", "设计送审需求派发", "有新的设计/送审需求", "“{{projectName}}”已由{{actorName}}创建并指定给你，请及时查看并跟进。"},
             {"DESIGN_REQUIREMENT_DESIGNER_ASSIGNED", "设计需求指派设计师", "有新的设计需求待交付", "“{{projectName}}”已由{{actorName}}指派给你，请在{{deadline}}前完成设计交付。"},
@@ -282,7 +279,7 @@ public class AdminService {
             // 外观相关配置对外公开
             for (String key : List.of("app.title", "app.logo", "app.logoEmoji", "app.subtitle",
                                        "login.bg", "login.bgColor", "system.version",
-                                       "feishu.enabled", "feishu.appId")) {
+                                       "feishu.enabled", "feishu.ssoAppId")) {
                 configRepository.findByConfigKey(key).ifPresent(c ->
                     result.put(c.getConfigKey(), c.getConfigValue() != null ? c.getConfigValue() : ""));
             }

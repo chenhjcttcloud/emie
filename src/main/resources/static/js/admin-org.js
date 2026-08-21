@@ -32,6 +32,11 @@ function uniqueAdminOrgUsers(usersData) {
   });
 }
 
+function isVisibleOrgUser(user) {
+  const status = String(user?.status || '').toLowerCase();
+  return !['inactive', 'disabled'].includes(status) && adminOrgRoleKey(user?.role) !== 'admin';
+}
+
 async function refreshOrgData() {
   try {
     const [users, depts] = await Promise.all([
@@ -54,7 +59,7 @@ async function renderAdminOrg(container) {
   EMIE.state.departments = depts;
   EMIE.state.users = usersData;
   // 展平所有用户
-  const allUsers = uniqueAdminOrgUsers(usersData);
+  const allUsers = uniqueAdminOrgUsers(usersData).filter(isVisibleOrgUser);
   const roleLabels = Object.fromEntries(roles.map(r => [r.name, r.displayName || r.name]));
 
   // 确保部门负责人也计入部门成员（即使 departmentId 未同步）
@@ -126,7 +131,7 @@ async function openCreateDeptModal() {
     apiGet('/users'),
   ]);
   const roles = roleData.filter(r => r.name !== 'pending');
-  const allUsers = uniqueAdminOrgUsers(usersData);
+  const allUsers = uniqueAdminOrgUsers(usersData).filter(isVisibleOrgUser);
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'createDeptModal';
@@ -161,15 +166,9 @@ async function openCreateDeptModal() {
   document.getElementById('deptRoleSelect').onchange = function() {
     const role = this.value;
     const sel = document.getElementById('deptHeadSelect');
-    const filtered = [
-      ...allUsers.filter(u => adminOrgRoleKey(u.role) === adminOrgRoleKey(role)),
-      ...allUsers.filter(u => adminOrgRoleKey(u.role) === 'admin'),
-    ];
+    const filtered = allUsers;
     sel.innerHTML = '<option value="">未设置</option>' +
-      filtered.filter(u => adminOrgRoleKey(u.role) !== 'admin').map(u => `<option value="${escHtml(u.userId)}">${escHtml(u.name)}</option>`).join('') +
-      (filtered.some(u => adminOrgRoleKey(u.role) === 'admin')
-        ? '<optgroup label="管理员">' + filtered.filter(u => adminOrgRoleKey(u.role) === 'admin').map(u => `<option value="${escHtml(u.userId)}">${escHtml(u.name)}</option>`).join('') + '</optgroup>'
-        : '');
+      filtered.map(u => `<option value="${escHtml(u.userId)}">${escHtml(u.name)}（${escHtml(u.role || '')}）</option>`).join('');
   };
   document.getElementById('deptRoleSelect').dispatchEvent(new Event('change'));
 }
@@ -194,7 +193,7 @@ async function editDept(d) {
   if (d.role && !roles.some(r => r.name === d.role)) {
     roles.push({ name: d.role, displayName: d.role });
   }
-  const allUsers = uniqueAdminOrgUsers(usersData);
+  const allUsers = uniqueAdminOrgUsers(usersData).filter(isVisibleOrgUser);
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'editDeptModal';
@@ -232,19 +231,11 @@ async function editDept(d) {
   const updateHeadSelect = () => {
     const role = document.getElementById('editDeptRoleSelect').value;
     const sel = document.getElementById('editDeptHeadSelect');
-    const candidates = [
-        ...allUsers.filter(u => adminOrgRoleKey(u.role) === adminOrgRoleKey(role)),
-        ...allUsers.filter(u => adminOrgRoleKey(u.role) === 'admin'),
-      ];
+    const candidates = allUsers;
     sel.innerHTML = '<option value="">未设置</option>' +
-      candidates.filter(u => adminOrgRoleKey(u.role) !== 'admin').map(u =>
-        `<option value="${escHtml(u.userId)}" ${u.userId === d.headUserId ? 'selected' : ''}>${escHtml(u.name)}</option>`
-      ).join('') +
-      (candidates.some(u => adminOrgRoleKey(u.role) === 'admin')
-        ? '<optgroup label="管理员">' + candidates.filter(u => adminOrgRoleKey(u.role) === 'admin').map(u =>
-          `<option value="${escHtml(u.userId)}" ${u.userId === d.headUserId ? 'selected' : ''}>${escHtml(u.name)}</option>`
-        ).join('') + '</optgroup>'
-        : '');
+      candidates.map(u =>
+        `<option value="${escHtml(u.userId)}" ${u.userId === d.headUserId ? 'selected' : ''}>${escHtml(u.name)}（${escHtml(u.role || '')}）</option>`
+      ).join('');
   };
   document.getElementById('editDeptRoleSelect').onchange = updateHeadSelect;
   updateHeadSelect();
@@ -273,7 +264,7 @@ async function openAssignUserDept(userId) {
     apiGet('/departments'),
     apiGet('/users'),
   ]);
-  const allUsers = uniqueAdminOrgUsers(usersData);
+  const allUsers = uniqueAdminOrgUsers(usersData).filter(isVisibleOrgUser);
   const user = allUsers.find(u => u.userId === userId);
   if (!user) return;
   // 按角色过滤可选部门

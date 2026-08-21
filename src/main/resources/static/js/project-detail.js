@@ -160,6 +160,8 @@ function renderProjectDetailContent(detail) {
         <div class="detail-item"><div class="detail-label">IP</div><div class="detail-value">${escHtml(formatProjectIp(detail.ipName, detail.ipSubOptions))}</div></div>
         ${isChannel ? `<div class="detail-item"><div class="detail-label">需求方（销售）</div><div class="detail-value">${escHtml(detail.salesName || '-')}</div></div>` : ''}
         <div class="detail-item"><div class="detail-label">产品企划</div><div class="detail-value">${escHtml(detail.plannerName || '-')}</div></div>
+        ${detail.creativeAuthorName || detail.creativeAuthor ? `<div class="detail-item"><div class="detail-label">创意作者</div><div class="detail-value">${escHtml(detail.creativeAuthorName || detail.creativeAuthor)}</div></div>` : ''}
+        ${detail.source === '素材广场' || detail.sourceType === 'material_market' || detail.materialId ? `<div class="detail-item"><div class="detail-label">来源</div><div class="detail-value">素材广场</div></div>` : ''}
         ${detail.productCategory ? `<div class="detail-item"><div class="detail-label">产品类目</div><div class="detail-value">${escHtml(detail.productCategory)}${detail.productCategory === '其他' && detail.productCategoryNote ? `（${escHtml(detail.productCategoryNote)}）` : ''}</div></div>` : ''}
         ${detail.priceRange ? `<div class="detail-item"><div class="detail-label">参考零售价</div><div class="detail-value">${escHtml(detail.priceRange)}</div></div>` : ''}
         ${detail.targetMarket ? `<div class="detail-item"><div class="detail-label">目标市场</div><div class="detail-value">${(() => { try { return JSON.parse(detail.targetMarket).map(escHtml).join('、'); } catch(e) { return escHtml(detail.targetMarket); } })()}</div></div>` : ''}

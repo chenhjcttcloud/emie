@@ -29,26 +29,35 @@ public class NotificationRetryService implements NotificationRetryOperations {
     private final NotificationAuditLogRepository audits;
     private final FeishuBaseService feishu;
     private final NotificationEventRepository events;
+    private final NotificationRecipientRouter recipientRouter;
 
     public NotificationRetryService(NotificationDeliveryRepository deliveries, NotificationRepository notifications,
                                     UserRepository users, NotificationAuditLogRepository audits, FeishuBaseService feishu) {
-        this(deliveries, notifications, users, audits, feishu, null);
+        this(deliveries, notifications, users, audits, feishu, null, null);
+    }
+
+    public NotificationRetryService(NotificationDeliveryRepository deliveries, NotificationRepository notifications,
+                                    UserRepository users, NotificationAuditLogRepository audits, FeishuBaseService feishu,
+                                    NotificationEventRepository events) {
+        this(deliveries, notifications, users, audits, feishu, events, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
     public NotificationRetryService(NotificationDeliveryRepository deliveries, NotificationRepository notifications,
                                     UserRepository users, NotificationAuditLogRepository audits, FeishuBaseService feishu,
-                                    NotificationEventRepository events) {
+                                    NotificationEventRepository events, NotificationRecipientRouter recipientRouter) {
         this.deliveries = deliveries;
         this.notifications = notifications;
         this.users = users;
         this.audits = audits;
         this.feishu = feishu;
         this.events = events;
+        this.recipientRouter = recipientRouter;
     }
 
     @Scheduled(fixedDelayString = "${notification.retry-delay-ms:30000}")
     public void retryDueDeliveries() {
+        if (isTestRecipientOverrideEnabled()) return;
         // 先恢复崩溃残留的认领（长时间停留在 processing 的投递），避免永久滞留。
         deliveries.recoverStuckClaims(LocalDateTime.now().minusMinutes(10), LocalDateTime.now());
         List<NotificationDelivery> due = deliveries
@@ -142,6 +151,9 @@ public class NotificationRetryService implements NotificationRetryOperations {
 
     @Transactional(transactionManager = "backgroundTransactionManager")
     public void retryNow(Long deliveryId, String operatorUserId) {
+        if (isTestRecipientOverrideEnabled()) {
+            throw new IllegalStateException("测试环境已阻止重试历史飞书投递，请触发新的业务通知进行验证");
+        }
         NotificationDelivery d = deliveries.findById(deliveryId)
                 .orElseThrow(() -> new IllegalArgumentException("通知投递记录不存在"));
         if (!"feishu".equals(d.getChannel())) throw new IllegalArgumentException("仅支持重试飞书通知");
@@ -206,6 +218,10 @@ public class NotificationRetryService implements NotificationRetryOperations {
     private void audit(Notification n, NotificationDelivery d, String action, String detail) {
         audits.save(NotificationAuditLog.builder().eventId(n.getEventId()).notificationId(n.getId())
                 .deliveryId(d.getId()).action(action).detail(detail).createdAt(LocalDateTime.now()).build());
+    }
+
+    private boolean isTestRecipientOverrideEnabled() {
+        return recipientRouter != null && recipientRouter.isTestOverrideEnabled();
     }
 
     private String limit(String value) { return value == null ? "未知错误" : value.substring(0, Math.min(1000, value.length())); }
