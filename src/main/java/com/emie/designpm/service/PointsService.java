@@ -111,6 +111,13 @@ public class PointsService {
 
     private boolean eligibleForPoints(SubTask task) {
         if (task == null || task.getId() == null || task.getDesignerId() == null || task.getDesignerId().isBlank()) return false;
+        // 积分制度从配置的起算日开始；起算日前创建的历史子任务不补发积分。
+        LocalDate earningStart = LocalDate.of(2026, 8, 25);
+        if (configs != null) {
+            String configured = configs.findByConfigKey("points.program.earning_start").map(c -> c.getConfigValue()).orElse(null);
+            try { if (configured != null && !configured.isBlank()) earningStart = LocalDate.parse(configured.trim()); } catch (Exception ignored) { }
+        }
+        if (task.getCreatedAt() != null && task.getCreatedAt().toLocalDate().isBefore(earningStart)) return false;
         // 积分仅面向设计师任务（产品确认：供应链等其它负责人类型不参与积分）。
         // 写入端（addSubTask/updateSubTask）已把 null/''、别名归一化为 designer；历史 NULL/别名数据按不发分处理。
         if (!"designer".equals(task.getAssigneeRole())) return false;
