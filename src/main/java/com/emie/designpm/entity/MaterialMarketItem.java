@@ -21,7 +21,9 @@ public class MaterialMarketItem {
  @Column(columnDefinition="TEXT") private String proposalPptJson;
  @Column(nullable=false,length=20) private String status="available";
  private Long projectId;
+ @Transient private String projectCode;
  private String selectedBy;
+ @Transient private String selectedByName;
  private LocalDateTime selectedAt;
  @Column(nullable=false) private LocalDateTime createdAt;
  @PrePersist void onCreate(){if(createdAt==null)createdAt=LocalDateTime.now();}

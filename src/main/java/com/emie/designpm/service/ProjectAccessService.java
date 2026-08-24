@@ -116,6 +116,8 @@ public class ProjectAccessService {
 
     public boolean canView(Project project, AuthController.AuthSession session) {
         if (project == null || session == null) return false;
+        // 素材广场立项的项目对素材广场可见角色开放详情查看；编辑权限仍由各操作接口单独校验。
+        if ("素材广场".equals(project.getSource())) return true;
         String role = PermissionCatalog.normalizeRole(session.role());
         if (!hasPermission(role, "project.detail.view")) return false;
         if (hasScope(role, "project.detail.view", "all")) return true;

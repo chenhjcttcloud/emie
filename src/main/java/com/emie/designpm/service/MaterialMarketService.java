@@ -17,7 +17,12 @@ public class MaterialMarketService {
  private final IpOptionRepository ips; private final PointRuleRepository rules; private final PointAdjustmentLedgerRepository adjustments;
  private final NotificationWorkflowService notifications;
  public MaterialMarketService(MaterialMarketItemRepository m,ProjectRepository p,UserRepository u,FileRecordRepository f,FileArchiveService archive,IpOptionRepository i,PointRuleRepository r,PointAdjustmentLedgerRepository a,NotificationWorkflowService n){materials=m;projects=p;users=u;fileRecords=f;fileArchive=archive;ips=i;rules=r;adjustments=a;notifications=n;}
- public List<MaterialMarketItem> list(){return materials.findAllByOrderByCreatedAtDesc();}
+ public List<MaterialMarketItem> list(){return materials.findAllByOrderByCreatedAtDesc().stream().map(this::withSelectorName).toList();}
+ private MaterialMarketItem withSelectorName(MaterialMarketItem item){
+  if(item.getSelectedBy()!=null) item.setSelectedByName(users.findByUserId(item.getSelectedBy()).map(User::getName).orElse(item.getSelectedBy()));
+  if(item.getProjectId()!=null) projects.findById(item.getProjectId()).ifPresent(p -> item.setProjectCode(p.getProjectCode()));
+  return item;
+ }
  public MaterialMarketItem publish(Map<String,Object> b,String creatorId){
   User u=users.findByUserId(creatorId).orElseThrow(()->new IllegalArgumentException("用户不存在"));
   if(!"designer".equals(u.getRole())) throw new SecurityException("仅设计师可以发布素材");
@@ -28,6 +33,22 @@ public class MaterialMarketService {
   String referenceImages=validateFiles(Objects.toString(b.getOrDefault("referenceImagesJson","[]"),"[]"),true,6,true,creatorId);
   MaterialMarketItem m=new MaterialMarketItem();m.setTitle(title);m.setCreatorId(creatorId);m.setCreatorName(u.getName());m.setIpName(ip);m.setIpSubOptionsJson(Objects.toString(b.getOrDefault("ipSubOptions","[]"),"[]"));m.setMaterialFilesJson(files);m.setReferenceImagesJson(referenceImages);m.setProductDescription(desc);m.setProposalPptJson(Objects.toString(b.containsKey("planFileJson")?b.get("planFileJson"):b.get("proposalPpt"),null));m=materials.save(m);fileArchive.bindFilesFromJson(files,"material_market",m.getId());fileArchive.bindFilesFromJson(referenceImages,"material_market",m.getId());return m;
  }
+ public MaterialMarketItem update(Long id,Map<String,Object> b,String actorId){
+  MaterialMarketItem m=materials.findById(id).orElseThrow(()->new NoSuchElementException("素材不存在"));
+  ensureDesignerOwner(m,actorId);
+  if(!"available".equals(m.getStatus())) throw new IllegalStateException("已认领或已下架的素材不能修改");
+  if(b.containsKey("title")){String v=Objects.toString(b.get("title"),"").trim(); if(v.isBlank()) throw new IllegalArgumentException("标题不能为空"); m.setTitle(v);}
+  if(b.containsKey("description")||b.containsKey("productDescription")){String v=Objects.toString(b.containsKey("description")?b.get("description"):b.get("productDescription"),"").trim(); if(v.isBlank()) throw new IllegalArgumentException("产品说明不能为空"); m.setProductDescription(v);}
+  if(b.containsKey("ipName")){String v=Objects.toString(b.get("ipName"),""); if(ips.findByName(v).filter(x->Boolean.TRUE.equals(x.getActive())).isEmpty()) throw new IllegalArgumentException("IP必须选择系统启用配置"); m.setIpName(v);}
+  if(b.containsKey("ipSubOptions")) m.setIpSubOptionsJson(Objects.toString(b.get("ipSubOptions"),"[]"));
+  if(b.containsKey("filesJson")||b.containsKey("materialFiles")){String v=Objects.toString(b.containsKey("filesJson")?b.get("filesJson"):b.get("materialFiles"),""); m.setMaterialFilesJson(validateFilesForUpdate(v,false,5,false,actorId,id));}
+  if(b.containsKey("referenceImagesJson")) m.setReferenceImagesJson(validateFilesForUpdate(Objects.toString(b.get("referenceImagesJson"),"[]"),true,6,true,actorId,id));
+  if(b.containsKey("planFileJson")||b.containsKey("proposalPpt")) m.setProposalPptJson(Objects.toString(b.containsKey("planFileJson")?b.get("planFileJson"):b.get("proposalPpt"),null));
+  m=materials.save(m); fileArchive.bindFilesFromJson(m.getMaterialFilesJson(),"material_market",m.getId()); fileArchive.bindFilesFromJson(m.getReferenceImagesJson(),"material_market",m.getId()); return m;
+ }
+ public MaterialMarketItem withdraw(Long id,String actorId){MaterialMarketItem m=materials.findById(id).orElseThrow(()->new NoSuchElementException("素材不存在")); ensureDesignerOwner(m,actorId); if(!"available".equals(m.getStatus())) throw new IllegalStateException("已认领的素材不能下架"); m.setStatus("withdrawn"); return materials.save(m);}
+ public void delete(Long id,String actorId){MaterialMarketItem m=materials.findById(id).orElseThrow(()->new NoSuchElementException("素材不存在")); ensureDesignerOwner(m,actorId); if(m.getProjectId()!=null||"selected".equals(m.getStatus())) throw new IllegalStateException("已认领素材不能删除，请保留项目关联记录"); materials.delete(m);}
+ private void ensureDesignerOwner(MaterialMarketItem m,String actorId){if(!Objects.equals(m.getCreatorId(),actorId)) throw new SecurityException("仅素材作者可以操作"); users.findByUserId(actorId).filter(u->"designer".equals(u.getRole())).orElseThrow(()->new SecurityException("仅设计师可以操作素材"));}
  public MaterialMarketItem select(Long id,String actorId,String role,String plannerId){
   MaterialMarketItem m=materials.lockById(id).orElseThrow(()->new IllegalArgumentException("素材不存在或已被选中"));
   if(!"available".equals(m.getStatus())) throw new IllegalStateException("素材已被选中");
@@ -61,6 +82,20 @@ public class MaterialMarketService {
    }
    if(required&&cleaned.isEmpty()) throw new IllegalArgumentException(images?"参考图片不能为空":"附件不能为空");
    return MAPPER.writeValueAsString(cleaned);
+  }catch(IllegalArgumentException e){throw e;}catch(Exception e){throw new IllegalArgumentException("文件信息格式不正确");}
+ }
+ private String validateFilesForUpdate(String json,boolean images,int maxCount,boolean required,String ownerId,Long materialId){
+  if(json==null||json.isBlank()){if(required)throw new IllegalArgumentException(images?"参考图片不能为空":"附件不能为空");return "[]";}
+  try{
+   List<Map<String,Object>> values=MAPPER.readValue(json,new TypeReference<>(){}); if(values.size()>maxCount)throw new IllegalArgumentException((images?"参考图片":"附件")+"最多上传"+maxCount+"个");
+   List<Map<String,Object>> cleaned=new ArrayList<>();
+   for(Map<String,Object> value:values){String storedName=Objects.toString(value.get("storedName"),""); FileRecord record=fileRecords.findByStoredName(storedName).orElseThrow(()->new IllegalArgumentException("文件不存在或已失效"));
+    boolean existing=record.getTargetType()==null&&record.getTargetId()==null || "material_market".equals(record.getTargetType())&&Objects.equals(record.getTargetId(),materialId);
+    if(!ownerId.equals(record.getOwnerUserId())||!existing)throw new IllegalArgumentException("只能使用本人素材文件");
+    if(images?!SecurityUtil.isValidImageFile(record.getOriginalName()):!SecurityUtil.isValidAttachmentFile(record.getOriginalName()))throw new IllegalArgumentException("文件类型不支持");
+    cleaned.add(Map.of("name",record.getOriginalName(),"storedName",record.getStoredName(),"size",record.getFileSize(),"url","/api/files/download/"+record.getStoredName()));
+   }
+   if(required&&cleaned.isEmpty())throw new IllegalArgumentException(images?"参考图片不能为空":"附件不能为空"); return MAPPER.writeValueAsString(cleaned);
   }catch(IllegalArgumentException e){throw e;}catch(Exception e){throw new IllegalArgumentException("文件信息格式不正确");}
  }
 }

@@ -16,5 +16,9 @@ public class MaterialMarketController{
   var s=AuthController.validateToken(token); if(s==null) throw new SecurityException("未登录"); return s;
  }
  @PostMapping public ResponseEntity<?> publish(@RequestBody Map<String,Object> body,HttpServletRequest req){var s=session(req);return ResponseEntity.ok(service.publish(body,s.userId()));}
+ @PatchMapping("/{id}") public ResponseEntity<?> update(@PathVariable Long id,@RequestBody Map<String,Object> body,HttpServletRequest req){var s=session(req);return ResponseEntity.ok(service.update(id,body,s.userId()));}
+ @PutMapping("/{id}") public ResponseEntity<?> updateCompat(@PathVariable Long id,@RequestBody Map<String,Object> body,HttpServletRequest req){var s=session(req);return ResponseEntity.ok(service.update(id,body,s.userId()));}
+ @PostMapping("/{id}/withdraw") public ResponseEntity<?> withdraw(@PathVariable Long id,HttpServletRequest req){var s=session(req);return ResponseEntity.ok(service.withdraw(id,s.userId()));}
+ @DeleteMapping("/{id}") public ResponseEntity<?> delete(@PathVariable Long id,HttpServletRequest req){var s=session(req);service.delete(id,s.userId());return ResponseEntity.ok(Map.of("message","已删除"));}
  @PostMapping("/{id}/select") public ResponseEntity<?> select(@PathVariable Long id,@RequestBody(required=false) Map<String,Object> body,HttpServletRequest req){var s=session(req);return ResponseEntity.ok(service.select(id,s.userId(),s.role(),body==null?null:Objects.toString(body.get("plannerId"),null)));}
 }
