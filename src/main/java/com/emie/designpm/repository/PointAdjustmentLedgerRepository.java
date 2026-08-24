@@ -1,9 +1,6 @@
 package com.emie.designpm.repository;
 import com.emie.designpm.entity.PointAdjustmentLedger;import org.springframework.data.jpa.repository.*;import org.springframework.data.repository.query.Param;import java.util.*;import java.time.LocalDateTime;
 public interface PointAdjustmentLedgerRepository extends JpaRepository<PointAdjustmentLedger,Long>{
- @Modifying
- @Query("delete from PointAdjustmentLedger a where a.sourceType in :types")
- int deleteBySourceTypes(@Param("types") Collection<String> types);
  Optional<PointAdjustmentLedger> findBySourceTypeAndSourceId(String type,Long sourceId);
  List<PointAdjustmentLedger> findByUserIdOrderByCreatedAtDescIdDesc(String userId);
  /** 指定来源类型的最大 sourceId；无记录时返回 0。用于 MANUAL 手工调账生成自增 sourceId（唯一约束 (source_type,source_id) 兜底并发）。 */
