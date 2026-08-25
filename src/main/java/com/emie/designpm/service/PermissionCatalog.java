@@ -155,6 +155,9 @@ public final class PermissionCatalog {
             permissions.add("file.preview");
         }
         if ("planner".equals(role)) {
+            // 企划创建子任务还会在 ProjectService 中校验项目负责人归属；这里必须保留入口权限，
+            // 否则旧版角色编辑留下的 deny 会在进入业务归属校验前直接拦截所有企划。
+            permissions.add("subtask.create");
             permissions.add("subtask.review.first.submit");
             permissions.add("subtask.review.first.approve");
             permissions.add("subtask.review.first.reject");
