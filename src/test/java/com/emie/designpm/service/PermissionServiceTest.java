@@ -111,6 +111,27 @@ class PermissionServiceTest {
     }
 
     @Test
+    void plannerSubtaskCreationCannotBeRemovedByHistoricalDenyAssignment() {
+        RoleRepository roles = mock(RoleRepository.class);
+        RolePermissionRepository assignments = mock(RolePermissionRepository.class);
+        PermissionVersionRepository versions = emptyVersions();
+        when(roles.findByNameIgnoreCase("planner")).thenReturn(Optional.empty());
+        when(assignments.findAllowedPermissionCodes("planner")).thenReturn(List.of());
+        when(assignments.findDeniedPermissionCodes("planner")).thenReturn(List.of("subtask.create"));
+
+        List<String> permissions = permissions(
+                new PermissionService(roles, assignments, versions).capabilities("planner"));
+
+        assertTrue(permissions.contains("subtask.create"));
+    }
+
+    @Test
+    void plannerCanAcceptAssignedSubtask() {
+        assertTrue(PermissionCatalog.compatibilityPermissions("planner").contains("subtask.accept"));
+        assertTrue(PermissionCatalog.mandatoryPermissions("planner").contains("subtask.accept"));
+    }
+
+    @Test
     void configuredDataScopeOverridesCompatibilityScopeAndIsReturnedToFrontend() {
         RoleRepository roles = mock(RoleRepository.class);
         RolePermissionRepository assignments = emptyAssignments();
