@@ -2,6 +2,13 @@ const EMIE = window.EMIE;
 const doneOpenModal = (...args) => EMIE.actions.doneOpenModal(...args);
 const isModalOpen = (...args) => EMIE.actions.isModalOpen(...args);
 
+// 前后端共同使用的业务状态名，避免页面各处散落字符串。
+const EMIE_STATUS = Object.freeze({
+  project: Object.freeze({ pendingPlanner: 'pending_planner', plannerAccepted: 'planner_accepted', inProgress: 'in_progress', paused: 'paused', pendingTerminate: 'pending_terminate', terminated: 'terminated', completed: 'completed' }),
+  task: Object.freeze({ pending: 'pending', accepted: 'accepted', delivered: 'delivered', submitted: 'submitted_for_review', rejected: 'rejected', completed: 'completed' }),
+  allocation: Object.freeze({ marketOpen: 'market_open', directAssigned: 'direct_assigned', withdrawn: 'withdrawn' }),
+});
+
 // ==================== 状态标签 ====================
 function getProjectStatusInfo(status) {
   return {
@@ -87,7 +94,7 @@ function renderDatePicker(name, opts = {}) {
   const now = new Date();
   const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   return `<div class="date-picker" style="position:relative;">
-    <input id="${inputId}" type="date" class="form-input" name="${name}" value="${val}" ${req} min="${localToday}" aria-label="${ph}" autocomplete="off" style="min-height:38px;cursor:pointer;" data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">
+    <input id="${inputId}" type="date" class="form-input" name="${name}" value="${val}" ${req} min="${localToday}" aria-label="${ph}" autocomplete="off" style="min-height:38px;cursor:pointer;" data-emie-action="input:ui-date-input">
   </div>`;
 }
 
@@ -390,6 +397,11 @@ function showSystemAlert(message, title = '提示') {
   overlay.querySelector('[data-action="ok"]').onclick = finish; overlay.querySelector('.modal-close').onclick = finish;
   requestAnimationFrame(() => overlay.querySelector('[data-action="ok"]')?.focus());
 }
+
+function showApiError(error, title = '操作失败') {
+  const message = error?.message || String(error || '请稍后重试');
+  showSystemAlert(message, title);
+}
 function showSystemInput(message, value = '', title = '请输入') {
   return new Promise(resolve => {
     const id='systemInputModal'; document.getElementById(id)?.remove(); const overlay=document.createElement('div'); overlay.className='modal-overlay'; overlay.id=id; overlay.style.zIndex='450'; document.body.appendChild(overlay);
@@ -480,7 +492,7 @@ function showSaveConfirmModal() {
   confirm.innerHTML = `
     <div class="modal" style="max-width:400px;">
       <div class="modal-header">
-        <button class="modal-close" data-emie-onclick="document.getElementById('saveConfirmOverlay')?.remove()">✕</button>
+        <button class="modal-close" data-emie-action="click:ui-close-save-confirm">✕</button>
         <div class="modal-header-left"><div class="modal-title">💾 未保存的内容</div></div>
       </div>
       <div class="modal-body" style="text-align:center;padding:32px 24px;">
@@ -489,8 +501,8 @@ function showSaveConfirmModal() {
         <p style="font-size:13px;color:var(--gray-500);">是否保存为草稿以便稍后继续？</p>
       </div>
       <div class="modal-footer" style="justify-content:center;gap:12px;">
-        <button class="btn btn-outline" data-emie-onclick="discardCreateDraft()" style="padding:10px 24px;">不保存</button>
-        <button class="btn btn-primary" data-emie-onclick="saveCreateDraft()" style="padding:10px 24px;">保存草稿</button>
+        <button class="btn btn-outline" data-emie-action="click:ui-discard-draft" style="padding:10px 24px;">不保存</button>
+        <button class="btn btn-primary" data-emie-action="click:ui-save-draft" style="padding:10px 24px;">保存草稿</button>
       </div>
     </div>`;
   document.body.appendChild(confirm);
@@ -544,6 +556,8 @@ EMIE.registerActions({
   openModal,
   showSaveConfirmModal,
   showSystemAlert,
+  showApiError,
+  EMIE_STATUS,
   showSystemInput,
   showSystemForm,
   showSystemSelect,
@@ -571,6 +585,8 @@ EMIE.registerModule('coreUi', {
   openModal,
   showSaveConfirmModal,
   showSystemAlert,
+  showApiError,
+  EMIE_STATUS,
   showSystemInput,
   showSystemForm,
   showSystemSelect,
@@ -578,3 +594,16 @@ EMIE.registerModule('coreUi', {
   discardCreateDraft,
   showLoading,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('ui-date-input', (_event, element) => {
+    element.closest('.form-group')?.querySelector('.field-error')?.remove();
+    element.style.borderColor = '';
+    formModified();
+  });
+  registerEventAction('ui-close-save-confirm', () =>
+    document.getElementById('saveConfirmOverlay')?.remove());
+  registerEventAction('ui-discard-draft', () => discardCreateDraft());
+  registerEventAction('ui-save-draft', () => saveCreateDraft());
+}

@@ -62,32 +62,32 @@ async function renderScoringView(main, role, uid) {
       <h2 style="font-size:22px;">⭐ 评分中心 <span style="font-size:14px;color:var(--gray-400);font-weight:400;">待评分 ${pendingCount} / 已评分 ${doneCount}</span></h2>
     </div>
     <div class="filter-bar">
-      <select class="form-select" data-emie-onchange="filterScoringView()" style="min-width:120px;" id="scoringFilter">
+      <select class="form-select" data-emie-action="change:scoring-filter" style="min-width:120px;" id="scoringFilter">
         <option value="all">全部</option>
         <option value="pending">待评分</option>
         <option value="done">已评分</option>
       </select>
-      <select class="form-select" data-emie-onchange="filterScoringView()" style="min-width:120px;" id="scoringTypeFilter">
+      <select class="form-select" data-emie-action="change:scoring-filter" style="min-width:120px;" id="scoringTypeFilter">
         <option value="all">全部项目类型</option>
         <option value="channel_custom">渠道定制单</option>
         <option value="regular">公司常规品</option>
         <option value="design_requirement">设计/送审需求</option>
       </select>
-      <select class="form-select" data-emie-onchange="filterScoringView()" style="min-width:120px;" id="scoringStageFilter">
+      <select class="form-select" data-emie-action="change:scoring-filter" style="min-width:120px;" id="scoringStageFilter">
         <option value="all">全部审核阶段</option>
         <option value="first">一审</option>
         <option value="second">二审</option>
       </select>
-      <select class="form-select" data-emie-onchange="filterScoringView()" style="min-width:140px;" id="scoringPlannerFilter">
+      <select class="form-select" data-emie-action="change:scoring-filter" style="min-width:140px;" id="scoringPlannerFilter">
         <option value="all">全部产品企划</option>
         ${plannerOptions.map(([id, name]) => `<option value="${escHtml(id)}">${escHtml(name)}</option>`).join('')}
       </select>
-      <input class="form-input" placeholder="🔍 搜索任务名/项目号..." data-emie-oninput="filterScoringView()" style="min-width:180px;" id="scoringSearch">
-      <input type="date" class="form-input" id="scoringDateStart" data-emie-onchange="filterScoringView()" style="min-width:130px;" title="计划完成日期起">
+      <input class="form-input" placeholder="🔍 搜索任务名/项目号..." data-emie-action="input:scoring-filter" style="min-width:180px;" id="scoringSearch">
+      <input type="date" class="form-input" id="scoringDateStart" data-emie-action="change:scoring-filter" style="min-width:130px;" title="计划完成日期起">
       <span style="color:var(--gray-400);font-size:13px;">~</span>
-      <input type="date" class="form-input" id="scoringDateEnd" data-emie-onchange="filterScoringView()" style="min-width:130px;" title="计划完成日期止">
-      <button class="btn btn-primary btn-sm" data-emie-onclick="filterScoringView()">🔍 查询</button>
-      <button class="btn btn-outline btn-sm" data-emie-onclick="resetScoringFilters()">↺ 重置</button>
+      <input type="date" class="form-input" id="scoringDateEnd" data-emie-action="change:scoring-filter" style="min-width:130px;" title="计划完成日期止">
+      <button class="btn btn-primary btn-sm" data-emie-action="click:scoring-filter">🔍 查询</button>
+      <button class="btn btn-outline btn-sm" data-emie-action="click:scoring-reset">↺ 重置</button>
     </div>
     <div id="scoringContainer">${renderScoringCards(pendingTasks)}</div>
   `;
@@ -159,9 +159,9 @@ function renderScoringPager(total, page, pageSize) {
   if (total <= pageSize) return '';
   const current = Math.min(page, pages);
   return `<div class="pagination" style="display:flex;justify-content:center;align-items:center;gap:6px;margin:12px 0;">
-    <button class="btn btn-outline btn-sm" ${current <= 1 ? 'disabled' : ''} data-emie-onclick="changeScoringPage(${current - 1})">上一页</button>
+    <button class="btn btn-outline btn-sm" ${current <= 1 ? 'disabled' : ''} data-emie-action="click:scoring-page" data-page="${current - 1}">上一页</button>
     <span style="font-size:12px;color:var(--gray-600);min-width:42px;text-align:center;">${current} / ${pages}</span>
-    <button class="btn btn-outline btn-sm" ${current >= pages ? 'disabled' : ''} data-emie-onclick="changeScoringPage(${current + 1})">下一页</button>
+    <button class="btn btn-outline btn-sm" ${current >= pages ? 'disabled' : ''} data-emie-action="click:scoring-page" data-page="${current + 1}">下一页</button>
   </div>`;
 }
 
@@ -205,8 +205,8 @@ function renderScoringCards(tasks) {
           </div>
         </div>
         <div class="subtask-actions" style="margin-top:10px;">
-          ${t.isAdminView || t.isDesignerView ? '' : (isPending ? `<button class="btn btn-primary btn-sm" data-emie-onclick="${t.itemKind === 'design_requirement' ? `openDesignRequirementScore(${t.requirementId},${EMIE.state.currentRole === 'designer'})` : `openScoring(${t.projectId},${t.id})`}">⭐ 立即评分</button>` : '')}
-          <button class="btn btn-outline btn-sm" data-emie-onclick="${t.itemKind === 'design_requirement' ? `openDesignRequirementDetail(${t.requirementId})` : `openProjectDetail(${t.projectId})`}">查看${t.itemKind === 'design_requirement' ? '需求' : '项目'}</button>
+          ${t.isAdminView || t.isDesignerView ? '' : (isPending ? `<button class="btn btn-primary btn-sm" data-emie-action="click:scoring-open" data-item-kind="${escHtml(t.itemKind)}" data-requirement-id="${t.requirementId || ''}" data-project-id="${t.projectId || ''}" data-task-id="${t.id || ''}">⭐ 立即评分</button>` : '')}
+          <button class="btn btn-outline btn-sm" data-emie-action="click:scoring-detail" data-item-kind="${escHtml(t.itemKind)}" data-requirement-id="${t.requirementId || ''}" data-project-id="${t.projectId || ''}">查看${t.itemKind === 'design_requirement' ? '需求' : '项目'}</button>
         </div>
       </div>`;
     }).join('')}
@@ -223,6 +223,19 @@ EMIE.registerActions({
   renderScoringCards,
   changeScoringPage,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('scoring-filter', () => filterScoringView());
+  registerEventAction('scoring-reset', () => resetScoringFilters());
+  registerEventAction('scoring-page', (_event, element) => changeScoringPage(Number(element.dataset.page)));
+  registerEventAction('scoring-open', (_event, el) => el.dataset.itemKind === 'design_requirement'
+    ? openDesignRequirementScore(Number(el.dataset.requirementId), EMIE.state.currentRole === 'designer')
+    : openScoring(Number(el.dataset.projectId), Number(el.dataset.taskId)));
+  registerEventAction('scoring-detail', (_event, el) => el.dataset.itemKind === 'design_requirement'
+    ? openDesignRequirementDetail(Number(el.dataset.requirementId))
+    : openProjectDetail(Number(el.dataset.projectId)));
+}
 
 EMIE.registerModule('dashboardScoring', {
   renderScoringView,

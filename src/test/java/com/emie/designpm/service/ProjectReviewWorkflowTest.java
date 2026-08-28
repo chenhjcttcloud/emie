@@ -28,7 +28,8 @@ class ProjectReviewWorkflowTest {
     private ProjectAccessService access;
     private NotificationWorkflowService notifications;
     private UserService users;
-    private ProjectService service;
+    private DefaultSubTaskCommandService service;
+    private ProjectService queryService;
 
     @BeforeEach
     void setUp() {
@@ -41,7 +42,7 @@ class ProjectReviewWorkflowTest {
         notifications = mock(NotificationWorkflowService.class);
         users = mock(UserService.class);
         when(configs.findByConfigKey(anyString())).thenReturn(Optional.empty());
-        service = new ProjectService(
+        service = new DefaultSubTaskCommandService(
                 projects,
                 subTasks,
                 scoring,
@@ -55,6 +56,9 @@ class ProjectReviewWorkflowTest {
                 access,
                 notifications
         );
+        queryService = new ProjectService(projects, subTasks, scoring, deliveryVersions, users,
+                mock(ProductCategoryRepository.class), mock(IpOptionRepository.class), configs,
+                mock(SyncQueueService.class), mock(FileArchiveService.class), access, notifications);
     }
 
     @Test
@@ -328,7 +332,7 @@ class ProjectReviewWorkflowTest {
         when(access.findVisibleProjectsLight("planner", "planner-1")).thenReturn(List.of(project));
         when(scoring.findBySubTaskIds(List.of(11L, 12L))).thenReturn(List.of(rejectedReview, pendingReview));
 
-        List<Map<String, Object>> result = service.getPendingScoringTasks("planner", "planner-1");
+        List<Map<String, Object>> result = queryService.getPendingScoringTasks("planner", "planner-1");
 
         assertEquals(1, result.size());
         assertEquals(12L, result.getFirst().get("taskId"));

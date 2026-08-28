@@ -31,12 +31,12 @@ async function renderAdmin(main, role, uid) {
         <span class="admin-header-status"><i></i> 管理服务正常</span>
       </div>
       <div class="admin-layout"><aside class="admin-tabs" id="adminTabs">
-        <div class="admin-tab-group"><div class="admin-tab-group-title">总览</div><button class="admin-tab ${EMIE.adminState.currentTab === 'dashboard' ? 'active' : ''}" data-emie-onclick="switchAdminTab('dashboard')">📊 概览</button></div>
-        <div class="admin-tab-group"><div class="admin-tab-group-title">系统与外观</div><button class="admin-tab ${EMIE.adminState.currentTab === 'config' ? 'active' : ''}" data-emie-onclick="switchAdminTab('config')">🔧 系统配置</button><button class="admin-tab ${EMIE.adminState.currentTab === 'appearance' ? 'active' : ''}" data-emie-onclick="switchAdminTab('appearance')">🎨 外观</button><button class="admin-tab ${EMIE.adminState.currentTab === 'filestorage' ? 'active' : ''}" data-emie-onclick="switchAdminTab('filestorage')">📦 文件与存储</button></div>
-        <div class="admin-tab-group"><div class="admin-tab-group-title">用户与权限</div><button class="admin-tab ${EMIE.adminState.currentTab === 'users' ? 'active' : ''}" data-emie-onclick="switchAdminTab('users')">👥 用户管理</button><button class="admin-tab ${EMIE.adminState.currentTab === 'roles' ? 'active' : ''}" data-emie-onclick="switchAdminTab('roles')">🔐 角色与权限</button><button class="admin-tab ${EMIE.adminState.currentTab === 'org' ? 'active' : ''}" data-emie-onclick="switchAdminTab('org')">🏢 组织架构</button></div>
-        <div class="admin-tab-group"><div class="admin-tab-group-title">业务配置</div><button class="admin-tab ${EMIE.adminState.currentTab === 'categories' ? 'active' : ''}" data-emie-onclick="switchAdminTab('categories')">📂 产品类目</button><button class="admin-tab ${EMIE.adminState.currentTab === 'ipOptions' ? 'active' : ''}" data-emie-onclick="switchAdminTab('ipOptions')">🏷️ IP配置</button><button class="admin-tab ${EMIE.adminState.currentTab === 'compliance' ? 'active' : ''}" data-emie-onclick="switchAdminTab('compliance')">⚖️ 合规处罚</button><button class="admin-tab ${EMIE.adminState.currentTab === 'priceRanges' ? 'active' : ''}" data-emie-onclick="switchAdminTab('priceRanges')">💰 参考零售价</button><button class="admin-tab ${EMIE.adminState.currentTab === 'scoring' ? 'active' : ''}" data-emie-onclick="switchAdminTab('scoring')">⭐ 评分管理</button><button class="admin-tab ${EMIE.adminState.currentTab === 'points' ? 'active' : ''}" data-emie-onclick="switchAdminTab('points')">🏅 积分规则</button></div>
-        <div class="admin-tab-group"><div class="admin-tab-group-title">通知中心</div><button class="admin-tab ${EMIE.adminState.currentTab === 'notificationCenter' ? 'active' : ''}" data-emie-onclick="switchAdminTab('notificationCenter')">🔔 通知设置与发送记录</button><button class="admin-tab ${EMIE.adminState.currentTab === 'notificationTemplates' ? 'active' : ''}" data-emie-onclick="switchAdminTab('notificationTemplates')">💬 通知文案</button></div>
-        <div class="admin-tab-group"><div class="admin-tab-group-title">运维与审计</div><button class="admin-tab ${EMIE.adminState.currentTab === 'logs' ? 'active' : ''}" data-emie-onclick="switchAdminTab('logs')">📜 日志</button><button class="admin-tab ${EMIE.adminState.currentTab === 'shares' ? 'active' : ''}" data-emie-onclick="switchAdminTab('shares')">🔗 分享管理</button></div>
+        <div class="admin-tab-group"><div class="admin-tab-group-title">总览</div><button class="admin-tab ${EMIE.adminState.currentTab === 'dashboard' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="dashboard">📊 概览</button></div>
+        <div class="admin-tab-group"><div class="admin-tab-group-title">系统与外观</div><button class="admin-tab ${EMIE.adminState.currentTab === 'config' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="config">🔧 系统配置</button><button class="admin-tab ${EMIE.adminState.currentTab === 'appearance' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="appearance">🎨 外观</button><button class="admin-tab ${EMIE.adminState.currentTab === 'filestorage' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="filestorage">📦 文件与存储</button></div>
+        <div class="admin-tab-group"><div class="admin-tab-group-title">用户与权限</div><button class="admin-tab ${EMIE.adminState.currentTab === 'users' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="users">👥 用户管理</button><button class="admin-tab ${EMIE.adminState.currentTab === 'roles' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="roles">🔐 角色与权限</button><button class="admin-tab ${EMIE.adminState.currentTab === 'org' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="org">🏢 组织架构</button></div>
+        <div class="admin-tab-group"><div class="admin-tab-group-title">业务配置</div><button class="admin-tab ${EMIE.adminState.currentTab === 'categories' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="categories">📂 产品类目</button><button class="admin-tab ${EMIE.adminState.currentTab === 'ipOptions' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="ipOptions">🏷️ IP配置</button><button class="admin-tab ${EMIE.adminState.currentTab === 'compliance' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="compliance">⚖️ 合规处罚</button><button class="admin-tab ${EMIE.adminState.currentTab === 'priceRanges' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="priceRanges">💰 参考零售价</button><button class="admin-tab ${EMIE.adminState.currentTab === 'scoring' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="scoring">⭐ 评分管理</button><button class="admin-tab ${EMIE.adminState.currentTab === 'points' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="points">🏅 积分规则</button></div>
+        <div class="admin-tab-group"><div class="admin-tab-group-title">通知中心</div><button class="admin-tab ${EMIE.adminState.currentTab === 'notificationCenter' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="notificationCenter">🔔 通知设置与发送记录</button><button class="admin-tab ${EMIE.adminState.currentTab === 'notificationTemplates' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="notificationTemplates">💬 通知文案</button></div>
+        <div class="admin-tab-group"><div class="admin-tab-group-title">运维与审计</div><button class="admin-tab ${EMIE.adminState.currentTab === 'logs' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="logs">📜 日志</button><button class="admin-tab ${EMIE.adminState.currentTab === 'shares' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="shares">🔗 分享管理</button></div>
       </aside><section class="admin-content-shell"><div id="adminSectionHeader"></div><main id="adminContent"></main></section></div>
     </div>`;
   await renderAdminContent();
@@ -49,7 +49,7 @@ async function switchAdminTab(tab) {
   localStorage.setItem('design_pm_lastAdminTab', tab);
   const tabs = document.querySelectorAll('.admin-tab');
   tabs.forEach(t => t.classList.remove('active'));
-  const activeTab = document.querySelector(`.admin-tab[data-emie-onclick*="'${tab}'"]`);
+  const activeTab = document.querySelector(`.admin-tab[data-emie-action*="admin-tab"]`);
   if (activeTab) activeTab.classList.add('active');
   await renderAdminContent();
   if (adminNav) adminNav.scrollTop = navScrollTop;
@@ -179,14 +179,14 @@ async function renderAdminDashboard(container) {
       <div class="admin-sync-metrics">
         ${[['待处理', sync.pending], ['处理中', sync.processing], ['失败', sync.fail], ['已完成', sync.done]].map(([label, value], index) => `<div class="tone-${index}"><span>${label}</span><strong>${value ?? 0}</strong></div>`).join('')}
       </div>
-      <div class="admin-sync-footer"><span>最近成功：${sync.lastSuccessAt || '暂无'}</span><button class="btn btn-outline btn-sm" data-emie-onclick="triggerFeishuSync(this)">立即同步</button></div>
+      <div class="admin-sync-footer"><span>最近成功：${sync.lastSuccessAt || '暂无'}</span><button class="btn btn-outline btn-sm" data-emie-action="click:admin-feishu-sync">立即同步</button></div>
       ${sync.lastFailure ? `<div style="margin-top:8px;padding:10px;background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;font-size:12px;color:#9f1239;">最近失败：${escHtml(sync.lastFailure.entityType || '')} #${sync.lastFailure.entityId || '-'} · ${escHtml(sync.lastFailure.error || '未知错误')}</div>` : ''}
       <div id="feishuSyncResult" style="margin-top:8px;font-size:12px;color:var(--gray-500);"></div>
     </section>
     <section class="admin-overview-card admin-integrity-card">
       <div class="admin-overview-card-head">
         <div><span class="admin-card-icon green">✓</span><div><h3>数据完整性检查</h3><p>只读扫描文件引用，不修改任何数据</p></div></div>
-        <button class="btn btn-outline btn-sm" data-emie-onclick="runDataIntegrityScan(this)">开始扫描</button>
+        <button class="btn btn-outline btn-sm" data-emie-action="click:admin-integrity-scan">开始扫描</button>
       </div>
       <div class="admin-integrity-placeholder"><strong>系统文件引用检查</strong><span>建议在数据迁移或批量导入后执行</span></div>
       <div id="dataIntegrityResult"></div>
@@ -297,8 +297,8 @@ async function renderAdminConfig(container) {
       <div class="config-card" data-group="${group}">
         <div class="config-card-header">
           <h3>${groupLabel(group)}</h3>
-          ${group === 'notification' ? '<button class="btn btn-sm btn-secondary" data-emie-onclick="sendNotificationTest()">🧪 保存并发送测试</button>' : ''}
-          <button class="btn btn-sm btn-primary" data-emie-onclick="saveConfigGroup('${group}')">💾 保存</button>
+          ${group === 'notification' ? '<button class="btn btn-sm btn-secondary" data-emie-action="click:admin-test-notification">🧪 保存并发送测试</button>' : ''}
+          <button class="btn btn-sm btn-primary" data-emie-action="click:admin-save-config" data-config-group="${group}">💾 保存</button>
         </div>
         <div class="config-card-body">
           <div class="config-grid">
@@ -329,7 +329,7 @@ async function renderAdminConfig(container) {
   container.innerHTML = html;
   if (configs.notification && EMIE.adminState.currentTab === 'notificationCenter') {
     container.insertAdjacentHTML('beforeend', `<div class="config-card" data-group="temporary-broadcast">
-      <div class="config-card-header"><h3>📣 系统更新通知</h3><button class="btn btn-primary" id="temporaryBroadcastSendButton" data-emie-onclick="sendTemporaryBroadcast()">发送给全部用户</button></div>
+      <div class="config-card-header"><h3>📣 系统更新通知</h3><button class="btn btn-primary" id="temporaryBroadcastSendButton" data-emie-action="click:admin-temp-broadcast">发送给全部用户</button></div>
       <div class="config-card-body">
         <p style="margin:0 0 6px;color:var(--gray-700);font-size:13px;">编辑完成后，将向除已停用账号外的所有系统用户发送飞书通知。</p>
         <p style="margin:0 0 12px;color:var(--gray-500);font-size:12px;">未绑定飞书的用户无法投递，并会计入发送结果；本次内容不会保存为通知模板。</p>
@@ -337,7 +337,7 @@ async function renderAdminConfig(container) {
         <textarea class="form-textarea" id="temporaryBroadcastContent" placeholder="请输入更新时间、影响范围和注意事项" maxlength="2000" rows="5"></textarea>
       </div></div>`);
     container.insertAdjacentHTML('beforeend', `<div class="config-card" data-group="notification-failures">
-      <div class="config-card-header"><h3>🛠️ 通知发送记录（仅管理员）</h3><button class="btn btn-sm btn-secondary" data-emie-onclick="loadNotificationFailures()">🔄 刷新</button></div>
+      <div class="config-card-header"><h3>🛠️ 通知发送记录（仅管理员）</h3><button class="btn btn-sm btn-secondary" data-emie-action="click:admin-notification-refresh">🔄 刷新</button></div>
       <div class="config-card-body" id="notificationFailures"><div class="loading">加载中</div></div>
     </div>`);
     await loadNotificationFailures();
@@ -348,7 +348,7 @@ async function sendTemporaryBroadcast() {
   const title = document.getElementById('temporaryBroadcastTitle')?.value?.trim();
   const content = document.getElementById('temporaryBroadcastContent')?.value?.trim();
   if (!title || !content) { showAdminToast('❌ 请填写通知标题和内容', 'error'); return; }
-  if (!window.confirm('确认发送给全部系统用户？\n\n发送后，已绑定飞书的用户将立即收到这条通知。')) return;
+  if (!await EMIE.actions.showSystemConfirm('确认发送给全部系统用户？\n\n发送后，已绑定飞书的用户将立即收到这条通知。')) return;
   const button = document.getElementById('temporaryBroadcastSendButton');
   if (button) { button.disabled = true; button.textContent = '正在后台发送…'; }
   try {
@@ -389,7 +389,7 @@ async function loadNotificationFailures(page = notificationFailuresPage) {
     const rows = notificationFailuresRows.slice((notificationFailuresPage - 1) * NOTIFICATION_FAILURES_PAGE_SIZE, notificationFailuresPage * NOTIFICATION_FAILURES_PAGE_SIZE);
     const fmt = value => value ? new Date(value).toLocaleString('zh-CN', {hour12:false}) : '—';
     const totalPages = Math.max(1, Math.ceil(notificationFailuresRows.length / NOTIFICATION_FAILURES_PAGE_SIZE));
-    target.innerHTML = notificationFailuresRows.length ? `<div class="table-responsive"><table class="data-table"><thead><tr><th>结果</th><th>业务流程</th><th>收件人</th><th>触发时间</th><th>最近尝试</th><th>发送内容</th><th>失败原因</th><th>操作</th></tr></thead><tbody>${rows.map(r => `<tr><td>${escHtml(r.statusLabel || r.status || '')}<br><small>重试 ${r.retryCount ?? 0} 次</small></td><td>${escHtml(r.processLabel || '系统通知')}</td><td>${escHtml(r.recipientName ? `${r.recipientName}（${r.recipientUserId || ''}）` : (r.recipientUserId || ''))}</td><td>${fmt(r.createdAt)}</td><td>${fmt(r.lastAttemptAt || r.firstAttemptAt)}${r.deliveredAt ? `<br>成功：${fmt(r.deliveredAt)}` : ''}${r.nextRetryAt ? `<br>下次：${fmt(r.nextRetryAt)}` : ''}</td><td style="max-width:320px;white-space:pre-wrap;">${escHtml(r.content || '')}</td><td>${escHtml(r.errorMsg || '—')}</td><td>${['failed','dead_letter','blocked'].includes(r.status) ? `<button class="btn btn-sm btn-primary" data-emie-onclick="retryNotificationDelivery(${r.deliveryId})">重新发送</button>` : '—'}</td></tr>`).join('')}</tbody></table></div><div class="admin-pagination"><span>共 ${notificationFailuresRows.length} 条 · 第 ${notificationFailuresPage}/${totalPages} 页</span><button class="btn btn-sm btn-secondary" ${notificationFailuresPage <= 1 ? 'disabled' : ''} data-emie-onclick="loadNotificationFailures(${notificationFailuresPage - 1})">上一页</button><button class="btn btn-sm btn-secondary" ${notificationFailuresPage >= totalPages ? 'disabled' : ''} data-emie-onclick="loadNotificationFailures(${notificationFailuresPage + 1})">下一页</button></div>` : '<div class="empty-state">暂无通知发送记录</div>';
+    target.innerHTML = notificationFailuresRows.length ? `<div class="table-responsive"><table class="data-table"><thead><tr><th>结果</th><th>业务流程</th><th>收件人</th><th>触发时间</th><th>最近尝试</th><th>发送内容</th><th>失败原因</th><th>操作</th></tr></thead><tbody>${rows.map(r => `<tr><td>${escHtml(r.statusLabel || r.status || '')}<br><small>重试 ${r.retryCount ?? 0} 次</small></td><td>${escHtml(r.processLabel || '系统通知')}</td><td>${escHtml(r.recipientName ? `${r.recipientName}（${r.recipientUserId || ''}）` : (r.recipientUserId || ''))}</td><td>${fmt(r.createdAt)}</td><td>${fmt(r.lastAttemptAt || r.firstAttemptAt)}${r.deliveredAt ? `<br>成功：${fmt(r.deliveredAt)}` : ''}${r.nextRetryAt ? `<br>下次：${fmt(r.nextRetryAt)}` : ''}</td><td style="max-width:320px;white-space:pre-wrap;">${escHtml(r.content || '')}</td><td>${escHtml(r.errorMsg || '—')}</td><td>${['failed','dead_letter','blocked'].includes(r.status) ? `<button class="btn btn-sm btn-primary" data-emie-action="click:admin-retry-notification" data-delivery-id="${r.deliveryId}">重新发送</button>` : '—'}</td></tr>`).join('')}</tbody></table></div><div class="admin-pagination"><span>共 ${notificationFailuresRows.length} 条 · 第 ${notificationFailuresPage}/${totalPages} 页</span><button class="btn btn-sm btn-secondary" ${notificationFailuresPage <= 1 ? 'disabled' : ''} data-emie-action="click:admin-notification-page" data-page="${notificationFailuresPage - 1}">上一页</button><button class="btn btn-sm btn-secondary" ${notificationFailuresPage >= totalPages ? 'disabled' : ''} data-emie-action="click:admin-notification-page" data-page="${notificationFailuresPage + 1}">下一页</button></div>` : '<div class="empty-state">暂无通知发送记录</div>';
   } catch (e) { target.innerHTML = `<div class="error-state">加载失败：${escHtml(e.message)}</div>`; }
 }
 
@@ -459,10 +459,10 @@ async function renderAdminNotificationTemplates(container) {
   const groups = await apiGet('/admin/configs');
   const configs = Object.fromEntries((groups.notification_templates || []).map(item => [item.configKey, item.configValue || '']));
   const variableButtons = (event, field) => NOTIFICATION_VARIABLES.map(([label, token]) =>
-    `<button type="button" class="btn btn-outline btn-sm" style="padding:3px 7px;font-size:11px;" data-emie-onclick="insertNotificationVariable('${event}','${field}','${token}')">＋${label}</button>`).join('');
+    `<button type="button" class="btn btn-outline btn-sm" style="padding:3px 7px;font-size:11px;" data-emie-action="click:admin-insert-variable" data-event="${event}" data-field="${field}" data-token="${token}">＋${label}</button>`).join('');
   container.innerHTML = `
     <div class="config-card">
-      <div class="config-card-header"><h3>💬 飞书通知文案</h3><button class="btn btn-primary" data-emie-onclick="saveNotificationTemplates()">💾 保存全部文案</button></div>
+      <div class="config-card-header"><h3>💬 飞书通知文案</h3><button class="btn btn-primary" data-emie-action="click:admin-save-templates">💾 保存全部文案</button></div>
       <div class="config-card-body">
         <div style="padding:12px 14px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;color:#1E40AF;font-size:13px;line-height:1.7;margin-bottom:18px;">直接修改成你希望员工看到的中文即可。需要自动带入项目或任务信息时，点击下方蓝色按钮插入，不需要记任何技术写法。保存后，下一条飞书通知会立即使用新文案。</div>
         ${NOTIFICATION_TEMPLATE_SCENARIOS.map(([event, label, when]) => {
@@ -515,7 +515,7 @@ async function renderAdminAppearance(container) {
     <div class="config-card">
       <div class="config-card-header">
         <h3>🎨 外观设置</h3>
-        <button class="btn btn-sm btn-primary" data-emie-onclick="saveAppearanceConfig()">💾 保存</button>
+        <button class="btn btn-sm btn-primary" data-emie-action="click:admin-save-appearance">💾 保存</button>
       </div>
       <div class="config-card-body">
         <div class="config-grid">
@@ -539,11 +539,11 @@ async function renderAdminAppearance(container) {
             <span class="config-desc">上传 Logo 图片（PNG/JPG/SVG，推荐 120x120px）</span>
             <div class="admin-image-upload">
               ${getVal('app.logo') ? `<img src="${getVal('app.logo')}" class="admin-image-preview logo-preview" id="logoPreviewImg">` : `<div class="admin-image-preview logo-preview" id="logoPreviewPlaceholder" style="display:flex;align-items:center;justify-content:center;font-size:24px;background:var(--gray-100);">${getVal('app.logoEmoji') || '🎨'}</div>`}
-              <div class="admin-image-upload-btn" data-emie-onclick="document.getElementById('logoUploadInput').click()">
+              <div class="admin-image-upload-btn" data-emie-action="click:admin-logo-input">
                 📁 ${getVal('app.logo') ? '更换 Logo' : '上传 Logo'}
-                <input type="file" id="logoUploadInput" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" style="display:none" data-emie-onchange="uploadAdminImage(this, 'logo')">
+                <input type="file" id="logoUploadInput" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" style="display:none" data-emie-action="change:admin-logo-upload">
               </div>
-              ${getVal('app.logo') ? `<button class="btn btn-sm btn-outline" data-emie-onclick="removeAdminImage('app.logo', 'logoPreviewImg')">🗑️ 移除</button>` : ''}
+              ${getVal('app.logo') ? `<button class="btn btn-sm btn-outline" data-emie-action="click:admin-logo-remove">🗑️ 移除</button>` : ''}
             </div>
           </div>
           <div class="config-item full">
@@ -551,11 +551,11 @@ async function renderAdminAppearance(container) {
             <span class="config-desc">推荐 1920x1080px，上传后自动替换登录页背景</span>
             <div class="admin-image-upload">
               ${getVal('login.bg') ? `<img src="${getVal('login.bg')}" class="admin-image-preview" id="bgPreviewImg" style="width:120px;height:68px;object-fit:cover;">` : `<div class="admin-image-preview" id="bgPreviewPlaceholder" style="display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--gray-100);width:120px;height:68px;">🌄</div>`}
-              <div class="admin-image-upload-btn" data-emie-onclick="document.getElementById('bgUploadInput').click()">
+              <div class="admin-image-upload-btn" data-emie-action="click:admin-bg-input">
                 📁 ${getVal('login.bg') ? '更换背景' : '上传背景'}
-                <input type="file" id="bgUploadInput" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none" data-emie-onchange="uploadAdminImage(this, 'login-bg')">
+                <input type="file" id="bgUploadInput" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none" data-emie-action="change:admin-bg-upload">
               </div>
-              ${getVal('login.bg') ? `<button class="btn btn-sm btn-outline" data-emie-onclick="removeAdminImage('login.bg', 'bgPreviewImg')">🗑️ 移除</button>` : ''}
+              ${getVal('login.bg') ? `<button class="btn btn-sm btn-outline" data-emie-action="click:admin-bg-remove">🗑️ 移除</button>` : ''}
             </div>
           </div>
           <div class="config-item">
@@ -614,7 +614,7 @@ async function uploadAdminImage(input, type) {
 
 // 移除管理图片
 async function removeAdminImage(configKey, imgId) {
-  if (!confirm('确定移除该图片？')) return;
+  if (!await EMIE.actions.showSystemConfirm('确定移除该图片？')) return;
   try {
     await apiPut('/admin/configs', { configs: { [configKey]: '' } });
     showAdminToast('✅ 已移除', 'success');
@@ -662,6 +662,28 @@ EMIE.registerActions({
   removeAdminImage,
   saveAppearanceConfig,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('admin-tab', (_event, el) => switchAdminTab(el.dataset.tab));
+  registerEventAction('admin-feishu-sync', (_event, el) => triggerFeishuSync(el));
+  registerEventAction('admin-integrity-scan', (_event, el) => runDataIntegrityScan(el));
+  registerEventAction('admin-test-notification', () => sendNotificationTest());
+  registerEventAction('admin-save-config', (_event, el) => saveConfigGroup(el.dataset.configGroup));
+  registerEventAction('admin-temp-broadcast', () => sendTemporaryBroadcast());
+  registerEventAction('admin-notification-refresh', () => loadNotificationFailures());
+  registerEventAction('admin-retry-notification', (_event, el) => retryNotificationDelivery(Number(el.dataset.deliveryId)));
+  registerEventAction('admin-notification-page', (_event, el) => loadNotificationFailures(Number(el.dataset.page)));
+  registerEventAction('admin-insert-variable', (_event, el) => insertNotificationVariable(el.dataset.event, el.dataset.field, el.dataset.token));
+  registerEventAction('admin-save-templates', () => saveNotificationTemplates());
+  registerEventAction('admin-save-appearance', () => saveAppearanceConfig());
+  registerEventAction('admin-logo-input', () => document.getElementById('logoUploadInput')?.click());
+  registerEventAction('admin-logo-upload', (_event, el) => uploadAdminImage(el, 'logo'));
+  registerEventAction('admin-logo-remove', () => removeAdminImage('app.logo', 'logoPreviewImg'));
+  registerEventAction('admin-bg-input', () => document.getElementById('bgUploadInput')?.click());
+  registerEventAction('admin-bg-upload', (_event, el) => uploadAdminImage(el, 'login-bg'));
+  registerEventAction('admin-bg-remove', () => removeAdminImage('login.bg', 'bgPreviewImg'));
+}
 
 EMIE.registerModule('adminShell', {
   renderAdmin,

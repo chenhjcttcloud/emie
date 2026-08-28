@@ -9,6 +9,7 @@ import com.emie.designpm.service.SyncQueueService;
 import com.emie.designpm.service.SyncWorker;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -65,19 +66,22 @@ public class FeishuSyncController {
 
     /** 同步状态统计 */
     @GetMapping("/stats")
-    public ResponseEntity<Map<String, Object>> getStats() {
+    public ResponseEntity<Map<String, Object>> getStats(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return forbidden();
         return ResponseEntity.ok(syncQueueService.getStats());
     }
 
     /** 飞书 Base 配置 */
     @GetMapping("/config")
-    public ResponseEntity<Map<String, String>> getConfig() {
+    public ResponseEntity<Map<String, String>> getConfig(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
         return ResponseEntity.ok(feishuBaseService.getConfig());
     }
 
     /** 管理员手动消费一轮同步队列；复用定时任务的并发锁和失败重试逻辑。 */
     @PostMapping("/process")
-    public ResponseEntity<Map<String, Object>> processOnce() {
+    public ResponseEntity<Map<String, Object>> processOnce(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return forbidden();
         if (syncWorker == null) return ResponseEntity.status(503).body(Map.of("message", "同步服务暂不可用"));
         syncWorker.processQueue();
         Map<String, Object> result = new LinkedHashMap<>(syncQueueService.getStats());
@@ -90,7 +94,8 @@ public class FeishuSyncController {
      * 不创建、更新或重试任何飞书记录。
      */
     @PostMapping("/validate-backups")
-    public ResponseEntity<Map<String, Object>> validateBackups() {
+    public ResponseEntity<Map<String, Object>> validateBackups(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return forbidden();
         try {
             Map<String, Object> result = feishuBaseService.validateBackupTables();
             return Boolean.TRUE.equals(result.get("valid"))
@@ -105,7 +110,17 @@ public class FeishuSyncController {
 
     /** 全量重刷（重新入队所有数据） */
     @PostMapping("/full-resync")
-    public ResponseEntity<Map<String, Object>> fullResync() {
+    public ResponseEntity<Map<String, Object>> fullResync(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return forbidden();
+        return fullResyncInternal();
+    }
+
+    /** 保留服务层单元测试的无参调用入口；不暴露为 HTTP 映射。 */
+    ResponseEntity<Map<String, Object>> fullResync() {
+        return fullResyncInternal();
+    }
+
+    private ResponseEntity<Map<String, Object>> fullResyncInternal() {
         try {
             Map<String, Object> validation = feishuBaseService.validateBackupTables();
             if (!Boolean.TRUE.equals(validation.get("valid"))) {
@@ -161,7 +176,8 @@ public class FeishuSyncController {
 
     /** 初始化飞书 Base（机器人自动创建多维表格） */
     @PostMapping("/init")
-    public ResponseEntity<Map<String, Object>> initBase() {
+    public ResponseEntity<Map<String, Object>> initBase(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return forbidden();
         try {
             Map<String, Object> result = feishuBaseService.initBase();
             return ResponseEntity.ok(result);
@@ -174,7 +190,8 @@ public class FeishuSyncController {
 
     /** 为当前主表和备份表补齐两级审核同步字段。 */
     @PostMapping("/ensure-review-fields")
-    public ResponseEntity<Map<String, Object>> ensureReviewFields() {
+    public ResponseEntity<Map<String, Object>> ensureReviewFields(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return forbidden();
         try {
             return ResponseEntity.ok(feishuBaseService.ensureReviewWorkflowFields());
         } catch (Exception e) {
@@ -185,12 +202,17 @@ public class FeishuSyncController {
 
     /** 为当前八张表补齐主表镜像与备份保留策略字段。 */
     @PostMapping("/ensure-mirror-fields")
-    public ResponseEntity<Map<String, Object>> ensureMirrorFields() {
+    public ResponseEntity<Map<String, Object>> ensureMirrorFields(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return forbidden();
         try {
             return ResponseEntity.ok(feishuBaseService.ensureMirrorStrategyFields());
         } catch (Exception e) {
             return ResponseEntity.status(502).body(Map.of(
                     "error", "补充飞书镜像字段失败，请检查表格权限及同名字段类型"));
         }
+    }
+
+    private ResponseEntity<Map<String, Object>> forbidden() {
+        return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
     }
 }

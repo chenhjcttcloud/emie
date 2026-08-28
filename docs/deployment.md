@@ -17,11 +17,28 @@
 示例：
 
 ```bash
-git push emie project_manager_system:master
-git push github project_manager_system:main
+git push emie master:master
+git push github master:main
 ```
 
 生产应用必须显式启用 `prod` profile，并提供 `DESIGNPM_DB_HOST`、`DESIGNPM_DB_NAME`、`DESIGNPM_DB_USER`、`DESIGNPM_DB_PASSWORD`。仓库不再为这些变量提供可连接数据库的默认值；缺少任意变量时应让部署失败，不得回退到其他数据库。`DESIGNPM_DB_USE_SSL` 默认建议保持为 `true`，只有已确认的受保护内网环境才可按实际情况调整。
+
+## 全新环境数据库初始化（逃生门）
+
+> 背景：迁移脚本存在基线缺口——47 张实体表中仅 18 张有 Flyway CREATE 脚本（V1 为空 baseline），其余表历史上由 Hibernate `update` 补建。因此在**全新空库**上使用默认配置（`ddl-auto: validate` + Flyway 开启）会启动失败：Flyway V2 迁移即因 `design_requirements` 表不存在而报错（已实测 2026-08-26）。存量环境（schema 齐全）不受影响。
+
+全新环境（新机器 / CI / 新测试库）首次启动必须设置以下变量：
+
+```dotenv
+SPRING_FLYWAY_ENABLED=false
+SPRING_JPA_DDL_AUTO=update
+```
+
+效果：跳过 Flyway，由 Hibernate 按实体自动建全量表结构（含 background 数据源）。已验证（2026-08-26）：全新 MySQL 8.4 空库 + 以上变量启动成功（4.5s）。
+
+之后若需恢复 Flyway 管理，必须补齐迁移基线（专项任务：为缺失的 29 张表补 CREATE 脚本），否则不能重新开启 `validate`。
+
+`ddl-auto` 默认值仍为 `validate`（`${SPRING_JPA_DDL_AUTO:validate}`），安全意图不变：未显式设置变量的环境（存量）保持结构校验。
 
 应用容器 JVM 固定使用 `Asia/Shanghai`（UTC+8），由 `JAVA_TOOL_OPTIONS=-Duser.timezone=Asia/Shanghai` 和 `TZ=Asia/Shanghai` 注入，确保日志与业务时间一致。
 
@@ -29,7 +46,7 @@ git push github project_manager_system:main
 
 - 生产 Java 运行时为 Java 21，应用容器为 `emie-app`，使用 host 网络并监听 8080。
 - 生产部署目录为 `/home/emie/emie-deploy`，持久化上传和日志目录位于 `/home/emie/emie-app-data/`；该目录是运行产物目录，不是 Git 工作区。
-- 业务代码必须先推送到 `project_manager_system`，再由本地 [`scripts/release-production.sh`](../scripts/release-production.sh) 对精确提交执行 Java 21 完整构建、增量上传和生产切换。
+- 业务代码必须先推送本地 `master`（映射到 Gitee `master`、GitHub `main`），再由本地 [`scripts/release-production.sh`](../scripts/release-production.sh) 对精确提交执行 Java 21 完整构建、增量上传和生产切换。
 - 发布脚本使用 Maven 增量构建、SSH 连接复用和 rsync 增量上传；仍保留完整测试、JAR SHA-256 校验、数据库备份及候选容器回滚。
 - 生产域名必须默认严格校验证书；只有当前环境明确使用自签名证书时，才可在发布命令中临时设置 `SERVER_INSECURE_TLS=true`，发布完成后恢复默认值。
 - 新发布使用稳定 Java 21 运行时镜像和只读版本化 JAR 挂载：`releases/<完整提交>/app.jar → /app/app.jar`。不再为每次更新复制约 107MB JAR 并生成新镜像；首次使用新脚本会自动从当前镜像平滑迁移。

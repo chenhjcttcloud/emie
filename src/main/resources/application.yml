@@ -106,7 +106,8 @@ spring:
       keepalive-time: 120000
   jpa:
     hibernate:
-      ddl-auto: update
+      # 数据库结构统一由 Flyway 迁移管理，避免 Hibernate 自动改表与迁移脚本漂移。
+      ddl-auto: ${SPRING_JPA_DDL_AUTO:validate}
     show-sql: false
     properties:
       hibernate:
@@ -142,7 +143,8 @@ spring:
       keepalive-time: 120000
   jpa:
     hibernate:
-      ddl-auto: update
+      # 数据库结构统一由 Flyway 迁移管理，避免 Hibernate 自动改表与迁移脚本漂移。
+      ddl-auto: ${SPRING_JPA_DDL_AUTO:validate}
     show-sql: false
     properties:
       hibernate:
@@ -174,7 +176,7 @@ spring:
       leak-detection-threshold: ${DESIGNPM_DB_LEAK_DETECTION_MS:10000}
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: ${SPRING_JPA_DDL_AUTO:validate}
     properties:
       hibernate:
         jdbc.batch_size: 50
@@ -217,7 +219,8 @@ spring:
       keepalive-time: 120000
   jpa:
     hibernate:
-      ddl-auto: update
+      # 本机 H2 也使用迁移脚本，保持与测试和生产结构一致。
+      ddl-auto: ${SPRING_JPA_DDL_AUTO:validate}
     show-sql: false
     properties:
       hibernate:

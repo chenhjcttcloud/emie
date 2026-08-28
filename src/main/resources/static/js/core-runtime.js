@@ -296,7 +296,8 @@ async function submitGuard(btn, handler) {
     await handler();
   } catch (e) {
     console.error(e);
-    showActionError(e?.message);
+    if (window.EMIE?.actions?.showApiError) window.EMIE.actions.showApiError(e);
+    else showActionError(e?.message);
   } finally {
     btn.disabled = false;
     btn.removeAttribute('aria-busy');

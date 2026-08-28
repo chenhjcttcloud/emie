@@ -279,13 +279,16 @@ class FrontendModuleLayoutTest {
         assertTrue(detail.contains("bulkStageCompleted && allTasksCompleted"),
                 "只有大货节点与全部子任务完成后才可进入项目完结");
         String tasks = readResource("/static/js/project-tasks.js");
-        assertTrue(tasks.contains("switchAssigneeType('add', 'promotion'") && tasks.contains("📣 产品推广"),
+        assertTrue(tasks.contains("data-emie-action=\"click:task-add-assignee\"")
+                        && tasks.contains("data-assignee-role=\"promotion\"")
+                        && tasks.contains("📣 产品推广"),
                 "新建子任务负责人类型应包含产品推广");
         assertTrue(detail.contains("第 ${record.attemptNo} 次驳回")
                         && detail.contains("openTaskRejectionRecord")
                         && detail.contains("本次提交内容"),
                 "子任务卡片应逐行展示驳回记录，并可查看当轮提交快照");
-        assertTrue(detail.contains("openProjectSubTaskDetail(event,${task.id})")
+        assertTrue(detail.contains("data-emie-action=\"click:detail-subtask-open\"")
+                        && detail.contains("data-task-id=\"${task.id}\"")
                         && detail.contains("projectSubTaskDetailModal")
                         && detail.contains("修改要求次数"),
                 "项目详情中的整张子任务卡片应可打开对应子任务详情");
@@ -302,7 +305,8 @@ class FrontendModuleLayoutTest {
                 "已发布子任务应可从独立详情查看每一轮修改要求、提交快照和附件");
         String projects = readResource("/static/js/dashboard-projects.js");
         String lists = readResource("/static/js/dashboard-lists.js");
-        assertTrue(projects.contains("data-emie-onclick=\"${rowOpen}\"")
+        assertTrue(projects.contains("data-emie-action=\"click:project-row-open\"")
+                        && projects.contains("data-project-id=\"${o.id}\"")
                         && projects.contains("tabindex=\"0\""),
                 "项目列表整行应支持鼠标和键盘打开详情");
         assertTrue(projects.contains("o.statusLabel || fallbackStatus.label")
@@ -365,7 +369,7 @@ class FrontendModuleLayoutTest {
                 "业务状态不应挂载为 window._xxx 全局变量");
         assertFalse(allModules.matches("(?s).*\\s(onclick|onchange|oninput|onsubmit)=.*"),
                 "前端模板不应保留 HTML 内联事件属性");
-        assertTrue(allModules.contains("data-emie-onclick"), "动态交互应使用统一声明式事件入口");
+        assertTrue(allModules.contains("data-emie-action"), "动态交互应使用统一声明式事件入口");
         for (String module : REGISTERED_MODULES) {
             assertTrue(allModules.contains("EMIE.registerModule('" + module + "'"),
                     module + " 必须显式注册公共接口");

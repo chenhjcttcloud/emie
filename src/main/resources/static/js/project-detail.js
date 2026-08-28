@@ -31,6 +31,7 @@ const taskRedeliver = (...args) => EMIE.actions.taskRedeliver(...args);
 const taskConfirmRevision = (...args) => EMIE.actions.taskConfirmRevision(...args);
 const taskApprove = (...args) => EMIE.actions.taskApprove(...args);
 const taskReject = (...args) => EMIE.actions.taskReject(...args);
+const taskCorrectDelivery = (...args) => EMIE.actions.taskCorrectDelivery(...args);
 const submitTaskReview = (...args) => EMIE.actions.submitTaskReview(...args);
 const clearSWRCache = (...args) => EMIE.actions.clearSWRCache(...args);
 const openScoring = (...args) => EMIE.actions.openScoring(...args);
@@ -100,7 +101,7 @@ async function openProjectDetail(pid) {
     modal.className = 'modal-overlay';
     modal.id = 'projectDetailModal';
     modal.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('projectDetailModal')">✕</button>
+    <button class="modal-close-float" data-emie-action="click:detail-close">✕</button>
       <div class="modal modal-lg">
         <div class="modal-header">
           <div class="modal-header-left"><div class="modal-title">${detail.type === 'channel_custom' ? '📦 渠道定制项目' : '🏭 常规品设计项目'} ${escHtml(detail.projectCode || ('#' + detail.id))}</div></div>
@@ -152,7 +153,7 @@ function renderProjectDetailContent(detail) {
 
     <div class="detail-section">
       <div class="detail-section-title">📋 项目信息
-        ${canEditInformation ? `<button class="btn btn-outline btn-sm" style="margin-left:auto;" data-emie-onclick="openEditProject(${detail.id})">✏️ 编辑项目信息</button>` : ''}
+        ${canEditInformation ? `<button class="btn btn-outline btn-sm" style="margin-left:auto;" data-emie-action="click:detail-project-edit" data-project-id="${detail.id}">✏️ 编辑项目信息</button>` : ''}
       </div>
       <div class="detail-grid">
         <div class="detail-item"><div class="detail-label">项目类型</div><div class="detail-value">${isChannel ? '渠道定制单' : '公司常规品'}</div></div>
@@ -182,7 +183,7 @@ function renderProjectDetailContent(detail) {
       <div class="detail-section-title">
         📌 子任务列表
         <span style="font-size:12px;color:var(--gray-400);font-weight:400;">${doneTasks}/${detail.tasks.length} 完成</span>
-        ${canManageSubTasks && (detail.status === 'planner_accepted' || detail.status === 'in_progress' || detail.status === 'completed' || detail.status === 'completed_pending_score') ? `<button class="btn btn-primary btn-sm" style="margin-left:auto;" data-emie-onclick="addSubTask(${detail.id})">➕ 添加子任务</button>` : ''}
+        ${canManageSubTasks && (detail.status === 'planner_accepted' || detail.status === 'in_progress' || detail.status === 'completed' || detail.status === 'completed_pending_score') ? `<button class="btn btn-primary btn-sm" style="margin-left:auto;" data-emie-action="click:detail-subtask-add" data-project-id="${detail.id}">➕ 添加子任务</button>` : ''}
       </div>
       ${detail.tasks.length === 0 ? `<div class="empty" style="padding:30px;"><div class="empty-icon">📭</div><p>暂无子任务，等待产品企划添加</p></div>` : ''}
       ${detail.tasks.map((t, i) => renderSubTaskCard(detail, t, i)).join('')}
@@ -257,8 +258,9 @@ function renderSubTaskCard(detail, task, idx) {
     ? latestRejection.requiredCompletionDate : task.plannedDate;
 
   return `<div class="subtask-card${isDone ? ' completed' : ''}" role="button" tabindex="0"
-    data-emie-onclick="openProjectSubTaskDetail(event,${task.id})"
-    data-emie-onkeydown="if(event.key==='Enter'||event.key===' '){openProjectSubTaskDetail(event,${task.id})}"
+    data-emie-action="click:detail-subtask-open"
+    data-emie-keydown-action="detail-subtask-open"
+    data-task-id="${task.id}"
     style="cursor:pointer;">
     <div class="subtask-header">
       <div class="subtask-name"><span class="subtask-number">${idx + 1}</span> ${escHtml(task.name)}</div>
@@ -288,33 +290,34 @@ function renderSubTaskCard(detail, task, idx) {
 
     <div class="subtask-actions">
       ${/* 企划验收（首轮）：常规品直接通过；渠道定制单进入企划确认状态 */''}
-      ${plannerSubmitReview ? `<button class="btn btn-primary btn-sm" data-emie-onclick="submitTaskReview(${detail.id},${task.id})">🔎 送审</button>` : ''}
+      ${plannerSubmitReview ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-review" data-project-id="${detail.id}" data-task-id="${task.id}">🔎 送审</button>` : ''}
       ${isPlanner && task.status === 'submitted_for_review' ? `
-        <button class="btn btn-success btn-sm" data-emie-onclick="taskApprove(${detail.id},${task.id},'${detail.type}')">✅ ${plannerApproveAndScore ? '通过并评分' : '验收通过'}</button>
-        <button class="btn btn-danger btn-sm" data-emie-onclick="taskReject(${detail.id},${task.id})">↩️ 驳回</button>
+        <button class="btn btn-success btn-sm" data-emie-action="click:detail-task-approve" data-project-id="${detail.id}" data-task-id="${task.id}" data-project-type="${escHtml(detail.type)}">✅ ${plannerApproveAndScore ? '通过并评分' : '验收通过'}</button>
+        <button class="btn btn-danger btn-sm" data-emie-action="click:detail-task-reject" data-project-id="${detail.id}" data-task-id="${task.id}">↩️ 驳回</button>
       ` : ''}
-      ${isPlanner && task.status === 'delivered' ? `<button class="btn btn-danger btn-sm" data-emie-onclick="taskReject(${detail.id},${task.id})">↩️ 驳回</button>` : ''}
+      ${isPlanner && task.status === 'delivered' ? `<button class="btn btn-danger btn-sm" data-emie-action="click:detail-task-reject" data-project-id="${detail.id}" data-task-id="${task.id}">↩️ 驳回</button>` : ''}
       ${/* 渠道定制单：销售第二轮确认 */''}
       ${EMIE.state.currentRole === 'sales' && detail.type === 'channel_custom' && task.status === 'planner_approved' ? `
-        <button class="btn btn-success btn-sm" data-emie-onclick="taskApprove(${detail.id},${task.id},'channel_custom')">✅ 销售确认通过</button>
-        <button class="btn btn-danger btn-sm" data-emie-onclick="taskReject(${detail.id},${task.id})">↩️ 驳回</button>
+        <button class="btn btn-success btn-sm" data-emie-action="click:detail-task-approve" data-project-id="${detail.id}" data-task-id="${task.id}" data-project-type="channel_custom">✅ 销售确认通过</button>
+        <button class="btn btn-danger btn-sm" data-emie-action="click:detail-task-reject" data-project-id="${detail.id}" data-task-id="${task.id}">↩️ 驳回</button>
       ` : ''}
       ${EMIE.state.currentRole === 'admin' && detail.type !== 'channel_custom' && task.status === 'planner_approved' ? `
-        <button class="btn btn-success btn-sm" data-emie-onclick="taskApprove(${detail.id},${task.id},'regular')">✅ 通过并评分</button>
-        <button class="btn btn-danger btn-sm" data-emie-onclick="taskReject(${detail.id},${task.id})">↩️ 驳回</button>
+        <button class="btn btn-success btn-sm" data-emie-action="click:detail-task-approve" data-project-id="${detail.id}" data-task-id="${task.id}" data-project-type="regular">✅ 通过并评分</button>
+        <button class="btn btn-danger btn-sm" data-emie-action="click:detail-task-reject" data-project-id="${detail.id}" data-task-id="${task.id}">↩️ 驳回</button>
       ` : ''}
-      ${myTask && task.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskAccept(${detail.id},${task.id})">✅ 接单</button>` : ''}
-      ${myTask && task.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskDeliver(${detail.id},${task.id})">📤 交付成果</button>` : ''}
-      ${myTask && task.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-onclick="taskConfirmRevision(${detail.id},${task.id})">🛠️ 确认修改</button>` : ''}
-      ${myTask && ['delivered', 'planner_approved', 'sales_approved', 'admin_approved'].includes(task.status) ? `<button class="btn btn-outline btn-sm" data-emie-onclick="taskCorrectDelivery(${detail.id},${task.id})">📝 修正交付</button>` : ''}
+      ${myTask && task.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-accept" data-project-id="${detail.id}" data-task-id="${task.id}">✅ 接单</button>` : ''}
+      ${myTask && task.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-deliver" data-project-id="${detail.id}" data-task-id="${task.id}">📤 交付成果</button>` : ''}
+      ${myTask && task.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-action="click:detail-task-confirm-revision" data-project-id="${detail.id}" data-task-id="${task.id}">🛠️ 确认修改</button>` : ''}
+      ${myTask && ['delivered', 'planner_approved', 'sales_approved', 'admin_approved'].includes(task.status) ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-correct" data-project-id="${detail.id}" data-task-id="${task.id}">📝 修正交付</button>` : ''}
       ${isPlanner && detail.status !== 'paused' && (task.status === 'pending' || task.status === 'accepted') ? `
-        ${task.allocationStatus === 'market_open' ? `<button class="btn btn-warning btn-sm" data-emie-onclick="withdrawMarketTask(${detail.id},${task.id})">撤回市场</button>` : ''}
-        <button class="btn btn-outline btn-sm" data-emie-onclick="editTask(${detail.id},${task.id})">✏️ 编辑</button>
-        <button class="btn btn-outline btn-sm" data-emie-onclick="deleteTask(${detail.id},${task.id})" style="color:var(--danger);border-color:var(--danger);">🗑️ 删除</button>
+        ${task.allocationStatus === 'market_open' ? `<button class="btn btn-warning btn-sm" data-emie-action="click:detail-task-withdraw" data-project-id="${detail.id}" data-task-id="${task.id}">撤回市场</button>` : ''}
+        ${task.status === 'accepted' ? `<button class="btn btn-warning btn-sm" data-emie-action="click:detail-task-cancel-accept" data-project-id="${detail.id}" data-task-id="${task.id}">取消接单</button>` : ''}
+        <button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-edit" data-project-id="${detail.id}" data-task-id="${task.id}">✏️ 编辑</button>
+        ${task.status === 'pending' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-delete" data-project-id="${detail.id}" data-task-id="${task.id}" style="color:var(--danger);border-color:var(--danger);">🗑️ 删除</button>` : ''}
       ` : ''}
       ${needScore && EMIE.state.currentRole !== 'admin'
         && !(isPlanner && ['delivered', 'submitted_for_review'].includes(task.status))
-        ? `<button class="btn btn-warning btn-sm" data-emie-onclick="openScoring(${detail.id},${task.id})">⭐ 评分</button>` : ''}
+        ? `<button class="btn btn-warning btn-sm" data-emie-action="click:detail-task-score" data-project-id="${detail.id}" data-task-id="${task.id}">⭐ 评分</button>` : ''}
     </div>
   </div>`;
 }
@@ -338,7 +341,7 @@ function openProjectSubTaskDetail(event, taskId) {
   modal.innerHTML = `
     <div class="modal" style="max-width:760px;">
       <div class="modal-header">
-        <button class="modal-close" data-emie-onclick="closeM('projectSubTaskDetailModal')">✕</button>
+        <button class="modal-close" data-emie-action="click:detail-subtask-close">✕</button>
         <div class="modal-header-left">
           <div class="modal-title">子任务详情 · ${escHtml(task.name || '-')}</div>
           <div style="font-size:12px;color:var(--gray-400);margin-top:3px;">所属阶段：${escHtml(workflowStageLabel)} · #${task.id}</div>
@@ -381,7 +384,7 @@ function openProjectSubTaskDetail(event, taskId) {
         <div style="margin-top:18px;">
           <div style="font-size:14px;font-weight:700;margin-bottom:8px;">修改要求记录 <span style="color:var(--gray-400);font-weight:400;">(${records.length})</span></div>
           ${records.length ? records.map(record => `
-            <button type="button" data-emie-onclick="openTaskRejectionRecord(${task.id},${record.attemptNo})"
+            <button type="button" data-emie-action="click:detail-rejection-record" data-task-id="${task.id}" data-attempt-no="${record.attemptNo}"
               style="width:100%;display:flex;align-items:center;gap:8px;padding:10px 12px;margin-bottom:8px;border:1px solid #F3C1C1;border-radius:9px;background:#FFF8F8;cursor:pointer;text-align:left;">
               <strong style="color:#A32D2D;white-space:nowrap;">第 ${record.attemptNo} 次修改要求</strong>
               <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray-600);">${escHtml(record.reason || '未填写修改意见')}</span>
@@ -390,7 +393,7 @@ function openProjectSubTaskDetail(event, taskId) {
             </button>`).join('') : '<div class="empty" style="padding:24px;"><p>暂无修改要求记录</p></div>'}
         </div>
       </div>
-      <div class="modal-footer"><button class="btn btn-primary" data-emie-onclick="closeM('projectSubTaskDetailModal')">关闭</button></div>
+      <div class="modal-footer"><button class="btn btn-primary" data-emie-action="click:detail-subtask-close">关闭</button></div>
     </div>`;
   document.body.appendChild(modal);
 }
@@ -411,7 +414,7 @@ function openTaskRejectionRecord(taskId, attemptNo) {
   modal.innerHTML = `
     <div class="modal" style="max-width:700px;">
       <div class="modal-header">
-        <button class="modal-close" data-emie-onclick="closeM('taskRejectionRecordModal')">✕</button>
+        <button class="modal-close" data-emie-action="click:detail-rejection-close">✕</button>
         <div class="modal-header-left">
           <div class="modal-title">↩ 第 ${record.attemptNo} 次驳回详情</div>
           <div style="font-size:12px;color:var(--gray-400);margin-top:3px;">${escHtml(task.name)} · ${fmtDT(record.reviewedAt)}</div>
@@ -440,7 +443,7 @@ function openTaskRejectionRecord(taskId, attemptNo) {
           ${rejectionAttachments ? `<div style="margin-top:14px;"><div class="detail-label">驳回附件</div>${rejectionAttachments}</div>` : ''}
         </div>
       </div>
-      <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskRejectionRecordModal')">关闭</button></div>
+      <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:detail-rejection-close">关闭</button></div>
     </div>`;
   document.body.appendChild(modal);
 }
@@ -466,7 +469,7 @@ function renderProjectActions(detail) {
     || canManageProject;
 
   if (EMIE.state.currentRole === 'planner' && detail.status === 'pending_planner' && detail.type === 'channel_custom') {
-    actions += `<button class="btn btn-primary" data-emie-onclick="plannerAcceptProject(${detail.id})">✅ 接单</button>`;
+    actions += `<button class="btn btn-primary" data-emie-action="click:detail-project-accept" data-project-id="${detail.id}">✅ 接单</button>`;
   }
 
   if (canManageProject) {
@@ -474,20 +477,20 @@ function renderProjectActions(detail) {
 
     // 终止按钮（含暂停状态，暂停也可终止）
     if (activeStatuses.includes(detail.status) || detail.status === 'paused') {
-      actions += `<button class="btn btn-danger btn-sm" data-emie-onclick="terminateProject(${detail.id})">终止项目</button>`;
+      actions += `<button class="btn btn-danger btn-sm" data-emie-action="click:detail-project-terminate" data-project-id="${detail.id}">终止项目</button>`;
     }
     // 终止确认中 - 对方可以确认
     if (detail.status === 'pending_terminate') {
-      actions += `<button class="btn btn-danger btn-sm" data-emie-onclick="terminateProject(${detail.id})">确认终止</button>`;
-      actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="cancelTerminate(${detail.id})" style="color:var(--gray-600);border-color:var(--gray-300);">↩️ 取消终止</button>`;
+      actions += `<button class="btn btn-danger btn-sm" data-emie-action="click:detail-project-terminate" data-project-id="${detail.id}">确认终止</button>`;
+      actions += `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-project-cancel-terminate" data-project-id="${detail.id}" style="color:var(--gray-600);border-color:var(--gray-300);">↩️ 取消终止</button>`;
     }
 
     // 暂停 / 继续
     if (activeStatuses.includes(detail.status)) {
-      actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="pauseProject(${detail.id})" style="color:var(--primary);border-color:var(--primary);">暂停</button>`;
+      actions += `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-project-pause" data-project-id="${detail.id}" style="color:var(--primary);border-color:var(--primary);">暂停</button>`;
     }
     if (detail.status === 'paused') {
-      actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="resumeProject(${detail.id})" style="color:var(--success);border-color:var(--success);">继续</button>`;
+      actions += `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-project-resume" data-project-id="${detail.id}" style="color:var(--success);border-color:var(--success);">继续</button>`;
     }
   }
 
@@ -498,20 +501,20 @@ function renderProjectActions(detail) {
   // 但群本身仍然存在，此时必须继续保留“进入项目群”入口。
   const hasProjectChat = !!String(detail.feishuChatId || '').trim();
   if (hasProjectChat) {
-    actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="openProjectFeishuChat('${escHtml(escJsString(detail.feishuChatId))}')">💬 进入项目群</button>`;
+    actions += `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-chat-open" data-chat-id="${escHtml(detail.feishuChatId)}">💬 进入项目群</button>`;
   } else if (canCreateProjectChat && !['terminated', 'pending_terminate'].includes(detail.status)
       && (!detail.feishuChatStatus || ['not_created', 'failed', 'dissolved'].includes(detail.feishuChatStatus))) {
-    actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="createProjectFeishuChat(${detail.id})">💬 创建项目群</button>`;
+    actions += `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-chat-create" data-project-id="${detail.id}">💬 创建项目群</button>`;
   }
   if (hasProjectChat && ['completed', 'terminated', 'pending_terminate'].includes(detail.status)) {
-    actions += `<button class="btn btn-danger btn-sm" data-emie-onclick="dissolveProjectFeishuChat(${detail.id})">解散项目群</button>`;
+    actions += `<button class="btn btn-danger btn-sm" data-emie-action="click:detail-chat-dissolve" data-project-id="${detail.id}">解散项目群</button>`;
   }
   // 管理员可永久删除项目
   if (EMIE.state.currentRole === 'admin') {
-    actions += `<button class="btn btn-danger btn-sm" data-emie-onclick="deleteProject(${detail.id})" title="永久删除项目和所有关联数据">🗑️ 删除</button>`;
+    actions += `<button class="btn btn-danger btn-sm" data-emie-action="click:detail-project-delete" data-project-id="${detail.id}" title="永久删除项目和所有关联数据">🗑️ 删除</button>`;
   }
-  actions += `<button class="btn btn-outline btn-sm" data-emie-onclick="shareProject(${detail.id})">🔗 分享</button>`;
-  actions += `<button class="btn btn-outline" data-emie-onclick="closeM('projectDetailModal')">关闭</button>`;
+  actions += `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-project-share" data-project-id="${detail.id}">🔗 分享</button>`;
+  actions += `<button class="btn btn-outline" data-emie-action="click:detail-close">关闭</button>`;
   return actions;
 }
 
@@ -520,7 +523,7 @@ async function createProjectFeishuChat(id) {
   catch (e) { window.EMIE.actions.showSystemAlert('创建项目群失败：' + e.message); }
 }
 async function dissolveProjectFeishuChat(id) {
-  if (!confirm('确认解散项目群？解散后无法恢复。')) return;
+  if (!await EMIE.actions.showSystemConfirm('确认解散项目群？解散后无法恢复。')) return;
   try { await apiPost(`/projects/${id}/feishu-chat/dissolve`, {}); window.EMIE.actions.showSystemAlert('项目群已解散'); await refreshAfterMutation(id); }
   catch (e) { window.EMIE.actions.showSystemAlert('解散项目群失败：' + e.message); }
 }
@@ -541,14 +544,14 @@ function showConfirmDialog(message, onConfirm, confirmText, cancelText) {
   overlay.innerHTML = `
     <div class="modal" style="max-width:380px;">
       <div class="modal-header">
-        <button class="modal-close" data-emie-onclick="this.closest('.modal-overlay').remove()">✕</button>
+        <button class="modal-close" data-emie-action="click:detail-confirm-close">✕</button>
         <div class="modal-header-left"><div class="modal-title">⚠️ 确认操作</div></div>
       </div>
       <div class="modal-body" style="text-align:center;padding:28px 20px;">
         <p style="font-size:14px;color:var(--gray-700);margin:0;line-height:1.6;">${message}</p>
       </div>
       <div class="modal-footer" style="justify-content:center;gap:12px;padding:12px 20px;">
-        <button class="btn btn-outline" data-emie-onclick="this.closest('.modal-overlay').remove()" style="padding:8px 20px;">${cancelText || '取消'}</button>
+        <button class="btn btn-outline" data-emie-action="click:detail-confirm-close" style="padding:8px 20px;">${cancelText || '取消'}</button>
         <button class="btn btn-danger" id="confirmDialogOk" style="padding:8px 20px;">${confirmText || '确定'}</button>
       </div>
     </div>`;
@@ -605,14 +608,19 @@ async function resumeProject(pid) {
 // 渲染项目参考图片
 // 兼容历史数据中的旧域名、/uploads 路径和缺少当前下载路径的记录。
 function normalizeFileUrl(fileOrUrl) {
-  const raw = typeof fileOrUrl === 'string' ? fileOrUrl : (fileOrUrl?.url || '');
+  const raw = typeof fileOrUrl === 'string'
+    ? fileOrUrl
+    : (fileOrUrl?.url || fileOrUrl?.fileUrl || fileOrUrl?.path || fileOrUrl?.storedName || '');
+  const originalName = typeof fileOrUrl === 'object'
+    ? (fileOrUrl?.name || fileOrUrl?.originalName || '')
+    : '';
   const storedName = typeof fileOrUrl === 'object' && fileOrUrl?.storedName
     ? fileOrUrl.storedName
     : raw.split('?')[0].split('/').pop();
   if (!storedName) return raw;
   // 历史数据可能把原始文件名直接写进 url；交给后端按 originalName 找回真实存储名。
-  if (typeof fileOrUrl === 'object' && !fileOrUrl?.storedName && fileOrUrl?.name && storedName === fileOrUrl.name) {
-    return '/api/files/download-by-original?name=' + encodeURIComponent(fileOrUrl.name);
+  if (typeof fileOrUrl === 'object' && !fileOrUrl?.storedName && originalName && storedName === originalName) {
+    return '/api/files/download-by-original?name=' + encodeURIComponent(originalName);
   }
   return '/api/files/download/' + encodeURIComponent(storedName);
 }
@@ -625,7 +633,7 @@ function storedNameFromFile(fileOrUrl) {
 }
 
 function originalFileUrl(fileOrUrl, kind) {
-  const name = typeof fileOrUrl === 'object' ? (fileOrUrl?.name || '') : '';
+  const name = typeof fileOrUrl === 'object' ? (fileOrUrl?.name || fileOrUrl?.originalName || '') : '';
   if (name && typeof fileOrUrl === 'object' && !fileOrUrl?.storedName) {
     return '/api/files/' + kind + '-by-original?name=' + encodeURIComponent(name);
   }
@@ -637,18 +645,8 @@ function originalFileUrl(fileOrUrl, kind) {
 }
 
 function protectedFileUrl(url) {
-  // 缩略图和交付图片由 img 标签直接请求，必须复用与下载/预览相同的
-  // URL 规范化逻辑；同时兼容历史数据中的旧生产端口。
-  const token = localStorage.getItem('design_pm_token');
-  if (!token || !url) return url;
-  try {
-    const parsed = new URL(url, window.location.origin);
-    if (parsed.hostname !== window.location.hostname) return url;
-    if (!parsed.searchParams.has('access_token')) parsed.searchParams.set('access_token', token);
-    return parsed.pathname + parsed.search + parsed.hash;
-  } catch (e) {
-    return url;
-  }
+  // 原生图片请求会自动携带 HttpOnly 会话 Cookie。
+  return url;
 }
 
 function isPreviewableFile(fileName) {
@@ -666,9 +664,9 @@ function renderAttachmentActions(fileOrUrl, compact = false) {
   const fileSize = typeof fileOrUrl === 'object' ? (fileOrUrl?.size || 0) : 0;
   const fileUrl = normalizeFileUrl(fileOrUrl);
   const previewButton = isPreviewableFile(fileName)
-    ? `<button class="attachment-action-btn preview" data-emie-onclick="event.stopPropagation();openFilePreview('${escHtml(escJsString(fileUrl))}','${escHtml(escJsString(fileName))}',${fileSize})" title="在线预览">${compact ? '👁' : '👁 预览'}</button>`
+    ? `<button class="attachment-action-btn preview" data-emie-action="click:detail-file-preview" data-file-url="${escHtml(fileUrl)}" data-file-name="${escHtml(fileName)}" data-file-size="${fileSize}" title="在线预览">${compact ? '👁' : '👁 预览'}</button>`
     : '';
-  return `<span class="attachment-actions">${previewButton}<button class="attachment-action-btn download" data-emie-onclick="event.stopPropagation();showDownloadOptions('${escHtml(escJsString(fileUrl))}','${escHtml(escJsString(fileName))}',${fileSize})" title="下载选项">${compact ? '⬇' : '⬇ 下载'}</button></span>`;
+  return `<span class="attachment-actions">${previewButton}<button class="attachment-action-btn download" data-emie-action="click:detail-file-download" data-file-url="${escHtml(fileUrl)}" data-file-name="${escHtml(fileName)}" data-file-size="${fileSize}" title="下载选项">${compact ? '⬇' : '⬇ 下载'}</button></span>`;
 }
 
 function renderProjectReferenceImages(detail) {
@@ -681,8 +679,8 @@ function renderProjectReferenceImages(detail) {
   return `<div style="margin-top:8px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => isRasterImageFile(img.name || storedNameFromFile(img)) ? `<div style="position:relative;display:inline-block;">
-          <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" title="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="cursor:pointer;">
-          <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escHtml(escJsString(normalizeFileUrl(img)))}','${escHtml(escJsString(img.name || 'image.png'))}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
+          <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" title="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="cursor:pointer;">
+          <button data-emie-action="click:detail-file-download" data-file-url="${escHtml(normalizeFileUrl(img))}" data-file-name="${escHtml(img.name || 'image.png')}" data-file-size="${img.size || 0}" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>` : `<div class="attachment-item" style="width:100%;display:flex;align-items:center;gap:8px;"><span>📐</span><span class="attachment-name" style="flex:1;">${escHtml(img.name || storedNameFromFile(img))}</span>${renderAttachmentActions(img)}</div>`).join('')}
     </div></div>`;
 }
@@ -698,8 +696,8 @@ function renderSubTaskImages(jsonStr) {
   return `<div style="margin-top:8px;padding-left:4px;"><div class="detail-label">🖼️ 参考图片</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => isRasterImageFile(img.name || storedNameFromFile(img)) ? `<div style="position:relative;display:inline-block;">
-          <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="cursor:pointer;">
-          <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escHtml(escJsString(normalizeFileUrl(img)))}','${escHtml(escJsString(img.name || 'image.png'))}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
+          <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="cursor:pointer;">
+          <button data-emie-action="click:detail-file-download" data-file-url="${escHtml(normalizeFileUrl(img))}" data-file-name="${escHtml(img.name || 'image.png')}" data-file-size="${img.size || 0}" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
       </div>` : `<div class="attachment-item" style="width:100%;display:flex;align-items:center;gap:8px;"><span>📐</span><span class="attachment-name" style="flex:1;">${escHtml(img.name || storedNameFromFile(img))}</span>${renderAttachmentActions(img)}</div>`).join('')}
     </div></div>`;
 }
@@ -738,8 +736,8 @@ function renderTaskAttachments(jsonStr) {
     html += `<div style="margin-top:8px;"><div class="detail-label">🖼️ 交付图片</div>
       <div class="image-preview" style="margin-top:4px;">
         ${images.map(img => `<div style="position:relative;display:inline-block;">
-            <img src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable img-preview-large" draggable="true" loading="lazy" decoding="async" style="cursor:grab;">
-            <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escHtml(escJsString(normalizeFileUrl(img)))}','${escHtml(escJsString(img.name || 'image.png'))}',${img.size || 0})" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
+          <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable img-preview-large" draggable="true" loading="lazy" decoding="async" style="cursor:grab;">
+            <button data-emie-action="click:detail-file-download" data-file-url="${escHtml(normalizeFileUrl(img))}" data-file-name="${escHtml(img.name || 'image.png')}" data-file-size="${img.size || 0}" style="position:absolute;bottom:2px;right:2px;width:22px;height:22px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
         </div>`).join('')}
       </div></div>`;
   }
@@ -843,7 +841,7 @@ function renderSubTaskProgress(detail) {
 }
 
 async function completeWorkflowExecution(projectId) {
-  if (!confirm('确认完成当前阶段并进入下一阶段？')) return;
+  if (!await EMIE.actions.showSystemConfirm('确认完成当前阶段并进入下一阶段？')) return;
   try {
     await apiPost(`/projects/${projectId}/workflow/complete-execution`, {});
     await refreshAfterMutation(projectId);
@@ -851,7 +849,7 @@ async function completeWorkflowExecution(projectId) {
 }
 
 async function submitWorkflowReview(projectId) {
-  if (!confirm('确认提交本轮审核？提交后将等待审核人处理。')) return;
+  if (!await EMIE.actions.showSystemConfirm('确认提交本轮审核？提交后将等待审核人处理。')) return;
   try {
     await apiPost(`/projects/${projectId}/workflow/submit-review`, {});
     await refreshAfterMutation(projectId);
@@ -865,7 +863,7 @@ function openWorkflowReviewModal(projectId, decision, stageLabel) {
   modal.className = 'modal-overlay';
   modal.id = 'workflowReviewModal';
   modal.innerHTML = `<div class="modal" style="max-width:480px;">
-    <div class="modal-header"><button class="modal-close" data-emie-onclick="closeM('workflowReviewModal')">✕</button>
+    <div class="modal-header"><button class="modal-close" data-emie-action="click:detail-workflow-close">
       <div class="modal-header-left"><div class="modal-title">${isReject ? '↩️ 驳回' : '✅ 通过'}：${escHtml(stageLabel)}</div></div>
     </div>
     <div class="modal-body">
@@ -873,8 +871,8 @@ function openWorkflowReviewModal(projectId, decision, stageLabel) {
       <textarea class="form-textarea" id="workflowReviewComment" rows="4" maxlength="1000" placeholder="${isReject ? '请说明需要修改的内容，便于下一轮准确处理' : '可填写本轮审核说明'}"></textarea>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-outline" data-emie-onclick="closeM('workflowReviewModal')">取消</button>
-      <button class="btn ${isReject ? 'btn-danger' : 'btn-primary'}" data-emie-onclick="submitWorkflowDecision(${projectId},'${decision}')">确认${isReject ? '驳回' : '通过'}</button>
+      <button class="btn btn-outline" data-emie-action="click:detail-workflow-close">取消</button>
+      <button class="btn ${isReject ? 'btn-danger' : 'btn-primary'}" data-emie-action="click:detail-workflow-submit" data-project-id="${projectId}" data-decision="${escHtml(decision)}">确认${isReject ? '驳回' : '通过'}</button>
     </div>
   </div>`;
   document.body.appendChild(modal);
@@ -1115,3 +1113,60 @@ EMIE.registerModule('projectDetail', {
   dissolveProjectFeishuChat,
   openProjectFeishuChat,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('detail-close', () => closeM('projectDetailModal'));
+  registerEventAction('detail-subtask-close', () => closeM('projectSubTaskDetailModal'));
+  registerEventAction('detail-rejection-close', () => closeM('taskRejectionRecordModal'));
+  registerEventAction('detail-file-preview', (_event, element) =>
+    openFilePreview(element.dataset.fileUrl, element.dataset.fileName, Number(element.dataset.fileSize) || 0));
+  registerEventAction('detail-file-download', (_event, element) => {
+    _event.stopPropagation();
+    showDownloadOptions(element.dataset.fileUrl, element.dataset.fileName, Number(element.dataset.fileSize) || 0);
+  });
+  registerEventAction('detail-project-accept', (_event, element) => plannerAcceptProject(Number(element.dataset.projectId)));
+  registerEventAction('detail-project-terminate', (_event, element) => terminateProject(Number(element.dataset.projectId)));
+  registerEventAction('detail-project-cancel-terminate', (_event, element) => cancelTerminate(Number(element.dataset.projectId)));
+  registerEventAction('detail-project-pause', (_event, element) => pauseProject(Number(element.dataset.projectId)));
+  registerEventAction('detail-project-resume', (_event, element) => resumeProject(Number(element.dataset.projectId)));
+  registerEventAction('detail-chat-open', (_event, element) => openProjectFeishuChat(element.dataset.chatId));
+  registerEventAction('detail-chat-create', (_event, element) => createProjectFeishuChat(Number(element.dataset.projectId)));
+  registerEventAction('detail-chat-dissolve', (_event, element) => dissolveProjectFeishuChat(Number(element.dataset.projectId)));
+  registerEventAction('detail-project-delete', (_event, element) => deleteProject(Number(element.dataset.projectId)));
+  registerEventAction('detail-project-share', (_event, element) => shareProject(Number(element.dataset.projectId)));
+  registerEventAction('detail-subtask-open', (event, element) =>
+    openProjectSubTaskDetail(event, Number(element.dataset.taskId)));
+  registerEventAction('detail-task-review', (_event, element) =>
+    submitTaskReview(Number(element.dataset.projectId), Number(element.dataset.taskId)));
+  registerEventAction('detail-task-approve', (_event, element) =>
+    taskApprove(Number(element.dataset.projectId), Number(element.dataset.taskId), element.dataset.projectType));
+  registerEventAction('detail-task-reject', (_event, element) =>
+    taskReject(Number(element.dataset.projectId), Number(element.dataset.taskId)));
+  registerEventAction('detail-task-accept', (_event, element) =>
+    taskAccept(Number(element.dataset.projectId), Number(element.dataset.taskId)));
+  registerEventAction('detail-task-deliver', (_event, element) =>
+    taskDeliver(Number(element.dataset.projectId), Number(element.dataset.taskId)));
+  registerEventAction('detail-task-confirm-revision', (_event, element) =>
+    taskConfirmRevision(Number(element.dataset.projectId), Number(element.dataset.taskId)));
+  registerEventAction('detail-task-correct', (_event, element) =>
+    taskCorrectDelivery(Number(element.dataset.projectId), Number(element.dataset.taskId)));
+  registerEventAction('detail-task-withdraw', (_event, element) =>
+    withdrawMarketTask(Number(element.dataset.projectId), Number(element.dataset.taskId)));
+  registerEventAction('detail-task-cancel-accept', (_event, element) =>
+    EMIE.actions.cancelAcceptedTask(Number(element.dataset.projectId), Number(element.dataset.taskId)));
+  registerEventAction('detail-task-edit', (_event, element) =>
+    editTask(Number(element.dataset.projectId), Number(element.dataset.taskId)));
+  registerEventAction('detail-task-delete', (_event, element) =>
+    deleteTask(Number(element.dataset.projectId), Number(element.dataset.taskId)));
+  registerEventAction('detail-task-score', (_event, element) =>
+    openScoring(Number(element.dataset.projectId), Number(element.dataset.taskId)));
+  registerEventAction('detail-project-edit', (_event, element) => openEditProject(Number(element.dataset.projectId)));
+  registerEventAction('detail-subtask-add', (_event, element) => addSubTask(Number(element.dataset.projectId)));
+  registerEventAction('detail-rejection-record', (_event, element) =>
+    openTaskRejectionRecord(Number(element.dataset.taskId), Number(element.dataset.attemptNo)));
+  registerEventAction('detail-confirm-close', (_event, element) => element.closest('.modal-overlay')?.remove());
+  registerEventAction('detail-workflow-close', () => closeM('workflowReviewModal'));
+  registerEventAction('detail-workflow-submit', (_event, element) =>
+    submitWorkflowDecision(Number(element.dataset.projectId), element.dataset.decision));
+}

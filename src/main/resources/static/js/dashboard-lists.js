@@ -15,6 +15,8 @@ const renderProjectRow = (...args) => EMIE.actions.renderProjectRow(...args);
 const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const openCreateProject = (...args) => EMIE.actions.openCreateProject(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
+const handleDeliverImages = (...args) => EMIE.actions.handleDeliverImages(...args);
+const handleDeliverAttachments = (...args) => EMIE.actions.handleDeliverAttachments(...args);
 
 function renderDesignRequirementMaterials(referenceImagesJson, attachmentsJson, delivery = false) {
   const imageRenderer = delivery
@@ -68,7 +70,7 @@ async function openDesignRequirementDetail(id) {
     modal.className = 'modal-overlay';
     modal.id = 'designRequirementDetailModal';
     modal.innerHTML = `
-      <button class="modal-close-float" data-emie-onclick="closeM('designRequirementDetailModal')">✕</button>
+      <button class="modal-close-float" data-emie-action="click:lists-requirement-close">✕</button>
       <div class="modal modal-lg">
         <div class="modal-header"><div class="modal-header-left">
           <div class="modal-title">🎨 设计/送审需求详情</div>
@@ -109,15 +111,15 @@ async function openDesignRequirementDetail(id) {
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-outline" data-emie-onclick="closeM('designRequirementDetailModal')">关闭</button>
-          ${canTerminate ? `<button class="btn btn-danger" data-emie-onclick="terminateDesignRequirement(${id})">终止需求</button>` : ''}
-          ${canConfirmRevision ? `<button class="btn btn-warning" data-emie-onclick="confirmDesignRequirementRevision(${id})">🛠️ 确认修改</button>` : ''}
-          ${canReject ? `<button class="btn btn-danger" data-emie-onclick="openDesignRequirementReject(${id})">↩️ 驳回</button>` : ''}
-          ${canDeliver && ['draft', 'in_progress'].includes(detail.status) ? `<button class="btn btn-primary" data-emie-onclick="openDesignRequirementDelivery(${id})">📦 提交交付成果</button>` : ''}
-          ${myScore?.status === 'pending' && myScore.stage === 'self' ? `<button class="btn btn-warning" data-emie-onclick="openDesignRequirementScore(${id},true)">⭐ 完成自评</button>` : ''}
-          ${myScore?.status === 'pending' && myScore.stage === 'review' ? `<button class="btn btn-primary" data-emie-onclick="openDesignRequirementScore(${id},false)">⭐ 立即评分</button>` : ''}
-          ${hasChat ? `<button class="btn btn-outline" data-emie-onclick="openDesignRequirementChat('${escHtml(escJsString(detail.feishuChatId))}')">💬 进入项目群</button>` : (canManageChat && detail.status !== 'terminated' ? `<button class="btn btn-outline" data-emie-onclick="createDesignRequirementChat(${id})">💬 创建项目群</button>` : '')}
-          ${hasChat && ['completed', 'terminated'].includes(detail.status) && canManageChat ? `<button class="btn btn-danger" data-emie-onclick="dissolveDesignRequirementChat(${id})">解散项目群</button>` : ''}
+          <button class="btn btn-outline" data-emie-action="click:lists-requirement-close">关闭</button>
+          ${canTerminate ? `<button class="btn btn-danger" data-emie-action="click:lists-requirement-terminate" data-requirement-id="${id}">终止需求</button>` : ''}
+          ${canConfirmRevision ? `<button class="btn btn-warning" data-emie-action="click:lists-requirement-confirm" data-requirement-id="${id}">🛠️ 确认修改</button>` : ''}
+          ${canReject ? `<button class="btn btn-danger" data-emie-action="click:lists-requirement-reject" data-requirement-id="${id}">↩️ 驳回</button>` : ''}
+          ${canDeliver && ['draft', 'in_progress'].includes(detail.status) ? `<button class="btn btn-primary" data-emie-action="click:lists-requirement-deliver" data-requirement-id="${id}">📦 提交交付成果</button>` : ''}
+          ${myScore?.status === 'pending' && myScore.stage === 'self' ? `<button class="btn btn-warning" data-emie-action="click:lists-requirement-score" data-requirement-id="${id}" data-self-score="true">⭐ 完成自评</button>` : ''}
+          ${myScore?.status === 'pending' && myScore.stage === 'review' ? `<button class="btn btn-primary" data-emie-action="click:lists-requirement-score" data-requirement-id="${id}" data-self-score="false">⭐ 立即评分</button>` : ''}
+          ${hasChat ? `<button class="btn btn-outline" data-emie-action="click:lists-requirement-chat-open" data-chat-id="${escHtml(detail.feishuChatId)}">💬 进入项目群</button>` : (canManageChat && detail.status !== 'terminated' ? `<button class="btn btn-outline" data-emie-action="click:lists-requirement-chat-create" data-requirement-id="${id}">💬 创建项目群</button>` : '')}
+          ${hasChat && ['completed', 'terminated'].includes(detail.status) && canManageChat ? `<button class="btn btn-danger" data-emie-action="click:lists-requirement-chat-dissolve" data-requirement-id="${id}">解散项目群</button>` : ''}
         </div>
       </div>`;
     document.body.appendChild(modal);
@@ -127,7 +129,7 @@ async function openDesignRequirementDetail(id) {
 }
 
 async function terminateDesignRequirement(id) {
-  if (!confirm('确定终止该设计/送审需求吗？终止后将不能继续交付或评分。')) return;
+  if (!await EMIE.actions.showSystemConfirm('确定终止该设计/送审需求吗？终止后将不能继续交付或评分。')) return;
   try {
     await apiPost(`/design-requirements/${id}/terminate`, {});
     closeM('designRequirementDetailModal');
@@ -140,7 +142,7 @@ async function createDesignRequirementChat(id) {
   catch (e) { window.EMIE.actions.showSystemAlert('创建项目群失败：' + e.message); }
 }
 async function dissolveDesignRequirementChat(id) {
-  if (!confirm('确认解散项目群？解散后无法恢复。')) return;
+  if (!await EMIE.actions.showSystemConfirm('确认解散项目群？解散后无法恢复。')) return;
   try { await apiPost(`/design-requirements/${id}/feishu-chat/dissolve`, {}); window.EMIE.actions.showSystemAlert('项目群已解散'); closeM('designRequirementDetailModal'); await openDesignRequirementDetail(id); }
   catch (e) { window.EMIE.actions.showSystemAlert('解散项目群失败：' + e.message); }
 }
@@ -151,7 +153,7 @@ function openDesignRequirementChat(chatId) {
 
 function openDesignRequirementReject(id) {
   const modal = document.createElement('div'); modal.className = 'modal-overlay'; modal.id = 'designRequirementRejectModal';
-  modal.innerHTML = `<div class="modal"><div class="modal-header"><div class="modal-title">↩️ 驳回设计/送审需求</div></div><div class="modal-body"><div class="form-group"><label class="form-label">驳回意见</label><textarea class="form-textarea" id="designRequirementRejectComments" required></textarea></div><div class="form-group"><label class="form-label">要求完成时间</label><input type="date" class="form-input" id="designRequirementRejectDeadline" required min="${new Date().toISOString().slice(0,10)}"></div></div><div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('designRequirementRejectModal')">取消</button><button class="btn btn-danger" data-emie-onclick="submitDesignRequirementReject(${id})">确认驳回</button></div></div>`;
+  modal.innerHTML = `<div class="modal"><div class="modal-header"><div class="modal-title">↩️ 驳回设计/送审需求</div></div><div class="modal-body"><div class="form-group"><label class="form-label">驳回意见</label><textarea class="form-textarea" id="designRequirementRejectComments" required></textarea></div><div class="form-group"><label class="form-label">要求完成时间</label><input type="date" class="form-input" id="designRequirementRejectDeadline" required min="${new Date().toISOString().slice(0,10)}"></div></div><div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:lists-reject-close">取消</button><button class="btn btn-danger" data-emie-action="click:lists-reject-submit" data-requirement-id="${id}">确认驳回</button></div></div>`;
   document.body.appendChild(modal);
   enhanceDateInputs(modal);
 }
@@ -165,7 +167,7 @@ async function submitDesignRequirementReject(id) {
 }
 
 async function confirmDesignRequirementRevision(id) {
-  if (!confirm('确认开始修改该设计/送审需求吗？')) return;
+  if (!await EMIE.actions.showSystemConfirm('确认开始修改该设计/送审需求吗？')) return;
   try {
     await apiPost(`/design-requirements/${id}/confirm-revision`, {});
     closeM('designRequirementDetailModal');
@@ -185,22 +187,22 @@ function openDesignRequirementDelivery(id) {
       <div class="form-group"><label class="form-label">交付内容</label><textarea class="form-textarea" id="designRequirementDeliveryContent" rows="7" placeholder="请填写本次交付内容或送审说明"></textarea></div>
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
         <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
-        <div class="upload-area" data-emie-onclick="document.getElementById('designRequirementDeliverImageInput').click()">
+        <div class="upload-area" data-emie-action="click:lists-open-input" data-input-id="designRequirementDeliverImageInput">
           <div>📁 拖拽图片到此处，或点击选择图片</div>
-          <input type="file" id="designRequirementDeliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleDeliverImages(this)">
+          <input type="file" id="designRequirementDeliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:lists-deliver-images">
         </div>
         <div class="file-list" id="deliverImageList"></div>
       </div>
       <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
         <div class="form-label" style="margin-bottom:8px;">📎 交付附件</div>
-        <div class="upload-area" data-emie-onclick="document.getElementById('designRequirementDeliverAttachmentInput').click()">
+        <div class="upload-area" data-emie-action="click:lists-open-input" data-input-id="designRequirementDeliverAttachmentInput">
           <div>📁 拖拽文件到此处，或点击选择文件</div>
-          <input type="file" id="designRequirementDeliverAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
+          <input type="file" id="designRequirementDeliverAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-action="change:lists-deliver-attachments">
         </div>
         <div class="file-list" id="deliverAttachmentList"></div>
       </div>
     </div>
-    <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('designRequirementDeliveryModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitDesignRequirementDelivery(${id})">提交交付</button></div></div>`;
+    <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:lists-delivery-close">取消</button><button class="btn btn-primary" data-emie-action="click:lists-delivery-submit" data-requirement-id="${id}">提交交付</button></div></div>`;
   document.body.appendChild(modal);
 }
 
@@ -228,7 +230,7 @@ function openDesignRequirementScore(id, selfScore) {
   modal.id = 'designRequirementScoreModal';
   modal.innerHTML = `<div class="modal"><div class="modal-header"><div class="modal-title">⭐ ${selfScore ? '设计师自评' : '需求评分'}</div></div>
     <div class="modal-body"><p style="color:var(--gray-500);margin-bottom:16px;">请对本次设计交付进行综合评分（1-100分）</p><input type="number" class="form-input" id="designRequirementScoreValue" min="1" max="100" style="font-size:24px;text-align:center;"></div>
-    <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('designRequirementScoreModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitDesignRequirementScore(${id},${selfScore})">提交评分</button></div></div>`;
+    <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:lists-score-close">取消</button><button class="btn btn-primary" data-emie-action="click:lists-score-submit" data-requirement-id="${id}" data-self-score="${selfScore}">提交评分</button></div></div>`;
   document.body.appendChild(modal);
 }
 
@@ -263,13 +265,13 @@ async function renderOrderList(main, type, role, uid, titleOverride = '', endpoi
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <h2 style="font-size:20px;">${title} <span id="projectListCount" style="font-size:13px;color:var(--gray-400);font-weight:400;">（${result.total} 个）</span></h2>
       <div style="display:flex;gap:8px;">
-        ${type === 'channel_custom' && hasPermission('project.channel.create') ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('channel_custom')">➕ 新建渠道定制项目</button>` : ''}
-        ${type === 'regular' && hasPermission('project.regular.create') ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('regular')">➕ 新建常规品设计项目</button>` : ''}
-        ${type === 'design_requirement' && hasPermission('design_requirement.create') ? `<button class="btn btn-primary" data-emie-onclick="openCreateProject('design_requirement')">➕ 新建设计/送审需求</button>` : ''}
+        ${type === 'channel_custom' && hasPermission('project.channel.create') ? `<button class="btn btn-primary" data-emie-action="click:lists-create-project" data-project-type="channel_custom">➕ 新建渠道定制项目</button>` : ''}
+        ${type === 'regular' && hasPermission('project.regular.create') ? `<button class="btn btn-primary" data-emie-action="click:lists-create-project" data-project-type="regular">➕ 新建常规品设计项目</button>` : ''}
+        ${type === 'design_requirement' && hasPermission('design_requirement.create') ? `<button class="btn btn-primary" data-emie-action="click:lists-create-project" data-project-type="design_requirement">➕ 新建设计/送审需求</button>` : ''}
       </div>
     </div>
     <div class="filter-bar" style="margin-bottom:16px;">
-      <select class="form-select" data-emie-onchange="filterProjectList()" style="min-width:120px;" id="projectStatusFilter">
+      <select class="form-select" data-emie-action="change:lists-project-filter" style="min-width:120px;" id="projectStatusFilter">
         <option value="all">全部状态</option>
         <option value="in_progress">进行中</option>
         <option value="paused">已暂停</option>
@@ -279,16 +281,16 @@ async function renderOrderList(main, type, role, uid, titleOverride = '', endpoi
         <option value="pending_terminate">终止确认中</option>
         <option value="terminated">已终止</option>
       </select>
-      <select class="form-select" data-emie-onchange="filterProjectList()" style="min-width:120px;" id="projectCategoryFilter">
+      <select class="form-select" data-emie-action="change:lists-project-filter" style="min-width:120px;" id="projectCategoryFilter">
         <option value="all">全部类目</option>
         ${(EMIE.state.categories || []).map(c => `<option value="${escHtml(c.name)}">${escHtml(c.name)}</option>`).join('')}
       </select>
-      <select class="form-select" data-emie-onchange="filterProjectList()" style="min-width:120px;" id="projectMarketFilter">
+      <select class="form-select" data-emie-action="change:lists-project-filter" style="min-width:120px;" id="projectMarketFilter">
         <option value="all">全部市场</option>
         <option value="国内">国内</option>
         <option value="海外">海外</option>
       </select>
-      <select class="form-select" id="projectOwnerRoleFilter" data-emie-onchange="changeProjectOwnerRole(this.value)" style="min-width:140px;">
+      <select class="form-select" id="projectOwnerRoleFilter" data-emie-action="change:lists-owner-role" style="min-width:140px;">
         <option value="all">全部负责人</option>
         <option value="sales">需求方（销售）</option>
         <option value="planner">产品企划</option>
@@ -296,12 +298,12 @@ async function renderOrderList(main, type, role, uid, titleOverride = '', endpoi
       <select class="form-select" id="projectOwnerFilter" style="min-width:150px;" disabled>
         <option value="">请先选择负责人类型</option>
       </select>
-      <input class="form-input" placeholder="🔍 搜索编号/描述..." data-emie-oninput="filterProjectList()" style="min-width:180px;" id="searchInput">
-      <input type="date" class="form-input" id="filterDateStart" data-emie-onchange="filterProjectList()" style="min-width:130px;" title="开始日期">
+      <input class="form-input" placeholder="🔍 搜索编号/描述..." data-emie-action="input:lists-project-filter" style="min-width:180px;" id="searchInput">
+      <input type="date" class="form-input" id="filterDateStart" data-emie-action="change:lists-project-filter" style="min-width:130px;" title="开始日期">
       <span style="color:var(--gray-400);font-size:12px;">~</span>
-      <input type="date" class="form-input" id="filterDateEnd" data-emie-onchange="filterProjectList()" style="min-width:130px;" title="结束日期">
-      <button class="btn btn-primary btn-sm" data-emie-onclick="filterProjectList()">🔍 查询</button>
-      <button class="btn btn-outline btn-sm" data-emie-onclick="resetProjectFilters()">↺ 重置</button>
+      <input type="date" class="form-input" id="filterDateEnd" data-emie-action="change:lists-project-filter" style="min-width:130px;" title="结束日期">
+      <button class="btn btn-primary btn-sm" data-emie-action="click:lists-project-filter">🔍 查询</button>
+      <button class="btn btn-outline btn-sm" data-emie-action="click:lists-project-reset">↺ 重置</button>
     </div>
     <div class="card project-list-card" id="projectListContainer">${renderProjectTable(result.items, { compact: true, showType: !type })}</div>
   `;
@@ -355,7 +357,7 @@ function renderProjectPagination(currentCount) {
   const page = state.page || 0;
   const from = total ? page * 15 + 1 : 0;
   const to = total ? page * 15 + currentCount : 0;
-  return `<div class="project-pagination"><span>显示 ${from}-${to} / ${total} · 共 ${pages} 页</span><div><button class="btn btn-outline btn-sm" ${page <= 0 ? 'disabled' : ''} data-emie-onclick="changeProjectListPage(${page - 1})">上一页</button><span class="project-page-indicator">${pages ? `${page + 1} / ${pages}` : '0 / 0'}</span><button class="btn btn-outline btn-sm" ${page >= pages - 1 ? 'disabled' : ''} data-emie-onclick="changeProjectListPage(${page + 1})">下一页</button><span class="project-page-jump">跳至 <input id="projectPageJumpInput" type="number" min="1" max="${Math.max(pages, 1)}" value="${pages ? page + 1 : 1}" ${pages ? '' : 'disabled'}> 页</span><button class="btn btn-outline btn-sm" ${pages ? '' : 'disabled'} data-emie-onclick="jumpProjectListPage()">跳转</button></div></div>`;
+  return `<div class="project-pagination"><span>显示 ${from}-${to} / ${total} · 共 ${pages} 页</span><div><button class="btn btn-outline btn-sm" ${page <= 0 ? 'disabled' : ''} data-emie-action="click:lists-project-page" data-page="${page - 1}">上一页</button><span class="project-page-indicator">${pages ? `${page + 1} / ${pages}` : '0 / 0'}</span><button class="btn btn-outline btn-sm" ${page >= pages - 1 ? 'disabled' : ''} data-emie-action="click:lists-project-page" data-page="${page + 1}">下一页</button><span class="project-page-jump">跳至 <input id="projectPageJumpInput" type="number" min="1" max="${Math.max(pages, 1)}" value="${pages ? page + 1 : 1}" ${pages ? '' : 'disabled'}> 页</span><button class="btn btn-outline btn-sm" ${pages ? '' : 'disabled'} data-emie-action="click:lists-project-jump">跳转</button></div></div>`;
 }
 
 function renderProjectListLoading() {
@@ -477,7 +479,7 @@ async function renderMyTasks(main, role, uid, bucket = 'all') {
       <h2 style="font-size:22px;">📌 子任务管理 <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${orders.length} 个项目)</span></h2>
     </div>
     <div class="filter-bar">
-      <select class="form-select" data-emie-onchange="filterTaskProjects()" style="min-width:120px;" id="taskProjectFilter">
+      <select class="form-select" data-emie-action="change:lists-task-filter" style="min-width:120px;" id="taskProjectFilter">
         <option value="all">全部项目</option>
         <option value="paused">已暂停</option>
         <option value="in_progress">进行中</option>
@@ -487,17 +489,17 @@ async function renderMyTasks(main, role, uid, bucket = 'all') {
         <option value="pending_terminate">终止确认中</option>
         <option value="terminated">已终止</option>
       </select>
-      <select class="form-select" data-emie-onchange="filterTaskProjects()" style="min-width:120px;" id="taskProjectTypeFilter">
+      <select class="form-select" data-emie-action="change:lists-task-filter" style="min-width:120px;" id="taskProjectTypeFilter">
         <option value="all">全部类型</option>
         <option value="channel_custom">渠道定制单</option>
         <option value="regular">公司常规品</option>
       </select>
-      <input class="form-input" placeholder="🔍 搜索项目编号/描述..." data-emie-oninput="filterTaskProjects()" style="min-width:180px;" id="taskProjectSearch">
-      <input type="date" class="form-input" id="taskProjectDateStart" data-emie-onchange="filterTaskProjects()" style="min-width:130px;" title="要求日期起">
+      <input class="form-input" placeholder="🔍 搜索项目编号/描述..." data-emie-action="input:lists-task-filter" style="min-width:180px;" id="taskProjectSearch">
+      <input type="date" class="form-input" id="taskProjectDateStart" data-emie-action="change:lists-task-filter" style="min-width:130px;" title="要求日期起">
       <span style="color:var(--gray-400);font-size:13px;">~</span>
-      <input type="date" class="form-input" id="taskProjectDateEnd" data-emie-onchange="filterTaskProjects()" style="min-width:130px;" title="要求日期止">
-      <button class="btn btn-primary btn-sm" data-emie-onclick="filterTaskProjects()">🔍 查询</button>
-      <button class="btn btn-outline btn-sm" data-emie-onclick="resetTaskProjectFilters()">↺ 重置</button>
+      <input type="date" class="form-input" id="taskProjectDateEnd" data-emie-action="change:lists-task-filter" style="min-width:130px;" title="要求日期止">
+      <button class="btn btn-primary btn-sm" data-emie-action="click:lists-task-filter">🔍 查询</button>
+      <button class="btn btn-outline btn-sm" data-emie-action="click:lists-task-reset">↺ 重置</button>
     </div>
     <div id="taskProjectContainer">${renderTaskProjectTable(orders)}</div>
   `;
@@ -516,7 +518,7 @@ async function loadTaskProjectPage(page) {
 function renderTaskProjectTable(orders) {
   if (!orders.length) return `<div class="empty"><div class="empty-icon">📭</div><p>${EMIE.state.currentRole === 'admin' ? '暂无项目' : '暂无进行中的项目'}</p></div>`;
   const state = EMIE.taskProjectListState || {};
-  const pagination = state.totalPages > 1 ? `<div class="project-pagination"><span>共 ${state.total} 个项目 · ${state.page + 1} / ${state.totalPages} 页</span><div><button class="btn btn-outline btn-sm" ${state.page <= 0 ? 'disabled' : ''} data-emie-onclick="changeTaskProjectPage(${state.page - 1})">上一页</button><button class="btn btn-outline btn-sm" ${state.page >= state.totalPages - 1 ? 'disabled' : ''} data-emie-onclick="changeTaskProjectPage(${state.page + 1})">下一页</button></div></div>` : '';
+  const pagination = state.totalPages > 1 ? `<div class="project-pagination"><span>共 ${state.total} 个项目 · ${state.page + 1} / ${state.totalPages} 页</span><div><button class="btn btn-outline btn-sm" ${state.page <= 0 ? 'disabled' : ''} data-emie-action="click:lists-task-page" data-page="${state.page - 1}">上一页</button><button class="btn btn-outline btn-sm" ${state.page >= state.totalPages - 1 ? 'disabled' : ''} data-emie-action="click:lists-task-page" data-page="${state.page + 1}">下一页</button></div></div>` : '';
   return `<div class="card"><div class="table-wrap"><table>
     <thead><tr>
       <th>项目编号</th>
@@ -539,8 +541,8 @@ function renderTaskProjectTable(orders) {
         <td>${formatDate(o.deadline)}</td>
         <td><span class="badge ${st.cls}">${st.label}</span></td>
         <td>
-          <button class="btn btn-primary btn-sm" data-emie-onclick="openProjectDetail(${o.id})">📋 管理子任务</button>
-          <button class="btn btn-outline btn-sm" data-emie-onclick="openProjectDetail(${o.id})">查看</button>
+          <button class="btn btn-primary btn-sm" data-emie-action="click:lists-project-detail" data-project-id="${o.id}">📋 管理子任务</button>
+          <button class="btn btn-outline btn-sm" data-emie-action="click:lists-project-detail" data-project-id="${o.id}">查看</button>
         </td>
       </tr>`;
     }).join('')}</tbody>
@@ -694,3 +696,36 @@ EMIE.registerModule('dashboardLists', {
   filterTaskProjects,
   resetTaskProjectFilters,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('lists-requirement-close', () => closeM('designRequirementDetailModal'));
+  registerEventAction('lists-requirement-terminate', (_event, el) => terminateDesignRequirement(Number(el.dataset.requirementId)));
+  registerEventAction('lists-requirement-confirm', (_event, el) => confirmDesignRequirementRevision(Number(el.dataset.requirementId)));
+  registerEventAction('lists-requirement-reject', (_event, el) => openDesignRequirementReject(Number(el.dataset.requirementId)));
+  registerEventAction('lists-requirement-deliver', (_event, el) => openDesignRequirementDelivery(Number(el.dataset.requirementId)));
+  registerEventAction('lists-requirement-score', (_event, el) => openDesignRequirementScore(Number(el.dataset.requirementId), el.dataset.selfScore === 'true'));
+  registerEventAction('lists-requirement-chat-open', (_event, el) => openDesignRequirementChat(el.dataset.chatId));
+  registerEventAction('lists-requirement-chat-create', (_event, el) => createDesignRequirementChat(Number(el.dataset.requirementId)));
+  registerEventAction('lists-requirement-chat-dissolve', (_event, el) => dissolveDesignRequirementChat(Number(el.dataset.requirementId)));
+  registerEventAction('lists-project-filter', () => filterProjectList());
+  registerEventAction('lists-project-reset', () => resetProjectFilters());
+  registerEventAction('lists-owner-role', (_event, el) => changeProjectOwnerRole(el.value));
+  registerEventAction('lists-project-page', (_event, el) => changeProjectListPage(Number(el.dataset.page)));
+  registerEventAction('lists-project-jump', () => jumpProjectListPage());
+  registerEventAction('lists-task-filter', () => filterTaskProjects());
+  registerEventAction('lists-task-reset', () => resetTaskProjectFilters());
+  registerEventAction('lists-task-page', (_event, el) => changeTaskProjectPage(Number(el.dataset.page)));
+  registerEventAction('lists-reject-close', () => closeM('designRequirementRejectModal'));
+  registerEventAction('lists-reject-submit', (_event, el) => submitDesignRequirementReject(Number(el.dataset.requirementId)));
+  registerEventAction('lists-open-input', (_event, el) => document.getElementById(el.dataset.inputId)?.click());
+  registerEventAction('lists-deliver-images', (_event, el) => handleDeliverImages(el));
+  registerEventAction('lists-deliver-attachments', (_event, el) => handleDeliverAttachments(el));
+  registerEventAction('lists-delivery-close', () => closeM('designRequirementDeliveryModal'));
+  registerEventAction('lists-delivery-submit', (_event, el) => submitDesignRequirementDelivery(Number(el.dataset.requirementId)));
+  registerEventAction('lists-score-close', () => closeM('designRequirementScoreModal'));
+  registerEventAction('lists-score-submit', (_event, el) =>
+    submitDesignRequirementScore(Number(el.dataset.requirementId), el.dataset.selfScore === 'true'));
+  registerEventAction('lists-create-project', (_event, el) => openCreateProject(el.dataset.projectType));
+  registerEventAction('lists-project-detail', (_event, el) => openProjectDetail(Number(el.dataset.projectId)));
+}

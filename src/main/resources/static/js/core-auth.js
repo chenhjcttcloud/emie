@@ -14,7 +14,7 @@ function notifySystemVersion(version) {
   const notice = document.createElement('div');
   notice.id = 'systemVersionNotice';
   notice.style.cssText = 'position:fixed;bottom:16px;left:16px;z-index:10000;max-width:360px;pointer-events:none;';
-  notice.innerHTML = `<div style="pointer-events:auto;background:#fff;border:1px solid #BFDBFE;border-left:4px solid var(--primary);border-radius:10px;box-shadow:0 8px 24px rgba(15,23,42,.16);padding:12px 14px;display:flex;align-items:center;gap:12px;"><div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;color:#1E3A8A;margin-bottom:3px;">系统已更新</div><div style="font-size:12px;color:var(--gray-500);line-height:1.5;">当前操作不会被打断。完成后点击刷新即可使用最新版本。</div></div><button class="btn btn-primary btn-sm" data-emie-onclick="forceRefreshForVersion()" style="white-space:nowrap;">立即刷新</button><button class="modal-close" aria-label="稍后刷新" data-emie-onclick="document.getElementById('systemVersionNotice')?.remove()" style="position:static;width:24px;height:24px;">✕</button></div>`;
+  notice.innerHTML = `<div style="pointer-events:auto;background:#fff;border:1px solid #BFDBFE;border-left:4px solid var(--primary);border-radius:10px;box-shadow:0 8px 24px rgba(15,23,42,.16);padding:12px 14px;display:flex;align-items:center;gap:12px;"><div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;color:#1E3A8A;margin-bottom:3px;">系统已更新</div><div style="font-size:12px;color:var(--gray-500);line-height:1.5;">当前操作不会被打断。完成后点击刷新即可使用最新版本。</div></div><button class="btn btn-primary btn-sm" data-emie-action="click:auth-force-refresh" style="white-space:nowrap;">立即刷新</button><button class="modal-close" aria-label="稍后刷新" data-emie-action="click:auth-dismiss-version" style="position:static;width:24px;height:24px;">✕</button></div>`;
   document.body.appendChild(notice);
 }
 
@@ -349,7 +349,7 @@ function showPendingApproval() {
         <p style="color:var(--gray-500);line-height:1.8;margin:0 auto 24px;max-width:440px;">
           你的公司飞书身份已验证，系统账号也已创建。管理员分配部门和角色后，即可查看项目和业务数据。
         </p>
-        <button class="btn btn-primary" data-emie-onclick="refreshPendingAccess()">重新登录检查权限</button>
+        <button class="btn btn-primary" data-emie-action="click:auth-refresh-access">重新登录检查权限</button>
       </div>`;
   }
   document.documentElement.dataset.appReady = 'pending';
@@ -554,7 +554,7 @@ function showIdleLogoutModal() {
       <div style="font-size:48px;margin-bottom:16px;">⏰</div>
       <div style="font-size:18px;font-weight:600;color:var(--gray-800);margin-bottom:8px;">登录超时</div>
       <p style="font-size:14px;color:var(--gray-500);margin-bottom:24px;">长时间未操作，已自动退出登录<br>请重新登录系统</p>
-      <button class="btn btn-primary btn-lg" data-emie-onclick="closeIdleLogoutModal()" style="width:100%;justify-content:center;padding:10px 0;">确 定</button>
+      <button class="btn btn-primary btn-lg" data-emie-action="click:auth-close-idle" style="width:100%;justify-content:center;padding:10px 0;">确 定</button>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -604,6 +604,16 @@ EMIE.registerActions({
   forceRefreshForVersion,
   roleLabel,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('auth-logout', () => handleLogout());
+  registerEventAction('auth-feishu-login', () => handleFeishuLogin());
+  registerEventAction('auth-refresh-access', () => EMIE.actions.refreshPendingAccess());
+  registerEventAction('auth-close-idle', () => EMIE.actions.closeIdleLogoutModal());
+  registerEventAction('auth-force-refresh', () => forceRefreshForVersion());
+  registerEventAction('auth-dismiss-version', (_event, el) => el.closest('#systemVersionNotice')?.remove());
+}
 
 EMIE.registerModule('coreAuth', {
   initApp,

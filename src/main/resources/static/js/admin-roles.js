@@ -41,7 +41,7 @@ async function renderAdminRoles(container) {
     <div class="config-card">
       <div class="config-card-header">
         <h3>🔐 角色管理 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">共 ${roles.length} 个角色</span></h3>
-        <button class="btn btn-sm btn-primary" data-emie-onclick="openCreateRoleModal()">➕ 新建角色</button>
+        <button class="btn btn-sm btn-primary" data-emie-action="click:roles-create">➕ 新建角色</button>
       </div>
       <div class="config-card-body">
         <div class="table-wrap">
@@ -68,8 +68,8 @@ async function renderAdminRoles(container) {
                   <td>${r.isSystem ? '<span class="admin-user-role-badge role-admin">系统</span>' : '<span class="admin-user-role-badge role-sales">自定义</span>'}</td>
                   <td>
                     <div class="admin-user-actions">
-                      <button class="btn-edit-user" data-emie-onclick="openEditRoleById(${r.id})">✏️ 编辑</button>
-                      ${!r.isSystem ? `<button class="btn-delete" data-emie-onclick="confirmDeleteRole(${r.id}, '${escHtml(escJsString(r.displayName))}')">🗑️ 删除</button>` : ''}
+                      <button class="btn-edit-user" data-emie-action="click:roles-edit" data-role-id="${r.id}">✏️ 编辑</button>
+                      ${!r.isSystem ? `<button class="btn-delete" data-emie-action="click:roles-delete" data-role-id="${r.id}" data-role-name="${escHtml(escJsString(r.displayName))}">🗑️ 删除</button>` : ''}
                     </div>
                   </td>
                 </tr>
@@ -118,7 +118,7 @@ async function loadPermDefsAndOpenModal(editData) {
   modal.id = 'roleFormModal';
   modal.innerHTML = `
     <div class="modal modal-lg">
-      <div class="modal-header"><button class="modal-close" data-emie-onclick="closeM('roleFormModal')">✕</button><div class="modal-header-left"><div class="modal-title">${isEdit ? '✏️ 编辑角色' : '➕ 新建角色'}</div></div></div>
+      <div class="modal-header"><button class="modal-close" data-emie-action="click:roles-close">✕</button><div class="modal-header-left"><div class="modal-title">${isEdit ? '✏️ 编辑角色' : '➕ 新建角色'}</div></div></div>
       <div class="modal-body">
         <div id="roleFormError" style="color:var(--danger);font-size:13px;display:none;margin-bottom:12px;text-align:center;padding:8px;background:var(--danger-light);border-radius:6px;"></div>
         ${!isEdit ? `
@@ -151,7 +151,7 @@ async function loadPermDefsAndOpenModal(editData) {
             <div class="checkbox-group">
               ${perms.map(p => `
                 <label class="checkbox-item ${selectedPerms.includes(p.key) ? 'checked' : ''}">
-                  <input type="checkbox" name="perm" value="${p.key}" ${selectedPerms.includes(p.key) ? 'checked' : ''} data-emie-onchange="this.closest('.checkbox-item').classList.toggle('checked')">
+                  <input type="checkbox" name="perm" value="${p.key}" ${selectedPerms.includes(p.key) ? 'checked' : ''} data-emie-action="change:roles-permission-toggle">
                   <span>${p.label}${['high','critical'].includes(p.riskLevel) ? ` <small style="color:var(--danger);">高风险</small>` : ''}</span>
                 </label>
               `).join('')}
@@ -174,8 +174,8 @@ async function loadPermDefsAndOpenModal(editData) {
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" data-emie-onclick="closeM('roleFormModal')">取消</button>
-        <button class="btn btn-primary" data-emie-onclick="${isEdit ? `submitEditRole(${editData.id})` : 'submitCreateRole()'}">${isEdit ? '💾 保存修改' : '✅ 创建角色'}</button>
+        <button class="btn btn-outline" data-emie-action="click:roles-close">取消</button>
+        <button class="btn btn-primary" data-emie-action="click:roles-submit" data-role-id="${isEdit ? editData.id : ''}">${isEdit ? '💾 保存修改' : '✅ 创建角色'}</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -244,9 +244,9 @@ function collectPermissionScopes() {
   return result;
 }
 
-function confirmDeleteRole(roleId, displayName) {
-  if (!confirm(`⚠️ 确定要删除角色「${displayName}」吗？\n删除后该角色下所有用户将失去对应权限。`)) return;
-  const reason = prompt('请输入删除角色的原因（将写入权限审计日志）：');
+async function confirmDeleteRole(roleId, displayName) {
+  if (!await EMIE.actions.showSystemConfirm(`⚠️ 确定要删除角色「${displayName}」吗？\n删除后该角色下所有用户将失去对应权限。`)) return;
+  const reason = await EMIE.actions.showSystemInput('请输入删除角色的原因（将写入权限审计日志）：');
   if (!reason?.trim()) return;
   submitDeleteRole(roleId, reason.trim());
 }
@@ -275,6 +275,16 @@ EMIE.registerActions({
   confirmDeleteRole,
   submitDeleteRole,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('roles-create', () => openCreateRoleModal());
+  registerEventAction('roles-close', () => closeM('roleFormModal'));
+  registerEventAction('roles-permission-toggle', (_event, el) => el.closest('.checkbox-item')?.classList.toggle('checked', el.checked));
+  registerEventAction('roles-edit', (_event, el) => openEditRoleById(Number(el.dataset.roleId)));
+  registerEventAction('roles-delete', (_event, el) => confirmDeleteRole(Number(el.dataset.roleId), el.dataset.roleName || ''));
+  registerEventAction('roles-submit', (_event, el) => el.dataset.roleId ? submitEditRole(Number(el.dataset.roleId)) : submitCreateRole());
+}
 
 EMIE.registerModule('adminRoles', {
   renderAdminRoles,

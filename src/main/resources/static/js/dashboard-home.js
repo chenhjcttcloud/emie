@@ -87,16 +87,16 @@ async function renderDashboard(main, role, uid) {
   main.innerHTML = `
     <h2 style="font-size:22px;margin-bottom:20px;">📊 工作台 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">— ${EMIE.state.currentRole === 'planner' ? `<select class="form-input" style="display:inline-block;width:auto;min-width:130px;padding:4px 28px 4px 8px;font-size:13px;vertical-align:middle;"><option value="mine" ${plannerBoardScope === 'mine' ? 'selected' : ''}>${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}</option><option value="all" ${plannerBoardScope === 'all' ? 'selected' : ''}>全部产品企划</option></select>` : `${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}（${roleLabel(EMIE.state.currentRole)}）`}</span></h2>
     ${!executionRole ? `<div class="stats-grid dashboard-stats-row">
-      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateMyProjects()"><div class="stat-icon blue">📁</div><div><div class="stat-value">${stats.totalProjects}</div><div class="stat-label">${EMIE.state.currentRole === 'admin' ? '全部项目' : (plannerBoardScope === 'all' ? '全部企划项目' : '我的项目')}</div></div></div>
-      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateChannelCard()"><div class="stat-icon blue">📦</div><div><div class="stat-value">${stats.channelProjects}</div><div class="stat-label">渠道定制单</div></div></div>
-      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateRegularCard()"><div class="stat-icon green">🏭</div><div><div class="stat-value">${stats.regularProjects}</div><div class="stat-label">公司常规品</div></div></div>
-      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateInProgressCard()"><div class="stat-icon yellow">🔄</div><div><div class="stat-value">${stats.inProgress}</div><div class="stat-label">进行中项目</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-my-projects"><div class="stat-icon blue">📁</div><div><div class="stat-value">${stats.totalProjects}</div><div class="stat-label">${EMIE.state.currentRole === 'admin' ? '全部项目' : (plannerBoardScope === 'all' ? '全部企划项目' : '我的项目')}</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-channel"><div class="stat-icon blue">📦</div><div><div class="stat-value">${stats.channelProjects}</div><div class="stat-label">渠道定制单</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-regular"><div class="stat-icon green">🏭</div><div><div class="stat-value">${stats.regularProjects}</div><div class="stat-label">公司常规品</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-in-progress"><div class="stat-icon yellow">🔄</div><div><div class="stat-value">${stats.inProgress}</div><div class="stat-label">进行中项目</div></div></div>
     </div>
     <div class="stats-grid dashboard-stats-row">
-      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateTaskBucket('all')"><div class="stat-icon blue">📌</div><div><div class="stat-value">${stats.allTasks ?? 0}</div><div class="stat-label">子任务总数</div></div></div>
-      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateTaskBucket('pending')"><div class="stat-icon yellow">⏳</div><div><div class="stat-value">${stats.pendingTasks}</div><div class="stat-label">待处理子任务</div></div></div>
-      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigateTaskBucket('completed')"><div class="stat-icon green">✅</div><div><div class="stat-value">${stats.approvedTasks}</div><div class="stat-label">已完成子任务</div></div></div>
-      <div class="stat-card" style="cursor:pointer" data-emie-onclick="navigatePendingScoring()"><div class="stat-icon yellow">⭐</div><div><div class="stat-value">${stats.pendingScore}</div><div class="stat-label">待评分</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-tasks-all"><div class="stat-icon blue">📌</div><div><div class="stat-value">${stats.allTasks ?? 0}</div><div class="stat-label">子任务总数</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-tasks-pending"><div class="stat-icon yellow">⏳</div><div><div class="stat-value">${stats.pendingTasks}</div><div class="stat-label">待处理子任务</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-tasks-completed"><div class="stat-icon green">✅</div><div><div class="stat-value">${stats.approvedTasks}</div><div class="stat-label">已完成子任务</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-pending-scoring"><div class="stat-icon yellow">⭐</div><div><div class="stat-value">${stats.pendingScore}</div><div class="stat-label">待评分</div></div></div>
     </div>` : ''}
     ${rolePanelsHtml}
     ${!executionRole && orders.length === 0 ? `<div class="empty"><div class="empty-icon">📭</div><p>暂无您负责的项目</p></div>` : ''}
@@ -135,12 +135,12 @@ async function loadDashboardDesignRequirements(uid, role) {
       <div style="padding:20px 20px 0;"><div class="type-section-title">🎨 设计/送审需求 <span class="count">共 ${actionable.length} 个</span></div></div>
       <div style="padding:0 20px 20px;"><div class="table-wrap"><table>
         <thead><tr><th>需求</th><th>需求负责人</th><th>设计师</th><th>产品企划</th><th>要求完成时间</th><th>状态</th></tr></thead>
-        <tbody>${actionable.slice(0, 8).map(item => `<tr style="cursor:pointer" data-emie-onclick="openDesignRequirementDetail(${item.id})">
+        <tbody>${actionable.slice(0, 8).map(item => `<tr style="cursor:pointer" data-emie-action="click:home-design-detail" data-requirement-id="${item.id}">
           <td><strong>${escHtml(item.productName || '-')}</strong><div style="font-size:11px;color:var(--gray-400)">${escHtml(item.projectCode || ('#' + item.id))}</div></td>
           <td>${escHtml(item.responsibleName || item.ownerName || '-')}</td><td>${escHtml(item.designerName || '-')}</td><td>${escHtml(item.plannerName || '-')}</td>
           <td>${formatDate(item.deadline)}</td><td><span class="badge ${item.status === 'rejected' ? 'badge-rejected' : 'badge-progress'}">${escHtml(labels[item.status] || item.status)}</span></td>
         </tr>`).join('')}</tbody></table></div>
-        ${actionable.length > 8 ? '<div style="text-align:center;margin-top:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="navigate(\'design-needs\')">查看全部设计需求 →</button></div>' : ''}
+        ${actionable.length > 8 ? '<div style="text-align:center;margin-top:8px;"><button class="btn btn-outline btn-sm" data-emie-action="click:home-design-list">查看全部设计需求 →</button></div>' : ''}
       </div></div></div>`;
     syncExecutionTaskZoneVisibility();
   } catch (error) {
@@ -175,7 +175,7 @@ async function loadDashboardPlannerTasks(uid) {
     const grouped = key => tasks.filter(t => key === 'active' ? ['accepted', 'rejected'].includes(t.status) : t.status === key);
     const renderGroup = ([key, title, label]) => {
       const list = grouped(key);
-      return `<div class="type-section"><div class="card" style="padding:0;"><div style="padding:16px 20px 0;"><div class="type-section-title">${title} <span class="count">共 ${list.length} 个</span></div></div><div style="padding:0 20px 16px;">${list.length ? `<div class="table-wrap"><table class="dashboard-uniform-task-table"><thead><tr><th>子任务</th><th>所属项目</th><th>负责人</th><th>要求完成时间</th><th>状态</th></tr></thead><tbody>${list.slice(0, 8).map(t => `<tr style="cursor:pointer" data-emie-onclick="openPublishedSubTaskDetail(${t.id})"><td><strong>${escHtml(t.name || '-')}</strong><div style="font-size:11px;color:var(--gray-400)">#${t.id}</div></td><td>${escHtml(t.projectName || '-')}</td><td>${escHtml(t.designerName || t.assigneeName || '待接单')}</td><td>${formatDate(t.plannedDate)}</td><td><span class="badge ${getTaskStatusInfo(t.status).cls}">${label}</span></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state" style="padding:14px">暂无子任务</div>'}</div></div></div>`;
+      return `<div class="type-section"><div class="card" style="padding:0;"><div style="padding:16px 20px 0;"><div class="type-section-title">${title} <span class="count">共 ${list.length} 个</span></div></div><div style="padding:0 20px 16px;">${list.length ? `<div class="table-wrap"><table class="dashboard-uniform-task-table"><thead><tr><th>子任务</th><th>所属项目</th><th>负责人</th><th>要求完成时间</th><th>状态</th></tr></thead><tbody>${list.slice(0, 8).map(t => `<tr style="cursor:pointer" data-emie-action="click:home-subtask-detail" data-task-id="${t.id}"><td><strong>${escHtml(t.name || '-')}</strong><div style="font-size:11px;color:var(--gray-400)">#${t.id}</div></td><td>${escHtml(t.projectName || '-')}</td><td>${escHtml(t.designerName || t.assigneeName || '待接单')}</td><td>${formatDate(t.plannedDate)}</td><td><span class="badge ${getTaskStatusInfo(t.status).cls}">${label}</span></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state" style="padding:14px">暂无子任务</div>'}</div></div></div>`;
     };
     container.innerHTML = groups.map(renderGroup).join('');
   } catch (error) { container.innerHTML = `<div class="empty"><p>子任务面板加载失败：${escHtml(error.message)}</p></div>`; }
@@ -228,19 +228,19 @@ async function loadDashboardExecutionTasks(uid, role) {
                     statusInfo.icon = '🔧';
                   }
                   return `
-                    <tr style="cursor:pointer;" data-emie-onclick="openPublishedSubTaskDetail(${t.id})">
+                    <tr style="cursor:pointer;" data-emie-action="click:home-subtask-detail" data-task-id="${t.id}">
                       <td><strong>${escHtml(t.name || '-')}</strong><div style="font-size:11px;color:var(--gray-400);margin-top:2px;">#${t.id}</div></td>
                       <td>${escHtml(t.projectName || '未命名项目')}</td>
                       <td>${escHtml(t.publisherName || '-')}</td>
                       <td>${formatDate(t.plannedDate)}</td>
                       <td><span class="badge ${statusInfo.cls}">${statusInfo.icon} ${statusInfo.label}</span></td>
                       <td style="max-width:260px;white-space:normal;">${t.status === 'rejected' ? escHtml(t.reviewComments || '待查看详情') : '—'}</td>
-                      <td><button class="btn btn-outline btn-sm" data-emie-onclick="event.stopPropagation();openPublishedSubTaskDetail(${t.id})">查看</button></td>
+                      <td><button class="btn btn-outline btn-sm" data-emie-action="click:home-subtask-detail" data-task-id="${t.id}">查看</button></td>
                     </tr>`;
                 }).join('')}
                 </tbody>
               </table></div>
-              ${groupTasks.length > 5 ? '<div style="text-align:center;margin-top:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="navigate(\'tasks\')">查看全部关联子任务 →</button></div>' : ''}
+              ${groupTasks.length > 5 ? '<div style="text-align:center;margin-top:8px;"><button class="btn btn-outline btn-sm" data-emie-action="click:home-task-list">查看全部关联子任务 →</button></div>' : ''}
             </div>
           </div>
         </div>`;
@@ -327,7 +327,7 @@ async function loadDashboardWorkloadSection() {
         <span style="font-size:16px;font-weight:600;color:#1f2937;">工作量概览</span>
         <span style="font-size:12px;color:var(--gray-400);margin-left:4px;">时间范围:</span>
         ${rangeOpts.map(o => `
-          <button data-emie-onclick="switchDashWorkload('${o.k}')"
+          <button data-emie-action="click:home-workload-range" data-workload-range="${escHtml(o.k)}"
             style="padding:4px 12px;border-radius:6px;border:${o.k === EMIE.dashboardState.workloadRange ? '2px solid #3370FF' : '1px solid var(--gray-200)'};
             background:${o.k === EMIE.dashboardState.workloadRange ? '#E6F1FB' : '#fff'};
             color:${o.k === EMIE.dashboardState.workloadRange ? '#1E40AF' : '#374151'};
@@ -570,9 +570,9 @@ function renderUserCard(u, cardRole) {
       <div class="designer-title">${escHtml(displayText(u.title, '未设置职级'))}</div>
       <div class="designer-tasks">
         ${u.busy
-          ? (u.activeTasks
-            ? `进行中：${u.activeTasks.length}个子任务`
-            : `进行中：${u.activeProjects.length}个项目`)
+          ? (cardRole === 'planner'
+            ? `进行中：${(u.activeProjects || []).length}个项目`
+            : `进行中：${(u.activeTasks || []).length}个子任务`)
           : `🟢 空闲`}
       </div>
     </div>
@@ -590,7 +590,7 @@ function showUserTasksPopup(userId, userName, cardRole) {
   modal.onclick = function(e) { if (e.target === this) closeM('userTasksPopup'); };
   modal.innerHTML = `
     <div class="modal" style="max-width:500px;">
-      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📋 ${escHtml(userName)} 的进行中任务</div></div><button class="modal-close" data-emie-onclick="closeM('userTasksPopup')">✕</button></div>
+      <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📋 ${escHtml(userName)} 的进行中${cardRole === 'planner' ? '项目' : '任务'}</div></div><button class="modal-close" data-emie-action="click:home-close-user-tasks">✕</button></div>
       <div class="modal-body" id="userTasksPopupBody">
         <div style="text-align:center;padding:20px;color:var(--gray-400);">加载中...</div>
       </div>
@@ -612,8 +612,8 @@ async function loadUserTasksPopup(userId, cardRole) {
       document.getElementById('userTasksPopupBody').innerHTML = '<div style="text-align:center;padding:20px;color:var(--gray-500);">暂无数据</div>';
       return;
     }
-    const tasks = userData.activeTasks || [];
-    const projects = cardRole === 'planner' ? [] : (userData.activeProjects || []);
+    const tasks = cardRole === 'planner' ? [] : (userData.activeTasks || []);
+    const projects = userData.activeProjects || [];
     const body = document.getElementById('userTasksPopupBody');
     if (tasks.length === 0 && projects.length === 0) {
       body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--success);">🟢 当前空闲，无进行中的任务</div>';
@@ -625,7 +625,7 @@ async function loadUserTasksPopup(userId, cardRole) {
         <div style="display:flex;flex-direction:column;gap:6px;">`;
       tasks.forEach(t => {
         const statusLabels = { pending: '⏳ 待接单', accepted: '🔄 进行中', rejected: '↩️ 已驳回', delivered: '📤 已交付' };
-        html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;cursor:pointer;" data-emie-onclick="closeM('userTasksPopup');openProjectDetail(${t.projectId})">
+        html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;cursor:pointer;" data-emie-action="click:home-user-project" data-project-id="${t.projectId}">
           <span style="font-size:13px;">${escHtml(t.name)}</span>
           <span style="font-size:11px;color:var(--gray-500);">${statusLabels[t.status] || t.status}</span>
         </div>`;
@@ -636,8 +636,8 @@ async function loadUserTasksPopup(userId, cardRole) {
       html += `<div style="font-size:13px;font-weight:600;color:var(--gray-500);margin-top:12px;margin-bottom:8px;">项目（${projects.length}）</div>
         <div style="display:flex;flex-direction:column;gap:6px;">`;
       projects.forEach(p => {
-        html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;cursor:pointer;" data-emie-onclick="closeM('userTasksPopup');openProjectDetail(${p.id})">
-          <span style="font-size:13px;">${escHtml(p.name)}</span>
+        html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;cursor:pointer;" data-emie-action="click:home-user-project" data-project-id="${p.id}">
+          <span style="font-size:13px;"><strong>${escHtml(p.projectCode || ('#' + p.id))}</strong> · ${escHtml(p.productName || p.name || '未命名项目')}</span>
           <span style="font-size:11px;color:var(--gray-500);">${p.type === 'channel_custom' ? '📦 渠道定制' : '🏭 常规品'}</span>
         </div>`;
       });
@@ -663,7 +663,7 @@ function renderProjectSummary(projects, title) {
         <thead><tr><th>项目编号</th><th>产品名称</th><th>需求方</th><th>产品企划</th><th>产品类目</th><th>目标市场</th><th>子任务数</th><th>进度</th><th>评分</th><th>要求完成时间</th><th>状态</th></tr></thead>
         <tbody>${display.map(o => {
           const st = getProjectStatusInfo(o.status);
-          return `<tr style="cursor:pointer;" data-emie-onclick="openProjectDetail(${o.id})">
+          return `<tr style="cursor:pointer;" data-emie-action="click:home-project-detail" data-project-id="${o.id}">
             <td><strong>${escHtml(o.projectCode || ('#' + o.id))}</strong></td>
             <td>${escHtml(displayText(o.productName, '未设置'))}</td>
             <td>${o.salesName ? escHtml(o.salesName) : '-'}</td>
@@ -678,7 +678,7 @@ function renderProjectSummary(projects, title) {
           </tr>`;
         }).join('')}</tbody>
       </table></div>
-      ${projects.length > 5 ? `<div style="text-align:center;margin-top:8px;"><button class="btn btn-outline btn-sm" data-emie-onclick="navigate('${title.includes('渠道') ? 'channel' : 'regular'}')">查看全部 →</button></div>` : ''}
+      ${projects.length > 5 ? `<div style="text-align:center;margin-top:8px;"><button class="btn btn-outline btn-sm" data-emie-action="click:home-project-list" data-project-list="${title.includes('渠道') ? 'channel' : 'regular'}">查看全部 →</button></div>` : ''}
       </div></div></div>`;
 }
 
@@ -724,3 +724,32 @@ EMIE.registerModule('dashboardHome', {
   navigateInProgressCard,
   navigatePendingScoring,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('home-my-projects', () => navigateMyProjects());
+  registerEventAction('home-channel', () => navigateChannelCard());
+  registerEventAction('home-regular', () => navigateRegularCard());
+  registerEventAction('home-in-progress', () => navigateInProgressCard());
+  registerEventAction('home-tasks-all', () => EMIE.actions.navigateTaskBucket('all'));
+  registerEventAction('home-tasks-pending', () => EMIE.actions.navigateTaskBucket('pending'));
+  registerEventAction('home-tasks-completed', () => EMIE.actions.navigateTaskBucket('completed'));
+  registerEventAction('home-pending-scoring', () => navigatePendingScoring());
+  registerEventAction('home-workload-range', (_event, element) =>
+    switchDashWorkload(element.dataset.workloadRange));
+  registerEventAction('home-project-detail', (_event, element) =>
+    openProjectDetail(Number(element.dataset.projectId)));
+  registerEventAction('home-project-list', (_event, element) =>
+    navigate(element.dataset.projectList));
+  registerEventAction('home-design-detail', (_event, element) =>
+    openDesignRequirementDetail(Number(element.dataset.requirementId)));
+  registerEventAction('home-design-list', () => navigate('design-needs'));
+  registerEventAction('home-subtask-detail', (_event, element) =>
+    EMIE.actions.openPublishedSubTaskDetail(Number(element.dataset.taskId)));
+  registerEventAction('home-task-list', () => navigate('tasks'));
+  registerEventAction('home-close-user-tasks', () => closeM('userTasksPopup'));
+  registerEventAction('home-user-project', (_event, element) => {
+    closeM('userTasksPopup');
+    openProjectDetail(Number(element.dataset.projectId));
+  });
+}

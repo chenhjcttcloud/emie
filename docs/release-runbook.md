@@ -48,7 +48,7 @@
 - 确认项目根目录的 `RTK.md` 存在并已阅读。
 - 运行 `git status --short --branch`，逐项识别修改和未跟踪文件。
 - 确认 `.sheet-work/`、`outputs/`、上传文件、日志和本地备份不会误入提交。
-- 确认当前分支是 `project_manager_system`。
+- 确认当前分支是 `master`。
 
 ### 4.2 同步远端
 

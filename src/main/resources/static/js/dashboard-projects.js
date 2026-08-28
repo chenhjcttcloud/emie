@@ -18,6 +18,7 @@ const renderDepartmentTasks = (...args) => EMIE.actions.renderDepartmentTasks(..
 const renderScoringView = (...args) => EMIE.actions.renderScoringView(...args);
 const renderPointsView = (...args) => EMIE.actions.renderPointsView(...args);
 const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
+const openListItemDetail = (...args) => EMIE.actions.openListItemDetail(...args);
 const renderProjectDetailContent = (...args) => EMIE.actions.renderProjectDetailContent(...args);
 const renderProjectActions = (...args) => EMIE.actions.renderProjectActions(...args);
 const pauseProject = (...args) => EMIE.actions.pauseProject(...args);
@@ -135,7 +136,7 @@ function renderProjectRow(o, compact = false, showType = true) {
   const rowOpen = `openListItemDetail('${o.type}',${o.id})`;
   if (compact) {
     const market = o.targetMarket ? (() => { try { return JSON.parse(o.targetMarket).join('/'); } catch(e) { return o.targetMarket; } })() : '-';
-    return `<tr style="cursor:pointer;" tabindex="0" data-emie-onclick="${rowOpen}" data-emie-onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();${rowOpen}}">
+    return `<tr style="cursor:pointer;" tabindex="0" data-emie-action="click:project-row-open" data-emie-keydown-action="project-row-open" data-project-type="${escHtml(o.type)}" data-project-id="${o.id}">
       <td><strong>#${o.id}</strong></td>
       ${showType ? `<td>${o.type === 'channel_custom' ? '📦 渠道' : '🏭 常规'}</td>` : ''}
       <td class="project-name-cell" title="${escHtml(displayText(o.productName, '未设置'))}">${escHtml(displayText(o.productName, '未设置'))}</td>
@@ -144,10 +145,10 @@ function renderProjectRow(o, compact = false, showType = true) {
       <td>${o.approvedTaskCount}/${o.taskCount}<span class="project-muted"> · ${renderScore(o.score)}</span></td>
       <td>${formatDate(o.deadline)}</td>
       <td><span class="badge ${st.cls}">${st.label}</span></td>
-      <td class="project-action-cell"><button class="btn btn-outline btn-sm" data-emie-onclick="event.stopPropagation();${rowOpen}">查看</button></td>
+      <td class="project-action-cell"><button class="btn btn-outline btn-sm" data-emie-action="click:project-row-open" data-project-type="${escHtml(o.type)}" data-project-id="${o.id}">查看</button></td>
     </tr>`;
   }
-  return `<tr style="cursor:pointer;" tabindex="0" data-emie-onclick="${rowOpen}" data-emie-onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();${rowOpen}}">
+  return `<tr style="cursor:pointer;" tabindex="0" data-emie-action="click:project-row-open" data-emie-keydown-action="project-row-open" data-project-type="${escHtml(o.type)}" data-project-id="${o.id}">
     <td><strong>#${o.id}</strong></td>
     <td style="font-size:12px;">${o.type === 'channel_custom' ? '📦 渠道' : '🏭 常规'}</td>
     <td>${escHtml(displayText(o.productName, '未设置'))}</td>
@@ -161,9 +162,9 @@ function renderProjectRow(o, compact = false, showType = true) {
     <td style="font-size:12px;">${formatDate(o.deadline)}</td>
     <td><span class="badge ${st.cls}" style="font-size:11px;">${st.label}</span></td>
     <td style="white-space:nowrap;">
-      <button class="btn btn-outline btn-sm" data-emie-onclick="event.stopPropagation();${rowOpen}">查看</button>
-      ${o.status === 'pending_planner' && EMIE.state.currentRole === 'planner' ? `<button class="btn btn-outline btn-sm" data-emie-onclick="event.stopPropagation();plannerAcceptFromList(${o.id})" style="color:var(--success);border-color:var(--success);margin-left:4px;">接单</button>` : ''}
-      ${['planner_accepted','in_progress','paused'].includes(o.status) ? `<button class="btn btn-outline btn-sm" data-emie-onclick="event.stopPropagation();${o.status === 'paused' ? `resumeProject(${o.id})` : `pauseProject(${o.id})`}" style="font-size:11px;margin-left:4px;color:${o.status === 'paused' ? 'var(--success)' : 'var(--primary)'};border-color:${o.status === 'paused' ? 'var(--success)' : 'var(--primary)'};">${o.status === 'paused' ? '▶ 继续' : '⏸ 暂停'}</button>` : ''}
+      <button class="btn btn-outline btn-sm" data-emie-action="click:project-row-open" data-project-type="${escHtml(o.type)}" data-project-id="${o.id}">查看</button>
+      ${o.status === 'pending_planner' && EMIE.state.currentRole === 'planner' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:project-planner-accept" data-project-id="${o.id}" style="color:var(--success);border-color:var(--success);margin-left:4px;">接单</button>` : ''}
+      ${['planner_accepted','in_progress','paused'].includes(o.status) ? `<button class="btn btn-outline btn-sm" data-emie-action="click:project-pause-toggle" data-project-id="${o.id}" data-project-status="${o.status}" style="font-size:11px;margin-left:4px;color:${o.status === 'paused' ? 'var(--success)' : 'var(--primary)'};border-color:${o.status === 'paused' ? 'var(--success)' : 'var(--primary)'};">${o.status === 'paused' ? '▶ 继续' : '⏸ 暂停'}</button>` : ''}
     </td>
   </tr>`;
 }
@@ -240,6 +241,25 @@ EMIE.registerActions({
   renderProjectRow,
   render,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('project-row-open', (event, element) => {
+    if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) return;
+    event.stopPropagation();
+    if (event.type === 'keydown') event.preventDefault();
+    openListItemDetail(element.dataset.projectType, Number(element.dataset.projectId));
+  });
+  registerEventAction('project-planner-accept', (event, element) => {
+    event.stopPropagation();
+    plannerAcceptFromList(Number(element.dataset.projectId));
+  });
+  registerEventAction('project-pause-toggle', (event, element) => {
+    event.stopPropagation();
+    const action = element.dataset.projectStatus === 'paused' ? resumeProject : pauseProject;
+    action(Number(element.dataset.projectId));
+  });
+}
 
 EMIE.registerModule('dashboardProjects', {
   refreshAfterMutation,

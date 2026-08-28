@@ -28,7 +28,7 @@ async function renderAdminScoring(container) {
             <h2 style="font-size:18px;margin:0 0 4px;">⭐ 评分权重管理</h2>
             <p style="font-size:13px;color:var(--gray-400);margin:0;">按项目类型分别设置各角色评分权重（百分比）</p>
           </div>
-          <button class="btn btn-outline btn-sm" data-emie-onclick="resetScoringWeights()" style="color:var(--gray-500);">↺ 重置默认</button>
+          <button class="btn btn-outline btn-sm" data-emie-action="click:scoring-reset-weights" style="color:var(--gray-500);">↺ 重置默认</button>
         </div>
         ${types.map((t, ti) => `
           <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:20px;margin-bottom:16px;">
@@ -42,8 +42,8 @@ async function renderAdminScoring(container) {
                     <span style="font-size:12px;color:var(--gray-400);">%</span>
                   </div>
                   <div style="display:flex;align-items:center;gap:8px;">
-                    <input type="range" min="0" max="100" step="1" value="${Math.round(w.weight)}" style="flex:1;" data-emie-oninput="updateScoringPct('${t.type}','${w.role}',this.value)">
-                    <input type="number" class="form-input" value="${Math.round(w.weight)}" min="0" max="100" step="1" style="width:55px;text-align:center;padding:4px 6px;" data-emie-onchange="updateScoringPct('${t.type}','${w.role}',this.value)">
+                    <input type="range" min="0" max="100" step="1" value="${Math.round(w.weight)}" style="flex:1;" data-emie-action="input:scoring-pct" data-score-type="${t.type}" data-score-role="${w.role}">
+                    <input type="number" class="form-input" value="${Math.round(w.weight)}" min="0" max="100" step="1" style="width:55px;text-align:center;padding:4px 6px;" data-emie-action="change:scoring-pct" data-score-type="${t.type}" data-score-role="${w.role}">
                   </div>
                 </div>
               `).join('')}
@@ -54,7 +54,7 @@ async function renderAdminScoring(container) {
           </div>
         `).join('')}
         <div style="text-align:right;">
-          <button class="btn btn-primary" data-emie-onclick="saveScoringWeights()">💾 保存权重</button>
+          <button class="btn btn-primary" data-emie-action="click:scoring-save-weights">💾 保存权重</button>
         </div>
         <div style="margin-top:16px;padding:12px;background:var(--warning-light,#FFFBEB);border-radius:8px;font-size:12px;color:#92400E;">
           💡 权重为百分比（0~100%），建议各项目类型的权重合计为 100%。综合分 = Σ(角色评分 × 权重%) ÷ Σ(权重%)。修改仅影响新建评分，历史评分不受影响。
@@ -103,7 +103,7 @@ const saveScoringWeights = async function() {
 };
 
 const resetScoringWeights = async function() {
-  if (!confirm('确定重置所有权重为默认值？')) return;
+  if (!await EMIE.actions.showSystemConfirm('确定重置所有权重为默认值？')) return;
   window.location.reload();
 };
 
@@ -126,8 +126,8 @@ async function renderAdminPoints(container) {
     const governanceConfig = Object.fromEntries((systemConfigs?.business || []).filter(x => String(x.configKey || '').startsWith('points.withdrawal.')).map(x => [x.configKey, x.configValue || '']));
     container.innerHTML = `<div class="admin-points-config" style="max-width:1100px;margin:0 auto;">
       <div class="admin-points-page-head" style="margin-bottom:18px;"><div><h2 style="font-size:18px;margin:0 0 4px;">🏅 积分与绩效配置</h2><p style="color:var(--gray-500);font-size:13px;margin:0;">规则修改只影响后续入账，历史积分台账不会重算。</p></div></div>
-      <div class="card admin-point-rules-card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>积分规则</h3><p class="admin-section-hint">共 ${ruleList.length} 条，列表显示 5 条，可滚动查看</p></div><button class="btn btn-primary btn-sm" data-emie-onclick="createPointRule()">＋ 新增规则</button></div>
-        <div class="admin-point-rule-filters"><div class="admin-filter-card"><span class="admin-filter-title">筛选规则</span><input class="form-input" id="adminPointRuleSearch" placeholder="搜索规则编号或说明"><select class="form-select" id="adminPointRuleCategory"><option value="">全部类别</option>${[...new Set(ruleList.map(rule => String(rule.category || '').trim()).filter(Boolean))].sort().map(category => `<option value="${escHtml(category)}">${escHtml(category)}</option>`).join('')}</select><select class="form-select" id="adminPointRuleStatus"><option value="">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select><button class="btn btn-primary btn-sm" data-emie-onclick="filterAdminPointRules()">查询</button><button class="btn btn-outline btn-sm" data-emie-onclick="resetAdminPointRuleFilters()">重置</button></div></div>
+      <div class="card admin-point-rules-card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>积分规则</h3><p class="admin-section-hint">共 ${ruleList.length} 条，列表显示 5 条，可滚动查看</p></div><button class="btn btn-primary btn-sm" data-emie-action="click:scoring-create-rule">＋ 新增规则</button></div>
+        <div class="admin-point-rule-filters"><div class="admin-filter-card"><span class="admin-filter-title">筛选规则</span><input class="form-input" id="adminPointRuleSearch" placeholder="搜索规则编号或说明"><select class="form-select" id="adminPointRuleCategory"><option value="">全部类别</option>${[...new Set(ruleList.map(rule => String(rule.category || '').trim()).filter(Boolean))].sort().map(category => `<option value="${escHtml(category)}">${escHtml(category)}</option>`).join('')}</select><select class="form-select" id="adminPointRuleStatus"><option value="">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select><button class="btn btn-primary btn-sm" data-emie-action="click:scoring-filter-rules">查询</button><button class="btn btn-outline btn-sm" data-emie-action="click:scoring-reset-rules">重置</button></div></div>
         ${ruleList.length ? `<div class="admin-point-rules-scroll">${ruleList.map((rule, index) => `<div class="admin-point-rule-item" data-rule-code="${escHtml(String(rule.ruleCode || '').toLowerCase())}" data-rule-description="${escHtml(String(rule.description || '').toLowerCase())}" data-rule-category="${escHtml(String(rule.category || ''))}" data-rule-enabled="${rule.enabled === false ? 'disabled' : 'enabled'}" style="${index ? 'border-top:1px solid var(--gray-200);' : ''}">
         <div style="display:grid;grid-template-columns:1.1fr 1fr .8fr .9fr .9fr;gap:10px;align-items:end;">
           <label class="form-label">规则编号<input class="form-input" value="${escHtml(rule.ruleCode || '')}" disabled></label>
@@ -138,12 +138,12 @@ async function renderAdminPoints(container) {
         </div>
         <div style="display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap;">
           <input class="form-input" id="pr_desc_${index}" value="${escHtml(rule.description || '')}" placeholder="规则说明" style="flex:1;min-width:240px;">
-          <label class="checkbox-item ${rule.enabled === false ? '' : 'checked'}"><input type="checkbox" id="pr_enabled_${index}" ${rule.enabled === false ? '' : 'checked'} data-emie-onchange="this.closest('.checkbox-item')?.classList.toggle('checked', this.checked)"> 启用</label>
-          <button class="btn btn-primary btn-sm" data-emie-onclick="savePointRule('${escHtml(escJsString(rule.ruleCode))}',${index})">保存规则</button>
-          <button class="btn btn-danger btn-sm" data-emie-onclick="deletePointRule('${escHtml(escJsString(rule.ruleCode))}')">移除</button>
+          <label class="checkbox-item ${rule.enabled === false ? '' : 'checked'}"><input type="checkbox" id="pr_enabled_${index}" ${rule.enabled === false ? '' : 'checked'} data-emie-action="change:scoring-rule-toggle"> 启用</label>
+          <button class="btn btn-primary btn-sm" data-emie-action="click:scoring-save-rule" data-rule-code="${escHtml(escJsString(rule.ruleCode))}" data-rule-index="${index}">保存规则</button>
+          <button class="btn btn-danger btn-sm" data-emie-action="click:scoring-delete-rule" data-rule-code="${escHtml(escJsString(rule.ruleCode))}">移除</button>
         </div>
       </div>`).join('')}</div><div class="admin-point-rule-empty empty-state" hidden>没有符合条件的积分规则</div>` : '<div class="empty-state">暂无积分规则</div>'}</div>
-      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>难度档位</h3></div><div class="table-wrap"><table><thead><tr><th>档位</th><th>系数</th><th>说明</th><th>启用</th><th>操作</th></tr></thead><tbody>${difficultyList.map((item,index)=>`<tr><td><strong>${escHtml(item.difficultyCode || '-')}</strong></td><td><input class="form-input" type="number" min="0.1" max="10" step="0.1" id="pd_multiplier_${index}" value="${Number(item.multiplier || 1)}"></td><td><input class="form-input" id="pd_desc_${index}" value="${escHtml(item.description || '')}"></td><td><input type="checkbox" id="pd_enabled_${index}" ${item.enabled === false ? '' : 'checked'}></td><td><button class="btn btn-primary btn-sm" data-emie-onclick="savePointDifficulty('${escHtml(escJsString(item.difficultyCode))}',${index})">保存</button></td></tr>`).join('')}</tbody></table></div></div>
+      <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>难度档位</h3></div><div class="table-wrap"><table><thead><tr><th>档位</th><th>系数</th><th>说明</th><th>启用</th><th>操作</th></tr></thead><tbody>${difficultyList.map((item,index)=>`<tr><td><strong>${escHtml(item.difficultyCode || '-')}</strong></td><td><input class="form-input" type="number" min="0.1" max="10" step="0.1" id="pd_multiplier_${index}" value="${Number(item.multiplier || 1)}"></td><td><input class="form-input" id="pd_desc_${index}" value="${escHtml(item.description || '')}"></td><td><input type="checkbox" id="pd_enabled_${index}" ${item.enabled === false ? '' : 'checked'}></td><td><button class="btn btn-primary btn-sm" data-emie-action="click:scoring-save-difficulty" data-difficulty-code="${escHtml(escJsString(item.difficultyCode))}" data-difficulty-index="${index}">保存</button></td></tr>`).join('')}</tbody></table></div></div>
     </div>`;
     const appealCard = [...container.querySelectorAll('.card')].find(card => card.textContent.includes('积分异议复核'));
     const appealRows = appealCard ? appealCard.querySelectorAll('tbody tr') : [];
@@ -177,7 +177,7 @@ async function saveWithdrawalGovernanceConfig() {
 }
 
 function renderDesignerTargetRows(rows) {
-  return rows.length ? rows.map((item, index) => `<tr><td><strong>${escHtml(item.userName || '-')}</strong></td><td>${escHtml(item.userId || '-')}</td><td><input class="form-input" type="number" min="0" id="dt_points_${index}" value="${Number(item.targetPoints || 0)}"></td><td>${item.configured ? '<span class="badge badge-completed">已配置</span>' : '<span class="badge badge-pending">待配置</span>'}</td><td><button class="btn btn-primary btn-sm" data-emie-onclick="saveDesignerTarget(${index})">保存</button></td></tr>`).join('') : '<tr><td colspan="5"><div class="empty-state">暂无在职设计师</div></td></tr>';
+  return rows.length ? rows.map((item, index) => `<tr><td><strong>${escHtml(item.userName || '-')}</strong></td><td>${escHtml(item.userId || '-')}</td><td><input class="form-input" type="number" min="0" id="dt_points_${index}" value="${Number(item.targetPoints || 0)}"></td><td>${item.configured ? '<span class="badge badge-completed">已配置</span>' : '<span class="badge badge-pending">待配置</span>'}</td><td><button class="btn btn-primary btn-sm" data-emie-action="click:scoring-save-target" data-target-index="${index}">保存</button></td></tr>`).join('') : '<tr><td colspan="5"><div class="empty-state">暂无在职设计师</div></td></tr>';
 }
 
 function renderProposalDesignFiles(value) {
@@ -195,7 +195,7 @@ function renderProposalDesignFiles(value) {
 function renderAppealImages(value) {
   let files = []; try { files = JSON.parse(value || '[]'); } catch (_) { return ''; }
   if (!Array.isArray(files) || !files.length) return '';
-  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${files.slice(0, 3).map(file => { const storedName = String(file.storedName || '').replace(/[^a-zA-Z0-9._-]/g, ''); const url = storedName ? `/api/files/download/${encodeURIComponent(storedName)}` : ''; const authenticatedUrl = url && EMIE.actions.authenticatedFileUrl ? EMIE.actions.authenticatedFileUrl(url) : url; return authenticatedUrl ? `<a href="${escHtml(authenticatedUrl)}" target="_blank" rel="noopener"><img src="${escHtml(authenticatedUrl)}" style="width:56px;height:56px;object-fit:cover;border:1px solid var(--gray-200);border-radius:6px;" alt="相关图片"></a>` : ''; }).join('')}</div>`;
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${files.slice(0, 3).map(file => { const storedName = String(file.storedName || '').replace(/[^a-zA-Z0-9._-]/g, ''); const url = storedName ? `/api/files/download/${encodeURIComponent(storedName)}` : ''; const authenticatedUrl = url && EMIE.actions.authenticatedFileUrl ? EMIE.actions.authenticatedFileUrl(url) : url; return authenticatedUrl ? `<a href="${escHtml(authenticatedUrl)}" target="_blank" rel="noopener"><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(authenticatedUrl)}" style="width:56px;height:56px;object-fit:cover;border:1px solid var(--gray-200);border-radius:6px;" alt="相关图片"></a>` : ''; }).join('')}</div>`;
 }
 
 async function loadDesignerTargetMonth(month) {
@@ -219,11 +219,11 @@ async function saveDesignerTarget(index) {
 }
 
 async function createPointRule() {
-  const ruleCode = (window.prompt('规则编号（字母、数字、下划线或短横线）') || '').trim().toUpperCase();
+  const ruleCode = (await EMIE.actions.showSystemInput('规则编号（字母、数字、下划线或短横线）') || '').trim().toUpperCase();
   if (!ruleCode) return;
-  const category = (window.prompt('规则分类', 'GENERAL') || 'GENERAL').trim();
-  const points = Number(window.prompt('基础积分', '10'));
-  const description = (window.prompt('规则说明', '') || '').trim();
+  const category = (await EMIE.actions.showSystemInput('规则分类', 'GENERAL') || 'GENERAL').trim();
+  const points = Number(await EMIE.actions.showSystemInput('基础积分', '10'));
+  const description = (await EMIE.actions.showSystemInput('规则说明', '') || '').trim();
   try {
     await apiPost('/points/rules', { ruleCode, category, points, description });
     const pointsContainer = EMIE.state.currentView === 'points'
@@ -234,7 +234,7 @@ async function createPointRule() {
 }
 
 async function deletePointRule(code) {
-  if (!confirm(`确定移除积分规则 ${code} 吗？历史任务快照和积分台账不会变化。`)) return;
+  if (!await EMIE.actions.showSystemConfirm(`确定移除积分规则 ${code} 吗？历史任务快照和积分台账不会变化。`)) return;
   try { await apiDelete('/points/rules/' + encodeURIComponent(code)); await renderAdminPoints(document.getElementById('adminContent')); }
   catch (e) { window.EMIE.actions.showSystemAlert('移除失败：' + e.message); }
 }
@@ -263,7 +263,7 @@ async function savePointDifficulty(code, index) {
 }
 
 async function deleteStandardPointConfig(id) {
-  if (!id || !confirm('确定删除这条设计师个人绩效配置吗？')) return;
+  if (!id || !await EMIE.actions.showSystemConfirm('确定删除这条设计师个人绩效配置吗？')) return;
   const scrollTop = document.getElementById('adminContent')?.scrollTop || 0;
   try { await apiDelete('/performance/standard/' + id); await renderAdminPoints(document.getElementById('adminContent')); requestAnimationFrame(() => { const el = document.getElementById('adminContent'); if (el) el.scrollTop = scrollTop; }); }
   catch (e) { window.EMIE.actions.showSystemAlert('删除失败：' + e.message); }
@@ -295,11 +295,11 @@ async function saveMonthlyPerformanceConfig(index) {
   const now = new Date();
   const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const monthKey = current ? document.getElementById('mp_month_' + index)?.value : defaultMonth;
-  const targetPoints = current ? Number(document.getElementById('mp_target_' + index)?.value) : Number(window.prompt(`${monthKey} 的目标积分`, '100') || 0);
-  const multiplier = current ? Number(document.getElementById('mp_multiplier_' + index)?.value) : Number(window.prompt(`${monthKey} 的绩效系数`, '1') || 1);
-  const salesRaw = current ? document.getElementById('mp_sales_' + index)?.value : window.prompt(`${monthKey} 公司销售额（万元，留空使用手动系数）`, '');
+  const targetPoints = current ? Number(document.getElementById('mp_target_' + index)?.value) : Number(await EMIE.actions.showSystemInput(`${monthKey} 的目标积分`, '100') || 0);
+  const multiplier = current ? Number(document.getElementById('mp_multiplier_' + index)?.value) : Number(await EMIE.actions.showSystemInput(`${monthKey} 的绩效系数`, '1') || 1);
+  const salesRaw = current ? document.getElementById('mp_sales_' + index)?.value : await EMIE.actions.showSystemInput(`${monthKey} 公司销售额（万元，留空使用手动系数）`, '');
   const salesAmount = salesRaw === '' || salesRaw === null ? null : Number(salesRaw);
-  const supplyShortage = current ? document.getElementById('mp_shortage_' + index)?.checked : window.confirm('该月是否存在企划供单不足？');
+  const supplyShortage = current ? document.getElementById('mp_shortage_' + index)?.checked : await EMIE.actions.showSystemConfirm('该月是否存在企划供单不足？');
   if (!monthKey) return;
   try {
     await apiPut('/performance/monthly/' + encodeURIComponent(monthKey), { targetPoints, multiplier, salesAmount, supplyShortage });
@@ -342,14 +342,14 @@ async function openManualAdjustmentModal() {
   modal.className = 'modal-overlay';
   modal.id = 'manualAdjustmentModal';
   modal.innerHTML = `<div class="modal" style="max-width:540px;">
-    <div class="modal-header"><div class="modal-header-left"><div class="modal-title">手动调账</div><div class="modal-subtitle">管理员主动补分或扣分，必填备注并记入调账台账</div></div><button class="modal-close" data-emie-onclick="closeM('manualAdjustmentModal')">✕</button></div>
+    <div class="modal-header"><div class="modal-header-left"><div class="modal-title">手动调账</div><div class="modal-subtitle">管理员主动补分或扣分，必填备注并记入调账台账</div></div><button class="modal-close" data-emie-action="click:scoring-close-adjustment">✕</button></div>
     <div class="modal-body">
       <div class="form-group"><label class="form-label">成员 <span style="color:var(--gray-400);">（仅设计师）</span></label><select class="form-input" id="manualAdjUser"><option value="">请选择成员</option>${eligibleUsers.map(u => `<option value="${escHtml(u.userId)}">${escHtml(u.name || u.userId)}（${escHtml(u.userId)}）</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">积分 <span style="color:var(--danger);">*</span></label><input class="form-input" type="number" step="1" id="manualAdjPoints" placeholder="例如：50 或 -30"><div style="font-size:12px;color:var(--gray-400);margin-top:4px;">非零整数，绝对值不超过 100000；增加填正数，扣减填负数。</div></div>
       <div class="form-group"><label class="form-label">备注 <span style="color:var(--danger);">*</span></label><textarea class="form-input" id="manualAdjReason" rows="3" maxlength="500" placeholder="必填，说明调账原因（500 字内）"></textarea></div>
       <div id="manualAdjError" style="display:none;color:var(--danger);font-size:13px;"></div>
     </div>
-    <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('manualAdjustmentModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitManualAdjustment(this)">确认调账</button></div>
+    <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:scoring-close-adjustment">取消</button><button class="btn btn-primary" data-emie-action="click:scoring-submit-adjustment">确认调账</button></div>
   </div>`;
   document.body.appendChild(modal);
 }
@@ -396,14 +396,14 @@ async function createPoPointProject() {
   modal.className = 'modal-overlay';
   modal.id = 'poPointProjectModal';
   modal.innerHTML = `<div class="modal" style="max-width:540px;">
-    <div class="modal-header"><div class="modal-header-left"><div class="modal-title">新增 PO 产品</div><div class="modal-subtitle">为产品指定负责设计师及月度固定积分</div></div><button class="modal-close" data-emie-onclick="closeM('poPointProjectModal')">✕</button></div>
+    <div class="modal-header"><div class="modal-header-left"><div class="modal-title">新增 PO 产品</div><div class="modal-subtitle">为产品指定负责设计师及月度固定积分</div></div><button class="modal-close" data-emie-action="click:scoring-close-po">✕</button></div>
     <div class="modal-body">
       <div class="form-group"><label class="form-label">产品名称</label><input class="form-input" id="poProjectName" maxlength="100" placeholder="请输入产品名称"></div>
       <div class="form-group"><label class="form-label">PO 设计师</label><select class="form-input" id="poProjectOwner"><option value="">请选择设计师</option>${designers.map(item => `<option value="${escHtml(item.userId)}" data-name="${escHtml(item.userName || item.userId)}">${escHtml(item.userName || item.userId)}</option>`).join('')}</select>${designers.length ? '' : '<div style="font-size:12px;color:var(--danger);margin-top:6px;">暂无在职设计师，请先在用户管理中添加设计师。</div>'}</div>
       <div class="form-group"><label class="form-label">每月固定积分</label><input class="form-input" type="number" min="0" step="1" value="30" id="poProjectMonthlyPoints"></div>
       <div id="poProjectError" style="display:none;color:var(--danger);font-size:13px;"></div>
     </div>
-    <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('poPointProjectModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitPoPointProjectForm(this)" ${designers.length ? '' : 'disabled'}>确认新增</button></div>
+    <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:scoring-close-po">取消</button><button class="btn btn-primary" data-emie-action="click:scoring-submit-po" ${designers.length ? '' : 'disabled'}>确认新增</button></div>
   </div>`;
   document.body.appendChild(modal);
 }
@@ -433,7 +433,7 @@ async function submitPoPointProjectForm(button) {
 }
 
 async function reviewPoProgress(id, approve) {
-  const comment = window.prompt(approve ? '请输入确认说明（可简填）' : '请输入驳回原因', approve ? '确认完成本月履职' : '');
+  const comment = await EMIE.actions.showSystemInput(approve ? '请输入确认说明（可简填）' : '请输入驳回原因', approve ? '确认完成本月履职' : '');
   if (comment === null || (!approve && !comment.trim())) return;
   try { await apiPost(`/point-governance/po/progress/${id}/review`, { approve, comment }); await renderAdminPoints(document.getElementById('adminContent')); }
   catch (e) { window.EMIE.actions.showSystemAlert('处理失败：' + e.message); }
@@ -447,13 +447,13 @@ async function archivePointMonth() {
 }
 
 async function configurePointSkills() {
-  const userId = window.prompt('请输入成员用户 ID'); if (!userId) return;
+  const userId = await EMIE.actions.showSystemInput('请输入成员用户 ID'); if (!userId) return;
   let current = [];
   try {
     const data = await apiGet('/points/skills/' + encodeURIComponent(userId.trim()));
     current = JSON.parse(data.skillsJson || '[]');
   } catch (e) { window.EMIE.actions.showSystemAlert('读取失败：' + e.message); return; }
-  const raw = window.prompt('请输入能力标签（逗号分隔，最多20项）', current.join('、'));
+  const raw = await EMIE.actions.showSystemInput('请输入能力标签（逗号分隔，最多20项）', current.join('、'));
   if (raw === null) return;
   const skills = raw.split(/[,，、]/).map(value => value.trim()).filter(Boolean);
   try { await apiPut('/points/skills/' + encodeURIComponent(userId.trim()), { skills }); window.EMIE.actions.showSystemAlert('能力标签已保存'); }
@@ -475,18 +475,18 @@ async function configureMarketEligibility() {
 }
 
 async function preparePointArchive() {
-  const month = window.prompt('请输入需要自动生成归档草稿的月份（YYYY-MM）'); if (!month) return;
+  const month = await EMIE.actions.showSystemInput('请输入需要自动生成归档草稿的月份（YYYY-MM）'); if (!month) return;
   try { await apiPost(`/point-governance/archives/${encodeURIComponent(month)}/prepare`, {}); window.EMIE.actions.showSystemAlert('已根据积分、个人标准和供单状态生成草稿'); await renderAdminPoints(document.getElementById('adminContent')); }
   catch (e) { window.EMIE.actions.showSystemAlert('生成失败：' + e.message); }
 }
 async function savePointArchiveDraft() {
-  const month = window.prompt('归档月份（YYYY-MM）'); if (!/^\d{4}-\d{2}$/.test(month || '')) { if (month) window.EMIE.actions.showSystemAlert('月份格式应为 YYYY-MM'); return; }
-  const userId = window.prompt('成员用户 ID'); if (!userId) return;
-  const earnedPoints = Number(window.prompt('该月实际获得积分', '0')); if (!Number.isFinite(earnedPoints)) return window.EMIE.actions.showSystemAlert('实际积分格式错误');
-  const targetPoints = Number(window.prompt('该月目标积分', '100')); if (!Number.isFinite(targetPoints) || targetPoints < 0) return window.EMIE.actions.showSystemAlert('目标积分格式错误');
-  const suppliedPoints = Number(window.prompt('该月供单积分', '0')); if (!Number.isFinite(suppliedPoints)) return window.EMIE.actions.showSystemAlert('供单积分格式错误');
-  const quarterlyAveragePoints = Number(window.prompt('季度平均积分（归档快照）', String(earnedPoints))); if (!Number.isFinite(quarterlyAveragePoints)) return window.EMIE.actions.showSystemAlert('季度平均积分格式错误');
-  const protectionEnabled = window.confirm('是否启用供单不足保护？');
+  const month = await EMIE.actions.showSystemInput('归档月份（YYYY-MM）'); if (!/^\d{4}-\d{2}$/.test(month || '')) { if (month) window.EMIE.actions.showSystemAlert('月份格式应为 YYYY-MM'); return; }
+  const userId = await EMIE.actions.showSystemInput('成员用户 ID'); if (!userId) return;
+  const earnedPoints = Number(await EMIE.actions.showSystemInput('该月实际获得积分', '0')); if (!Number.isFinite(earnedPoints)) return window.EMIE.actions.showSystemAlert('实际积分格式错误');
+  const targetPoints = Number(await EMIE.actions.showSystemInput('该月目标积分', '100')); if (!Number.isFinite(targetPoints) || targetPoints < 0) return window.EMIE.actions.showSystemAlert('目标积分格式错误');
+  const suppliedPoints = Number(await EMIE.actions.showSystemInput('该月供单积分', '0')); if (!Number.isFinite(suppliedPoints)) return window.EMIE.actions.showSystemAlert('供单积分格式错误');
+  const quarterlyAveragePoints = Number(await EMIE.actions.showSystemInput('季度平均积分（归档快照）', String(earnedPoints))); if (!Number.isFinite(quarterlyAveragePoints)) return window.EMIE.actions.showSystemAlert('季度平均积分格式错误');
+  const protectionEnabled = await EMIE.actions.showSystemConfirm('是否启用供单不足保护？');
   try {
     await apiPut(`/point-governance/archives/${encodeURIComponent(month)}/${encodeURIComponent(userId.trim())}`, { earnedPoints, targetPoints, suppliedPoints, protectionEnabled, quarterlyAveragePoints });
     window.EMIE.actions.showSystemAlert('归档草稿已保存');
@@ -523,6 +523,25 @@ EMIE.registerActions({
   savePointArchiveDraft,
   archivePointMonth,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('scoring-reset-weights', () => resetScoringWeights());
+  registerEventAction('scoring-save-weights', () => saveScoringWeights());
+  registerEventAction('scoring-filter-rules', () => filterAdminPointRules());
+  registerEventAction('scoring-reset-rules', () => resetAdminPointRuleFilters());
+  registerEventAction('scoring-pct', (_event, el) => updateScoringPct(el.dataset.scoreType, el.dataset.scoreRole, el.value));
+  registerEventAction('scoring-rule-toggle', (_event, el) => el.closest('.checkbox-item')?.classList.toggle('checked', el.checked));
+  registerEventAction('scoring-save-rule', (_event, el) => savePointRule(el.dataset.ruleCode, Number(el.dataset.ruleIndex)));
+  registerEventAction('scoring-delete-rule', (_event, el) => deletePointRule(el.dataset.ruleCode));
+  registerEventAction('scoring-save-difficulty', (_event, el) => savePointDifficulty(el.dataset.difficultyCode, Number(el.dataset.difficultyIndex)));
+  registerEventAction('scoring-save-target', (_event, el) => saveDesignerTarget(Number(el.dataset.targetIndex)));
+  registerEventAction('scoring-create-rule', () => createPointRule());
+  registerEventAction('scoring-close-adjustment', () => closeM('manualAdjustmentModal'));
+  registerEventAction('scoring-submit-adjustment', (_event, el) => submitManualAdjustment(el));
+  registerEventAction('scoring-close-po', () => closeM('poPointProjectModal'));
+  registerEventAction('scoring-submit-po', (_event, el) => submitPoPointProjectForm(el));
+}
 
 EMIE.registerModule('adminScoring', {
   renderAdminScoring,

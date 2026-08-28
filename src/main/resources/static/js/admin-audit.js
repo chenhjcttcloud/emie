@@ -13,8 +13,8 @@ async function renderAdminLogs(container) {
       <label><span>开始日期</span><input type="date" class="form-input" id="logStartDate" title="开始日期"></label>
       <i>至</i>
       <label><span>结束日期</span><input type="date" class="form-input" id="logEndDate" title="结束日期"></label>
-      <button class="btn btn-primary btn-sm" data-emie-onclick="queryAdminLogs()">查询日志</button>
-      <button class="btn btn-outline btn-sm" data-emie-onclick="resetAdminLogs()">重置</button>
+      <button class="btn btn-primary btn-sm" data-emie-action="click:audit-query-logs">查询日志</button>
+      <button class="btn btn-outline btn-sm" data-emie-action="click:audit-reset-logs">重置</button>
     </div></div>
     <div id="logContainer"><div class="loading">加载中</div></div>
   `;
@@ -66,11 +66,11 @@ async function loadAdminLogs() {
       logs.map(l => {
         const rl = {sales:'销售',planner:'企划',designer:'设计师',supplychain:'供应链',admin:'管理员'};
         const rn = rl[l.role] || l.role;
-        const pl = l.projectId ? '<a href="javascript:void(0)" data-emie-onclick="openProjectDetail(' + l.projectId + ')" style="color:var(--primary);text-decoration:none;">#' + l.projectId + '</a>' : '-';
+        const pl = l.projectId ? '<a href="javascript:void(0)" data-emie-action="click:audit-open-project" data-project-id="' + l.projectId + '" style="color:var(--primary);text-decoration:none;">#' + l.projectId + '</a>' : '-';
         return '<tr><td style="color:var(--gray-400);">' + l.id + '</td><td style="white-space:nowrap;font-size:12px;">' +
           escHtml(l.time || '-') + '</td><td><span class="admin-log-role role-' + escHtml(l.role || '') + '">' + escHtml(rn || '-') + '</span></td><td><strong>' +
           escHtml(l.username || '-') + '</strong></td><td class="admin-log-action">' + escHtml(l.action || '-') + '</td><td>' + pl + '</td></tr>';
-      }).join('') + '</tbody></table></div>' + (pageResult.totalPages > 1 ? `<div class="admin-log-pagination"><span>第 ${pageResult.page + 1} / ${pageResult.totalPages} 页</span><div><button class="btn btn-outline btn-sm" ${pageResult.page <= 0 ? 'disabled' : ''} data-emie-onclick="changeAdminLogPage(${pageResult.page - 1})">上一页</button><span class="admin-log-jump">跳至 <input id="adminLogPageJump" type="number" min="1" max="${pageResult.totalPages}" value="${pageResult.page + 1}" aria-label="日志页码"> 页</span><button class="btn btn-outline btn-sm" data-emie-onclick="jumpAdminLogPage()">跳转</button><button class="btn btn-outline btn-sm" ${pageResult.page >= pageResult.totalPages - 1 ? 'disabled' : ''} data-emie-onclick="changeAdminLogPage(${pageResult.page + 1})">下一页</button></div></div>` : '') + '</div>';
+      }).join('') + '</tbody></table></div>' + (pageResult.totalPages > 1 ? `<div class="admin-log-pagination"><span>第 ${pageResult.page + 1} / ${pageResult.totalPages} 页</span><div><button class="btn btn-outline btn-sm" ${pageResult.page <= 0 ? 'disabled' : ''} data-emie-action="click:audit-log-page" data-page="${pageResult.page - 1}">上一页</button><span class="admin-log-jump">跳至 <input id="adminLogPageJump" type="number" min="1" max="${pageResult.totalPages}" value="${pageResult.page + 1}" aria-label="日志页码"> 页</span><button class="btn btn-outline btn-sm" data-emie-action="click:audit-log-jump">跳转</button><button class="btn btn-outline btn-sm" ${pageResult.page >= pageResult.totalPages - 1 ? 'disabled' : ''} data-emie-action="click:audit-log-page" data-page="${pageResult.page + 1}">下一页</button></div></div>` : '') + '</div>';
   } catch (e) {
     if (requestId !== EMIE.adminState.logRequestId) return;
     container.innerHTML = '<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ' + escHtml(e.message || '未知错误') + '</p></div>';
@@ -131,7 +131,7 @@ async function renderAdminShares(container) {
                 return '<tr>' +
                   '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);">' + s.id + '</td>' +
                   '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);">' + typeLabel(s.targetType) + '</td>' +
-                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);"><a href="javascript:void(0)" data-emie-onclick="openProjectDetail(' + s.targetId + ')" style="color:var(--primary);text-decoration:none;">#' + s.targetId + '</a></td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);"><a href="javascript:void(0)" data-emie-action="click:audit-open-project" data-project-id="' + s.targetId + '" style="color:var(--primary);text-decoration:none;">#' + s.targetId + '</a></td>' +
                   '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);">' + (s.createdByName || s.createdBy || '-') + '</td>' +
                   '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);font-size:12px;">' + (s.createdAt ? s.createdAt.substring(0,16) : '-') + '</td>' +
                   '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);font-size:12px;">' + (s.expiresAt ? s.expiresAt.substring(0,10) : '永不过期') + '</td>' +
@@ -139,8 +139,8 @@ async function renderAdminShares(container) {
                   '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);font-size:12px;">' + (s.viewCount || 0) + ' 次</td>' +
                   '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);white-space:nowrap;">' +
                     (isActive
-                      ? '<button class="btn btn-outline btn-sm" data-emie-onclick="adminEditShare(' + s.id + ')" style="margin-right:4px;">编辑</button>' +
-                        '<button class="btn btn-danger btn-sm" data-emie-onclick="adminRevokeShare(' + s.id + ')">收回</button>'
+                      ? '<button class="btn btn-outline btn-sm" data-emie-action="click:audit-edit-share" data-share-id="' + s.id + '" style="margin-right:4px;">编辑</button>' +
+                        '<button class="btn btn-danger btn-sm" data-emie-action="click:audit-revoke-share" data-share-id="' + s.id + '">收回</button>'
                       : '<span style="font-size:12px;color:var(--gray-400);">-</span>') +
                   '</td></tr>';
               }).join('')}
@@ -182,8 +182,8 @@ async function adminEditShare(id) {
         <div id="editShareError" style="color:var(--danger);font-size:13px;text-align:center;margin-top:12px;display:none;"></div>
       </div>
       <div class="modal-footer" style="justify-content:center;">
-        <button class="btn btn-primary" data-emie-onclick="doAdminUpdateShare(${id})">💾 保存</button>
-        <button class="btn btn-outline" data-emie-onclick="closeM('shareEditModal')">取消</button>
+        <button class="btn btn-primary" data-emie-action="click:audit-save-share" data-share-id="${id}">💾 保存</button>
+        <button class="btn btn-outline" data-emie-action="click:audit-close-share">取消</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -232,7 +232,7 @@ async function doAdminUpdateShare(id) {
 }
 
 async function adminRevokeShare(id) {
-  if (!confirm('确定要收回此分享链接吗？收回后原链接将无法访问。')) return;
+  if (!await EMIE.actions.showSystemConfirm('确定要收回此分享链接吗？收回后原链接将无法访问。')) return;
   try {
     const r = await apiPost('/share/admin/' + id + '/revoke', {});
     showAdminToast('✅ ' + (r.message || '已收回'), 'success');
@@ -254,6 +254,19 @@ EMIE.registerActions({
   doAdminUpdateShare,
   adminRevokeShare,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('audit-query-logs', () => queryAdminLogs());
+  registerEventAction('audit-reset-logs', () => resetAdminLogs());
+  registerEventAction('audit-save-share', (_event, el) => doAdminUpdateShare(Number(el.dataset.shareId)));
+  registerEventAction('audit-close-share', () => closeM('shareEditModal'));
+  registerEventAction('audit-open-project', (_event, el) => EMIE.actions.openProjectDetail(Number(el.dataset.projectId)));
+  registerEventAction('audit-edit-share', (_event, el) => adminEditShare(Number(el.dataset.shareId)));
+  registerEventAction('audit-revoke-share', (_event, el) => adminRevokeShare(Number(el.dataset.shareId)));
+  registerEventAction('audit-log-page', (_event, el) => changeAdminLogPage(Number(el.dataset.page)));
+  registerEventAction('audit-log-jump', () => jumpAdminLogPage());
+}
 
 EMIE.registerModule('adminAudit', {
   renderAdminLogs,

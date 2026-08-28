@@ -44,13 +44,13 @@ function renderProductArchiveEditor() {
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
       ${PRODUCT_ARCHIVE_TYPES.map(([key, label]) => `<div style="border:1px solid var(--gray-200);border-radius:8px;padding:10px;">
         <div style="font-size:12px;font-weight:600;margin-bottom:7px;">${label}</div>
-        <input type="file" multiple id="archiveInput_${key}" style="display:none" data-emie-onchange="handleProductArchiveFiles(this,'${key}')">
-        <button type="button" class="btn btn-outline btn-sm" data-emie-onclick="document.getElementById('archiveInput_${key}').click()">选择文件</button>
-        <div id="archiveList_${key}" style="margin-top:7px;">${state[key].files.map((f, i) => `<div class="file-item"><span class="file-item-name">📎 ${escHtml(f.name)}</span><button class="remove-file" data-emie-onclick="removeProductArchiveFile('${key}',${i})">✕</button></div>`).join('')}</div>
+        <input type="file" multiple id="archiveInput_${key}" style="display:none" data-emie-action="change:form-archive-files" data-archive-key="${key}">
+        <button type="button" class="btn btn-outline btn-sm" data-emie-action="click:form-open-input" data-input-id="archiveInput_${key}">选择文件</button>
+        <div id="archiveList_${key}" style="margin-top:7px;">${state[key].files.map((f, i) => `<div class="file-item"><span class="file-item-name">📎 ${escHtml(f.name)}</span><button class="remove-file" data-emie-action="click:form-remove-archive" data-archive-key="${key}" data-file-index="${i}">✕</button></div>`).join('')}</div>
       </div>`).join('')}
     </div>
-    <label class="form-label" style="display:flex;align-items:center;gap:8px;margin-top:14px;"><input type="checkbox" id="productArchiveComplete" ${state.complete ? 'checked' : ''} data-emie-onchange="productArchiveChanged()"> 是否齐全</label>
-    <textarea class="form-textarea" id="productArchiveRemark" maxlength="1000" placeholder="档案备注（可选）" style="margin-top:8px;min-height:70px;" data-emie-oninput="productArchiveChanged()">${escHtml(state.remark)}</textarea>
+    <label class="form-label" style="display:flex;align-items:center;gap:8px;margin-top:14px;"><input type="checkbox" id="productArchiveComplete" ${state.complete ? 'checked' : ''} data-emie-action="change:form-archive-changed"> 是否齐全</label>
+    <textarea class="form-textarea" id="productArchiveRemark" maxlength="1000" placeholder="档案备注（可选）" style="margin-top:8px;min-height:70px;" data-emie-action="input:form-archive-changed">${escHtml(state.remark)}</textarea>
   </div>`;
 }
 
@@ -134,7 +134,7 @@ function onIpChange(select, markModified = true) {
   group.style.display = '';
   group.dataset.selectionMode = mode;
   hint.textContent = mode === 'single' ? '请选择一个二级 IP' : '可多选';
-  chips.innerHTML = options.map(value => `<span class="chip" data-value="${escHtml(value)}" data-emie-onclick="toggleIpSubOption(this)">${escHtml(value)}</span>`).join('');
+  chips.innerHTML = options.map(value => `<span class="chip" data-value="${escHtml(value)}" data-emie-action="click:form-ip-sub-toggle">${escHtml(value)}</span>`).join('');
   if (markModified) formModified();
 }
 
@@ -266,37 +266,37 @@ function openCreateProject(type) {
   modal.className = 'modal-overlay';
   modal.id = 'createProjectModal';
   modal.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('createProjectModal')">✕</button>
+    <button class="modal-close-float" data-emie-action="click:form-create-close">✕</button>
     <div class="modal modal-lg">
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📝 ${title}</div></div></div>
       <div class="modal-body">
         <form id="createProjectForm">
           ${type === 'channel_custom' ? `
           <div class="form-group"><label class="form-label"><span class="required">*</span> 需求方（销售）</label>
-            <select class="form-select" name="salesId" ${EMIE.state.currentRole === 'sales' ? 'disabled' : ''} data-emie-onchange="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">${salesOpts}</select>
+            <select class="form-select" name="salesId" ${EMIE.state.currentRole === 'sales' ? 'disabled' : ''} data-emie-action="change:form-field-change">${salesOpts}</select>
             ${EMIE.state.currentRole === 'sales' ? `<input type="hidden" name="salesId" value="${EMIE.state.currentUserId}">` : ''}
           </div>` : ''}
           ${type === 'design_requirement' ? `<div class="form-group"><label class="form-label"><span class="required">*</span> 需求负责人</label><input class="form-input" value="${escHtml(getCurrentUserName())}" disabled><input type="hidden" name="responsibleId" value="${escHtml(EMIE.state.currentUserId)}"></div>` : ''}
-          ${type === 'design_requirement' ? `<div class="form-group"><label class="form-label"><span class="required">*</span> 交付设计师</label><select class="form-select" name="designerId" data-emie-onchange="formModified()">${designerOpts}</select></div>` : ''}
+          ${type === 'design_requirement' ? `<div class="form-group"><label class="form-label"><span class="required">*</span> 交付设计师</label><select class="form-select" name="designerId" data-emie-action="change:form-field-change">${designerOpts}</select></div>` : ''}
           <div class="form-group"><label class="form-label"><span class="required">*</span> 产品企划</label>
-            <select class="form-select" name="plannerId" ${EMIE.state.currentRole === 'planner' ? 'disabled' : ''} data-emie-onchange="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">${plannerOpts}</select>
+            <select class="form-select" name="plannerId" ${EMIE.state.currentRole === 'planner' ? 'disabled' : ''} data-emie-action="change:form-field-change">${plannerOpts}</select>
             ${EMIE.state.currentRole === 'planner' ? `<input type="hidden" name="plannerId" value="${EMIE.state.currentUserId}">` : ''}
           </div>
-          ${type === 'design_requirement' ? `<div class="form-group"><label class="form-label">客户名称<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可选）</span></label><input class="form-input" name="customerName" placeholder="请输入客户名称（可选）" maxlength="100" data-emie-oninput="formModified()"></div>` : ''}
+          ${type === 'design_requirement' ? `<div class="form-group"><label class="form-label">客户名称<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可选）</span></label><input class="form-input" name="customerName" placeholder="请输入客户名称（可选）" maxlength="100" data-emie-action="input:form-field-change"></div>` : ''}
           <div class="form-group"><label class="form-label"><span class="required">*</span> 产品类目</label>
-            <select class="form-select" name="productCategory" id="productCategorySelect" data-emie-onchange="onCategoryChange(this)">
+            <select class="form-select" name="productCategory" id="productCategorySelect" data-emie-action="change:form-category-change">
               <option value="">请选择产品类目</option>
               ${EMIE.state.categories.map(c => `<option value="${escHtml(c.name)}">${escHtml(c.name)}</option>`).join('')}
             </select>
             <div id="categoryNoteWrapper" style="display:none;margin-top:8px;">
-              <textarea class="form-textarea" name="productCategoryNote" placeholder="请说明其他类目的具体内容..." data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()"></textarea>
+              <textarea class="form-textarea" name="productCategoryNote" placeholder="请说明其他类目的具体内容..." data-emie-action="input:form-field-change"></textarea>
             </div>
           </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 产品名称</label>
-            <input class="form-input" name="productName" value="${escHtml(draft?.productName || '')}" placeholder="请输入产品名称" maxlength="200" data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">
+            <input class="form-input" name="productName" value="${escHtml(draft?.productName || '')}" placeholder="请输入产品名称" maxlength="200" data-emie-action="input:form-field-change">
           </div>
           <div class="form-group"><label class="form-label">IP<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可选）</span></label>
-            <select class="form-select" id="ipNameSelect" name="ipName" data-emie-onchange="onIpChange(this)">
+            <select class="form-select" id="ipNameSelect" name="ipName" data-emie-action="change:form-ip-change">
               <option value="">无IP</option>
               ${EMIE.state.ipOptions.map(ip => `<option value="${escHtml(ip.name)}" ${draft?.ipName === ip.name ? 'selected' : ''}>${escHtml(ip.name)}</option>`).join('')}
             </select>
@@ -313,49 +313,49 @@ function openCreateProject(type) {
           </div>
           <div class="form-group" style="${type === 'design_requirement' ? 'display:none;' : ''}"><label class="form-label"><span class="required">*</span> 目标市场<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选）</span></label>
             <div class="chip-group" id="marketChips">
-              <span class="chip" data-value="国内" data-emie-onclick="toggleMarket(this)">国内</span>
-              <span class="chip" data-value="海外" data-emie-onclick="toggleMarket(this)">海外</span>
+              <span class="chip" data-value="国内" data-emie-action="click:form-market-toggle">国内</span>
+              <span class="chip" data-value="海外" data-emie-action="click:form-market-toggle">海外</span>
             </div>
             <input type="hidden" name="targetMarket" id="targetMarketInput" value="">
             <div class="form-hint">可多选</div>
           </div>
           <div class="form-group" style="${type === 'design_requirement' ? 'display:none;' : ''}"><label class="form-label">合规处罚<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选，非必选）</span></label>
             <div class="chip-group" id="complianceChips">
-              ${EMIE.state.complianceItems.map(c => `<span class="chip" data-value="${escHtml(c.name)}" data-emie-onclick="toggleCompliance(this)">${escHtml(c.name)}</span>`).join('')}
+              ${EMIE.state.complianceItems.map(c => `<span class="chip" data-value="${escHtml(c.name)}" data-emie-action="click:form-compliance-toggle">${escHtml(c.name)}</span>`).join('')}
             </div>
             <input type="hidden" name="complianceItems" id="complianceItemsInput" value="">
             <div class="form-hint">提醒产品企划关注相关供应商是否有相关资质</div>
           </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 要求完成时间</label>${renderDatePicker('deadline', {value: draft?.deadline || ''})}</div>
           <div class="form-group" style="margin-top:14px;padding:12px 14px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;"><input type="checkbox" name="feishuChatEnabled" value="true" ${draft?.feishuChatEnabled ? 'checked' : ''} data-emie-onchange="formModified()"> 创建项目飞书群</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;"><input type="checkbox" name="feishuChatEnabled" value="true" ${draft?.feishuChatEnabled ? 'checked' : ''} data-emie-action="change:form-field-change"> 创建项目飞书群</label>
             <div class="form-hint" style="margin-top:4px;">开启后会自动创建项目群，并邀请项目相关人员加入；默认不创建。</div>
           </div>
-          <div class="form-group"><label class="form-label"><span class="required">*</span> 产品要求</label><textarea class="form-textarea" name="productRequirements" placeholder="产品的基本要求和目标..." data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">${escHtml(draft?.productRequirements || '')}</textarea></div>
-          <div class="form-group"><label class="form-label">细节描述（可选）</label><textarea class="form-textarea" name="description" placeholder="补充细节说明..." data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor='';formModified()">${escHtml(draft?.description || '')}</textarea></div>
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 产品要求</label><textarea class="form-textarea" name="productRequirements" placeholder="产品的基本要求和目标..." data-emie-action="input:form-field-change">${escHtml(draft?.productRequirements || '')}</textarea></div>
+          <div class="form-group"><label class="form-label">细节描述（可选）</label><textarea class="form-textarea" name="description" placeholder="补充细节说明..." data-emie-action="input:form-field-change">${escHtml(draft?.description || '')}</textarea></div>
         </form>
 
         <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
           <div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片</div>
-          <div class="upload-area" data-emie-onclick="document.getElementById('createRefImageInput').click()">
+          <div class="upload-area" data-emie-action="click:form-open-input" data-input-id="createRefImageInput">
             <div>📁 拖拽图片到此处，或点击选择图片</div>
-            <input type="file" id="createRefImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleCreateRefImages(this)">
+            <input type="file" id="createRefImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:form-create-ref-images">
           </div>
           <div class="file-list" id="createRefImageList"></div>
         </div>
 
         <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
           <div class="form-label" style="margin-bottom:8px;">📎 附件</div>
-          <div class="upload-area" data-emie-onclick="document.getElementById('createAttachmentInput').click()">
+          <div class="upload-area" data-emie-action="click:form-open-input" data-input-id="createAttachmentInput">
             <div>📁 拖拽文件到此处，或点击选择文件</div>
-            <input type="file" id="createAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleCreateAttachments(this)">
+            <input type="file" id="createAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-action="change:form-create-attachments">
           </div>
           <div class="file-list" id="createAttachmentList"></div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" data-emie-onclick="closeM('createProjectModal')">取消</button>
-        <button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitCreateProject('${type}'))">创建项目</button>
+        <button class="btn btn-outline" data-emie-action="click:form-create-close">取消</button>
+        <button class="btn btn-primary" data-emie-action="click:form-submit-create" data-project-type="${escHtml(type)}">创建项目</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -593,14 +593,14 @@ function openEditProject(pid) {
     modal.className = 'modal-overlay';
     modal.id = 'editProjectModal';
     modal.innerHTML = `
-      <button class="modal-close-float" data-emie-onclick="closeM('editProjectModal')">✕</button>
+      <button class="modal-close-float" data-emie-action="click:form-edit-close">✕</button>
       <div class="modal modal-lg">
         <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✏️ 编辑${isChannel ? '渠道定制项目' : '常规品设计项目'}</div></div></div>
         <div class="modal-body">
           <div style="font-size:12px;color:var(--gray-500);margin-bottom:16px;">项目类型和负责人归属不可在此修改。</div>
           <form id="editProjectForm">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 产品类目</label>
-              <select class="form-select" name="productCategory" id="productCategorySelect" data-emie-onchange="onCategoryChange(this)">
+              <select class="form-select" name="productCategory" id="productCategorySelect" data-emie-action="change:form-category-change">
                 <option value="">请选择产品类目</option>
                 ${EMIE.state.categories.map(c => `<option value="${escHtml(c.name)}" ${detail.productCategory === c.name ? 'selected' : ''}>${escHtml(c.name)}</option>`).join('')}
               </select>
@@ -608,23 +608,23 @@ function openEditProject(pid) {
                 <textarea class="form-textarea" name="productCategoryNote" placeholder="请说明其他类目的具体内容...">${escHtml(detail.productCategoryNote || '')}</textarea>
               </div>
             </div>
-            <div class="form-group"><label class="form-label"><span class="required">*</span> 产品名称</label><input class="form-input" name="productName" value="${escHtml(detail.productName || '')}" maxlength="200" data-emie-oninput="formModified()"></div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 产品名称</label><input class="form-input" name="productName" value="${escHtml(detail.productName || '')}" maxlength="200" data-emie-action="input:form-field-change"></div>
             <div class="form-group"><label class="form-label">IP<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可选）</span></label>
-              <select class="form-select" id="ipNameSelect" name="ipName" data-emie-onchange="onIpChange(this)"><option value="">无IP</option>${EMIE.state.ipOptions.map(ip => `<option value="${escHtml(ip.name)}" ${detail.ipName === ip.name ? 'selected' : ''}>${escHtml(ip.name)}</option>`).join('')}</select>
+              <select class="form-select" id="ipNameSelect" name="ipName" data-emie-action="change:form-ip-change"><option value="">无IP</option>${EMIE.state.ipOptions.map(ip => `<option value="${escHtml(ip.name)}" ${detail.ipName === ip.name ? 'selected' : ''}>${escHtml(ip.name)}</option>`).join('')}</select>
             </div>
             <div class="form-group" id="ipSubOptionGroup" style="display:none;"><label class="form-label">二级IP</label><div class="chip-group" id="ipSubOptionChips"></div><input type="hidden" name="ipSubOptions" id="ipSubOptionsInput" value="[]"><div class="form-hint" id="ipSubOptionHint"></div></div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 参考零售价</label><input class="form-input" type="number" name="priceRange" id="priceRangeInput" min="0" max="1000" step="0.01" inputmode="decimal" placeholder="请输入参考零售价" value="${escHtml(detail.priceRange || '')}"><div class="form-hint">请输入 0～1,000 的数字，支持两位小数</div></div>
-            <div class="form-group"><label class="form-label"><span class="required">*</span> 目标市场<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选）</span></label><div class="chip-group" id="marketChips"><span class="chip" data-value="国内" data-emie-onclick="toggleMarket(this)">国内</span><span class="chip" data-value="海外" data-emie-onclick="toggleMarket(this)">海外</span></div><input type="hidden" name="targetMarket" id="targetMarketInput" value="${escHtml(detail.targetMarket || '[]')}"></div>
-            <div class="form-group"><label class="form-label">合规处罚<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选）</span></label><div class="chip-group" id="complianceChips">${EMIE.state.complianceItems.map(c => `<span class="chip" data-value="${escHtml(c.name)}" data-emie-onclick="toggleCompliance(this)">${escHtml(c.name)}</span>`).join('')}</div><input type="hidden" name="complianceItems" id="complianceItemsInput" value="${escHtml(detail.complianceItems || '[]')}"></div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 目标市场<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选）</span></label><div class="chip-group" id="marketChips"><span class="chip" data-value="国内" data-emie-action="click:form-market-toggle">国内</span><span class="chip" data-value="海外" data-emie-action="click:form-market-toggle">海外</span></div><input type="hidden" name="targetMarket" id="targetMarketInput" value="${escHtml(detail.targetMarket || '[]')}"></div>
+            <div class="form-group"><label class="form-label">合规处罚<span style="color:var(--gray-400);font-weight:400;margin-left:4px;">（可多选）</span></label><div class="chip-group" id="complianceChips">${EMIE.state.complianceItems.map(c => `<span class="chip" data-value="${escHtml(c.name)}" data-emie-action="click:form-compliance-toggle">${escHtml(c.name)}</span>`).join('')}</div><input type="hidden" name="complianceItems" id="complianceItemsInput" value="${escHtml(detail.complianceItems || '[]')}"></div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 要求完成时间</label>${renderDatePicker('deadline', {value: detail.deadline || ''})}</div>
-            <div class="form-group"><label class="form-label"><span class="required">*</span> 产品要求</label><textarea class="form-textarea" name="productRequirements" data-emie-oninput="formModified()">${escHtml(detail.productRequirements || '')}</textarea></div>
-            <div class="form-group"><label class="form-label">细节描述（可选）</label><textarea class="form-textarea" name="description" data-emie-oninput="formModified()">${escHtml(detail.description || '')}</textarea></div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 产品要求</label><textarea class="form-textarea" name="productRequirements" data-emie-action="input:form-field-change">${escHtml(detail.productRequirements || '')}</textarea></div>
+            <div class="form-group"><label class="form-label">细节描述（可选）</label><textarea class="form-textarea" name="description" data-emie-action="input:form-field-change">${escHtml(detail.description || '')}</textarea></div>
           </form>
-          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);"><div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片</div><div class="upload-area" data-emie-onclick="document.getElementById('editProjectRefImageInput').click()"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="editProjectRefImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleEditProjectRefImages(this)"></div><div class="file-list" id="editProjectRefImageList"></div></div>
-          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);"><div class="form-label" style="margin-bottom:8px;">📎 附件</div><div class="upload-area" data-emie-onclick="document.getElementById('editProjectAttachmentInput').click()"><div>📁 拖拽文件到此处，或点击选择文件</div><input type="file" id="editProjectAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleEditProjectAttachments(this)"></div><div class="file-list" id="editProjectAttachmentList"></div></div>
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);"><div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片</div><div class="upload-area" data-emie-action="click:form-open-input" data-input-id="editProjectRefImageInput"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="editProjectRefImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:form-edit-ref-images"></div><div class="file-list" id="editProjectRefImageList"></div></div>
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);"><div class="form-label" style="margin-bottom:8px;">📎 附件</div><div class="upload-area" data-emie-action="click:form-open-input" data-input-id="editProjectAttachmentInput"><div>📁 拖拽文件到此处，或点击选择文件</div><input type="file" id="editProjectAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-action="change:form-edit-attachments"></div><div class="file-list" id="editProjectAttachmentList"></div></div>
           <div data-product-archive-editor>${renderProductArchiveEditor()}</div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('editProjectModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitEditProject(${pid}))">保存修改</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:form-edit-close">取消</button><button class="btn btn-primary" data-emie-action="click:form-submit-edit" data-project-id="${pid}">保存修改</button></div>
       </div>`;
     document.body.appendChild(modal);
     doneOpenModal('editProjectModal');
@@ -730,3 +730,32 @@ EMIE.registerModule('projectForm', {
   openEditProject,
   submitEditProject,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('form-create-close', () => closeM('createProjectModal'));
+  registerEventAction('form-edit-close', () => closeM('editProjectModal'));
+  registerEventAction('form-market-toggle', (_event, el) => toggleMarket(el));
+  registerEventAction('form-compliance-toggle', (_event, el) => toggleCompliance(el));
+  registerEventAction('form-open-input', (_event, el) => document.getElementById(el.dataset.inputId)?.click());
+  registerEventAction('form-create-ref-images', (_event, el) => handleCreateRefImages(el));
+  registerEventAction('form-create-attachments', (_event, el) => handleCreateAttachments(el));
+  registerEventAction('form-submit-edit', (_event, el) =>
+    submitGuard(el, () => submitEditProject(Number(el.dataset.projectId))));
+  registerEventAction('form-category-change', (_event, el) => onCategoryChange(el));
+  registerEventAction('form-ip-change', (_event, el) => onIpChange(el));
+  registerEventAction('form-field-change', (event, el) => {
+    el.closest('.form-group')?.querySelector('.field-error')?.remove();
+    el.style.borderColor = '';
+    formModified(event);
+  });
+  registerEventAction('form-submit-create', (_event, el) =>
+    submitGuard(el, () => submitCreateProject(el.dataset.projectType)));
+  registerEventAction('form-ip-sub-toggle', (_event, el) => toggleIpSubOption(el));
+  registerEventAction('form-archive-files', (_event, el) => handleProductArchiveFiles(el, el.dataset.archiveKey));
+  registerEventAction('form-remove-archive', (_event, el) =>
+    removeProductArchiveFile(el.dataset.archiveKey, Number(el.dataset.fileIndex)));
+  registerEventAction('form-archive-changed', () => productArchiveChanged());
+  registerEventAction('form-edit-ref-images', (_event, el) => handleEditProjectRefImages(el));
+  registerEventAction('form-edit-attachments', (_event, el) => handleEditProjectAttachments(el));
+}

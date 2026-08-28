@@ -24,18 +24,9 @@ function retryFilePreview() {
 }
 
 function authenticatedFileUrl(url) {
-  const token = localStorage.getItem('design_pm_token');
-  if (!token || !url) return url;
-  try {
-    const parsed = new URL(url, window.location.origin);
-    // 历史数据可能保存了旧端口（例如 production:9001）。只要主机仍是当前
-    // 站点，就降级为同源相对地址，避免浏览器原生请求绕过当前认证上下文。
-    if (parsed.hostname !== window.location.hostname) return url;
-    if (!parsed.searchParams.has('access_token')) parsed.searchParams.set('access_token', token);
-    return parsed.pathname + parsed.search + parsed.hash;
-  } catch (e) {
-    return url;
-  }
+  // 原生图片、iframe 和下载请求会自动携带 HttpOnly 会话 Cookie。
+  // 不再把长期会话 token 放进 URL，避免泄漏到历史记录、日志和 Referer。
+  return url;
 }
 
 async function openFilePreview(fileUrl, fileName, fileSize, retry = false) {
@@ -61,7 +52,7 @@ async function openFilePreview(fileUrl, fileName, fileSize, retry = false) {
           <span class="file-preview-icon">📄</span>
           <div><div class="file-preview-title">${escHtml(fileName || storedName)}</div><div class="file-preview-meta">${fileSize ? fmtSize(fileSize) + ' · ' : ''}${escHtml((fileName || storedName).split('.').pop()?.toUpperCase() || '')}</div></div>
         </div>
-        <button class="file-preview-close" data-emie-onclick="closeFilePreview()" aria-label="关闭预览">✕</button>
+        <button class="file-preview-close" data-emie-action="click:file-close-preview" aria-label="关闭预览">✕</button>
       </div>
       <div class="file-preview-body" id="filePreviewBody">
         <div class="file-preview-state"><div class="file-preview-spinner"></div><p>正在准备文件预览…</p></div>
@@ -69,8 +60,8 @@ async function openFilePreview(fileUrl, fileName, fileSize, retry = false) {
       <div class="file-preview-footer">
         <span class="file-preview-tip">PPT/PPTX 以静态幻灯片形式预览</span>
         <div class="file-preview-footer-actions">
-          <button class="btn btn-outline btn-sm" id="openPreviewWindowBtn" data-emie-onclick="openPreviewInNewWindow()" disabled>↗ 新窗口打开</button>
-          <button class="btn btn-primary btn-sm" data-emie-onclick="doDirectDownload('${escHtml(escJsString(authenticatedFileUrl(normalizedUrl)))}')">⬇ 下载原文件</button>
+          <button class="btn btn-outline btn-sm" id="openPreviewWindowBtn" data-emie-action="click:file-open-preview-window" disabled>↗ 新窗口打开</button>
+          <button class="btn btn-primary btn-sm" data-emie-action="click:file-direct-preview-download" data-file-url="${escHtml(authenticatedFileUrl(normalizedUrl))}" data-file-name="${escHtml(fileName || storedName)}">⬇ 下载原文件</button>
         </div>
       </div>
     </div>`;
@@ -108,9 +99,26 @@ async function openFilePreview(fileUrl, fileName, fileSize, retry = false) {
   }
 }
 
-function showFilePreviewFrame(previewUrl, fileName) {
+async function showFilePreviewFrame(previewUrl, fileName) {
   const body = document.getElementById('filePreviewBody');
   if (!body) return;
+  try {
+    const token = localStorage.getItem('design_pm_token');
+    const response = await fetch(previewUrl, {
+      headers: token ? { 'X-Auth-Token': token } : {},
+      credentials: 'same-origin',
+    });
+    if (!response.ok) throw new Error('文件预览请求失败（HTTP ' + response.status + '）');
+    const blobUrl = URL.createObjectURL(await response.blob());
+    if (!document.getElementById('filePreviewBody')) {
+      URL.revokeObjectURL(blobUrl);
+      return;
+    }
+    previewUrl = blobUrl;
+  } catch (error) {
+    showFilePreviewError(error.message || '文件预览加载失败', true);
+    return;
+  }
   const iframe = document.createElement('iframe');
   iframe.className = 'file-preview-frame';
   iframe.title = fileName || '文件预览';
@@ -125,7 +133,7 @@ function showFilePreviewFrame(previewUrl, fileName) {
 function showFilePreviewError(message, canRetry) {
   const body = document.getElementById('filePreviewBody');
   if (!body) return;
-  body.innerHTML = `<div class="file-preview-state error"><div class="file-preview-error-icon">⚠️</div><p>${escHtml(message)}</p>${canRetry ? '<button class="btn btn-outline btn-sm" data-emie-onclick="retryFilePreview()">重新生成预览</button>' : ''}</div>`;
+  body.innerHTML = `<div class="file-preview-state error"><div class="file-preview-error-icon">⚠️</div><p>${escHtml(message)}</p>${canRetry ? '<button class="btn btn-outline btn-sm" data-emie-action="click:file-retry-preview">重新生成预览</button>' : ''}</div>`;
 }
 
 function openPreviewInNewWindow() {
@@ -157,7 +165,7 @@ function showDownloadOptions(fileUrl, fileName, fileSize) {
   panel.id = 'downloadOptionPanel';
   panel.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:10000;display:flex;align-items:center;justify-content:center;';
   panel.innerHTML = `
-    <div data-emie-onclick="closeDownloadOptions()" style="position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);"></div>
+    <div data-emie-action="click:file-close-download-options" style="position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);"></div>
     <div style="position:relative;background:#fff;border-radius:16px;width:420px;max-width:90vw;box-shadow:0 8px 40px rgba(0,0,0,0.15);overflow:hidden;">
       <div style="padding:24px 24px 0;">
         <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:20px;">
@@ -166,20 +174,20 @@ function showDownloadOptions(fileUrl, fileName, fileSize) {
             <p style="font-weight:600;font-size:14px;color:#1f2937;margin:0 0 4px 0;word-break:break-all;line-height:1.4;">${escHtml(fileName || '')}</p>
             <p style="font-size:12px;color:#6b7280;margin:0;">${fileSize ? fmtSize(fileSize) + ' · ' : ''}${ext}</p>
           </div>
-          <button data-emie-onclick="closeDownloadOptions()" style="background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;padding:4px;line-height:1;">✕</button>
+          <button data-emie-action="click:file-close-download-options" style="background:none;border:none;cursor:pointer;font-size:18px;color:#9ca3af;padding:4px;line-height:1;">✕</button>
         </div>
       </div>
       <div style="padding:0 24px 24px;">
         <div style="display:grid;grid-template-columns:repeat(${canPreview ? 3 : 2},1fr);gap:10px;margin-bottom:16px;">
-          ${canPreview ? `<button data-emie-onclick="closeDownloadOptions();openFilePreview('${escHtml(escJsString(fileUrl))}','${escHtml(escJsString(fileName))}',${fileSize || 0});"
+          ${canPreview ? `<button data-emie-action="click:file-preview-option" data-file-url="${escHtml(fileUrl)}" data-file-name="${escHtml(fileName || '')}" data-file-size="${fileSize || 0}"
             style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 6px;border-radius:10px;border:1px solid #c7d2fe;background:#eef2ff;cursor:pointer;font-size:13px;color:#3730a3;transition:background 0.15s;">
             <span style="font-size:18px;">👁</span> 在线预览
           </button>` : ''}
-          <button class="file-dl-btn" data-emie-onclick="doDirectDownload('${escHtml(escJsString(fullUrl))}');closeDownloadOptions();"
+          <button class="file-dl-btn" data-emie-action="click:file-direct-download" data-file-url="${escHtml(fullUrl)}"
             style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 6px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:13px;color:#1f2937;">
             <span style="font-size:18px;">⬇️</span> 直接下载
           </button>
-          <button class="file-dl-btn" data-emie-onclick="doCopyDownloadLink('${escHtml(escJsString(fullUrl))}', this);"
+          <button class="file-dl-btn" data-emie-action="click:file-copy-download-link" data-file-url="${escHtml(fullUrl)}"
             style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 6px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;font-size:13px;color:#1f2937;">
             <span style="font-size:18px;">🔗</span> <span id="copyBtnLabel">复制下载地址</span>
           </button>
@@ -187,7 +195,7 @@ function showDownloadOptions(fileUrl, fileName, fileSize) {
         <div style="padding:10px 14px;background:#f9fafb;border-radius:10px;font-size:12px;color:#9ca3af;display:flex;align-items:center;gap:8px;">
           <span style="flex-shrink:0;">🔗</span>
           <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(fullUrl)}">${escHtml(fullUrl)}</span>
-          <button data-emie-onclick="copyUrlOnly('${escHtml(escJsString(fullUrl))}', this)" style="background:none;border:none;cursor:pointer;font-size:12px;color:#3370FF;padding:2px 6px;border-radius:4px;flex-shrink:0;">复制</button>
+          <button data-emie-action="click:file-copy-url" data-file-url="${escHtml(fullUrl)}" style="background:none;border:none;cursor:pointer;font-size:12px;color:#3370FF;padding:2px 6px;border-radius:4px;flex-shrink:0;">复制</button>
         </div>
       </div>
     </div>`;
@@ -198,13 +206,26 @@ function closeDownloadOptions() {
   document.getElementById('downloadOptionPanel')?.remove();
 }
 
-/** 直接下载：添加 ?download=true 参数触发浏览器保存 */
-function doDirectDownload(url) {
-  const link = document.createElement('a');
-  link.href = url + (url.includes('?') ? '&' : '?') + 'download=true';
-  link.target = '_blank';
-  link.rel = 'noopener';
-  link.click();
+/** 直接下载：先用认证请求取文件，再由浏览器保存，避免原生链接丢失自定义认证头。 */
+async function doDirectDownload(url, fileName = '') {
+  try {
+    const token = localStorage.getItem('design_pm_token');
+    const response = await fetch(appendDownloadParam(url), {
+      headers: token ? { 'X-Auth-Token': token } : {},
+      credentials: 'same-origin',
+    });
+    if (!response.ok) throw new Error('下载失败（HTTP ' + response.status + '）');
+    const blobUrl = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = fileName || url.split('/').pop() || 'download';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch (error) {
+    window.EMIE.actions.showSystemAlert(error.message || '下载失败，请重新登录后重试');
+  }
 }
 
 /** 给 URL 追加 ?download=true 参数 */
@@ -262,7 +283,7 @@ async function copyUrlOnly(url, btn) {
 /** 生成文件操作按钮 HTML（用于嵌入到列表/卡片中） */
 function renderFileActions(fileUrl, fileName, fileSize) {
   const fullUrl = fileUrl.startsWith('http') ? fileUrl : window.location.origin + fileUrl;
-  return `<button class="btn btn-outline btn-sm" data-emie-onclick="showDownloadOptions('${escHtml(escJsString(fullUrl))}','${escHtml(escJsString(fileName || ''))}',${fileSize || 0})" title="下载选项">⬇️</button>`;
+  return `<button class="btn btn-outline btn-sm" data-emie-action="click:file-show-download-options" data-file-url="${escHtml(fullUrl)}" data-file-name="${escHtml(fileName || '')}" data-file-size="${fileSize || 0}" title="下载选项">⬇️</button>`;
 }
 
 
@@ -296,3 +317,27 @@ EMIE.registerModule('files', {
   copyUrlOnly,
   renderFileActions,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('file-close-preview', () => closeFilePreview());
+  registerEventAction('file-open-preview-window', () => openPreviewInNewWindow());
+  registerEventAction('file-retry-preview', () => retryFilePreview());
+  registerEventAction('file-close-download-options', () => closeDownloadOptions());
+  registerEventAction('file-preview-option', (_event, element) => {
+    closeDownloadOptions();
+    openFilePreview(element.dataset.fileUrl, element.dataset.fileName, Number(element.dataset.fileSize) || 0);
+  });
+  registerEventAction('file-direct-download', (_event, element) => {
+    doDirectDownload(element.dataset.fileUrl, element.dataset.fileName);
+    closeDownloadOptions();
+  });
+  registerEventAction('file-direct-preview-download', (_event, element) =>
+    doDirectDownload(element.dataset.fileUrl, element.dataset.fileName));
+  registerEventAction('file-copy-download-link', (_event, element) =>
+    doCopyDownloadLink(element.dataset.fileUrl, element));
+  registerEventAction('file-copy-url', (_event, element) =>
+    copyUrlOnly(element.dataset.fileUrl, element));
+  registerEventAction('file-show-download-options', (_event, element) =>
+    showDownloadOptions(element.dataset.fileUrl, element.dataset.fileName, Number(element.dataset.fileSize) || 0));
+}

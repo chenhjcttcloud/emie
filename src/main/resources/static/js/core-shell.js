@@ -50,14 +50,14 @@ function renderSidebar() {
   if (!sidebar) return;
 
   sidebar.innerHTML = navs.map(n => `
-    <button class="nav-item ${n.view === EMIE.state.currentView ? 'active' : ''}" data-emie-onclick="navigate('${n.view}')">
+    <button class="nav-item ${n.view === EMIE.state.currentView ? 'active' : ''}" data-emie-action="click:navigate-${n.view}">
       <span class="nav-icon">${n.icon}</span>${n.label}
       ${n.badge ? `<span class="nav-badge" id="${n.badge}">0</span>` : ''}
     </button>
     ${n.view === 'tasks' && n.view === EMIE.state.currentView ? `<div class="nav-submenu">
-      <button class="nav-subitem ${EMIE.state.taskBucket !== 'pending' && EMIE.state.taskBucket !== 'completed' ? 'active' : ''}" data-emie-onclick="navigateTaskBucket('all')">全部子任务</button>
-      <button class="nav-subitem ${EMIE.state.taskBucket === 'pending' ? 'active' : ''}" data-emie-onclick="navigateTaskBucket('pending')">待处理子任务</button>
-      <button class="nav-subitem ${EMIE.state.taskBucket === 'completed' ? 'active' : ''}" data-emie-onclick="navigateTaskBucket('completed')">已完成子任务</button>
+      <button class="nav-subitem ${EMIE.state.taskBucket !== 'pending' && EMIE.state.taskBucket !== 'completed' ? 'active' : ''}" data-emie-action="click:task-all">全部子任务</button>
+      <button class="nav-subitem ${EMIE.state.taskBucket === 'pending' ? 'active' : ''}" data-emie-action="click:task-pending">待处理子任务</button>
+      <button class="nav-subitem ${EMIE.state.taskBucket === 'completed' ? 'active' : ''}" data-emie-action="click:task-completed">已完成子任务</button>
     </div>` : ''}
   `).join('');
 }
@@ -130,6 +130,15 @@ EMIE.registerActions({
   closeMobileSidebar,
   canNavigateTo,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('shell-toggle-sidebar', () => toggleMobileSidebar());
+  registerEventAction('shell-close-sidebar', () => closeMobileSidebar());
+  NAV_DEFINITIONS.forEach(item => registerEventAction(`navigate-${item.view}`, () => navigate(item.view)));
+  ['all', 'pending', 'completed'].forEach(bucket =>
+    registerEventAction(`task-${bucket}`, () => navigateTaskBucket(bucket)));
+}
 
 EMIE.registerModule('coreShell', {
   renderSidebar,

@@ -18,7 +18,7 @@ async function renderAdminCategories(container) {
       <div class="config-card">
         <div class="config-card-header">
           <h3>📂 产品类目管理</h3>
-          <button class="btn btn-primary btn-sm" data-emie-onclick="addCategory()">➕ 新增类目</button>
+          <button class="btn btn-primary btn-sm" data-emie-action="click:catalog-add-category">➕ 新增类目</button>
         </div>
         <div class="config-card-body">
           <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px;">当前类目（顺序按排序号）：${cats.map(c => escHtml(c.name)).join(', ')}</p>
@@ -31,8 +31,8 @@ async function renderAdminCategories(container) {
                 <td>${c.sortOrder}</td>
                 <td><span class="badge ${c.active ? 'badge-completed' : 'badge-rejected'}">${c.active ? '启用' : '禁用'}</span></td>
                 <td style="white-space:nowrap;">
-                  <button class="btn btn-outline btn-sm" data-emie-onclick="editCategory(${c.id}, '${escHtml(escJsString(c.name))}', ${c.sortOrder}, ${c.active})">✏️ 编辑</button>
-                  <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-emie-onclick="deleteCategory(${c.id})">🗑️ 删除</button>
+                  <button class="btn btn-outline btn-sm" data-emie-action="click:catalog-edit-category" data-id="${c.id}" data-name="${escHtml(escJsString(c.name))}" data-sort="${c.sortOrder}" data-active="${c.active}">✏️ 编辑</button>
+                  <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-emie-action="click:catalog-delete-category" data-id="${c.id}">🗑️ 删除</button>
                 </td>
               </tr>`).join('')}
             </tbody>
@@ -50,7 +50,7 @@ const addCategory = function() {
   overlay.className = 'modal-overlay';
   overlay.id = 'categoryEditModal';
   overlay.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('categoryEditModal')">✕</button>
+    <button class="modal-close-float" data-emie-action="click:catalog-close-category">✕</button>
     <div class="modal">
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📂 新增产品类目</div></div></div>
       <div class="modal-body">
@@ -58,8 +58,8 @@ const addCategory = function() {
         <div class="form-group"><label class="form-label">排序号</label><input class="form-input" id="catOrder" type="number" value="0" placeholder="数字越小越靠前"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" data-emie-onclick="closeM('categoryEditModal')">取消</button>
-        <button class="btn btn-primary" data-emie-onclick="saveCategory(null)">保存</button>
+        <button class="btn btn-outline" data-emie-action="click:catalog-close-category">取消</button>
+        <button class="btn btn-primary" data-emie-action="click:catalog-save-category" data-id="">保存</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -70,7 +70,7 @@ const editCategory = function(id, name, order, active) {
   overlay.className = 'modal-overlay';
   overlay.id = 'categoryEditModal';
   overlay.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('categoryEditModal')">✕</button>
+    <button class="modal-close-float" data-emie-action="click:catalog-close-category">✕</button>
     <div class="modal">
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✏️ 编辑产品类目</div></div></div>
       <div class="modal-body">
@@ -84,8 +84,8 @@ const editCategory = function(id, name, order, active) {
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" data-emie-onclick="closeM('categoryEditModal')">取消</button>
-        <button class="btn btn-primary" data-emie-onclick="saveCategory(${id})">保存</button>
+        <button class="btn btn-outline" data-emie-action="click:catalog-close-category">取消</button>
+        <button class="btn btn-primary" data-emie-action="click:catalog-save-category" data-id="${id}">保存</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -110,7 +110,7 @@ const saveCategory = async function(id) {
 };
 
 const deleteCategory = async function(id) {
-  if (!confirm('确定删除该类目？已关联的项目不受影响。')) return;
+  if (!await EMIE.actions.showSystemConfirm('确定删除该类目？已关联的项目不受影响。')) return;
   await apiDelete(`/categories/${id}`);
   try { EMIE.state.categories = await apiGet('/categories'); } catch(e) {}
   switchAdminTab('categories');
@@ -124,7 +124,7 @@ async function renderAdminIpOptions(container) {
     <div class="config-card">
       <div class="config-card-header">
         <h3>🏷️ IP配置管理</h3>
-        <button class="btn btn-primary btn-sm" data-emie-onclick="addIpOption(${nextSortOrder})">➕ 新增IP</button>
+          <button class="btn btn-primary btn-sm" data-emie-action="click:catalog-add-ip" data-sort-order="${nextSortOrder}">➕ 新增IP</button>
       </div>
       <div class="config-card-body">
         <p style="font-size:13px;color:var(--gray-500);margin-bottom:14px;">启用的IP会出现在渠道定制单和公司常规品项目的新建页面中。可为每个一级IP配置二级标签，并选择单选或多选。</p>
@@ -140,8 +140,8 @@ async function renderAdminIpOptions(container) {
               <td>${item.sortOrder}</td>
               <td><span class="badge ${item.active ? 'badge-completed' : 'badge-rejected'}">${item.active ? '启用' : '禁用'}</span></td>
               <td style="white-space:nowrap;">
-                <button class="btn btn-outline btn-sm" data-emie-onclick="editIpOption(${item.id}, '${escHtml(escJsString(item.name))}', ${item.sortOrder}, ${item.active}, '${escHtml(escJsString(encodeURIComponent(item.subOptionsJson || '[]')))}', '${escHtml(escJsString(item.subOptionSelectionMode || 'multiple'))}')">✏️ 编辑</button>
-                <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-emie-onclick="deleteIpOption(${item.id})">🗑️ 删除</button>
+                <button class="btn btn-outline btn-sm" data-emie-action="click:catalog-edit-ip" data-id="${item.id}" data-name="${escHtml(escJsString(item.name))}" data-sort="${item.sortOrder}" data-active="${item.active}" data-sub-options="${escHtml(escJsString(encodeURIComponent(item.subOptionsJson || '[]')))}" data-selection-mode="${escHtml(escJsString(item.subOptionSelectionMode || 'multiple'))}">✏️ 编辑</button>
+                <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-emie-action="click:catalog-delete-ip" data-id="${item.id}">🗑️ 删除</button>
               </td>
             </tr>`).join('')}
           </tbody>
@@ -165,7 +165,7 @@ function openIpOptionModal(id, name, sortOrder, active, subOptions = [], selecti
   overlay.className = 'modal-overlay';
   overlay.id = 'ipOptionEditModal';
   overlay.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('ipOptionEditModal')">✕</button>
+    <button class="modal-close-float" data-emie-action="click:catalog-close-ip">✕</button>
     <div class="modal">
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">${id ? '✏️ 编辑IP' : '🏷️ 新增IP'}</div></div></div>
       <div class="modal-body">
@@ -181,8 +181,8 @@ function openIpOptionModal(id, name, sortOrder, active, subOptions = [], selecti
         </div>` : ''}
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" data-emie-onclick="closeM('ipOptionEditModal')">取消</button>
-        <button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>saveIpOption(${id || 'null'}))">保存</button>
+        <button class="btn btn-outline" data-emie-action="click:catalog-close-ip">取消</button>
+        <button class="btn btn-primary" data-emie-action="click:catalog-save-ip" data-id="${id || ''}">保存</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -207,7 +207,7 @@ const saveIpOption = async function(id) {
 };
 
 const deleteIpOption = async function(id) {
-  if (!confirm('确定删除该IP配置？历史项目中已保存的IP仍会保留。')) return;
+  if (!await EMIE.actions.showSystemConfirm('确定删除该IP配置？历史项目中已保存的IP仍会保留。')) return;
   try {
     await apiDelete(`/ip-options/${id}`);
     EMIE.state.ipOptions = await apiGet('/ip-options');
@@ -225,7 +225,7 @@ async function renderAdminCompliance(container) {
       <div class="config-card">
         <div class="config-card-header">
           <h3>⚖️ 合规处罚管理</h3>
-          <button class="btn btn-primary btn-sm" data-emie-onclick="addCompliance()">➕ 新增合规项</button>
+          <button class="btn btn-primary btn-sm" data-emie-action="click:catalog-add-compliance">➕ 新增合规项</button>
         </div>
         <div class="config-card-body">
           <div class="table-wrap"><table>
@@ -237,8 +237,8 @@ async function renderAdminCompliance(container) {
                 <td>${c.sortOrder}</td>
                 <td><span class="badge ${c.active ? 'badge-completed' : 'badge-rejected'}">${c.active ? '启用' : '禁用'}</span></td>
                 <td style="white-space:nowrap;">
-                  <button class="btn btn-outline btn-sm" data-emie-onclick="editCompliance(${c.id}, '${escHtml(escJsString(c.name))}', ${c.sortOrder}, ${c.active})">✏️ 编辑</button>
-                  <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-emie-onclick="deleteCompliance(${c.id})">🗑️ 删除</button>
+                  <button class="btn btn-outline btn-sm" data-emie-action="click:catalog-edit-compliance" data-id="${c.id}" data-name="${escHtml(escJsString(c.name))}" data-sort="${c.sortOrder}" data-active="${c.active}">✏️ 编辑</button>
+                  <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-emie-action="click:catalog-delete-compliance" data-id="${c.id}">🗑️ 删除</button>
                 </td>
               </tr>`).join('')}
             </tbody>
@@ -255,7 +255,7 @@ const addCompliance = function() {
   overlay.className = 'modal-overlay';
   overlay.id = 'complianceEditModal';
   overlay.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('complianceEditModal')">✕</button>
+    <button class="modal-close-float" data-emie-action="click:catalog-close-compliance">✕</button>
     <div class="modal">
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">⚖️ 新增合规处罚项</div></div></div>
       <div class="modal-body">
@@ -263,8 +263,8 @@ const addCompliance = function() {
         <div class="form-group"><label class="form-label">排序号</label><input class="form-input" id="compOrder" type="number" value="0" placeholder="数字越小越靠前"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" data-emie-onclick="closeM('complianceEditModal')">取消</button>
-        <button class="btn btn-primary" data-emie-onclick="saveCompliance(null)">保存</button>
+        <button class="btn btn-outline" data-emie-action="click:catalog-close-compliance">取消</button>
+        <button class="btn btn-primary" data-emie-action="click:catalog-save-compliance" data-id="">保存</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -275,7 +275,7 @@ const editCompliance = function(id, name, order, active) {
   overlay.className = 'modal-overlay';
   overlay.id = 'complianceEditModal';
   overlay.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('complianceEditModal')">✕</button>
+    <button class="modal-close-float" data-emie-action="click:catalog-close-compliance">✕</button>
     <div class="modal">
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✏️ 编辑合规处罚项</div></div></div>
       <div class="modal-body">
@@ -289,8 +289,8 @@ const editCompliance = function(id, name, order, active) {
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" data-emie-onclick="closeM('complianceEditModal')">取消</button>
-        <button class="btn btn-primary" data-emie-onclick="saveCompliance(${id})">保存</button>
+        <button class="btn btn-outline" data-emie-action="click:catalog-close-compliance">取消</button>
+        <button class="btn btn-primary" data-emie-action="click:catalog-save-compliance" data-id="${id}">保存</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -314,7 +314,7 @@ const saveCompliance = async function(id) {
 };
 
 const deleteCompliance = async function(id) {
-  if (!confirm('确定删除该合规项？')) return;
+  if (!await EMIE.actions.showSystemConfirm('确定删除该合规项？')) return;
   await apiDelete(`/compliance/${id}`);
   try { EMIE.state.complianceItems = await apiGet('/compliance'); } catch(e) {}
   switchAdminTab('compliance');
@@ -328,7 +328,7 @@ async function renderAdminPriceRanges(container) {
       <div class="config-card">
         <div class="config-card-header">
           <h3>💰 参考零售价管理</h3>
-          <button class="btn btn-primary btn-sm" data-emie-onclick="addPriceRange()">➕ 新增价格</button>
+          <button class="btn btn-primary btn-sm" data-emie-action="click:catalog-add-price">➕ 新增价格</button>
         </div>
         <div class="config-card-body">
           <div class="table-wrap"><table>
@@ -340,8 +340,8 @@ async function renderAdminPriceRanges(container) {
                 <td>${c.sortOrder}</td>
                 <td><span class="badge ${c.active ? 'badge-completed' : 'badge-rejected'}">${c.active ? '启用' : '禁用'}</span></td>
                 <td style="white-space:nowrap;">
-                  <button class="btn btn-outline btn-sm" data-emie-onclick="editPriceRange(${c.id}, '${escHtml(escJsString(c.name))}', ${c.sortOrder}, ${c.active})">✏️ 编辑</button>
-                  <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-emie-onclick="deletePriceRange(${c.id})">🗑️ 删除</button>
+                  <button class="btn btn-outline btn-sm" data-emie-action="click:catalog-edit-price" data-id="${c.id}" data-name="${escHtml(escJsString(c.name))}" data-sort="${c.sortOrder}" data-active="${c.active}">✏️ 编辑</button>
+                  <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-emie-action="click:catalog-delete-price" data-id="${c.id}">🗑️ 删除</button>
                 </td>
               </tr>`).join('')}
             </tbody>
@@ -358,7 +358,7 @@ const addPriceRange = function() {
   overlay.className = 'modal-overlay';
   overlay.id = 'priceRangeEditModal';
   overlay.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('priceRangeEditModal')">✕</button>
+    <button class="modal-close-float" data-emie-action="click:catalog-close-price">✕</button>
     <div class="modal">
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">💰 新增参考零售价</div></div></div>
       <div class="modal-body">
@@ -366,8 +366,8 @@ const addPriceRange = function() {
         <div class="form-group"><label class="form-label">排序号</label><input class="form-input" id="prOrder" type="number" value="0" placeholder="数字越小越靠前"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" data-emie-onclick="closeM('priceRangeEditModal')">取消</button>
-        <button class="btn btn-primary" data-emie-onclick="savePriceRange(null)">保存</button>
+        <button class="btn btn-outline" data-emie-action="click:catalog-close-price">取消</button>
+        <button class="btn btn-primary" data-emie-action="click:catalog-save-price" data-id="">保存</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -378,7 +378,7 @@ const editPriceRange = function(id, name, order, active) {
   overlay.className = 'modal-overlay';
   overlay.id = 'priceRangeEditModal';
   overlay.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('priceRangeEditModal')">✕</button>
+    <button class="modal-close-float" data-emie-action="click:catalog-close-price">✕</button>
     <div class="modal">
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✏️ 编辑参考零售价</div></div></div>
       <div class="modal-body">
@@ -392,8 +392,8 @@ const editPriceRange = function(id, name, order, active) {
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" data-emie-onclick="closeM('priceRangeEditModal')">取消</button>
-        <button class="btn btn-primary" data-emie-onclick="savePriceRange(${id})">保存</button>
+        <button class="btn btn-outline" data-emie-action="click:catalog-close-price">取消</button>
+        <button class="btn btn-primary" data-emie-action="click:catalog-save-price" data-id="${id}">保存</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -417,7 +417,7 @@ const savePriceRange = async function(id) {
 };
 
 const deletePriceRange = async function(id) {
-  if (!confirm('确定删除该价格？')) return;
+  if (!await EMIE.actions.showSystemConfirm('确定删除该价格？')) return;
   await apiDelete(`/price-ranges/${id}`);
   try { EMIE.state.priceRanges = await apiGet('/price-ranges'); } catch(e) {}
   switchAdminTab('priceRanges');
@@ -448,6 +448,30 @@ EMIE.registerActions({
   savePriceRange,
   deletePriceRange,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('catalog-add-category', () => addCategory());
+  registerEventAction('catalog-add-ip', (_event, el) => addIpOption(Number(el.dataset.sortOrder || 0)));
+  registerEventAction('catalog-add-compliance', () => addCompliance());
+  registerEventAction('catalog-add-price', () => addPriceRange());
+  registerEventAction('catalog-edit-category', (_event, el) => editCategory(Number(el.dataset.id), el.dataset.name || '', Number(el.dataset.sort || 0), el.dataset.active === 'true'));
+  registerEventAction('catalog-delete-category', (_event, el) => deleteCategory(Number(el.dataset.id)));
+  registerEventAction('catalog-close-category', () => closeM('categoryEditModal'));
+  registerEventAction('catalog-save-category', (_event, el) => saveCategory(el.dataset.id ? Number(el.dataset.id) : null));
+  registerEventAction('catalog-edit-ip', (_event, el) => editIpOption(Number(el.dataset.id), el.dataset.name || '', Number(el.dataset.sort || 0), el.dataset.active === 'true', el.dataset.subOptions || '', el.dataset.selectionMode || 'multiple'));
+  registerEventAction('catalog-delete-ip', (_event, el) => deleteIpOption(Number(el.dataset.id)));
+  registerEventAction('catalog-close-ip', () => closeM('ipOptionEditModal'));
+  registerEventAction('catalog-save-ip', (_event, el) => submitGuard(el, () => saveIpOption(el.dataset.id ? Number(el.dataset.id) : null)));
+  registerEventAction('catalog-edit-compliance', (_event, el) => editCompliance(Number(el.dataset.id), el.dataset.name || '', Number(el.dataset.sort || 0), el.dataset.active === 'true'));
+  registerEventAction('catalog-delete-compliance', (_event, el) => deleteCompliance(Number(el.dataset.id)));
+  registerEventAction('catalog-close-compliance', () => closeM('complianceEditModal'));
+  registerEventAction('catalog-save-compliance', (_event, el) => saveCompliance(el.dataset.id ? Number(el.dataset.id) : null));
+  registerEventAction('catalog-edit-price', (_event, el) => editPriceRange(Number(el.dataset.id), el.dataset.name || '', Number(el.dataset.sort || 0), el.dataset.active === 'true'));
+  registerEventAction('catalog-delete-price', (_event, el) => deletePriceRange(Number(el.dataset.id)));
+  registerEventAction('catalog-close-price', () => closeM('priceRangeEditModal'));
+  registerEventAction('catalog-save-price', (_event, el) => savePriceRange(el.dataset.id ? Number(el.dataset.id) : null));
+}
 
 EMIE.registerModule('adminCatalog', {
   renderAdminCategories,

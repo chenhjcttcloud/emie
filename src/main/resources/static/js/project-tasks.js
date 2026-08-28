@@ -107,12 +107,12 @@ async function addSubTask(pid) {
   modal.className = 'modal-overlay';
   modal.id = 'addSubTaskModal';
   modal.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('addSubTaskModal')">✕</button>
+    <button class="modal-close-float" data-emie-action="click:task-add-close">✕</button>
     <div class="modal modal-lg">
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">➕ 添加子任务</div></div></div>
       <div class="modal-body">
         <form id="addSubTaskForm">
-          <div class="form-group"><label class="form-label"><span class="required">*</span> 子任务名称</label><input type="text" class="form-input" name="name" required placeholder="如：首页Banner设计、详情页布局..." data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor=''"></div>
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 子任务名称</label><input type="text" class="form-input" name="name" required placeholder="如：首页Banner设计、详情页布局..." data-emie-action="input:task-clear-field-error"></div>
           <div class="form-row">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 所属阶段</label>
               <select class="form-select" name="workflowStage" required>
@@ -141,47 +141,47 @@ async function addSubTask(pid) {
           </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 负责人类型</label>
             <div style="display:flex;gap:16px;">
-              <label class="checkbox-item checked" style="cursor:pointer;" data-emie-onclick="switchAssigneeType('add', 'designer', this)">
-                <input type="radio" name="assigneeRole" value="designer" checked data-emie-onchange="switchAssigneeType('add', 'designer')" style="display:none;"> 👨‍🎨 设计师
+              <label class="checkbox-item checked" style="cursor:pointer;" data-emie-action="click:task-add-assignee" data-assignee-role="designer">
+                <input type="radio" name="assigneeRole" value="designer" checked style="display:none;"> 👨‍🎨 设计师
               </label>
-              <label class="checkbox-item" style="cursor:pointer;" data-emie-onclick="switchAssigneeType('add', 'supplychain', this)">
-                <input type="radio" name="assigneeRole" value="supplychain" data-emie-onchange="switchAssigneeType('add', 'supplychain')" style="display:none;"> 🛒 供应链
+              <label class="checkbox-item" style="cursor:pointer;" data-emie-action="click:task-add-assignee" data-assignee-role="supplychain">
+                <input type="radio" name="assigneeRole" value="supplychain" style="display:none;"> 🛒 供应链
               </label>
-              <label class="checkbox-item" style="cursor:pointer;" data-emie-onclick="switchAssigneeType('add', 'planner', this)">
-                <input type="radio" name="assigneeRole" value="planner" data-emie-onchange="switchAssigneeType('add', 'planner')" style="display:none;"> 📋 企划
+              <label class="checkbox-item" style="cursor:pointer;" data-emie-action="click:task-add-assignee" data-assignee-role="planner">
+                <input type="radio" name="assigneeRole" value="planner" style="display:none;"> 📋 企划
               </label>
-              <label class="checkbox-item" style="cursor:pointer;" data-emie-onclick="switchAssigneeType('add', 'sales', this)">
-                <input type="radio" name="assigneeRole" value="sales" data-emie-onchange="switchAssigneeType('add', 'sales')" style="display:none;"> 💼 销售
+              <label class="checkbox-item" style="cursor:pointer;" data-emie-action="click:task-add-assignee" data-assignee-role="sales">
+                <input type="radio" name="assigneeRole" value="sales" style="display:none;"> 💼 销售
               </label>
-              <label class="checkbox-item" style="cursor:pointer;" data-emie-onclick="switchAssigneeType('add', 'promotion', this)">
-                <input type="radio" name="assigneeRole" value="promotion" data-emie-onchange="switchAssigneeType('add', 'promotion')" style="display:none;"> 📣 产品推广
+              <label class="checkbox-item" style="cursor:pointer;" data-emie-action="click:task-add-assignee" data-assignee-role="promotion">
+                <input type="radio" name="assigneeRole" value="promotion" style="display:none;"> 📣 产品推广
               </label>
             </div>
           </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 指派子任务负责人</label>
             <div id="addSubTaskAssignmentMode" style="display:flex;gap:12px;margin-bottom:10px;">
-              <label class="checkbox-item checked"><input type="radio" name="assignmentMode" value="direct" checked data-emie-onchange="toggleSubTaskMarketMode(false)"> 指定设计师</label>
-              <label class="checkbox-item"><input type="radio" name="assignmentMode" value="market" data-emie-onchange="toggleSubTaskMarketMode(true)"> 发布到接单市场</label>
+              <label class="checkbox-item checked"><input type="radio" name="assignmentMode" value="direct" checked data-emie-action="change:task-assignment-mode" data-market-mode="false"> 指定设计师</label>
+              <label class="checkbox-item"><input type="radio" name="assignmentMode" value="market" data-emie-action="change:task-assignment-mode" data-market-mode="true"> 发布到接单市场</label>
             </div>
-            <select class="form-select" name="designerId" id="addSubTaskDesignerId" data-emie-onchange="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor=''">${designerOpts}</select>
+            <select class="form-select" name="designerId" id="addSubTaskDesignerId" data-emie-action="change:task-clear-field-error">${designerOpts}</select>
             <div id="addSubTaskMarketHint" style="display:none;margin-top:8px;font-size:12px;color:var(--gray-500);">发布后所有设计师均可查看，先抢先得。</div>
             <input type="hidden" name="assigneeRole" id="addSubTaskAssigneeRole" value="designer">
           </div>
-          <div class="form-group"><label class="form-label">细节要求说明</label><textarea class="form-textarea" name="details" placeholder="子任务的具体要求说明..." data-emie-oninput="this.closest('.form-group')?.querySelector('.field-error')?.remove();this.style.borderColor=''"></textarea></div>
+          <div class="form-group"><label class="form-label">细节要求说明</label><textarea class="form-textarea" name="details" placeholder="子任务的具体要求说明..." data-emie-action="input:task-clear-field-error"></textarea></div>
         </form>
         <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
           <div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片（可选）</div>
-          <div class="upload-area" data-emie-onclick="document.getElementById('subTaskRefImageInput').click()">
+          <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="subTaskRefImageInput">
             <div>📁 拖拽图片到此处，或点击选择图片</div>
-            <input type="file" id="subTaskRefImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleSubTaskRefImages(this)">
+            <input type="file" id="subTaskRefImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-subtask-ref-images">
           </div>
           <div class="file-list" id="createRefImageList"></div>
         </div>
         <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
           <div class="form-label" style="margin-bottom:8px;">📎 附件（可选）</div>
-          <div class="upload-area" data-emie-onclick="document.getElementById('subTaskAttachmentInput').click()">
+          <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="subTaskAttachmentInput">
             <div>📁 拖拽文件到此处，或点击选择文件</div>
-            <input type="file" id="subTaskAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleSubTaskAttachments(this)">
+            <input type="file" id="subTaskAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-subtask-attachments">
           </div>
           <div class="file-list" id="createAttachmentList"></div>
         </div>
@@ -189,7 +189,7 @@ async function addSubTask(pid) {
           💡 提示：可多次添加子任务。所有子任务完成后，项目才算完成。
         </div>
       </div>
-      <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('addSubTaskModal')">取消</button><button class="btn btn-outline" data-emie-onclick="saveSubTaskDraft('${pid}')">保存草稿</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitAddSubTask('${pid}'))">确认添加</button></div>
+      <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-add-close">取消</button><button class="btn btn-outline" data-emie-action="click:task-save-draft" data-project-id="${pid}">保存草稿</button><button class="btn btn-primary" data-emie-action="click:task-submit-add" data-project-id="${pid}">确认添加</button></div>
     </div>`;
   document.body.appendChild(modal);
   enhanceDateInputs(modal);
@@ -371,7 +371,7 @@ function editTask(pid, tid) {
     modal.className = 'modal-overlay';
     modal.id = 'editTaskModal';
     modal.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('editTaskModal')">✕</button>
+    <button class="modal-close-float" data-emie-action="click:task-edit-close">✕</button>
       <div class="modal modal-lg">
         <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✏️ 编辑子任务</div></div></div>
         <div class="modal-body">
@@ -406,19 +406,19 @@ function editTask(pid, tid) {
             </div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 负责人类型</label>
               <div style="display:flex;gap:16px;">
-                <label class="checkbox-item ${task.assigneeRole === 'designer' || !task.assigneeRole ? 'checked' : ''}" style="cursor:pointer;" data-emie-onclick="switchEditAssigneeType('designer', this)">
+                <label class="checkbox-item ${task.assigneeRole === 'designer' || !task.assigneeRole ? 'checked' : ''}" style="cursor:pointer;" data-emie-action="click:task-edit-assignee" data-assignee-role="designer">
                   <input type="radio" name="assigneeRole" value="designer" ${task.assigneeRole === 'designer' || !task.assigneeRole ? 'checked' : ''} style="display:none;"> 👨‍🎨 设计师
                 </label>
-                <label class="checkbox-item ${task.assigneeRole === 'supplychain' ? 'checked' : ''}" style="cursor:pointer;" data-emie-onclick="switchEditAssigneeType('supplychain', this)">
+                <label class="checkbox-item ${task.assigneeRole === 'supplychain' ? 'checked' : ''}" style="cursor:pointer;" data-emie-action="click:task-edit-assignee" data-assignee-role="supplychain">
                   <input type="radio" name="assigneeRole" value="supplychain" ${task.assigneeRole === 'supplychain' ? 'checked' : ''} style="display:none;"> 🛒 供应链
                 </label>
-                <label class="checkbox-item ${task.assigneeRole === 'planner' ? 'checked' : ''}" style="cursor:pointer;" data-emie-onclick="switchEditAssigneeType('planner', this)">
+                <label class="checkbox-item ${task.assigneeRole === 'planner' ? 'checked' : ''}" style="cursor:pointer;" data-emie-action="click:task-edit-assignee" data-assignee-role="planner">
                   <input type="radio" name="assigneeRole" value="planner" ${task.assigneeRole === 'planner' ? 'checked' : ''} style="display:none;"> 📋 企划
                 </label>
-                <label class="checkbox-item ${task.assigneeRole === 'sales' ? 'checked' : ''}" style="cursor:pointer;" data-emie-onclick="switchEditAssigneeType('sales', this)">
+                <label class="checkbox-item ${task.assigneeRole === 'sales' ? 'checked' : ''}" style="cursor:pointer;" data-emie-action="click:task-edit-assignee" data-assignee-role="sales">
                   <input type="radio" name="assigneeRole" value="sales" ${task.assigneeRole === 'sales' ? 'checked' : ''} style="display:none;"> 💼 销售
                 </label>
-                <label class="checkbox-item ${task.assigneeRole === 'promotion' ? 'checked' : ''}" style="cursor:pointer;" data-emie-onclick="switchEditAssigneeType('promotion', this)">
+                <label class="checkbox-item ${task.assigneeRole === 'promotion' ? 'checked' : ''}" style="cursor:pointer;" data-emie-action="click:task-edit-assignee" data-assignee-role="promotion">
                   <input type="radio" name="assigneeRole" value="promotion" ${task.assigneeRole === 'promotion' ? 'checked' : ''} style="display:none;"> 📣 产品推广
                 </label>
               </div>
@@ -431,22 +431,22 @@ function editTask(pid, tid) {
           </form>
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片（可选）</div>
-            <div class="upload-area" data-emie-onclick="document.getElementById('editRefImageInput').click()">
+            <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="editRefImageInput">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
-              <input type="file" id="editRefImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleEditRefImages(this)">
+              <input type="file" id="editRefImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-edit-ref-images">
             </div>
             <div class="file-list" id="createRefImageList"></div>
           </div>
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label" style="margin-bottom:8px;">📎 附件（可选）</div>
-            <div class="upload-area" data-emie-onclick="document.getElementById('editAttachmentInput').click()">
+            <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="editAttachmentInput">
               <div>📁 拖拽文件到此处，或点击选择文件</div>
-            <input type="file" id="editAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleEditAttachments(this)">
+            <input type="file" id="editAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-edit-attachments">
             </div>
             <div class="file-list" id="createAttachmentList"></div>
           </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('editTaskModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitEditTask('${pid}','${tid}'))">保存修改</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-edit-close">取消</button><button class="btn btn-primary" data-emie-action="click:task-submit-edit" data-project-id="${pid}" data-task-id="${tid}">保存修改</button></div>
       </div>`;
     document.body.appendChild(modal);
     doneOpenModal('editTaskModal');
@@ -504,7 +504,7 @@ async function submitEditTask(pid, tid) {
 }
 
 async function deleteTask(pid, tid) {
-  if (!confirm('确定要删除这个子任务吗？此操作不可恢复。')) return;
+  if (!await EMIE.actions.showSystemConfirm('确定要删除这个子任务吗？此操作不可恢复。')) return;
   try {
     await apiDelete(`/projects/${pid}/tasks/${tid}`);
     closeM('editTaskModal');
@@ -515,7 +515,7 @@ async function deleteTask(pid, tid) {
 }
 
 async function withdrawMarketTask(pid, tid) {
-  if (!confirm('确认将该任务撤出接单市场？撤回后设计师将无法抢单。')) return;
+  if (!await EMIE.actions.showSystemConfirm('确认将该任务撤出接单市场？撤回后设计师将无法抢单。')) return;
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/withdraw-market`, {});
     await refreshAfterMutation(pid);
@@ -525,9 +525,15 @@ async function withdrawMarketTask(pid, tid) {
 }
 
 async function withdrawAcceptedTask(pid, tid) {
-  if (!window.confirm('确认退单？接单后1小时内退单免扣分，超过1小时将按累计退单次数比例扣分。')) return;
+  if (!await EMIE.actions.showSystemConfirm('确认退单？接单后1小时内退单免扣分，超过1小时将按累计退单次数比例扣分。')) return;
   try { await apiPost(`/projects/${pid}/tasks/${tid}/withdraw`, {}); await refreshAfterMutation(pid); }
   catch (e) { window.EMIE.actions.showSystemAlert('退单失败：' + e.message); }
+}
+
+async function cancelAcceptedTask(pid, tid) {
+  if (!await EMIE.actions.showSystemConfirm('确认取消该任务的接单吗？当前负责人将被释放，任务内容会保留并回到待处理。')) return;
+  try { await apiPost(`/projects/${pid}/tasks/${tid}/cancel-accept`, {}); await refreshAfterMutation(pid); }
+  catch (e) { window.EMIE.actions.showSystemAlert('取消接单失败：' + e.message); }
 }
 
 // ==================== 任务工作流 ====================
@@ -547,7 +553,7 @@ async function taskAccept(pid, tid, marketTask = null) {
     modal.className = 'modal-overlay';
     modal.id = 'taskAcceptModal';
     modal.innerHTML = `
-      <button class="modal-close-float" data-emie-onclick="closeM('taskAcceptModal')">✕</button>
+      <button class="modal-close-float" data-emie-action="click:task-accept-close">✕</button>
       <div class="modal">
         <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✅ 接单：${escHtml(task.name)}</div></div></div>
         <div class="modal-body">
@@ -556,7 +562,7 @@ async function taskAccept(pid, tid, marketTask = null) {
             <div class="form-group"><label class="form-label"><span class="required">*</span> 计划完成时间</label>${renderDatePicker('plannedDate', {required:true, value: task.plannedDate || ''})}</div>
           </form>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskAcceptModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitTaskAccept(${pid},${tid}))">确认接单</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-accept-close">取消</button><button class="btn btn-primary" data-emie-action="click:task-submit-accept" data-project-id="${pid}" data-task-id="${tid}">确认接单</button></div>
       </div>`;
     document.body.appendChild(modal);
     doneOpenModal('taskAcceptModal');
@@ -621,7 +627,7 @@ async function taskDeliver(pid, tid) {
     modal.className = 'modal-overlay';
     modal.id = 'taskDeliverModal';
     modal.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('taskDeliverModal')">✕</button>
+    <button class="modal-close-float" data-emie-action="click:task-deliver-close">✕</button>
       <div class="modal modal-lg">
         <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📤 交付：${escHtml(task.name)}</div></div></div>
         <div class="modal-body">
@@ -630,29 +636,29 @@ async function taskDeliver(pid, tid) {
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required placeholder="描述交付的设计成果..." style="min-height:100px;"></textarea></div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 自评分数</label>
               <div style="max-width:200px;">
-                <input type="number" class="form-input" name="selfScore" required placeholder="1-100" min="1" max="100" step="1" style="text-align:center;font-size:18px;" data-emie-oninput="validateScoreInput(this)">
+                <input type="number" class="form-input" name="selfScore" required placeholder="1-100" min="1" max="100" step="1" style="text-align:center;font-size:18px;" data-emie-action="input:task-score-input">
                 <div style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:4px;">总分100分，填写1-100的整数</div>
               </div>
             </div>
           </form>
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
-            <div class="upload-area" data-emie-onclick="document.getElementById('deliverImageInput').click()">
+            <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="deliverImageInput">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
-              <input type="file" id="deliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleDeliverImages(this)">
+              <input type="file" id="deliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-deliver-images">
             </div>
             <div class="file-list" id="deliverImageList"></div>
           </div>
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label" style="margin-bottom:8px;">📎 交付附件</div>
-            <div class="upload-area" data-emie-onclick="document.getElementById('deliverAttachmentInput').click()">
+            <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="deliverAttachmentInput">
               <div>📁 拖拽文件到此处，或点击选择文件</div>
-            <input type="file" id="deliverAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
+            <input type="file" id="deliverAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-deliver-attachments">
             </div>
             <div class="file-list" id="deliverAttachmentList"></div>
           </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskDeliverModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitTaskDeliver(${pid},${tid}))">确认交付</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-deliver-close">取消</button><button class="btn btn-primary" data-emie-action="click:task-submit-deliver" data-project-id="${pid}" data-task-id="${tid}">确认交付</button></div>
       </div>`;
     document.body.appendChild(modal);
   } catch (e) {
@@ -739,7 +745,7 @@ async function taskRedeliver(pid, tid) {
     modal.className = 'modal-overlay';
     modal.id = 'taskRedeliverModal';
     modal.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('taskRedeliverModal')">✕</button>
+    <button class="modal-close-float" data-emie-action="click:task-redeliver-close">✕</button>
       <div class="modal modal-lg">
         <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📤 重新交付：${escHtml(task.name)}</div></div></div>
         <div class="modal-body">
@@ -749,29 +755,29 @@ async function taskRedeliver(pid, tid) {
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required style="min-height:100px;"></textarea></div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 自评分数</label>
               <div style="max-width:200px;">
-                <input type="number" class="form-input" name="selfScore" required placeholder="1-100" min="1" max="100" step="1" style="text-align:center;font-size:18px;" data-emie-oninput="validateScoreInput(this)">
+                <input type="number" class="form-input" name="selfScore" required placeholder="1-100" min="1" max="100" step="1" style="text-align:center;font-size:18px;" data-emie-action="input:task-score-input">
                 <div style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:4px;">总分100分，填写1-100的整数</div>
               </div>
             </div>
           </form>
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
-            <div class="upload-area" data-emie-onclick="document.getElementById('deliverImageInput').click()">
+            <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="deliverImageInput">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
-              <input type="file" id="deliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleDeliverImages(this)">
+              <input type="file" id="deliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-deliver-images">
             </div>
             <div class="file-list" id="deliverImageList"></div>
           </div>
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label" style="margin-bottom:8px;">📎 交付附件</div>
-            <div class="upload-area" data-emie-onclick="document.getElementById('deliverAttachmentInput').click()">
+            <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="deliverAttachmentInput">
               <div>📁 拖拽文件到此处，或点击选择文件</div>
-            <input type="file" id="deliverAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleDeliverAttachments(this)">
+              <input type="file" id="deliverAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-deliver-attachments">
             </div>
             <div class="file-list" id="deliverAttachmentList"></div>
           </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskRedeliverModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitTaskRedeliver(${pid},${tid}))">确认交付</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-redeliver-close">取消</button><button class="btn btn-primary" data-emie-action="click:task-submit-redeliver" data-project-id="${pid}" data-task-id="${tid}">确认交付</button></div>
       </div>`;
     document.body.appendChild(modal);
     doneOpenModal('taskRedeliverModal');
@@ -782,7 +788,7 @@ async function taskRedeliver(pid, tid) {
 }
 
 async function taskConfirmRevision(pid, tid) {
-  if (!confirm('确认开始修改该子任务吗？')) return;
+  if (!await EMIE.actions.showSystemConfirm('确认开始修改该子任务吗？')) return;
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/confirm-revision`, {
       currentUser: getCurrentUserName(), currentRole: EMIE.state.currentRole, currentUserId: getCurrentUserId()
@@ -827,7 +833,7 @@ async function taskCorrectDelivery(pid, tid) {
     modal.className = 'modal-overlay';
     modal.id = 'taskCorrectDeliveryModal';
     modal.innerHTML = `
-      <button class="modal-close-float" data-emie-onclick="closeM('taskCorrectDeliveryModal')">✕</button>
+      <button class="modal-close-float" data-emie-action="click:task-correct-close">✕</button>
       <div class="modal modal-lg">
         <div class="modal-header"><div class="modal-header-left">
           <div class="modal-title">📝 修正交付：${escHtml(task.name)}</div>
@@ -837,20 +843,20 @@ async function taskCorrectDelivery(pid, tid) {
           <form id="taskCorrectDeliveryForm">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 本次修正说明</label><textarea class="form-textarea" name="changeSummary" required maxlength="500" placeholder="例如：补充渲染源文件，移除误传的旧版包装图"></textarea></div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required style="min-height:100px;">${escHtml(task.deliverables || '')}</textarea></div>
-            <div class="form-group"><label class="form-label"><span class="required">*</span> 自评分数</label><input type="number" class="form-input" name="selfScore" required min="1" max="100" step="1" value="${task.selfScore || ''}" data-emie-oninput="validateScoreInput(this)" style="max-width:200px;"></div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 自评分数</label><input type="number" class="form-input" name="selfScore" required min="1" max="100" step="1" value="${task.selfScore || ''}" data-emie-action="input:task-score-input" style="max-width:200px;"></div>
           </form>
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label">🖼️ 当前交付参考图（可删除错误文件或补充文件）</div>
-            <div class="upload-area" data-emie-onclick="document.getElementById('correctDeliverImageInput').click()"><div>📁 点击补充图片或模型文件</div><input type="file" id="correctDeliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleDeliverImages(this)"></div>
+            <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="correctDeliverImageInput"><div>📁 点击补充图片或模型文件</div><input type="file" id="correctDeliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-deliver-images"></div>
             <div class="file-list" id="deliverImageList"></div>
           </div>
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label">📎 当前交付附件（可删除错误文件或补充文件）</div>
-            <div class="upload-area" data-emie-onclick="document.getElementById('correctDeliverAttachmentInput').click()"><div>📁 点击补充附件</div><input type="file" id="correctDeliverAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleDeliverAttachments(this)"></div>
+            <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="correctDeliverAttachmentInput"><div>📁 点击补充附件</div><input type="file" id="correctDeliverAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-deliver-attachments"></div>
             <div class="file-list" id="deliverAttachmentList"></div>
           </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskCorrectDeliveryModal')">取消</button><button class="btn btn-warning" data-emie-onclick="submitGuard(this,()=>submitTaskCorrectDelivery(${pid},${tid}))">生成新版本并重新送审</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-correct-close">取消</button><button class="btn btn-warning" data-emie-action="click:task-submit-correct" data-project-id="${pid}" data-task-id="${tid}">生成新版本并重新送审</button></div>
       </div>`;
     document.body.appendChild(modal);
     renderFileList(EMIE.projectState.deliverImages, '交付参考图');
@@ -916,7 +922,7 @@ function taskApprove(pid, tid, projectType) {
             </div>` : ''}
           <div class="form-group"><label class="form-label">验收意见（可选）</label><textarea class="form-textarea" id="approveComments" placeholder="输入验收意见..."></textarea></div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskApproveModal')">取消</button><button class="btn btn-success" data-emie-onclick="submitGuard(this,()=>submitTaskApprove(${pid},${tid},'${projectType}'))">${needsScore ? '确认通过并评分' : '确认通过'}</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-approve-close">取消</button><button class="btn btn-success" data-emie-action="click:task-submit-approve" data-project-id="${pid}" data-task-id="${tid}" data-project-type="${escHtml(projectType)}">${needsScore ? '确认通过并评分' : '确认通过'}</button></div>
       </div>`;
     document.body.appendChild(modal);
   });
@@ -960,10 +966,10 @@ function taskReject(pid, tid) {
       <div class="modal-body">
         <div class="form-group"><label class="form-label"><span class="required">*</span> 修改意见</label><textarea class="form-textarea" id="rejectComments" required placeholder="请详细说明修改意见..." style="min-height:100px;"></textarea></div>
         <div class="form-group"><label class="form-label"><span class="required">*</span> 要求完成时间</label><div class="date-picker" style="max-width:280px;"><input type="date" class="form-input" id="rejectDeadline" required min="${new Date().toISOString().slice(0, 10)}" aria-label="选择要求完成时间" autocomplete="off" style="width:100%;min-height:38px;cursor:pointer;"></div><div class="form-hint">设计师重新交付需在此日期前完成</div></div>
-        <div class="form-group"><label class="form-label">参考图片（选填）</label><div class="upload-area" data-emie-onclick="document.getElementById('rejectImageInput').click()"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="rejectImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleRejectImages(this)"></div><div class="file-list" id="rejectImageList"></div></div>
-        <div class="form-group"><label class="form-label">附件（选填）</label><div class="upload-area" data-emie-onclick="document.getElementById('rejectAttachmentInput').click()"><div>📁 拖拽文件到此处，或点击选择文件</div><input type="file" id="rejectAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-onchange="handleRejectAttachments(this)"></div><div class="file-list" id="rejectAttachmentList"></div></div>
+        <div class="form-group"><label class="form-label">参考图片（选填）</label><div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="rejectImageInput"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="rejectImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-reject-images"></div><div class="file-list" id="rejectImageList"></div></div>
+        <div class="form-group"><label class="form-label">附件（选填）</label><div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="rejectAttachmentInput"><div>📁 拖拽文件到此处，或点击选择文件</div><input type="file" id="rejectAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-reject-attachments"></div><div class="file-list" id="rejectAttachmentList"></div></div>
       </div>
-      <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('taskRejectModal')">取消</button><button class="btn btn-danger" data-emie-onclick="submitGuard(this,()=>submitTaskReject(${pid},${tid}))">确认驳回</button></div>
+      <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-reject-close">取消</button><button class="btn btn-danger" data-emie-action="click:task-submit-reject" data-project-id="${pid}" data-task-id="${tid}">确认驳回</button></div>
     </div>`;
   document.body.appendChild(modal);
   enhanceDateInputs(modal);
@@ -1019,7 +1025,7 @@ function openScoring(pid, tid) {
     modal.id = 'scoringModal';
     modal.innerHTML = `
       <div class="modal">
-        <div class="modal-header"><button class="modal-close" data-emie-onclick="closeM('scoringModal')">✕</button><div class="modal-header-left"><div class="modal-title">⭐ 评分：${escHtml(task.name)}</div></div></div>
+        <div class="modal-header"><button class="modal-close" data-emie-action="click:task-score-close">✕</button><div class="modal-header-left"><div class="modal-title">⭐ 评分：${escHtml(task.name)}</div></div></div>
         <div class="modal-body">
           <p style="margin-bottom:8px;color:var(--gray-500);">评分人：<strong>${escHtml(roleLabel(EMIE.state.currentRole))}</strong>（${escHtml(getCurrentUserName())}）</p>
           <p style="margin-bottom:16px;color:var(--gray-500);">请对 <strong>${escHtml(task.name)}</strong> 进行评分（1-100分）</p>
@@ -1027,7 +1033,7 @@ function openScoring(pid, tid) {
             <div class="form-group"><label class="form-label">⭐ 综合评分</label><input type="number" class="form-input" id="scoreValue" min="1" max="100" step="1" placeholder="1-100" value="${myRecord.score ?? ''}" style="font-size:24px;text-align:center;max-width:200px;margin:0 auto;"></div>
           </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" data-emie-onclick="closeM('scoringModal')">取消</button><button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitScoring(${pid},${tid}))">提交评分</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-score-close">取消</button><button class="btn btn-primary" data-emie-action="click:task-submit-score" data-project-id="${pid}" data-task-id="${tid}">提交评分</button></div>
       </div>`;
     document.body.appendChild(modal);
   });
@@ -1067,6 +1073,7 @@ EMIE.registerActions({
   deleteTask,
   withdrawMarketTask,
   withdrawAcceptedTask,
+  cancelAcceptedTask,
   taskAccept,
   submitTaskAccept,
   taskDeliver,
@@ -1098,6 +1105,7 @@ EMIE.registerModule('projectTasks', {
   deleteTask,
   withdrawMarketTask,
   withdrawAcceptedTask,
+  cancelAcceptedTask,
   handleSubTaskRefImages,
   handleSubTaskAttachments,
   handleEditRefImages,
@@ -1123,3 +1131,56 @@ EMIE.registerModule('projectTasks', {
   toggleSubTaskMarketMode,
   validateScoreInput,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('task-add-close', () => closeM('addSubTaskModal'));
+  registerEventAction('task-clear-field-error', (_event, element) => {
+    element.closest('.form-group')?.querySelector('.field-error')?.remove();
+    element.style.borderColor = '';
+  });
+  registerEventAction('task-add-assignee', (_event, element) =>
+    switchAssigneeType('add', element.dataset.assigneeRole, element));
+  registerEventAction('task-assignment-mode', (_event, element) =>
+    toggleSubTaskMarketMode(element.dataset.marketMode === 'true'));
+  registerEventAction('task-open-file-input', (_event, element) =>
+    document.getElementById(element.dataset.inputId)?.click());
+  registerEventAction('task-subtask-ref-images', (_event, element) => handleSubTaskRefImages(element));
+  registerEventAction('task-subtask-attachments', (_event, element) => handleSubTaskAttachments(element));
+  registerEventAction('task-save-draft', (_event, element) => saveSubTaskDraft(element.dataset.projectId));
+  registerEventAction('task-submit-add', (_event, element) =>
+    submitGuard(element, () => submitAddSubTask(element.dataset.projectId)));
+  registerEventAction('task-edit-close', () => closeM('editTaskModal'));
+  registerEventAction('task-edit-assignee', (_event, element) =>
+    switchEditAssigneeType(element.dataset.assigneeRole, element));
+  registerEventAction('task-edit-ref-images', (_event, element) => handleEditRefImages(element));
+  registerEventAction('task-edit-attachments', (_event, element) => handleEditAttachments(element));
+  registerEventAction('task-submit-edit', (_event, element) =>
+    submitGuard(element, () => submitEditTask(element.dataset.projectId, element.dataset.taskId)));
+  registerEventAction('task-accept-close', () => closeM('taskAcceptModal'));
+  registerEventAction('task-submit-accept', (_event, element) =>
+    submitGuard(element, () => submitTaskAccept(element.dataset.projectId, element.dataset.taskId)));
+  registerEventAction('task-deliver-close', () => closeM('taskDeliverModal'));
+  registerEventAction('task-score-input', (_event, element) => validateScoreInput(element));
+  registerEventAction('task-deliver-images', (_event, element) => handleDeliverImages(element));
+  registerEventAction('task-deliver-attachments', (_event, element) => handleDeliverAttachments(element));
+  registerEventAction('task-submit-deliver', (_event, element) =>
+    submitGuard(element, () => submitTaskDeliver(element.dataset.projectId, element.dataset.taskId)));
+  registerEventAction('task-redeliver-close', () => closeM('taskRedeliverModal'));
+  registerEventAction('task-submit-redeliver', (_event, element) =>
+    submitGuard(element, () => submitTaskRedeliver(element.dataset.projectId, element.dataset.taskId)));
+  registerEventAction('task-correct-close', () => closeM('taskCorrectDeliveryModal'));
+  registerEventAction('task-submit-correct', (_event, element) =>
+    submitGuard(element, () => submitTaskCorrectDelivery(element.dataset.projectId, element.dataset.taskId)));
+  registerEventAction('task-approve-close', () => closeM('taskApproveModal'));
+  registerEventAction('task-submit-approve', (_event, element) =>
+    submitGuard(element, () => submitTaskApprove(element.dataset.projectId, element.dataset.taskId, element.dataset.projectType)));
+  registerEventAction('task-reject-close', () => closeM('taskRejectModal'));
+  registerEventAction('task-reject-images', (_event, element) => handleRejectImages(element));
+  registerEventAction('task-reject-attachments', (_event, element) => handleRejectAttachments(element));
+  registerEventAction('task-submit-reject', (_event, element) =>
+    submitGuard(element, () => submitTaskReject(element.dataset.projectId, element.dataset.taskId)));
+  registerEventAction('task-score-close', () => closeM('scoringModal'));
+  registerEventAction('task-submit-score', (_event, element) =>
+    submitGuard(element, () => submitScoring(element.dataset.projectId, element.dataset.taskId)));
+}

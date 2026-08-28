@@ -103,7 +103,7 @@ class ProjectServiceTaskMarketTest {
         when(tasks.findByIdForUpdate(2L)).thenReturn(Optional.of(task));
         when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        ProjectService service = new ProjectService(projects, tasks, mock(ScoringRepository.class),
+        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(projects, tasks, mock(ScoringRepository.class),
                 mock(SubTaskDeliveryVersionRepository.class), mock(UserService.class), mock(ProductCategoryRepository.class),
                 mock(IpOptionRepository.class), mock(SystemConfigRepository.class), mock(SyncQueueService.class),
                 mock(FileArchiveService.class), mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
@@ -141,7 +141,7 @@ class ProjectServiceTaskMarketTest {
         when(tasks.findByIdForUpdate(2L)).thenReturn(Optional.of(task));
         when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        ProjectService service = new ProjectService(projects, tasks, mock(ScoringRepository.class),
+        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(projects, tasks, mock(ScoringRepository.class),
                 mock(SubTaskDeliveryVersionRepository.class), mock(UserService.class), mock(ProductCategoryRepository.class),
                 mock(IpOptionRepository.class), mock(SystemConfigRepository.class), mock(SyncQueueService.class),
                 mock(FileArchiveService.class), mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
@@ -177,14 +177,14 @@ class ProjectServiceTaskMarketTest {
         when(projects.saveAndFlush(project)).thenReturn(project);
         when(users.getUserName("designer-1")).thenReturn("张设计");
         SystemConfigRepository configs = mock(SystemConfigRepository.class);
-        ProjectService service = new ProjectService(projects, tasks, mock(ScoringRepository.class),
+        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(projects, tasks, mock(ScoringRepository.class),
                 mock(SubTaskDeliveryVersionRepository.class), users, mock(ProductCategoryRepository.class),
                 mock(IpOptionRepository.class), configs, mock(SyncQueueService.class),
                 files, mock(ProjectAccessService.class), notifications);
         return new Fixture(service, task, tasks, configs);
     }
 
-    private record Fixture(ProjectService service, SubTask task, SubTaskRepository tasks,
+    private record Fixture(DefaultSubTaskCommandService service, SubTask task, SubTaskRepository tasks,
                            SystemConfigRepository configs) {}
 
     @Test
@@ -212,7 +212,7 @@ class ProjectServiceTaskMarketTest {
         PointAppeal a1 = new PointAppeal(); a1.setId(300L);
         when(appeals.findByPointLedgerIdIn(List.of(200L))).thenReturn(List.of(a1));
 
-        ProjectService service = new ProjectService(projects, tasks, scoring, versions,
+        DefaultProjectLifecycleCommandService service = new DefaultProjectLifecycleCommandService(projects, tasks, scoring, versions,
                 mock(UserService.class), mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
                 mock(SystemConfigRepository.class), mock(SyncQueueService.class), mock(FileArchiveService.class),
                 mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
@@ -310,7 +310,7 @@ class ProjectServiceTaskMarketTest {
         when(scoring.findBySubTaskId(2L)).thenReturn(List.of());
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        ProjectService service = new ProjectService(projects, tasks, scoring, versions,
+        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(projects, tasks, scoring, versions,
                 mock(UserService.class), mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
                 mock(SystemConfigRepository.class), mock(SyncQueueService.class), mock(FileArchiveService.class),
                 mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
@@ -342,7 +342,7 @@ class ProjectServiceTaskMarketTest {
         when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(tasks.findByIdForUpdate(2L)).thenReturn(Optional.of(task));
 
-        ProjectService service = new ProjectService(projects, tasks, scoring, versions,
+        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(projects, tasks, scoring, versions,
                 mock(UserService.class), mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
                 mock(SystemConfigRepository.class), mock(SyncQueueService.class), mock(FileArchiveService.class),
                 mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
@@ -372,7 +372,7 @@ class ProjectServiceTaskMarketTest {
         when(scoring.findBySubTaskId(2L)).thenReturn(List.of());
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        ProjectService service = new ProjectService(projects, tasks, scoring, versions,
+        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(projects, tasks, scoring, versions,
                 mock(UserService.class), mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
                 mock(SystemConfigRepository.class), mock(SyncQueueService.class), mock(FileArchiveService.class),
                 mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
@@ -401,7 +401,7 @@ class ProjectServiceTaskMarketTest {
         when(scoring.findBySubTaskId(2L)).thenReturn(List.of());
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        ProjectService service = new ProjectService(projects, tasks, scoring, versions,
+        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(projects, tasks, scoring, versions,
                 mock(UserService.class), mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
                 mock(SystemConfigRepository.class), mock(SyncQueueService.class), mock(FileArchiveService.class),
                 mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
@@ -435,7 +435,7 @@ class ProjectServiceTaskMarketTest {
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         // 未注入退单/调账仓库：空集合守卫兜底，不 NPE 且其余清理照常执行
-        ProjectService service = new ProjectService(projects, tasks, scoring, versions,
+        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(projects, tasks, scoring, versions,
                 mock(UserService.class), mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
                 mock(SystemConfigRepository.class), mock(SyncQueueService.class), mock(FileArchiveService.class),
                 mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));

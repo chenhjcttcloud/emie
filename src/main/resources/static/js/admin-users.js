@@ -43,6 +43,7 @@ async function renderAdminUsers(container, page = 0, filters = {}) {
     Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); });
     pageResult = await apiGet('/admin/users/page?' + params);
     users = pageResult.items || [];
+    EMIE.state.adminUsers = users;
     EMIE.adminUserPage = { ...pageResult, container, page, filters };
     [roles] = await Promise.all([
       apiGet('/admin/roles'),
@@ -56,18 +57,18 @@ async function renderAdminUsers(container, page = 0, filters = {}) {
       <div class="config-card-header">
         <h3>👥 用户管理 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">共 ${EMIE.adminUserPage?.total ?? users.length} 人</span></h3>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-sm btn-outline" data-emie-onclick="refreshUserList()">🔄 刷新</button>
+          <button class="btn btn-sm btn-outline" data-emie-action="click:users-refresh">🔄 刷新</button>
         </div>
       </div>
       <div class="config-card-body">
         <div class="admin-user-filters">
-          <input type="text" id="userSearchInput" placeholder="🔍 搜索用户ID/姓名..." data-emie-oninput="filterAdminUsers()" style="flex:1;max-width:300px;">
-          <select id="userRoleFilter" data-emie-onchange="filterAdminUsers()">
+          <input type="text" id="userSearchInput" placeholder="🔍 搜索用户ID/姓名..." data-emie-action="input:users-filter" style="flex:1;max-width:300px;">
+          <select id="userRoleFilter" data-emie-action="change:users-filter">
             <option value="">全部角色</option>
             <option value="pending">待分配</option>
             ${assignableRoles.map(r => `<option value="${escHtml(r.name)}">${escHtml(r.displayName || r.name)}</option>`).join('')}
           </select>
-          <select id="userStatusFilter" data-emie-onchange="filterAdminUsers()">
+          <select id="userStatusFilter" data-emie-action="change:users-filter">
             <option value="">全部状态</option>
             <option value="pending">待分配</option>
             <option value="active">启用</option>
@@ -101,13 +102,13 @@ async function renderAdminUsers(container, page = 0, filters = {}) {
                   <td>${escHtml(u.email || '-')}</td>
                   <td>
                     <div class="admin-user-actions">
-                      <button class="btn-edit-user" data-emie-onclick="openEditUserModal({id:${u.id},userId:'${escHtml(escJsString(u.userId))}',name:'${escHtml(escJsString(u.name || ''))}',phone:'${escHtml(escJsString(u.phone || ''))}',email:'${escHtml(escJsString(u.email || ''))}',role:'${escHtml(escJsString(u.role || ''))}',status:'${escHtml(escJsString(u.status || 'active'))}'})">✏️ 编辑</button>
-                      <button class="btn-edit-role" data-emie-onclick="openChangeRoleModal(${u.id}, '${escHtml(escJsString(u.role || ''))}', '${escHtml(escJsString(u.name || ''))}')">${u.status === 'pending' ? '✅ 分配角色' : '🔄 角色'}</button>
-                      ${u.status === 'pending' ? '' : `<button class="btn-reset-pwd" data-emie-onclick="openResetPwdModal(${u.id}, '${escHtml(escJsString(u.name || ''))}')">🔑 密码</button>`}
+                      <button class="btn-edit-user" data-emie-action="click:users-edit" data-user-id="${u.id}">✏️ 编辑</button>
+                      <button class="btn-edit-role" data-emie-action="click:users-change-role" data-user-id="${u.id}" data-user-role="${escHtml(escJsString(u.role || ''))}" data-user-name="${escHtml(escJsString(u.name || ''))}">${u.status === 'pending' ? '✅ 分配角色' : '🔄 角色'}</button>
+                      ${u.status === 'pending' ? '' : `<button class="btn-reset-pwd" data-emie-action="click:users-reset-password" data-user-id="${u.id}" data-user-name="${escHtml(escJsString(u.name || ''))}">🔑 密码</button>`}
                       ${u.userId !== EMIE.state.authUser.userId
-                        ? `<button class="btn-status" data-emie-onclick="toggleUserStatus(${u.id}, '${escHtml(escJsString(u.name || ''))}', '${escHtml(escJsString(u.status || 'active'))}')">${(u.status === 'disabled') ? '✅ 启用' : '⛔ 停用'}</button>`
+                        ? `<button class="btn-status" data-emie-action="click:users-toggle-status" data-user-id="${u.id}" data-user-name="${escHtml(escJsString(u.name || ''))}" data-user-status="${escHtml(escJsString(u.status || 'active'))}">${(u.status === 'disabled') ? '✅ 启用' : '⛔ 停用'}</button>`
                         : ''}
-                      ${u.userId !== EMIE.state.authUser.userId ? `<button class="btn-delete" data-emie-onclick="confirmDeleteUser(${u.id}, '${escHtml(escJsString(u.name || ''))}')">🗑️ 删除</button>` : ''}
+                      ${u.userId !== EMIE.state.authUser.userId ? `<button class="btn-delete" data-emie-action="click:users-delete" data-user-id="${u.id}" data-user-name="${escHtml(escJsString(u.name || ''))}">🗑️ 删除</button>` : ''}
                     </div>
                   </td>
                 </tr>
@@ -116,7 +117,7 @@ async function renderAdminUsers(container, page = 0, filters = {}) {
           </table>
         </div>
           ${users.length === 0 ? '<div class="empty"><div class="empty-icon">📭</div><p>暂无用户数据</p></div>' : ''}
-          ${pageResult.totalPages > 1 ? `<div class="project-pagination"><span>显示第 ${pageResult.page + 1} / ${pageResult.totalPages} 页，共 ${pageResult.total} 人</span><div><button class="btn btn-outline btn-sm" ${page <= 0 ? 'disabled' : ''} data-emie-onclick="changeAdminUserPage(${page - 1})">上一页</button><button class="btn btn-outline btn-sm" ${page >= pageResult.totalPages - 1 ? 'disabled' : ''} data-emie-onclick="changeAdminUserPage(${page + 1})">下一页</button></div></div>` : ''}
+          ${pageResult.totalPages > 1 ? `<div class="project-pagination"><span>显示第 ${pageResult.page + 1} / ${pageResult.totalPages} 页，共 ${pageResult.total} 人</span><div><button class="btn btn-outline btn-sm" ${page <= 0 ? 'disabled' : ''} data-emie-action="click:users-page" data-page="${page - 1}">上一页</button><button class="btn btn-outline btn-sm" ${page >= pageResult.totalPages - 1 ? 'disabled' : ''} data-emie-action="click:users-page" data-page="${page + 1}">下一页</button></div></div>` : ''}
       </div>
     </div>`;
 }
@@ -149,7 +150,7 @@ function openEditUserModal(userData) {
   modal.id = 'editUserModal';
   modal.innerHTML = `
     <div class="modal modal-lg">
-      <div class="modal-header"><button class="modal-close" data-emie-onclick="closeM('editUserModal')">✕</button><div class="modal-header-left"><div class="modal-title">✏️ 编辑用户：${escHtml(userData.name || userData.userId)}</div></div></div>
+      <div class="modal-header"><button class="modal-close" data-emie-action="click:users-close-edit">✕</button><div class="modal-header-left"><div class="modal-title">✏️ 编辑用户：${escHtml(userData.name || userData.userId)}</div></div></div>
       <div class="modal-body">
         <div id="editUserError" style="color:var(--danger);font-size:13px;display:none;margin-bottom:12px;text-align:center;padding:8px;background:var(--danger-light);border-radius:6px;"></div>
         <div class="form-row">
@@ -191,8 +192,8 @@ function openEditUserModal(userData) {
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" data-emie-onclick="closeM('editUserModal')">取消</button>
-        <button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitEditUser(${userData.id}))">💾 保存修改</button>
+        <button class="btn btn-outline" data-emie-action="click:users-close-edit">取消</button>
+        <button class="btn btn-primary" data-emie-action="click:users-submit-edit" data-user-id="${userData.id}">💾 保存修改</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -237,7 +238,7 @@ async function submitEditUser(userId) {
 // ===== Admin: 停用/启用账号 =====
 async function toggleUserStatus(userId, userName, currentStatus) {
   const action = currentStatus === 'pending' ? '拒绝' : (currentStatus === 'disabled' ? '启用' : '停用');
-  if (!confirm(`⚠️ 确定要${action}用户「${userName}」吗？\n${action === '停用' ? '停用后该用户将无法登录系统。' : '启用后该用户可以正常登录。'}`)) return;
+  if (!await EMIE.actions.showSystemConfirm(`⚠️ 确定要${action}用户「${userName}」吗？\n${action === '停用' ? '停用后该用户将无法登录系统。' : '启用后该用户可以正常登录。'}`)) return;
 
   try {
     const result = await apiPut(`/admin/users/${userId}/toggle-status`, {});
@@ -266,7 +267,7 @@ async function openChangeRoleModal(userId, existingRole, userName) {
   modal.id = 'changeRoleModal';
   modal.innerHTML = `
     <div class="modal" style="max-width:400px;">
-      <div class="modal-header"><button class="modal-close" data-emie-onclick="closeM('changeRoleModal')">✕</button><div class="modal-header-left"><div class="modal-title">${needsAssignment ? '✅ 分配角色' : '✏️ 修改角色'}：${escHtml(userName)}</div></div></div>
+      <div class="modal-header"><button class="modal-close" data-emie-action="click:users-close-role">✕</button><div class="modal-header-left"><div class="modal-title">${needsAssignment ? '✅ 分配角色' : '✏️ 修改角色'}：${escHtml(userName)}</div></div></div>
       <div class="modal-body">
         <div class="form-group">
           <label class="form-label">当前角色</label>
@@ -283,8 +284,8 @@ async function openChangeRoleModal(userId, existingRole, userName) {
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" data-emie-onclick="closeM('changeRoleModal')">取消</button>
-        <button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitChangeRole(${userId}))">确认修改</button>
+        <button class="btn btn-outline" data-emie-action="click:users-close-role">取消</button>
+        <button class="btn btn-primary" data-emie-action="click:users-submit-role" data-user-id="${userId}">确认修改</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -315,7 +316,7 @@ function openResetPwdModal(userId, userName) {
   modal.id = 'resetPwdModal';
   modal.innerHTML = `
     <div class="modal" style="max-width:400px;">
-      <div class="modal-header"><button class="modal-close" data-emie-onclick="closeM('resetPwdModal')">✕</button><div class="modal-header-left"><div class="modal-title">🔑 重置密码：${escHtml(userName)}</div></div></div>
+      <div class="modal-header"><button class="modal-close" data-emie-action="click:users-close-pwd">✕</button><div class="modal-header-left"><div class="modal-title">🔑 重置密码：${escHtml(userName)}</div></div></div>
       <div class="modal-body">
         <div class="form-group">
           <label class="form-label">新密码</label>
@@ -328,8 +329,8 @@ function openResetPwdModal(userId, userName) {
         <div id="pwdError" style="color:var(--danger);font-size:13px;display:none;text-align:center;"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" data-emie-onclick="closeM('resetPwdModal')">取消</button>
-        <button class="btn btn-warning" data-emie-onclick="submitGuard(this,()=>submitResetPwd(${userId}))">确认重置</button>
+        <button class="btn btn-outline" data-emie-action="click:users-close-pwd">取消</button>
+        <button class="btn btn-warning" data-emie-action="click:users-submit-pwd" data-user-id="${userId}">确认重置</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -359,8 +360,8 @@ async function submitResetPwd(userId) {
   }
 }
 
-function confirmDeleteUser(userId, userName) {
-  if (!confirm(`⚠️ 确定要删除用户「${userName}」吗？\n此操作不可恢复！`)) return;
+async function confirmDeleteUser(userId, userName) {
+  if (!await EMIE.actions.showSystemConfirm(`⚠️ 确定要删除用户「${userName}」吗？\n此操作不可恢复！`)) return;
   submitDeleteUser(userId);
 }
 
@@ -409,6 +410,24 @@ EMIE.registerActions({
   submitDeleteUser,
   showAdminToast,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('users-refresh', () => refreshUserList());
+  registerEventAction('users-filter', () => filterAdminUsers());
+  registerEventAction('users-edit', (_event, el) => openEditUserModal(EMIE.state.adminUsers?.find?.(u => Number(u.id) === Number(el.dataset.userId))));
+  registerEventAction('users-change-role', (_event, el) => openChangeRoleModal(Number(el.dataset.userId), el.dataset.userRole || '', el.dataset.userName || ''));
+  registerEventAction('users-reset-password', (_event, el) => openResetPwdModal(Number(el.dataset.userId), el.dataset.userName || ''));
+  registerEventAction('users-toggle-status', (_event, el) => toggleUserStatus(Number(el.dataset.userId), el.dataset.userName || '', el.dataset.userStatus || 'active'));
+  registerEventAction('users-delete', (_event, el) => confirmDeleteUser(Number(el.dataset.userId), el.dataset.userName || ''));
+  registerEventAction('users-page', (_event, el) => changeAdminUserPage(Number(el.dataset.page)));
+  registerEventAction('users-close-edit', () => closeM('editUserModal'));
+  registerEventAction('users-close-role', () => closeM('changeRoleModal'));
+  registerEventAction('users-close-pwd', () => closeM('resetPwdModal'));
+  registerEventAction('users-submit-edit', (_event, el) => submitGuard(el, () => submitEditUser(Number(el.dataset.userId))));
+  registerEventAction('users-submit-role', (_event, el) => submitGuard(el, () => submitChangeRole(Number(el.dataset.userId))));
+  registerEventAction('users-submit-pwd', (_event, el) => submitGuard(el, () => submitResetPwd(Number(el.dataset.userId))));
+}
 
 EMIE.registerModule('adminUsers', {
   renderAdminUsers,

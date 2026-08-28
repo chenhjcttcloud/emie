@@ -118,7 +118,7 @@ set +a
 
 ## 分支与发布
 
-当前业务分支为 `project_manager_system`。固定推送规则如下：Gitee 远端 `emie` 推送到 `master`，GitHub 远端 `github` 推送到 `main`；生产发布前使用 `project_manager_system` 完成构建和验证。
+当前本地生产构建分支为 `master`。固定推送规则如下：Gitee 远端 `emie` 推送到 `master`，GitHub 远端 `github` 推送到 `main`；生产发布前使用本地 `master` 完成构建和验证。
 
 任何提交、推送、数据库迁移或生产部署操作都必须遵循 [RTK.md](RTK.md) 和 [发布操作手册](docs/release-runbook.md)。
 

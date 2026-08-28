@@ -56,7 +56,7 @@ async function renderAdminFileStorage(container) {
         </div>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:16px;">
-        <button class="btn btn-primary" data-emie-onclick="manualArchive()">📤 立即归档</button>
+        <button class="btn btn-primary" data-emie-action="click:storage-archive">📤 立即归档</button>
       </div>
       <div class="card">
         <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--gray-200);">
@@ -79,7 +79,7 @@ async function renderAdminFileStorage(container) {
                   '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);">' + fmt(f.fileSize) + '</td>' +
                   '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);">' + fmt(f.archiveSize) + '</td>' +
                   '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);font-size:12px;">' + (f.archivedAt ? f.archivedAt.substring(0,16) : '-') + '</td>' +
-                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);"><button class="btn btn-outline btn-sm" data-emie-onclick="restoreArchivedFile(' + f.id + ')">恢复本地</button></td>' +
+                  '<td style="padding:8px 12px;border-bottom:1px solid var(--gray-100);"><button class="btn btn-outline btn-sm" data-emie-action="click:storage-restore" data-file-id="' + f.id + '">恢复本地</button></td>' +
                 '</tr>').join('')}
             </tbody>
           </table>
@@ -91,7 +91,7 @@ async function renderAdminFileStorage(container) {
 }
 
 async function manualArchive() {
-  if (!confirm('确定要手动归档过期文件吗？超过 90 天的文件将被压缩并推送到 NAS。')) return;
+  if (!await EMIE.actions.showSystemConfirm('确定要手动归档过期文件吗？超过 90 天的文件将被压缩并推送到 NAS。')) return;
   try {
     const r = await apiPost('/admin/files/archive', {});
     showAdminToast('✅ 归档完成: 成功 ' + (r.success || 0) + ' 个, 失败 ' + (r.fail || 0) + ' 个', r.fail > 0 ? 'warning' : 'success');
@@ -102,7 +102,7 @@ async function manualArchive() {
 }
 
 async function restoreArchivedFile(fileId) {
-  if (!confirm('确定要从 NAS 恢复此文件到本地吗？')) return;
+  if (!await EMIE.actions.showSystemConfirm('确定要从 NAS 恢复此文件到本地吗？')) return;
   try {
     await apiPost('/admin/files/restore/' + fileId, {});
     showAdminToast('✅ 文件已恢复', 'success');
@@ -119,6 +119,13 @@ EMIE.registerActions({
   manualArchive,
   restoreArchivedFile,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('storage-archive', () => manualArchive());
+  registerEventAction('storage-restore', (_event, element) =>
+    restoreArchivedFile(Number(element.dataset.fileId)));
+}
 
 EMIE.registerModule('adminStorage', {
   renderAdminFileStorage,

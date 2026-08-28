@@ -43,12 +43,12 @@ async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.
   main.innerHTML = `
     <h2 style="font-size:22px;margin-bottom:20px;">${taskEmoji} ${pageTitle} <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${myTasks.length})</span></h2>
     <div class="filter-bar">
-      ${!marketView && bucket !== 'completed' ? `<select class="form-select" data-emie-onchange="filterDesignerTasks()" style="min-width:120px;" id="designerTaskFilter" aria-label="任务归属">
+      ${!marketView && bucket !== 'completed' ? `<select class="form-select" data-emie-action="change:designer-filter" style="min-width:120px;" id="designerTaskFilter" aria-label="任务归属">
         <option value="all">全部任务</option>
         <option value="unassigned">待认领</option>
         <option value="mine">我的任务</option>
       </select>` : ''}
-      ${bucket === 'all' ? `<select class="form-select" data-emie-onchange="filterDesignerTasks()" style="min-width:120px;" id="designerTaskStatusFilter">
+      ${bucket === 'all' ? `<select class="form-select" data-emie-action="change:designer-filter" style="min-width:120px;" id="designerTaskStatusFilter">
         <option value="all">全部状态</option>
         <option value="pending">待接单</option>
         <option value="accepted">进行中</option>
@@ -60,16 +60,16 @@ async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.
         <option value="completed">已完成</option>
         <option value="approved">已通过</option>
       </select>` : ''}
-      <select class="form-select" data-emie-onchange="filterDesignerTasks()" style="min-width:120px;" id="designerTaskTypeFilter">
+      <select class="form-select" data-emie-action="change:designer-filter" style="min-width:120px;" id="designerTaskTypeFilter">
         <option value="all">全部项目类型</option>
         <option value="channel_custom">渠道定制单</option>
         <option value="regular">公司常规品</option>
       </select>
-      <input class="form-input" placeholder="🔍 搜索任务名/项目号..." data-emie-oninput="filterDesignerTasks()" style="min-width:180px;" id="designerTaskSearch">
-      <input type="date" class="form-input" id="designerTaskDateStart" data-emie-onchange="filterDesignerTasks()" style="min-width:130px;" title="计划完成日期起">
+      <input class="form-input" placeholder="🔍 搜索任务名/项目号..." data-emie-action="input:designer-filter" style="min-width:180px;" id="designerTaskSearch">
+      <input type="date" class="form-input" id="designerTaskDateStart" data-emie-action="change:designer-filter" style="min-width:130px;" title="计划完成日期起">
       <span style="color:var(--gray-400);font-size:13px;">~</span>
-      <input type="date" class="form-input" id="designerTaskDateEnd" data-emie-onchange="filterDesignerTasks()" style="min-width:130px;" title="计划完成日期止">
-      <button class="btn btn-outline btn-sm" data-emie-onclick="resetDesignerTaskFilters()">↺ 重置</button>
+      <input type="date" class="form-input" id="designerTaskDateEnd" data-emie-action="change:designer-filter" style="min-width:130px;" title="计划完成日期止">
+      <button class="btn btn-outline btn-sm" data-emie-action="click:designer-reset">↺ 重置</button>
     </div>
     <div id="designerTaskContainer">${renderDesignerTaskCards(myTasks, readOnly)}</div>
   `;
@@ -163,14 +163,14 @@ function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
           ${t.scoringRecords ? renderScoringMini(t) : ''}
           ${deliveryVersions.length ? `<div style="margin-top:12px;"><div style="font-size:13px;font-weight:700;margin-bottom:6px;">交付版本 <span style="color:var(--gray-400);font-weight:400;">(${deliveryVersions.length})</span></div>${deliveryVersions.map(version => { const rejection = rejectionRecords.find(record => Number(record.attemptNo) === Number(version.versionNo)); return `<details style="border:1px solid var(--gray-200);border-radius:8px;margin-bottom:5px;overflow:hidden;background:var(--gray-50);"><summary style="display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;list-style:none;font-size:12px;"><strong>V${version.versionNo}</strong><span class="badge ${version.submissionType === 'redelivery' ? 'badge-rejected' : version.submissionType === 'correction' ? 'badge-pending' : 'badge-completed'}">${version.submissionType === 'redelivery' ? '驳回后重交' : version.submissionType === 'correction' ? '主动修正' : '首次交付'}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray-600);">${escHtml(version.changeSummary || '')}</span><span style="color:var(--gray-400);white-space:nowrap;">${version.submittedAt ? fmtDT(version.submittedAt) : ''}</span><span style="color:var(--gray-400);">⌄</span></summary><div style="padding:10px 12px;border-top:1px solid var(--gray-200);background:#fff;"><div style="font-size:12px;color:var(--gray-700);white-space:pre-wrap;">${escHtml(version.deliverables || '未填写文字交付内容')}</div>${rejection ? `<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#FFF8F8;color:#A32D2D;font-size:12px;"><strong>驳回意见：</strong>${escHtml(rejection.reason || '未填写驳回意见')}</div>` : ''}${taskDetailFiles(version.referenceImagesJson, true)}${taskDetailFiles(version.attachmentsJson, false)}</div></details>`; }).join('')}</div>` : ''}
           <div class="subtask-actions">
-            ${!readOnly && t.status === 'pending' && !t._unassigned ? `<button class="btn btn-primary btn-sm" data-emie-onclick="taskAccept(${t.projectId},${t.id})">✅ 接单</button>` : ''}
-            ${!readOnly && t._unassigned ? `<button class="btn btn-success btn-sm" data-emie-onclick='taskAccept(${t.projectId},${t.id},${JSON.stringify(t).replace(/'/g, '&#39;')})'>⚡ 抢单</button>` : ''}
-            ${!readOnly && t.status === 'accepted' && t.designerId === getCurrentUserId() ? `<button class="btn btn-warning btn-sm" data-emie-onclick="withdrawAcceptedTask(${t.projectId},${t.id})">↩️ 退单</button><button class="btn btn-primary btn-sm" data-emie-onclick="taskDeliver(${t.projectId},${t.id})">📤 交付成果</button>` : ''}
-            ${!readOnly && t.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-onclick="taskConfirmRevision(${t.projectId},${t.id})">🛠️ 确认修改</button>` : ''}
-            ${!readOnly && ['delivered', 'planner_approved', 'sales_approved', 'admin_approved'].includes(t.status) && t.designerId === getCurrentUserId() ? `<button class="btn btn-outline btn-sm" data-emie-onclick="taskCorrectDelivery(${t.projectId},${t.id})">📝 修正交付</button>` : ''}
-            ${!readOnly && needScore ? `<button class="btn btn-warning btn-sm" data-emie-onclick="openScoring(${t.projectId},${t.id})">⭐ 评分</button>` : ''}
-            <button class="btn btn-outline btn-sm" data-emie-onclick="openPublishedSubTaskDetail(${t.id})">查看子任务详情${modificationCount ? `（${modificationCount}）` : ''}</button>
-            <button class="btn btn-outline btn-sm" data-emie-onclick="openProjectDetail(${t.projectId})">查看项目</button>
+            ${!readOnly && t.status === 'pending' && !t._unassigned ? `<button class="btn btn-primary btn-sm" data-emie-action="click:designer-accept" data-project-id="${t.projectId}" data-task-id="${t.id}">✅ 接单</button>` : ''}
+            ${!readOnly && t._unassigned ? `<button class="btn btn-success btn-sm" data-emie-action="click:designer-accept-market" data-project-id="${t.projectId}" data-task-id="${t.id}" data-task-snapshot="${escHtml(JSON.stringify(t))}">⚡ 抢单</button>` : ''}
+            ${!readOnly && t.status === 'accepted' && t.designerId === getCurrentUserId() ? `<button class="btn btn-warning btn-sm" data-emie-action="click:designer-withdraw" data-project-id="${t.projectId}" data-task-id="${t.id}">↩️ 退单</button><button class="btn btn-primary btn-sm" data-emie-action="click:designer-deliver" data-project-id="${t.projectId}" data-task-id="${t.id}">📤 交付成果</button>` : ''}
+            ${!readOnly && t.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-action="click:designer-revision" data-project-id="${t.projectId}" data-task-id="${t.id}">🛠️ 确认修改</button>` : ''}
+            ${!readOnly && ['delivered', 'planner_approved', 'sales_approved', 'admin_approved'].includes(t.status) && t.designerId === getCurrentUserId() ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-correct" data-project-id="${t.projectId}" data-task-id="${t.id}">📝 修正交付</button>` : ''}
+            ${!readOnly && needScore ? `<button class="btn btn-warning btn-sm" data-emie-action="click:designer-score" data-project-id="${t.projectId}" data-task-id="${t.id}">⭐ 评分</button>` : ''}
+            <button class="btn btn-outline btn-sm" data-emie-action="click:designer-detail" data-task-id="${t.id}">查看子任务详情${modificationCount ? `（${modificationCount}）` : ''}</button>
+            <button class="btn btn-outline btn-sm" data-emie-action="click:designer-detail-project" data-project-id="${t.projectId}">查看项目</button>
           </div>
         </div>`;
       }).join('')}
@@ -196,7 +196,7 @@ function openPublishedSubTaskDetail(taskId) {
   modal.innerHTML = `
     <div class="modal" style="max-width:760px;">
       <div class="modal-header">
-        <button class="modal-close" data-emie-onclick="closeM('publishedSubTaskDetailModal')">✕</button>
+        <button class="modal-close" data-emie-action="click:designer-detail-close">✕</button>
         <div class="modal-header-left">
           <div class="modal-title">子任务详情 · ${escHtml(task.name || '-')}</div>
           <div style="font-size:12px;color:var(--gray-400);margin-top:3px;">所属项目：${escHtml(task.projectName || '未命名项目')} · #${task.id}</div>
@@ -253,11 +253,11 @@ function openPublishedSubTaskDetail(taskId) {
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" data-emie-onclick="openProjectDetail(${task.projectId})">查看所属项目</button>
-        ${EMIE.state.currentRole === 'designer' && task.status === 'pending' ? `<button class="btn btn-primary" data-emie-onclick="taskAccept(${task.projectId},${task.id})">✅ 接单</button>` : ''}
-        ${EMIE.state.currentRole === 'planner' && task.status === 'delivered' ? `<button class="btn btn-primary" data-emie-onclick="submitTaskReview(${task.projectId},${task.id})">📤 送审</button>` : ''}
-        ${EMIE.state.currentRole === 'planner' && task.status === 'submitted_for_review' ? `<button class="btn btn-success" data-emie-onclick="taskApprove(${task.projectId},${task.id},'${task.projectType || 'regular'}')">✅ 通过并评分</button>` : ''}
-        <button class="btn btn-primary" data-emie-onclick="closeM('publishedSubTaskDetailModal')">关闭</button>
+        <button class="btn btn-outline" data-emie-action="click:designer-detail-project" data-project-id="${task.projectId}">查看所属项目</button>
+        ${EMIE.state.currentRole === 'designer' && task.status === 'pending' ? `<button class="btn btn-primary" data-emie-action="click:designer-accept" data-project-id="${task.projectId}" data-task-id="${task.id}">✅ 接单</button>` : ''}
+        ${EMIE.state.currentRole === 'planner' && task.status === 'delivered' ? `<button class="btn btn-primary" data-emie-action="click:designer-review" data-project-id="${task.projectId}" data-task-id="${task.id}">📤 送审</button>` : ''}
+        ${EMIE.state.currentRole === 'planner' && task.status === 'submitted_for_review' ? `<button class="btn btn-success" data-emie-action="click:designer-approve" data-project-id="${task.projectId}" data-task-id="${task.id}" data-project-type="${escHtml(task.projectType || 'regular')}">✅ 通过并评分</button>` : ''}
+        <button class="btn btn-primary" data-emie-action="click:designer-detail-close">关闭</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -318,3 +318,26 @@ EMIE.registerModule('dashboardDesigner', {
   openPublishedSubTaskDetail,
   renderScoringMini,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('designer-filter', () => filterDesignerTasks());
+  registerEventAction('designer-reset', () => resetDesignerTaskFilters());
+  registerEventAction('designer-accept', (_event, el) => taskAccept(Number(el.dataset.projectId), Number(el.dataset.taskId)));
+  registerEventAction('designer-withdraw', (_event, el) => withdrawAcceptedTask(Number(el.dataset.projectId), Number(el.dataset.taskId)));
+  registerEventAction('designer-deliver', (_event, el) => taskDeliver(Number(el.dataset.projectId), Number(el.dataset.taskId)));
+  registerEventAction('designer-revision', (_event, el) => taskConfirmRevision(Number(el.dataset.projectId), Number(el.dataset.taskId)));
+  registerEventAction('designer-score', (_event, el) => openScoring(Number(el.dataset.projectId), Number(el.dataset.taskId)));
+  registerEventAction('designer-detail-close', () => closeM('publishedSubTaskDetailModal'));
+  registerEventAction('designer-detail-project', (_event, el) => openProjectDetail(Number(el.dataset.projectId)));
+  registerEventAction('designer-review', (_event, el) => submitTaskReview(Number(el.dataset.projectId), Number(el.dataset.taskId)));
+  registerEventAction('designer-approve', (_event, el) =>
+    taskApprove(Number(el.dataset.projectId), Number(el.dataset.taskId), el.dataset.projectType));
+  registerEventAction('designer-accept-market', (_event, el) => {
+    let snapshot;
+    try { snapshot = JSON.parse(el.dataset.taskSnapshot || '{}'); } catch (_) { snapshot = undefined; }
+    taskAccept(Number(el.dataset.projectId), Number(el.dataset.taskId), snapshot);
+  });
+  registerEventAction('designer-correct', (_event, el) => taskCorrectDelivery(Number(el.dataset.projectId), Number(el.dataset.taskId)));
+  registerEventAction('designer-detail', (_event, el) => openPublishedSubTaskDetail(Number(el.dataset.taskId)));
+}

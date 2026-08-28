@@ -25,7 +25,7 @@ async function renderAdminWorkload(container) {
         <span style="font-size:14px;font-weight:500;color:#374151;">工作量看板</span>
         <span style="font-size:12px;color:var(--gray-400);margin-right:4px;">时间范围:</span>
         ${rangeOptions.map(o => `
-          <button data-emie-onclick="switchWorkloadRange('${o.key}')"
+          <button data-emie-action="click:workload-range" data-range="${o.key}"
             style="padding:5px 14px;border-radius:8px;border:${o.key === EMIE.adminState.workloadRange ? '2px solid #3370FF' : '1px solid var(--gray-200)'};
             background:${o.key === EMIE.adminState.workloadRange ? '#E6F1FB' : '#fff'};
             color:${o.key === EMIE.adminState.workloadRange ? '#1E40AF' : '#374151'};
@@ -33,8 +33,8 @@ async function renderAdminWorkload(container) {
         `).join('')}
       </div>
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
-        <input class="form-input" style="width:220px;" placeholder="搜索员工姓名" value="${escHtml(workloadQuery)}" data-emie-oninput="setWorkloadQuery(this.value)">
-        <select class="form-select" style="width:160px;" data-emie-onchange="setWorkloadSort(this.value)">
+        <input class="form-input" style="width:220px;" placeholder="搜索员工姓名" value="${escHtml(workloadQuery)}" data-emie-action="input:workload-query">
+        <select class="form-select" style="width:160px;" data-emie-action="change:workload-sort">
           <option value="default" ${workloadSort === 'default' ? 'selected' : ''}>默认排序</option>
           <option value="total" ${workloadSort === 'total' ? 'selected' : ''}>按总量排序</option>
           <option value="pending" ${workloadSort === 'pending' ? 'selected' : ''}>按未完成排序</option>
@@ -195,6 +195,13 @@ EMIE.registerActions({
   setWorkloadQuery,
   setWorkloadSort,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('workload-range', (_event, element) => switchWorkloadRange(element.dataset.range));
+  registerEventAction('workload-query', (_event, element) => setWorkloadQuery(element.value));
+  registerEventAction('workload-sort', (_event, element) => setWorkloadSort(element.value));
+}
 
 EMIE.registerModule('adminWorkload', {
   renderAdminWorkload,

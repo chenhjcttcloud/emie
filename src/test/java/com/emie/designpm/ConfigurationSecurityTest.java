@@ -20,7 +20,8 @@ class ConfigurationSecurityTest {
         }
 
         assertTrue(config.contains("jdbc:h2:file:./data/designpm-dev"));
-        assertTrue(config.contains("ddl-auto: validate"));
+        assertTrue(config.contains("ddl-auto: ${SPRING_JPA_DDL_AUTO:validate}"),
+                "JPA schema mode must default to validate and only be explicitly overridden");
         assertFalse(config.matches("(?s).*\\$\\{DESIGNPM_DB_PASSWORD:[^}]+}.*"));
         assertFalse(config.matches("(?s).*\\$\\{DESIGNPM_TEST_DB_PASSWORD:[^}]+}.*"));
         assertFalse(config.contains("createDatabaseIfNotExist=true"));

@@ -240,21 +240,66 @@ document.addEventListener('click', function(e) {
   const img = e.target.closest('.img-clickable');
   if (img) {
     const source = img.dataset.fullSrc || img.src;
-    const token = localStorage.getItem('design_pm_token');
-    const authenticatedSource = token && source.startsWith('/api/')
-      ? source + (source.includes('?') ? '&' : '?') + 'access_token=' + encodeURIComponent(token)
-      : source;
-    previewImage(authenticatedSource, img.alt || img.title || '');
+    previewImage(source, img.alt || img.title || '');
   }
 });
 
 // 缩略图生成失败时自动回退到已授权原图，避免详情卡片出现空白；只回退一次防止错误循环。
 document.addEventListener('error', function(e) {
   const img = e.target.closest?.('img.img-clickable');
-  if (!img || img.dataset.fullFallback === 'true' || !img.dataset.fullSrc) return;
-  img.dataset.fullFallback = 'true';
-  img.src = img.dataset.fullSrc;
+  if (!img || img.dataset.authRetry === 'true') return;
+  img.dataset.authRetry = 'true';
+  const token = localStorage.getItem('design_pm_token');
+  const source = img.src;
+  if (token && source.startsWith(window.location.origin)) {
+    fetch(source, { headers: { 'X-Auth-Token': token }, credentials: 'same-origin' })
+      .then(response => response.ok ? response.blob() : Promise.reject(new Error('图片请求失败')))
+      .then(blob => { img.src = URL.createObjectURL(blob); })
+      .catch(() => {
+        if (img.dataset.fullFallback !== 'true' && img.dataset.fullSrc) {
+          img.dataset.fullFallback = 'true';
+          img.src = img.dataset.fullSrc;
+        }
+      });
+    return;
+  }
+  if (img.dataset.fullFallback !== 'true' && img.dataset.fullSrc) {
+    img.dataset.fullFallback = 'true';
+    img.src = img.dataset.fullSrc;
+  }
 }, true);
+
+// 受保护图片不要让原生 img 直接请求接口（原生请求无法附加 X-Auth-Token）。
+// 统一先通过 fetch 取二进制，再把 blob URL 交给 img，兼容 Cookie 和旧 token 会话。
+function hydrateProtectedImages(root = document) {
+  root.querySelectorAll?.('img[data-auth-src]').forEach(img => {
+    if (img.dataset.authLoading === 'true' || img.dataset.authLoaded === 'true') return;
+    const source = img.dataset.authSrc;
+    if (!source) return;
+    img.dataset.authLoading = 'true';
+    const token = localStorage.getItem('design_pm_token');
+    const headers = token ? { 'X-Auth-Token': token } : {};
+    fetch(source, { headers, credentials: 'same-origin' })
+      .then(response => response.ok ? response.blob() : Promise.reject(new Error('图片请求失败')))
+      .then(blob => {
+        img.src = URL.createObjectURL(blob);
+        img.dataset.authLoaded = 'true';
+      })
+      .catch(() => {
+        img.dataset.authError = 'true';
+        if (img.dataset.fullSrc && img.src !== img.dataset.fullSrc) img.src = img.dataset.fullSrc;
+      })
+      .finally(() => { img.dataset.authLoading = 'false'; });
+  });
+}
+
+const protectedImageObserver = new MutationObserver(mutations => {
+  mutations.forEach(mutation => mutation.addedNodes.forEach(node => {
+    if (node.nodeType === Node.ELEMENT_NODE) hydrateProtectedImages(node);
+  }));
+});
+protectedImageObserver.observe(document.body, { childList: true, subtree: true });
+hydrateProtectedImages();
 
 // 放大图激活时，⌘C / Ctrl+C 直接写入原始图片字节。
 // PNG 不再经过 Canvas 重编码，从而保留原图 DPI，避免 PowerPoint/WPS 按错误 DPI 放大。
@@ -379,7 +424,8 @@ async function handleFileUpload(input, list, maxCount, typeLabel, isImage) {
       EMIE.projectState.uploadingCount++;
       try {
         const result = await uploadFile(f, (pct) => updateProgress(barId, pct));
-        list.push({ name: result.name, url: result.url, size: result.size, storedName: result.storedName });
+        // 上传成功后先用本地 Blob 立即预览，避免再次请求受保护下载接口时因浏览器原生 img 无法附加 token 而裂图。
+        list.push({ name: result.name, url: result.url, size: result.size, storedName: result.storedName, previewUrl: URL.createObjectURL(f) });
         renderFileList(list, typeLabel);
         formModified();
         setTimeout(() => removeProgress(barId), 1500);
@@ -412,14 +458,14 @@ function renderFileList(list, typeLabel) {
   if (isImage) {
     c.innerHTML = `<div class="image-preview">${list.map((img, i) => canRenderAsImage(img)
       ? `<div style="position:relative;display:inline-block;">
-        <img src="${escHtml(authUrl(img.url))}" alt="${escHtml(img.name)}" class="img-clickable" draggable="true" loading="lazy" decoding="async" style="width:180px;height:180px;object-fit:contain;border-radius:6px;border:1px solid var(--gray-200);cursor:grab;background:#fff;">
-        <button data-emie-onclick="event.stopPropagation();showDownloadOptions('${escHtml(escJsString(img.url))}','${escHtml(escJsString(img.name))}',${img.size || 0})" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:20px;height:20px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
-        <button style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button>
+        <img src="${escHtml(img.previewUrl || 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==')}" ${img.previewUrl ? '' : `data-auth-src="${escHtml(authUrl(img.url))}"`} data-full-src="${escHtml(authUrl(img.url))}" alt="${escHtml(img.name)}" class="img-clickable" draggable="true" loading="lazy" decoding="async" style="width:180px;height:180px;object-fit:contain;border-radius:6px;border:1px solid var(--gray-200);cursor:grab;background:#fff;">
+        <button data-emie-action="click:upload-download-options" data-file-url="${escHtml(img.url)}" data-file-name="${escHtml(img.name)}" data-file-size="${img.size || 0}" title="下载选项" style="position:absolute;bottom:2px;right:2px;width:20px;height:20px;border-radius:4px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;border:none;cursor:pointer;">⬇</button>
+        <button style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;" data-emie-action="click:upload-remove-file" data-list-key="${context.listKey}" data-file-index="${i}">✕</button>
       </div>`
-      : `<div class="file-item" style="width:100%;"><span class="file-item-name">📐 ${escHtml(img.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(img.size)}</span>${renderAttachmentActions(img, true)}<button class="remove-file" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button></div>`).join('')}</div>`;
+      : `<div class="file-item" style="width:100%;"><span class="file-item-name">📐 ${escHtml(img.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(img.size)}</span>${renderAttachmentActions(img, true)}<button class="remove-file" data-emie-action="click:upload-remove-file" data-list-key="${context.listKey}" data-file-index="${i}">✕</button></div>`).join('')}</div>`;
   } else {
     c.innerHTML = list.map((f, i) =>
-      `<div class="file-item"><span class="file-item-name">📎 ${escHtml(f.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(f.size)}</span>${renderAttachmentActions(f, true)}<button class="remove-file" data-emie-onclick="removeFileItem('${context.listKey}',${i})">✕</button></div>`
+      `<div class="file-item"><span class="file-item-name">📎 ${escHtml(f.name)}</span><span style="font-size:11px;color:var(--gray-400);">${fmtSize(f.size)}</span>${renderAttachmentActions(f, true)}<button class="remove-file" data-emie-action="click:upload-remove-file" data-list-key="${context.listKey}" data-file-index="${i}">✕</button></div>`
     ).join('');
   }
 }
@@ -554,6 +600,16 @@ EMIE.registerActions({
   handleDeliverAttachments,
   handleUploadDrop,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('upload-download-options', (event, element) => {
+    event.stopPropagation();
+    showDownloadOptions(element.dataset.fileUrl, element.dataset.fileName, Number(element.dataset.fileSize) || 0);
+  });
+  registerEventAction('upload-remove-file', (_event, element) =>
+    removeFileItem(element.dataset.listKey, Number(element.dataset.fileIndex)));
+}
 
 EMIE.registerModule('projectUploads', {
   previewImage,

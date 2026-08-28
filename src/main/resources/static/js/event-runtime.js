@@ -1,6 +1,7 @@
 // EMIE 声明式事件运行时：代替 HTML 内联 on* 属性，并支持后续动态渲染的内容。
 const EMIE = window.EMIE;
 const compiledEventHandlers = new Map();
+const registeredEventHandlers = new Map();
 const forbiddenEventSource = /\b(?:constructor|__proto__|prototype|window|globalThis|Function|eval|import|fetch|XMLHttpRequest|WebSocket|localStorage|sessionStorage|cookie)\b/i;
 
 function validateEventSource(source) {
@@ -32,21 +33,48 @@ function findEventElement(event, attributeName) {
   return event.target.hasAttribute(attributeName) ? event.target : null;
 }
 
-function dispatchDeclarativeEvent(event) {
-  const attributeName = `data-emie-on${event.type}`;
-  const element = findEventElement(event, attributeName);
-  if (!element) return;
-  const source = element.getAttribute(attributeName);
-  if (!source) return;
-  const result = compileEventHandler(source).call(element, createActionScope(event));
-  if (result === false) event.preventDefault();
+// 安全事件入口：模板只保存不透明 action key，不保存可执行 JavaScript。
+function registerEventAction(key, handler) {
+  if (typeof key !== 'string' || !/^[a-z][a-z0-9:_-]{1,120}$/i.test(key)) {
+    throw new Error('事件 action key 非法');
+  }
+  if (typeof handler !== 'function') throw new TypeError('事件处理器必须是函数');
+  registeredEventHandlers.set(key, handler);
+  return () => registeredEventHandlers.delete(key);
 }
 
-['click', 'change', 'input', 'submit'].forEach(eventName => {
+function findRegisteredEventElement(event) {
+  if (!(event.target instanceof Element)) return null;
+  const attribute = event.type === 'keydown' ? '[data-emie-keydown-action]' : '[data-emie-action]';
+  return event.target.closest(attribute);
+}
+
+function dispatchRegisteredEvent(event) {
+  const element = findRegisteredEventElement(event);
+  if (!element) return false;
+  const descriptor = element.getAttribute(event.type === 'keydown' ? 'data-emie-keydown-action' : 'data-emie-action') || '';
+  const separator = descriptor.indexOf(':');
+  if (separator <= 0) return false;
+  const eventName = descriptor.slice(0, separator);
+  const key = descriptor.slice(separator + 1);
+  if (eventName !== event.type) return false;
+  const handler = registeredEventHandlers.get(key);
+  if (!handler) return false;
+  const result = handler.call(element, event, element);
+  if (result === false) event.preventDefault();
+  return true;
+}
+
+function dispatchDeclarativeEvent(event) {
+  dispatchRegisteredEvent(event);
+}
+
+['click', 'change', 'input', 'submit', 'keydown'].forEach(eventName => {
   document.addEventListener(eventName, dispatchDeclarativeEvent);
 });
 
 EMIE.registerActions({
+  registerEventAction,
   validateEventSource,
   createActionScope,
   compileEventHandler,
@@ -55,5 +83,6 @@ EMIE.registerActions({
 });
 
 EMIE.registerModule('eventRuntime', {
+  registerEventAction,
   dispatchDeclarativeEvent,
 });

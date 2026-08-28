@@ -88,7 +88,7 @@ async function renderRoleSwitcher() {
   container.id = 'identitySwitcher';
   container.className = 'identity-switcher';
   container.innerHTML = `
-    <button class="identity-trigger" data-emie-onclick="toggleIdentityPanel(event)" aria-label="切换用户视角" title="切换用户视角">
+    <button class="identity-trigger" data-emie-action="click:identity-toggle" aria-label="切换用户视角" title="切换用户视角">
       <span class="identity-avatar role-${roleKey}">${initial}</span>
       <span class="identity-info">
         <span class="identity-name">${escHtml(EMIE.state.authUser.name)}</span>
@@ -99,7 +99,7 @@ async function renderRoleSwitcher() {
     <div class="identity-panel" id="identityPanel">
       <div class="identity-search">
         <svg class="identity-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        <input type="text" id="identitySearchInput" placeholder="搜索用户..." data-emie-oninput="filterUsers(this.value)" autocomplete="off">
+        <input type="text" id="identitySearchInput" placeholder="搜索用户..." data-emie-action="input:identity-filter" autocomplete="off">
       </div>
       <div class="identity-current">
         <span>当前身份</span>
@@ -110,7 +110,7 @@ async function renderRoleSwitcher() {
       </div>
       ${isSwitched ? `
       <div style="padding:4px 10px 10px;">
-        <button class="identity-back-btn" data-emie-onclick="switchToUser('${escHtml(escJsString(EMIE.state.originalUser.userId))}')">
+        <button class="identity-back-btn" data-emie-action="click:identity-back" data-userid="${escHtml(EMIE.state.originalUser.userId)}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
           返回我的视角
         </button>
@@ -153,7 +153,7 @@ function renderUserList(users) {
       const avatarInitial = u.name.charAt(0);
       const uClass = 'u-' + identityRoleColor(u.role);
       const rClass = 'r-' + identityRoleColor(u.role);
-      html += `<div class="identity-user${isActive ? ' active' : ''}" data-userid="${escHtml(u.userId)}" data-emie-onclick="switchToUser('${escHtml(escJsString(u.userId))}')">
+      html += `<div class="identity-user${isActive ? ' active' : ''}" data-userid="${escHtml(u.userId)}" data-emie-action="click:identity-user">
         <span class="identity-user-avatar ${uClass}">${avatarInitial}</span>
         <span class="identity-user-info">
           <div class="identity-user-name">${escHtml(u.name)}</div>
@@ -297,6 +297,14 @@ EMIE.registerActions({
   getCurrentUserId,
   getUserName,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('identity-toggle', event => toggleIdentityPanel(event));
+  registerEventAction('identity-filter', (_event, element) => filterUsers(element.value));
+  registerEventAction('identity-back', (_event, element) => switchToUser(element.dataset.userid));
+  registerEventAction('identity-user', (_event, element) => switchToUser(element.dataset.userid));
+}
 
 EMIE.registerModule('coreIdentity', {
   renderRoleSwitcher,

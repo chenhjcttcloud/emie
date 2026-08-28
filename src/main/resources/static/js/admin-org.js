@@ -75,7 +75,7 @@ async function renderAdminOrg(container) {
   container.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <h3 style="font-size:16px;margin:0;">🏢 组织架构</h3>
-      <button class="btn btn-primary btn-sm" data-emie-onclick="openCreateDeptModal()">➕ 新建部门</button>
+      <button class="btn btn-primary btn-sm" data-emie-action="click:org-create-dept">➕ 新建部门</button>
     </div>
     ${depts.length === 0 ? `<div class="empty"><div class="empty-icon">🏢</div><p>暂无部门，点击上方按钮创建</p></div>` : `
     <div style="display:flex;flex-direction:column;gap:12px;">
@@ -91,8 +91,8 @@ async function renderAdminOrg(container) {
               ${!d.active ? `<span style="color:var(--danger);font-size:12px;margin-left:8px;">⛔ 已停用</span>` : ''}
             </div>
             <div style="display:flex;gap:6px;">
-              <button class="btn btn-outline btn-sm" data-emie-onclick="editDept({id:${d.id},name:'${escHtml(escJsString(d.name || ''))}',role:'${escHtml(escJsString(d.role || ''))}',headUserId:'${escHtml(escJsString(d.headUserId || ''))}',active:${!!d.active}})">✏️ 编辑</button>
-              <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-emie-onclick="deleteDept(${d.id})">🗑️ 删除</button>
+              <button class="btn btn-outline btn-sm" data-emie-action="click:org-edit-dept" data-dept-id="${d.id}" data-dept-name="${escHtml(escJsString(d.name || ''))}" data-dept-role="${escHtml(escJsString(d.role || ''))}" data-dept-head="${escHtml(escJsString(d.headUserId || ''))}" data-dept-active="${!!d.active}">✏️ 编辑</button>
+              <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);" data-emie-action="click:org-delete-dept" data-dept-id="${d.id}">🗑️ 删除</button>
             </div>
           </div>
           <div style="font-size:13px;color:var(--gray-500);margin-bottom:8px;">
@@ -105,7 +105,7 @@ async function renderAdminOrg(container) {
               const isHeadUser = d.headUserId === u.userId;
               return `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;font-size:12px;">
                 ${escHtml(u.name)}${titleLevelLabel}
-                ${isHeadUser ? '<span style="color:var(--gray-300);font-size:11px;" title="部门负责人不可移出">🔒</span>' : `<span style="cursor:pointer;color:var(--gray-400);font-size:11px;" data-emie-onclick="removeUserFromDept('${escHtml(escJsString(u.userId))}')" title="移出部门">✕</span>`}
+                ${isHeadUser ? '<span style="color:var(--gray-300);font-size:11px;" title="部门负责人不可移出">🔒</span>' : `<span style="cursor:pointer;color:var(--gray-400);font-size:11px;" data-emie-action="click:org-remove-user" data-user-id="${escHtml(escJsString(u.userId))}" title="移出部门">✕</span>`}
               </span>`;
             }).join('')}
           </div>` : '<div style="font-size:12px;color:var(--gray-400);">暂无成员</div>'}
@@ -117,7 +117,7 @@ async function renderAdminOrg(container) {
       ${allUsers.filter(u => !u.departmentId).map(u =>
         `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;font-size:12px;margin:3px;">
           ${escHtml(u.name)}（${escHtml(roleLabels[u.role] || u.role)}）
-          <span style="cursor:pointer;color:var(--primary);font-size:11px;" data-emie-onclick="openAssignUserDept('${escHtml(escJsString(u.userId))}')" title="分配到部门">📂</span>
+          <span style="cursor:pointer;color:var(--primary);font-size:11px;" data-emie-action="click:org-assign-user" data-user-id="${escHtml(escJsString(u.userId))}" title="分配到部门">📂</span>
         </span>`
       ).join('') || '<span style="font-size:12px;color:var(--gray-400);">全部已分配</span>'}
     </div>
@@ -136,7 +136,7 @@ async function openCreateDeptModal() {
   modal.className = 'modal-overlay';
   modal.id = 'createDeptModal';
   modal.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('createDeptModal')">✕</button>
+    <button class="modal-close-float" data-emie-action="click:org-close-create">✕</button>
     <div class="modal">
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">➕ 新建部门</div></div></div>
       <div class="modal-body">
@@ -157,8 +157,8 @@ async function openCreateDeptModal() {
         </form>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" data-emie-onclick="closeM('createDeptModal')">取消</button>
-        <button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitCreateDept())">确认创建</button>
+        <button class="btn btn-outline" data-emie-action="click:org-close-create">取消</button>
+        <button class="btn btn-primary" data-emie-action="click:org-submit-create">确认创建</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -198,7 +198,7 @@ async function editDept(d) {
   modal.className = 'modal-overlay';
   modal.id = 'editDeptModal';
   modal.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('editDeptModal')">✕</button>
+    <button class="modal-close-float" data-emie-action="click:org-close-edit">✕</button>
     <div class="modal">
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✏️ 编辑部门</div></div></div>
       <div class="modal-body">
@@ -223,8 +223,8 @@ async function editDept(d) {
         </form>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" data-emie-onclick="closeM('editDeptModal')">取消</button>
-        <button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitEditDept(${d.id}))">保存</button>
+        <button class="btn btn-outline" data-emie-action="click:org-close-edit">取消</button>
+        <button class="btn btn-primary" data-emie-action="click:org-submit-edit" data-dept-id="${d.id}">保存</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -252,7 +252,7 @@ async function submitEditDept(id) {
 }
 
 async function deleteDept(id) {
-  if (!confirm('确定删除该部门？')) return;
+  if (!await EMIE.actions.showSystemConfirm('确定删除该部门？')) return;
   await apiDelete(`/departments/${id}`);
   await refreshOrgData();
   switchAdminTab('org');
@@ -273,7 +273,7 @@ async function openAssignUserDept(userId) {
   modal.className = 'modal-overlay';
   modal.id = 'assignDeptModal';
   modal.innerHTML = `
-    <button class="modal-close-float" data-emie-onclick="closeM('assignDeptModal')">✕</button>
+    <button class="modal-close-float" data-emie-action="click:org-close-assign">✕</button>
     <div class="modal" style="max-width:400px;">
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📂 分配部门：${escHtml(user.name)}</div></div></div>
       <div class="modal-body">
@@ -288,8 +288,8 @@ async function openAssignUserDept(userId) {
         </div>`}
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" data-emie-onclick="closeM('assignDeptModal')">取消</button>
-        ${roleDepts.length > 0 ? `<button class="btn btn-primary" data-emie-onclick="submitGuard(this,()=>submitAssignDept('${escHtml(escJsString(userId))}'))">确认分配</button>` : ''}
+        <button class="btn btn-outline" data-emie-action="click:org-close-assign">取消</button>
+        ${roleDepts.length > 0 ? `<button class="btn btn-primary" data-emie-action="click:org-submit-assign" data-user-id="${escHtml(escJsString(userId))}">确认分配</button>` : ''}
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -311,7 +311,7 @@ async function removeUserFromDept(userId) {
     window.EMIE.actions.showSystemAlert('该用户是部门负责人，无法直接移出。请先更换部门负责人或删除部门。');
     return;
   }
-  if (!confirm('确定将该用户移出部门？')) return;
+  if (!await EMIE.actions.showSystemConfirm('确定将该用户移出部门？')) return;
   await apiPut(`/users/org/${userId}`, { departmentId: null });
   await refreshOrgData();
   switchAdminTab('org');
@@ -330,6 +330,27 @@ EMIE.registerActions({
   submitAssignDept,
   removeUserFromDept,
 });
+
+const registerEventAction = EMIE.actions.registerEventAction;
+if (registerEventAction) {
+  registerEventAction('org-create-dept', () => openCreateDeptModal());
+  registerEventAction('org-close-create', () => closeM('createDeptModal'));
+  registerEventAction('org-close-edit', () => closeM('editDeptModal'));
+  registerEventAction('org-close-assign', () => closeM('assignDeptModal'));
+  registerEventAction('org-delete-dept', (_event, el) => deleteDept(Number(el.dataset.deptId)));
+  registerEventAction('org-remove-user', (_event, el) => removeUserFromDept(el.dataset.userId));
+  registerEventAction('org-assign-user', (_event, el) => openAssignUserDept(el.dataset.userId));
+  registerEventAction('org-edit-dept', (_event, el) => editDept({
+    id: Number(el.dataset.deptId),
+    name: el.dataset.deptName || '',
+    role: el.dataset.deptRole || '',
+    headUserId: el.dataset.deptHead || '',
+    active: el.dataset.deptActive === 'true',
+  }));
+  registerEventAction('org-submit-create', (_event, el) => submitGuard(el, () => submitCreateDept()));
+  registerEventAction('org-submit-edit', (_event, el) => submitGuard(el, () => submitEditDept(Number(el.dataset.deptId))));
+  registerEventAction('org-submit-assign', (_event, el) => submitGuard(el, () => submitAssignDept(el.dataset.userId)));
+}
 
 EMIE.registerModule('adminOrg', {
   refreshOrgData,
