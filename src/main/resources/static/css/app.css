@@ -1320,6 +1320,17 @@ html:has(.admin-page)::-webkit-scrollbar,body:has(.admin-page)::-webkit-scrollba
 .points-rules-scroll table { margin:0; }
 .points-rules-scroll thead { position:sticky; top:0; z-index:2; box-shadow:0 1px 0 var(--gray-200); }
 .points-rules-scroll thead th { background:var(--gray-50); }
+.points-pagination { min-height:58px; padding:10px 16px; border-top:1px solid #ECEEF5; background:linear-gradient(180deg,#FCFCFF,#F8F8FD); display:flex; align-items:center; justify-content:space-between; gap:14px; }
+.points-pagination-centered { justify-content:center; }
+.points-pagination-meta { color:#989EAC; font-size:11px; }
+.points-pagination-controls { display:flex; align-items:center; gap:8px; }
+.points-page-button { min-width:76px; height:34px; padding:0 12px; border:1px solid #DEDFF0; border-radius:9px; background:#fff; color:#5149B8; display:inline-flex; align-items:center; justify-content:center; gap:6px; font:600 12px/1 inherit; cursor:pointer; box-shadow:0 2px 5px rgba(62,55,135,.04); transition:border-color .16s,background .16s,color .16s,transform .16s,box-shadow .16s; }
+.points-page-button:hover:not(:disabled) { border-color:#AAA5EA; background:#F2F0FF; color:#4338CA; box-shadow:0 4px 10px rgba(79,70,229,.10); transform:translateY(-1px); }
+.points-page-button:active:not(:disabled) { transform:translateY(0); }
+.points-page-button:disabled { border-color:#ECECF2; background:#F7F7FA; color:#C2C5CE; box-shadow:none; cursor:not-allowed; }
+.points-page-indicator { min-width:66px; height:34px; padding:0 12px; border:1px solid #E5E4F4; border-radius:9px; background:#F0EEFF; color:#8A86AB; display:inline-flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-variant-numeric:tabular-nums; }
+.points-page-indicator b { color:#4F46E5; font-size:14px; }
+.points-page-indicator i { color:#C0BDDA; font-style:normal; }
 .admin-section-hint { margin:4px 0 0; color:var(--gray-500); font-size:12px; }
 .admin-points-page-head { display:flex; align-items:center; justify-content:space-between; gap:16px; }
 @media (max-width:600px) { .admin-points-page-head { align-items:flex-start; } .admin-points-page-head .btn { flex-shrink:0; } }
@@ -1363,6 +1374,7 @@ html:has(.admin-page)::-webkit-scrollbar,body:has(.admin-page)::-webkit-scrollba
 @media (max-width:600px) { .admin-point-rules-scroll { height:560px; } .admin-filter-card .form-input { flex-basis:100%; min-width:0; } .admin-filter-card .form-select { flex:1; min-width:0; } }
 @media (max-width:900px) { .points-dashboard-grid { grid-template-columns:1fr; } .points-hero { padding:28px; } }
 @media (max-width:600px) { .points-page { gap:12px; } .points-hero { min-height:0; padding:24px 20px; border-radius:15px; flex-direction:column; align-items:stretch; } .points-hero-side { width:auto; } .points-hero h2 { font-size:23px; } .points-hero-stats { margin-top:20px; } .points-section-head { align-items:flex-start; } .points-section-head > .btn { flex-shrink:0; } .points-forecast-grid { grid-template-columns:1fr; padding:14px; } .points-performance-head { align-items:flex-start; gap:8px; } .points-rules-card .card-header { align-items:flex-start; gap:12px; } .points-rule-filter { width:100%; justify-content:space-between; } .points-rule-filter select { flex:1; } .points-rules-scroll { height:390px; min-height:390px; } }
+@media (max-width:600px) { .points-pagination { padding:10px 12px; } .points-pagination-meta { display:none; } .points-pagination-controls { width:100%; justify-content:center; } .points-page-button { min-width:64px; padding:0 9px; } }
 
 /* 文件下载选项面板按钮：悬停背景由 CSS 承担（P3 内联事件迁移，配合 CSP script-src-attr 'none'） */
 .file-dl-btn { transition: background 0.15s; }

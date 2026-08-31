@@ -6,7 +6,9 @@ const closeM = (...args) => EMIE.actions.closeM(...args);
 const uploadFile = (...args) => EMIE.actions.uploadFile(...args);
 let pointsRulesCache = [];
 let pointsLedgerPage = 0;
-const pointsLedgerSize = 20;
+const pointsLedgerSize = 10;
+let pointsRulesPage = 0;
+const pointsRulesSize = 10;
 
 function currentMonthKey() {
   const now = new Date();
@@ -40,8 +42,9 @@ function renderPointRuleRows(rules) {
   return rules.map(rule => `<tr><td><span class="points-category-badge">${escHtml(pointRuleCategoryLabel(rule.category))}</span></td><td><strong>${escHtml(rule.ruleCode || '-')}</strong><div style="font-size:12px;color:var(--gray-400);margin-top:3px;">${escHtml(rule.description || '')}</div></td><td>${formatPoints(rule.points)}</td><td>创建任务时选择档位并锁定</td><td>${Number(rule.qualityBonusRatio || 0) > 0 ? `评分 ≥ ${formatPoints(rule.qualityBonusThreshold)}，加 ${formatPoints(Number(rule.qualityBonusRatio) * 100)}%` : '无'}</td></tr>`).join('');
 }
 
-function filterPointsRules(category) {
-  const selected = category || document.querySelector('.points-rule-filter select')?.value || '';
+function filterPointsRules(resetPage = false) {
+  if (resetPage) pointsRulesPage = 0;
+  const selected = document.querySelector('.points-rule-filter select')?.value || '';
   const keyword = String(document.getElementById('pointsRuleSearch')?.value || '').trim().toLowerCase();
   const rows = pointsRulesCache.filter(rule => {
     if (!keyword && String(rule.category || 'GENERAL') !== selected) return false;
@@ -51,10 +54,23 @@ function filterPointsRules(category) {
   });
   const body = document.getElementById('pointsRulesBody');
   const count = document.getElementById('pointsRulesCount');
-  if (body) body.innerHTML = renderPointRuleRows(rows);
+  const pages = Math.max(1, Math.ceil(rows.length / pointsRulesSize));
+  pointsRulesPage = Math.min(pointsRulesPage, pages - 1);
+  const pageRows = rows.slice(pointsRulesPage * pointsRulesSize, (pointsRulesPage + 1) * pointsRulesSize);
+  if (body) body.innerHTML = renderPointRuleRows(pageRows);
   const scrollArea = body?.closest('.points-rules-scroll');
   if (scrollArea) scrollArea.scrollTop = 0;
   if (count) count.textContent = `当前分类 ${rows.length} 条规则`;
+  const pager = document.getElementById('pointsRulesPagination');
+  if (pager) {
+    pager.style.display = rows.length > pointsRulesSize ? 'flex' : 'none';
+    pager.innerHTML = `<button class="points-page-button" ${pointsRulesPage <= 0 ? 'disabled' : ''} data-emie-action="click:points-rules-page" data-page="${pointsRulesPage - 1}" aria-label="上一页">‹<span>上一页</span></button><span class="points-page-indicator"><b>${pointsRulesPage + 1}</b><i>/</i>${pages}</span><button class="points-page-button" ${pointsRulesPage >= pages - 1 ? 'disabled' : ''} data-emie-action="click:points-rules-page" data-page="${pointsRulesPage + 1}" aria-label="下一页"><span>下一页</span>›</button>`;
+  }
+}
+
+function changePointsRulesPage(page) {
+  pointsRulesPage = Math.max(0, Number(page) || 0);
+  filterPointsRules(false);
 }
 
 function renderLeaderboardRows(rows, currentUserId) {
@@ -136,7 +152,8 @@ function renderPointsLedger(ledger, adjustments, ledgerPages) {
     ...visibleAdjustments.map(item => ({ createdAt: item.createdAt, source: adjustmentSourceLabel(item.sourceType), detail: item.reason || '—', meta: item.sourceType === 'MATERIAL_MARKET' ? '素材被销售立项后自动奖励' : String(item.sourceType || '积分调整'), accountingMonth: item.accountingMonth || '-', points: Number(item.points || 0) })),
   ].sort((left, right) => String(right.createdAt || '').localeCompare(String(left.createdAt || '')));
   const visibleCount = Number(ledger.length || 0) + visibleAdjustments.length;
-  return `<div class="card points-ledger-card" style="margin-bottom:18px;"><div class="card-header"><div><h3>我的积分明细</h3><span class="points-ledger-hint">任务积分、素材广场奖励和其他积分调整均按入账时间排列</span></div><span class="points-ledger-count">${visibleCount} 条记录</span></div>${rows.length ? `<div class="table-wrap"><table class="points-ledger-table"><thead><tr><th>来源</th><th>积分明细</th><th>归属月</th><th>积分</th><th>入账时间</th></tr></thead><tbody>${rows.map(item => `<tr><td><strong>${escHtml(item.source)}</strong></td><td><strong>${escHtml(item.detail)}</strong><div style="font-size:12px;color:var(--gray-400);">${escHtml(item.meta)}</div></td><td>${escHtml(item.accountingMonth)}</td><td style="color:${item.points >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:700;">${item.points >= 0 ? '+' : ''}${formatPoints(item.points)}</td><td>${escHtml(String(item.createdAt || '-').replace('T', ' ').slice(0, 19))}</td></tr>`).join('')}</tbody></table></div>${ledgerPages > 1 ? `<div class="pagination"><button class="btn btn-outline btn-sm" ${pointsLedgerPage <= 0 ? 'disabled' : ''} data-emie-action="click:points-ledger-page" data-page="${pointsLedgerPage - 1}">上一页</button><span>任务积分第 ${pointsLedgerPage + 1} / ${ledgerPages} 页</span><button class="btn btn-outline btn-sm" ${pointsLedgerPage >= ledgerPages - 1 ? 'disabled' : ''} data-emie-action="click:points-ledger-page" data-page="${pointsLedgerPage + 1}">下一页</button></div>` : ''}` : '<div class="empty-state">暂无积分记录</div>'}</div>`;
+  const pages = Math.max(1, Number(ledgerPages || 0));
+  return `<div class="card points-ledger-card" style="margin-bottom:18px;"><div class="card-header"><div><h3>我的积分明细</h3><span class="points-ledger-hint">任务积分、素材广场奖励和其他积分调整均按入账时间排列</span></div><span class="points-ledger-count">${visibleCount} 条记录</span></div>${rows.length ? `<div class="table-wrap"><table class="points-ledger-table"><thead><tr><th>来源</th><th>积分明细</th><th>归属月</th><th>积分</th><th>入账时间</th></tr></thead><tbody>${rows.map(item => `<tr><td><strong>${escHtml(item.source)}</strong></td><td><strong>${escHtml(item.detail)}</strong><div style="font-size:12px;color:var(--gray-400);">${escHtml(item.meta)}</div></td><td>${escHtml(item.accountingMonth)}</td><td style="color:${item.points >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:700;">${item.points >= 0 ? '+' : ''}${formatPoints(item.points)}</td><td>${escHtml(String(item.createdAt || '-').replace('T', ' ').slice(0, 19))}</td></tr>`).join('')}</tbody></table></div><div class="points-pagination"><span class="points-pagination-meta">每页 ${pointsLedgerSize} 条</span><div class="points-pagination-controls"><button class="points-page-button" ${pointsLedgerPage <= 0 ? 'disabled' : ''} data-emie-action="click:points-ledger-page" data-page="${pointsLedgerPage - 1}" aria-label="上一页">‹<span>上一页</span></button><span class="points-page-indicator"><b>${pointsLedgerPage + 1}</b><i>/</i>${pages}</span><button class="points-page-button" ${pointsLedgerPage >= pages - 1 ? 'disabled' : ''} data-emie-action="click:points-ledger-page" data-page="${pointsLedgerPage + 1}" aria-label="下一页"><span>下一页</span>›</button></div></div>` : '<div class="empty-state">暂无积分记录</div>'}</div>`;
 }
 
 async function renderPointsView(main) {
@@ -164,11 +181,14 @@ async function renderPointsView(main) {
       .filter(rule => rule.enabled !== false)
       .sort(comparePointRuleCodes);
     pointsRulesCache = enabledRules;
+    pointsRulesPage = 0;
     const ruleCategories = [...new Set(enabledRules.map(rule => String(rule.category || 'GENERAL')))];
     const categoryPriority = { A: 1, B: 2, E: 3, S: 4, GENERAL: 5 };
     ruleCategories.sort((a, b) => (categoryPriority[a] || 99) - (categoryPriority[b] || 99) || a.localeCompare(b));
     const initialRuleCategory = ruleCategories[0] || '';
     const initialCategoryRules = enabledRules.filter(rule => String(rule.category || 'GENERAL') === initialRuleCategory);
+    const initialRulePages = Math.max(1, Math.ceil(initialCategoryRules.length / pointsRulesSize));
+    const initialRuleRows = initialCategoryRules.slice(0, pointsRulesSize);
     const appealList = Array.isArray(appeals) ? appeals : [];
     const poProjects = Array.isArray(poData?.projects) ? poData.projects : [];
     const poProgress = Array.isArray(poData?.progress) ? poData.progress : [];
@@ -187,7 +207,7 @@ async function renderPointsView(main) {
       ${false && appealList.length ? '<div></div>' : ''}
       ${poProjects.length ? `<div class="card" style="margin-bottom:18px;"><div class="card-header"><h3>PO 月度履职</h3></div><div class="table-wrap"><table><thead><tr><th>PO 项目</th><th>月度积分</th><th>本月状态</th><th>操作</th></tr></thead><tbody>${poProjects.map(project => { const progress = poProgress.find(item => Number(item.poProjectId) === Number(project.id) && item.monthKey === month); return `<tr><td>${escHtml(project.name || '-')}</td><td>${formatPoints(project.monthlyPoints)}</td><td>${progress ? escHtml(poProgressStatusLabel(progress.status)) : '未提交'}</td><td>${progress ? '-' : `<button class="btn btn-primary btn-sm" data-emie-action="click:points-submit-po" data-project-id="${Number(project.id)}" data-month="${month}">提交本月进展</button>`}</td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
       ${archiveList.length ? `<div class="card" style="margin-bottom:18px;"><div class="card-header"><h3>月度归档</h3></div><div class="table-wrap"><table><thead><tr><th>月份</th><th>获得积分</th><th>目标积分</th><th>供单积分</th><th>供单保护</th><th>状态</th></tr></thead><tbody>${archiveList.map(item => `<tr><td>${escHtml(item.monthKey || '-')}</td><td>${formatPoints(item.earnedPoints)}</td><td>${formatPoints(item.targetPoints)}</td><td>${formatPoints(item.suppliedPoints)}</td><td>${item.insufficientSupplyProtection ? '已启用' : '未启用'}</td><td>${item.status === 'ARCHIVED' ? '已归档' : '待确认'}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
-      <div class="card points-rules-card"><div class="card-header"><div><h3>当前生效规则</h3><span id="pointsRulesCount" class="points-rules-count">当前分类 ${initialCategoryRules.length} 条规则</span></div>${enabledRules.length ? `<label class="points-rule-filter"><span>规则分类</span><select data-emie-action="change:points-rules-filter">${ruleCategories.map(category => `<option value="${escHtml(category)}">${escHtml(pointRuleCategoryLabel(category))}</option>`).join('')}</select><input id="pointsRuleSearch" class="form-input" placeholder="全类别搜索规则编号/说明" data-emie-action="input:points-rules-filter" style="width:180px;"></label>` : ''}</div>${enabledRules.length ? `<div class="table-wrap points-rules-scroll"><table><thead><tr><th>类别</th><th>规则</th><th>基础分</th><th>难度</th><th>质量加分</th></tr></thead><tbody id="pointsRulesBody">${renderPointRuleRows(initialCategoryRules)}</tbody></table></div>` : '<div class="empty-state">暂无生效积分规则</div>'}</div></div>`;
+      <div class="card points-rules-card"><div class="card-header"><div><h3>当前生效规则</h3><span id="pointsRulesCount" class="points-rules-count">当前分类 ${initialCategoryRules.length} 条规则</span></div>${enabledRules.length ? `<label class="points-rule-filter"><span>规则分类</span><select data-emie-action="change:points-rules-filter">${ruleCategories.map(category => `<option value="${escHtml(category)}">${escHtml(pointRuleCategoryLabel(category))}</option>`).join('')}</select><input id="pointsRuleSearch" class="form-input" placeholder="全类别搜索规则编号/说明" data-emie-action="input:points-rules-filter" style="width:180px;"></label>` : ''}</div>${enabledRules.length ? `<div class="table-wrap points-rules-scroll"><table><thead><tr><th>类别</th><th>规则</th><th>基础分</th><th>难度</th><th>质量加分</th></tr></thead><tbody id="pointsRulesBody">${renderPointRuleRows(initialRuleRows)}</tbody></table></div><div id="pointsRulesPagination" class="points-pagination points-pagination-centered" style="display:${initialCategoryRules.length > pointsRulesSize ? 'flex' : 'none'}"><button class="points-page-button" disabled data-emie-action="click:points-rules-page" data-page="-1" aria-label="上一页">‹<span>上一页</span></button><span class="points-page-indicator"><b>1</b><i>/</i>${initialRulePages}</span><button class="points-page-button" ${initialRulePages <= 1 ? 'disabled' : ''} data-emie-action="click:points-rules-page" data-page="1" aria-label="下一页"><span>下一页</span>›</button></div>` : '<div class="empty-state">暂无生效积分规则</div>'}</div></div>`;
     if (isDesignerView || isAdminView) await refreshPointsMonth(month);
   } catch (error) {
     main.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>积分加载失败：${escHtml(error.message || '请稍后重试')}</p></div>`;
@@ -258,8 +278,8 @@ async function submitPoProgress(projectId, month) {
   } catch (error) { window.EMIE.actions.showSystemAlert('提交失败：' + (error.message || '请稍后重试')); }
 }
 
-  EMIE.registerActions({ refreshPointsMonth, filterPointsRules, submitPointAppeal, processPointAppeal, submitPoProgress });
-EMIE.registerModule('dashboardPoints', { renderPointsView, refreshPointsMonth, filterPointsRules, submitPointAppeal, processPointAppeal, submitPoProgress });
+  EMIE.registerActions({ refreshPointsMonth, filterPointsRules, changePointsRulesPage, submitPointAppeal, processPointAppeal, submitPoProgress });
+EMIE.registerModule('dashboardPoints', { renderPointsView, refreshPointsMonth, filterPointsRules, changePointsRulesPage, submitPointAppeal, processPointAppeal, submitPoProgress });
 
 const registerEventAction = EMIE.actions.registerEventAction;
 if (registerEventAction) {
@@ -271,5 +291,6 @@ if (registerEventAction) {
   registerEventAction('points-review-po', (_event, el) => EMIE.actions.reviewPoProgress(Number(el.dataset.progressId), el.dataset.approve === 'true'));
   registerEventAction('points-month', (_event, el) => refreshPointsMonth(el.value));
   registerEventAction('points-submit-po', (_event, el) => submitPoProgress(Number(el.dataset.projectId), el.dataset.month));
-  registerEventAction('points-rules-filter', (_event, el) => filterPointsRules(el.value));
+  registerEventAction('points-rules-filter', () => filterPointsRules(true));
+  registerEventAction('points-rules-page', (_event, el) => changePointsRulesPage(Number(el.dataset.page)));
 }

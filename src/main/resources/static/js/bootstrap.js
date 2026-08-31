@@ -9,7 +9,7 @@ import './dashboard-projects.js?v=435';
 import './dashboard-home.js?v=577';
 import './dashboard-lists.js?v=368';
 import './dashboard-scoring.js?v=334';
-import './dashboard-points.js?v=327';
+import './dashboard-points.js?v=330';
 import './dashboard-designer.js?v=542';
 import './dashboard.js?v=219';
 import './material-market.js?v=123';
@@ -28,7 +28,7 @@ import './admin-org.js?v=292';
 import './admin-scoring.js?v=565';
 import './admin-audit.js?v=357';
 import './admin-storage.js?v=321';
-import './admin-workload.js?v=426';
+import './admin-workload.js?v=430';
 import './admin.js?v=147';
 import './files.js?v=278';
 

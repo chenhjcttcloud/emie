@@ -8,14 +8,18 @@ async function renderAdminWorkload(container) {
   EMIE.workloadContainer = container;
   container.innerHTML = `<div class="loading">加载中</div>`;
   try {
-    const data = await apiGet('/admin/workload/timeline?range=' + EMIE.adminState.workloadRange);
+    const customStart = EMIE.adminState.workloadStartDate || '';
+    const customEnd = EMIE.adminState.workloadEndDate || '';
+    const customQuery = EMIE.adminState.workloadRange === 'custom' && customStart && customEnd
+      ? `&startDate=${encodeURIComponent(customStart)}&endDate=${encodeURIComponent(customEnd)}` : '';
+    const data = await apiGet('/admin/workload/timeline?range=' + EMIE.adminState.workloadRange + customQuery);
     const summary = data._summary || {};
     const rangeLabel = summary.rangeLabel || '今日';
     const rangeOptions = [
       { key: 'day', label: '今日' }, { key: 'week', label: '本周' },
       { key: 'month', label: '本月' }, { key: 'quarter', label: '本季度' },
       { key: 'half-year', label: '本半年' }, { key: 'year', label: '本年度' },
-      { key: 'all', label: '总览' },
+      { key: 'all', label: '总览' }, { key: 'custom', label: '自定义日期' },
     ];
 
     const workloadQuery = EMIE.adminState.workloadQuery || '';
@@ -31,6 +35,14 @@ async function renderAdminWorkload(container) {
             color:${o.key === EMIE.adminState.workloadRange ? '#1E40AF' : '#374151'};
             font-size:13px;cursor:pointer;white-space:nowrap;">${o.label}</button>
         `).join('')}
+      </div>
+      <div style="display:${EMIE.adminState.workloadRange === 'custom' ? 'flex' : 'none'};align-items:center;gap:8px;margin:-6px 0 16px;padding:12px 14px;border:1px solid #BFDBFE;border-radius:10px;background:#F8FBFF;flex-wrap:wrap;">
+        <span style="font-size:12px;color:#475569;">统计日期</span>
+        <input type="date" class="form-input" style="width:160px;" value="${escHtml(customStart)}" data-emie-action="change:workload-start-date" aria-label="开始日期">
+        <span style="color:var(--gray-400);">至</span>
+        <input type="date" class="form-input" style="width:160px;" value="${escHtml(customEnd)}" data-emie-action="change:workload-end-date" aria-label="结束日期">
+        <button class="btn btn-primary btn-sm" data-emie-action="click:workload-apply-dates">查询</button>
+        <span style="font-size:12px;color:var(--gray-400);">包含开始和结束当天</span>
       </div>
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
         <input class="form-input" style="width:220px;" placeholder="搜索员工姓名" value="${escHtml(workloadQuery)}" data-emie-action="input:workload-query">
@@ -172,6 +184,27 @@ async function renderAdminWorkload(container) {
 
 function switchWorkloadRange(range) {
   EMIE.adminState.workloadRange = range;
+  if (range === 'custom') {
+    const today = new Date();
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const formatDate = date => date.toLocaleDateString('en-CA');
+    EMIE.adminState.workloadStartDate ||= formatDate(monthStart);
+    EMIE.adminState.workloadEndDate ||= formatDate(today);
+  }
+  const container = EMIE.workloadContainer || document.getElementById('adminContent');
+  if (container) renderAdminWorkload(container);
+}
+
+function setWorkloadDate(kind, value) {
+  if (kind === 'start') EMIE.adminState.workloadStartDate = value;
+  if (kind === 'end') EMIE.adminState.workloadEndDate = value;
+}
+
+function applyWorkloadDates() {
+  const start = EMIE.adminState.workloadStartDate;
+  const end = EMIE.adminState.workloadEndDate;
+  if (!start || !end) return EMIE.actions.showSystemAlert('请选择开始日期和结束日期');
+  if (start > end) return EMIE.actions.showSystemAlert('结束日期不能早于开始日期');
   const container = EMIE.workloadContainer || document.getElementById('adminContent');
   if (container) renderAdminWorkload(container);
 }
@@ -194,6 +227,8 @@ EMIE.registerActions({
   switchWorkloadRange,
   setWorkloadQuery,
   setWorkloadSort,
+  setWorkloadDate,
+  applyWorkloadDates,
 });
 
 const registerEventAction = EMIE.actions.registerEventAction;
@@ -201,6 +236,9 @@ if (registerEventAction) {
   registerEventAction('workload-range', (_event, element) => switchWorkloadRange(element.dataset.range));
   registerEventAction('workload-query', (_event, element) => setWorkloadQuery(element.value));
   registerEventAction('workload-sort', (_event, element) => setWorkloadSort(element.value));
+  registerEventAction('workload-start-date', (_event, element) => setWorkloadDate('start', element.value));
+  registerEventAction('workload-end-date', (_event, element) => setWorkloadDate('end', element.value));
+  registerEventAction('workload-apply-dates', () => applyWorkloadDates());
 }
 
 EMIE.registerModule('adminWorkload', {
@@ -208,4 +246,6 @@ EMIE.registerModule('adminWorkload', {
   switchWorkloadRange,
   setWorkloadQuery,
   setWorkloadSort,
+  setWorkloadDate,
+  applyWorkloadDates,
 });

@@ -16,6 +16,7 @@ import org.springframework.data.domain.Pageable;
 import com.emie.designpm.dto.PageResponse;
 
 import java.util.*;
+import java.time.LocalDate;
 import java.io.IOException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -380,11 +381,20 @@ public class AdminController {
     @GetMapping("/workload/timeline")
     public ResponseEntity<Map<String, Object>> getWorkloadTimeline(
             @RequestParam(value = "range", defaultValue = "month") String range,
+            @RequestParam(value = "startDate", required = false) LocalDate startDate,
+            @RequestParam(value = "endDate", required = false) LocalDate endDate,
             @RequestHeader("X-Auth-Token") String token) {
         AuthController.AuthSession session = AuthController.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
         if (!"admin".equals(session.role())) return ResponseEntity.status(403).build();
-        return ResponseEntity.ok(adminService.getWorkloadTimeline(range));
+        if ((startDate == null) != (endDate == null)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "开始日期和结束日期必须同时填写"));
+        }
+        try {
+            return ResponseEntity.ok(adminService.getWorkloadTimeline(range, startDate, endDate));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     // ==================== 辅助方法 ====================
