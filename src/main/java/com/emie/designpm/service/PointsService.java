@@ -34,7 +34,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @Service
 @Transactional
 public class PointsService {
-    public static final String TASK_APPROVED = "TASK_APPROVED";
     private static final Logger log = LoggerFactory.getLogger(PointsService.class);
     private final PointRuleRepository rules;
     private final PointLedgerRepository ledgers;
@@ -238,7 +237,7 @@ public class PointsService {
     }
 
     private String normalizedRuleCode(String ruleCode) {
-        return ruleCode == null || ruleCode.isBlank() ? TASK_APPROVED : ruleCode.trim().toUpperCase();
+        return ruleCode == null ? "" : ruleCode.trim().toUpperCase();
     }
 
     private String normalizeDifficultyCode(String difficultyCode) {
@@ -307,7 +306,7 @@ public class PointsService {
 
     public PointRule createRule(PointRule rule) {
         String code = normalizedRuleCode(rule == null ? null : rule.getRuleCode());
-        if (TASK_APPROVED.equals(code) && (rule == null || rule.getRuleCode() == null || rule.getRuleCode().isBlank())) {
+        if (code.isBlank() || rule == null || rule.getRuleCode() == null || rule.getRuleCode().isBlank()) {
             throw new IllegalArgumentException("规则编号不能为空");
         }
         if (!code.matches("[A-Z0-9_-]{1,80}")) throw new IllegalArgumentException("规则编号仅支持字母、数字、下划线和短横线");

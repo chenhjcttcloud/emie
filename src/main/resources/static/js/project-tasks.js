@@ -38,6 +38,20 @@ function enabledPointRules(rules) {
   return (Array.isArray(rules) ? rules : []).filter(rule => rule.enabled !== false);
 }
 
+function pointRuleDisplayName(code, description) {
+  const labels = {
+    TASK_APPROVED: '通用任务（验收完成）',
+    A1: '包装整套设计', A2: '包装单项设计', A3: '包装修改 / 刀模 / 箱规', A4: '包装多语言版',
+    A5: '详情页全套设计', A6: '详情页局部 / 改版', A7: '主图 / 单张卖点图', A8: '海报 / 立牌 / 单页',
+    A9: '展会物料整套', A10: 'UI界面 / 灯珠图案 / 待机页', A11: 'AI生图 / 场景图 / 推广图',
+    B1: '原创产品设计', B2: '外采产品IP化设计', B3: '新增SKU / 配色衍生', B4: '展会样品 / 客户定制产品',
+    B5: '3D建模渲染出图', B6: '3D公仔建模 / 输出',
+    E1: '送审文件 / 送审调整', E2: '打样文件输出', E3: '报价文件', E4: '工厂跟单调色 / 大货文件',
+    S1: '内部建设（素材库 / 模板库 / 提示词库 / 竞品图库）',
+  };
+  return labels[String(code || '').toUpperCase()] || description || code;
+}
+
 function renderPointRuleOptions(rules, selectedCode) {
   const active = enabledPointRules(rules);
   const selected = String(selectedCode || '');
@@ -46,7 +60,7 @@ function renderPointRuleOptions(rules, selectedCode) {
   const groups = new Map();
   active.forEach(rule => { const key = String(rule.category || '其他').toUpperCase(); if (!groups.has(key)) groups.set(key, []); groups.get(key).push(rule); });
   const order = { A: 1, B: 2, E: 3, S: 4, 其他: 9 };
-  return `<option value="" ${selected ? '' : 'selected'} disabled>请选择积分规则</option>` + missingSelected + [...groups.entries()].sort((a, b) => (order[a[0]] || 8) - (order[b[0]] || 8)).map(([category, items]) => `<optgroup label="${escHtml(category)}">${items.sort((a, b) => { const na = Number(String(a.ruleCode || '').match(/\d+/)?.[0] || 0); const nb = Number(String(b.ruleCode || '').match(/\d+/)?.[0] || 0); return na - nb; }).map(rule => { const code = String(rule.ruleCode || ''); const desc = code === 'TASK_APPROVED' ? '' : (rule.description || ''); return `<option value="${escHtml(code)}" ${code === selected ? 'selected' : ''}>${escHtml(code)}（${Number(rule.points || 0)} 分）${desc ? ' · ' + escHtml(desc) : ''}</option>`; }).join('')}</optgroup>`).join('');
+  return `<option value="" ${selected ? '' : 'selected'} disabled>请选择积分规则</option>` + missingSelected + [...groups.entries()].sort((a, b) => (order[a[0]] || 8) - (order[b[0]] || 8)).map(([category, items]) => `<optgroup label="${escHtml(category)}">${items.sort((a, b) => { const na = Number(String(a.ruleCode || '').match(/\d+/)?.[0] || 0); const nb = Number(String(b.ruleCode || '').match(/\d+/)?.[0] || 0); return na - nb; }).map(rule => { const code = String(rule.ruleCode || ''); const label = pointRuleDisplayName(code, rule.description); return `<option value="${escHtml(code)}" ${code === selected ? 'selected' : ''}>${escHtml(label)}（${Number(rule.points || 0)} 分）</option>`; }).join('')}</optgroup>`).join('');
 }
 
 function pointRuleCategoryHint(category) {
