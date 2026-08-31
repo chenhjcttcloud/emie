@@ -84,6 +84,10 @@ async function refreshPointsMonth(month) {
     const rows = Array.isArray(leaderboard) ? leaderboard : [];
     if (leaderboardBody) leaderboardBody.innerHTML = renderLeaderboardRows(rows, EMIE.state.currentUserId);
     if (previewBox) {
+      if (preview.performanceDisabled) {
+        previewBox.innerHTML = '<div class="empty-state">当前仅记录积分，绩效由管理员根据积分人工核算</div>';
+        return;
+      }
       const target = Number(preview.targetPoints || 0);
       const actual = Number(preview.points || 0);
       const rate = Number.isFinite(Number(preview.attainmentRate))
