@@ -27,11 +27,14 @@ function authenticatedFileUrl(url) {
   // 原生图片/新窗口无法附加 X-Auth-Token；为兼容当前 token 会话，补充受保护资源参数。
   // fetch 请求仍优先使用请求头，只有浏览器原生资源请求才会使用该参数。
   const token = localStorage.getItem('design_pm_token');
-  if (!token || !url || !/^\/api\/files\//.test(url)) return url;
+  if (!token || !url) return url;
   try {
     const parsed = new URL(url, window.location.origin);
+    if (parsed.origin !== window.location.origin || !parsed.pathname.startsWith('/api/files/')) return url;
     parsed.searchParams.set('authToken', token);
-    return parsed.pathname + parsed.search + parsed.hash;
+    return parsed.origin === window.location.origin
+      ? parsed.pathname + parsed.search + parsed.hash
+      : parsed.toString();
   } catch (_) {
     return url;
   }
