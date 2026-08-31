@@ -70,8 +70,23 @@ public class PerformanceService {
         double points = month == null ? ledgers.sumPerformancePointsByUserId(userId) + adjustments.sumPointsByUserId(userId)
                 : leaderboard(month).stream().filter(row -> userId.equals(row.get("userId")))
                 .mapToDouble(row -> ((Number) row.get("points")).doubleValue()).findFirst().orElse(0);
+        StandardPointConfig personal = standards.findByConfigCode(userId).filter(StandardPointConfig::isEnabled).orElse(null);
+        MonthlyUserPointTarget assignedTarget = userTargets == null ? null : userTargets.findByUserId(userId).orElse(null);
+        int target = assignedTarget != null ? assignedTarget.getTargetPoints() : personal != null ? personal.getPoints() : 0;
+        double companyCoefficient = 1d;
+        double attainmentRate = target > 0 ? (double) points / target : 0d;
+        double performanceBase = personal == null || personal.getPerformanceBase() == null ? 0d : personal.getPerformanceBase();
+        double simulatedSalary = performanceBase * companyCoefficient * attainmentRate;
+        String mode = config("points.program.mode", "TRIAL").toUpperCase(Locale.ROOT);
+        boolean officiallyApplied = "ACTIVE".equals(mode) || ("AUTO".equals(mode) && !LocalDate.now().isBefore(LocalDate.parse(config("points.program.active_start", "2026-10-01"))));
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("userId", userId); out.put("month", month); out.put("points", points);
+        // 保留接口兼容字段；前端不再展示或使用自动绩效结果。
+        out.put("targetPoints", target); out.put("attainmentRate", attainmentRate); out.put("multiplier", companyCoefficient);
+        out.put("companyCoefficient", companyCoefficient); out.put("performanceFactor", attainmentRate * companyCoefficient);
+        out.put("performanceBase", performanceBase); out.put("simulatedPerformanceSalary", simulatedSalary);
+        out.put("officiallyApplied", officiallyApplied); out.put("payablePerformanceSalary", officiallyApplied ? simulatedSalary : null);
+        out.put("programMode", mode);
         out.put("performanceDisabled", true);
         out.put("manualCalculationMessage", "当前仅记录积分，绩效由管理员根据积分人工核算");
         return out;
