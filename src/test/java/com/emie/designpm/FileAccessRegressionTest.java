@@ -286,6 +286,29 @@ class FileAccessRegressionTest {
     }
 
     @Test
+    void designerCanOpenImageLibraryFileWithoutBusinessTargetId() {
+        String storedName = "library-image.png";
+        FileRecordRepository records = mock(FileRecordRepository.class);
+        FileController controller = new FileController(mock(FileArchiveService.class), records,
+                mock(ProjectAccessService.class), mock(SubTaskRepository.class), mock(FilePreviewService.class));
+        FileRecord libraryImage = FileRecord.builder()
+                .storedName(storedName)
+                .originalName("产品图.png")
+                .fileSize(1024L)
+                .ownerUserId("planner-1")
+                .targetType("image_library")
+                .targetId(null)
+                .storageTier("local")
+                .build();
+        when(records.findByStoredName(storedName)).thenReturn(Optional.of(libraryImage));
+
+        Boolean allowed = ReflectionTestUtils.invokeMethod(controller, "canAccessFile",
+                new AuthController.AuthSession("designer-1", "designer", "设计师"), storedName, storedName);
+
+        assertTrue(allowed, "图档库文件不应因没有业务 targetId 被拒绝");
+    }
+
+    @Test
     void anonymousAdminManagedImageIsAllowedButOtherAdminFilesFailClosed() {
         FileController controller = new FileController(mock(FileArchiveService.class),
                 mock(FileRecordRepository.class), mock(ProjectAccessService.class),

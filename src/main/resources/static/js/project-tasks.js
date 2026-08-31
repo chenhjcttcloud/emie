@@ -621,6 +621,7 @@ async function taskDeliver(pid, tid) {
     const task = detail.tasks.find(t => t.id === tid);
     if (!task) return;
     EMIE.projectState.deliverImages = [];
+    EMIE.projectState.deliverLibraryImages = [];
     EMIE.projectState.deliverAttachments = [];
 
     const modal = document.createElement('div');
@@ -642,13 +643,14 @@ async function taskDeliver(pid, tid) {
             </div>
           </form>
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
-            <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
+            <div class="form-label" style="margin-bottom:8px;">🖼️ 本地上传的交付参考图</div>
             <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="deliverImageInput">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
               <input type="file" id="deliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-deliver-images">
             </div>
             <div class="file-list" id="deliverImageList"></div>
           </div>
+          <div class="delivery-library-section"><div class="task-delivery-image-heading"><div><strong>🔗 关联图档库</strong><small>从团队图档库选择已有图片</small></div><button type="button" class="btn btn-outline btn-sm" data-emie-action="click:task-open-library-picker">选择图档</button></div><div id="deliveryLibraryImageList" class="delivery-library-selected-list"><span>暂未关联图档库图片</span></div></div>
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label" style="margin-bottom:8px;">📎 交付附件</div>
             <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="deliverAttachmentInput">
@@ -664,6 +666,37 @@ async function taskDeliver(pid, tid) {
   } catch (e) {
     window.EMIE.actions.showSystemAlert('加载失败: ' + e.message);
   }
+}
+
+async function openDeliveryLibraryPicker() {
+  if (document.getElementById('deliveryLibraryPicker')) return;
+  try {
+    const items = await apiGet('/image-library');
+    const images = items.flatMap(item => (item.images || []).filter(file => !String(file.name || '').toLowerCase().endsWith('.ai')).map(file => ({ ...file, libraryItemId: item.id, libraryName: item.name, ipName: item.ipName })));
+    EMIE.deliveryLibraryPickerImages = images;
+    const selectedNames = new Set((EMIE.projectState.deliverLibraryImages || []).map(file => file.storedName));
+    const token = localStorage.getItem('design_pm_token');
+    const authUrl = url => token ? `${url}${url.includes('?') ? '&' : '?'}authToken=${encodeURIComponent(token)}` : url;
+    const overlay = document.createElement('div'); overlay.id = 'deliveryLibraryPicker'; overlay.className = 'modal-overlay modal-detail-drawer';
+    overlay.innerHTML = `<div class="modal"><div class="modal-header"><div><div class="modal-title">关联图档库图片</div><div class="form-hint">选择后会作为本次交付参考图，交付图片总数最多 6 张</div></div><button class="modal-close" data-emie-action="click:task-close-library-picker">✕</button></div><div class="modal-body"><div class="delivery-library-picker-grid">${images.length ? images.map((file, index) => { const thumb = `/api/files/thumbnail/${file.storedName}`; const selected = selectedNames.has(file.storedName); return `<button type="button" class="delivery-library-picker-card ${selected ? 'selected' : ''}" data-emie-action="click:task-toggle-library-image" data-file-index="${index}"><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(authUrl(thumb))}" alt="${escHtml(file.name || file.libraryName)}"><strong>${escHtml(file.libraryName || file.name)}</strong><small>${escHtml(file.ipName || '')}</small><span>✓</span></button>`; }).join('') : '<div class="empty-state">图档库中暂无可关联的图片</div>'}</div></div><div class="modal-footer"><span id="deliveryLibrarySelectedCount" class="form-hint">已选择 ${selectedNames.size} 张</span><button class="btn btn-outline" data-emie-action="click:task-close-library-picker">取消</button><button class="btn btn-primary" data-emie-action="click:task-confirm-library-picker">确认关联</button></div></div>`;
+    overlay.addEventListener('click', event => { if (event.target === overlay) closeDeliveryLibraryPicker(); }); document.body.appendChild(overlay);
+  } catch (error) { window.EMIE.actions.showSystemAlert('图档库加载失败：' + error.message); }
+}
+function closeDeliveryLibraryPicker() { document.getElementById('deliveryLibraryPicker')?.remove(); EMIE.deliveryLibraryPickerImages = []; }
+function toggleDeliveryLibraryImage(button) { button.classList.toggle('selected'); const count = document.querySelectorAll('#deliveryLibraryPicker .delivery-library-picker-card.selected').length; document.getElementById('deliveryLibrarySelectedCount').textContent = `已选择 ${count} 张`; }
+function confirmDeliveryLibraryPicker() {
+  const files = [...document.querySelectorAll('#deliveryLibraryPicker .delivery-library-picker-card.selected')].map(button => EMIE.deliveryLibraryPickerImages[Number(button.dataset.fileIndex)]).filter(Boolean);
+  const selected = files.map(file => ({ name: file.name, url: file.url || `/api/files/download/${file.storedName}`, size: file.size, storedName: file.storedName, libraryItemId: file.libraryItemId, libraryName: file.libraryName }));
+  if ((EMIE.projectState.deliverImages || []).length + selected.length > 6) return window.EMIE.actions.showSystemAlert('本地图片和关联图档合计最多 6 张，请减少选择');
+  EMIE.projectState.deliverLibraryImages = selected; renderDeliveryLibrarySelection(); closeDeliveryLibraryPicker();
+}
+
+function removeDeliveryLibraryImage(index) { EMIE.projectState.deliverLibraryImages.splice(index, 1); renderDeliveryLibrarySelection(); }
+function renderDeliveryLibrarySelection() {
+  const container = document.getElementById('deliveryLibraryImageList'); if (!container) return;
+  const token = localStorage.getItem('design_pm_token'), authUrl = url => token ? `${url}${url.includes('?') ? '&' : '?'}authToken=${encodeURIComponent(token)}` : url;
+  const files = EMIE.projectState.deliverLibraryImages || [];
+  container.innerHTML = files.length ? files.map((file, index) => `<article><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(authUrl(`/api/files/thumbnail/${file.storedName}`))}" alt="${escHtml(file.name || '')}"><div><strong>${escHtml(file.libraryName || file.name || '图档库图片')}</strong><small>${escHtml(file.name || '')}</small></div><button type="button" data-emie-action="click:task-remove-library-image" data-index="${index}" aria-label="取消关联">✕</button></article>`).join('') : '<span>暂未关联图档库图片</span>';
 }
 
 // ===== 自评分数输入校验：1-100，整数 =====
@@ -686,6 +719,7 @@ const validateScoreInput = function(input) {
 
 async function submitTaskDeliver(pid, tid) {
   if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
+  if (EMIE.projectState.deliverImages.length + EMIE.projectState.deliverLibraryImages.length > 6) { window.EMIE.actions.showSystemAlert('本地图片和关联图档合计最多 6 张'); return; }
   const fd = new FormData(document.getElementById('taskDeliverForm'));
   const data = Object.fromEntries(fd.entries());
   data.actualDate = new Date().toISOString().split('T')[0];
@@ -696,7 +730,7 @@ async function submitTaskDeliver(pid, tid) {
   data.currentUser = getCurrentUserName();
   data.currentRole = EMIE.state.currentRole;
   data.currentUserId = EMIE.state.currentUserId;
-  data.referenceImagesJson = JSON.stringify(EMIE.projectState.deliverImages.map(i => ({ name: i.name, url: i.url, size: i.size, storedName: i.storedName })));
+  data.referenceImagesJson = JSON.stringify([...EMIE.projectState.deliverImages, ...EMIE.projectState.deliverLibraryImages].map(i => ({ name: i.name, url: i.url, size: i.size, storedName: i.storedName, libraryItemId: i.libraryItemId || null })));
   data.attachmentsJson = JSON.stringify(EMIE.projectState.deliverAttachments);
 
   try {
@@ -739,6 +773,7 @@ async function taskRedeliver(pid, tid) {
     const task = detail.tasks.find(t => t.id === tid);
     if (!task) return;
     EMIE.projectState.deliverImages = [];
+    EMIE.projectState.deliverLibraryImages = [];
     EMIE.projectState.deliverAttachments = [];
 
     const modal = document.createElement('div');
@@ -761,13 +796,14 @@ async function taskRedeliver(pid, tid) {
             </div>
           </form>
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
-            <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
+            <div class="form-label" style="margin-bottom:8px;">🖼️ 本地上传的交付参考图</div>
             <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="deliverImageInput">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
               <input type="file" id="deliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-deliver-images">
             </div>
             <div class="file-list" id="deliverImageList"></div>
           </div>
+          <div class="delivery-library-section"><div class="task-delivery-image-heading"><div><strong>🔗 关联图档库</strong><small>从团队图档库选择已有图片</small></div><button type="button" class="btn btn-outline btn-sm" data-emie-action="click:task-open-library-picker">选择图档</button></div><div id="deliveryLibraryImageList" class="delivery-library-selected-list"><span>暂未关联图档库图片</span></div></div>
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label" style="margin-bottom:8px;">📎 交付附件</div>
             <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="deliverAttachmentInput">
@@ -799,6 +835,7 @@ async function taskConfirmRevision(pid, tid) {
 
 async function submitTaskRedeliver(pid, tid) {
   if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
+  if (EMIE.projectState.deliverImages.length + EMIE.projectState.deliverLibraryImages.length > 6) { window.EMIE.actions.showSystemAlert('本地图片和关联图档合计最多 6 张'); return; }
   const fd = new FormData(document.getElementById('taskRedeliverForm'));
   const data = Object.fromEntries(fd.entries());
   data.actualDate = new Date().toISOString().split('T')[0];
@@ -809,7 +846,7 @@ async function submitTaskRedeliver(pid, tid) {
   data.currentUser = getCurrentUserName();
   data.currentRole = EMIE.state.currentRole;
   data.currentUserId = EMIE.state.currentUserId;
-  data.referenceImagesJson = JSON.stringify(EMIE.projectState.deliverImages.map(i => ({ name: i.name, url: i.url, size: i.size, storedName: i.storedName })));
+  data.referenceImagesJson = JSON.stringify([...EMIE.projectState.deliverImages, ...EMIE.projectState.deliverLibraryImages].map(i => ({ name: i.name, url: i.url, size: i.size, storedName: i.storedName, libraryItemId: i.libraryItemId || null })));
   data.attachmentsJson = JSON.stringify(EMIE.projectState.deliverAttachments);
 
   try {
@@ -827,7 +864,7 @@ async function taskCorrectDelivery(pid, tid) {
     const detail = await apiGet(`/projects/${pid}`);
     const task = detail.tasks.find(t => t.id === tid);
     if (!task) return;
-    try { EMIE.projectState.deliverImages = JSON.parse(task.referenceImagesJson || '[]'); } catch (_) { EMIE.projectState.deliverImages = []; }
+    try { const allImages = JSON.parse(task.referenceImagesJson || '[]'); EMIE.projectState.deliverLibraryImages = allImages.filter(file => file.libraryItemId); EMIE.projectState.deliverImages = allImages.filter(file => !file.libraryItemId); } catch (_) { EMIE.projectState.deliverImages = []; EMIE.projectState.deliverLibraryImages = []; }
     try { EMIE.projectState.deliverAttachments = JSON.parse(task.attachmentsJson || '[]'); } catch (_) { EMIE.projectState.deliverAttachments = []; }
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
@@ -846,10 +883,11 @@ async function taskCorrectDelivery(pid, tid) {
             <div class="form-group"><label class="form-label"><span class="required">*</span> 自评分数</label><input type="number" class="form-input" name="selfScore" required min="1" max="100" step="1" value="${task.selfScore || ''}" data-emie-action="input:task-score-input" style="max-width:200px;"></div>
           </form>
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
-            <div class="form-label">🖼️ 当前交付参考图（可删除错误文件或补充文件）</div>
+            <div class="form-label">🖼️ 当前本地交付参考图（可删除错误文件或补充文件）</div>
             <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="correctDeliverImageInput"><div>📁 点击补充图片或模型文件</div><input type="file" id="correctDeliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-deliver-images"></div>
             <div class="file-list" id="deliverImageList"></div>
           </div>
+          <div class="delivery-library-section"><div class="task-delivery-image-heading"><div><strong>🔗 关联图档库</strong><small>独立管理本次交付关联的图库图片</small></div><button type="button" class="btn btn-outline btn-sm" data-emie-action="click:task-open-library-picker">选择图档</button></div><div id="deliveryLibraryImageList" class="delivery-library-selected-list"></div></div>
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label">📎 当前交付附件（可删除错误文件或补充文件）</div>
             <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="correctDeliverAttachmentInput"><div>📁 点击补充附件</div><input type="file" id="correctDeliverAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-deliver-attachments"></div>
@@ -860,6 +898,7 @@ async function taskCorrectDelivery(pid, tid) {
       </div>`;
     document.body.appendChild(modal);
     renderFileList(EMIE.projectState.deliverImages, '交付参考图');
+    renderDeliveryLibrarySelection();
     renderFileList(EMIE.projectState.deliverAttachments, '交付附件');
     doneOpenModal('taskCorrectDeliveryModal');
   } catch (e) {
@@ -870,6 +909,7 @@ async function taskCorrectDelivery(pid, tid) {
 
 async function submitTaskCorrectDelivery(pid, tid) {
   if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
+  if (EMIE.projectState.deliverImages.length + EMIE.projectState.deliverLibraryImages.length > 6) { window.EMIE.actions.showSystemAlert('本地图片和关联图档合计最多 6 张'); return; }
   const form = document.getElementById('taskCorrectDeliveryForm');
   if (!form?.reportValidity()) return;
   const data = Object.fromEntries(new FormData(form).entries());
@@ -880,7 +920,7 @@ async function submitTaskCorrectDelivery(pid, tid) {
   data.currentUser = getCurrentUserName();
   data.currentRole = EMIE.state.currentRole;
   data.currentUserId = getCurrentUserId();
-  data.referenceImagesJson = JSON.stringify(EMIE.projectState.deliverImages);
+  data.referenceImagesJson = JSON.stringify([...EMIE.projectState.deliverImages, ...EMIE.projectState.deliverLibraryImages]);
   data.attachmentsJson = JSON.stringify(EMIE.projectState.deliverAttachments);
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/correct-delivery`, data);
@@ -1161,6 +1201,11 @@ if (registerEventAction) {
   registerEventAction('task-submit-accept', (_event, element) =>
     submitGuard(element, () => submitTaskAccept(element.dataset.projectId, element.dataset.taskId)));
   registerEventAction('task-deliver-close', () => closeM('taskDeliverModal'));
+  registerEventAction('task-open-library-picker', () => openDeliveryLibraryPicker());
+  registerEventAction('task-close-library-picker', () => closeDeliveryLibraryPicker());
+  registerEventAction('task-toggle-library-image', (_event, element) => toggleDeliveryLibraryImage(element));
+  registerEventAction('task-confirm-library-picker', () => confirmDeliveryLibraryPicker());
+  registerEventAction('task-remove-library-image', (_event, element) => removeDeliveryLibraryImage(Number(element.dataset.index)));
   registerEventAction('task-score-input', (_event, element) => validateScoreInput(element));
   registerEventAction('task-deliver-images', (_event, element) => handleDeliverImages(element));
   registerEventAction('task-deliver-attachments', (_event, element) => handleDeliverAttachments(element));

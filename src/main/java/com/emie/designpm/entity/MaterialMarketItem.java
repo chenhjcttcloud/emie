@@ -3,6 +3,8 @@ package com.emie.designpm.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 @Data
@@ -14,6 +16,7 @@ public class MaterialMarketItem {
  @Column(nullable=false,length=100) private String creatorId;
  @Column(nullable=false,length=200) private String creatorName;
  @Column(nullable=false,length=100) private String ipName;
+ @Column(nullable=false,length=20) private String category="visual";
  @Column(columnDefinition="TEXT") private String ipSubOptionsJson;
  @Column(columnDefinition="LONGTEXT",nullable=false) private String materialFilesJson;
  @Column(columnDefinition="LONGTEXT") private String referenceImagesJson;
@@ -25,6 +28,10 @@ public class MaterialMarketItem {
  private String selectedBy;
  @Transient private String selectedByName;
  private LocalDateTime selectedAt;
+ @Column(length=20) private String adoptionType;
+ @Column(nullable=false) private Integer likeCount=0;
+ @Transient private boolean likedByCurrentUser;
+ @Transient private List<MaterialMarketAdoption> adoptions=new ArrayList<>();
  @Column(nullable=false) private LocalDateTime createdAt;
  @PrePersist void onCreate(){if(createdAt==null)createdAt=LocalDateTime.now();}
  @JsonProperty("authorName") public String getAuthorName(){return creatorName;}
@@ -32,5 +39,5 @@ public class MaterialMarketItem {
  @JsonProperty("files") public String getFiles(){return materialFilesJson;}
  @JsonProperty("referenceImages") public String getReferenceImages(){return referenceImagesJson;}
  @JsonProperty("planFile") public String getPlanFile(){return proposalPptJson;}
- @JsonProperty("selected") public boolean isSelected(){return !"available".equals(status);}
+ @JsonProperty("selected") public boolean isSelected(){return "selected".equals(status);}
 }

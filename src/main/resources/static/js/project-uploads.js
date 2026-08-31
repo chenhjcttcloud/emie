@@ -122,21 +122,27 @@ function previewImage(src, name) {
   overlay.setAttribute('aria-modal', 'true');
   overlay.setAttribute('aria-label', name ? `图片预览：${name}` : '图片预览');
   overlay.setAttribute('tabindex', '-1');
-  overlay.style.cssText = 'z-index:300;background:rgba(0,0,0,.85);overflow:hidden;';
+  overlay.style.cssText = 'z-index:300;background:rgba(255,255,255,.72);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);overflow:hidden;';
   overlay.onclick = (e) => { if (e.target === overlay) { cleanup(); overlay.remove(); } };
 
   let scale = 1;
   const minScale = 0.25;
   const maxScale = 10;
   let isDragging = false;
+  let dragMoved = false;
   let startX = 0, startY = 0;
   let panX = 0, panY = 0;
 
   const imgWrap = document.createElement('div');
   imgWrap.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;justify-content:center;cursor:grab;user-select:none;overflow:hidden;';
+  imgWrap.onclick = function(e) {
+    if (e.target === imgWrap && !dragMoved) { cleanup(); overlay.remove(); }
+    dragMoved = false;
+  };
   imgWrap.onmousedown = function(e) {
     if (scale <= 1) return;
     isDragging = true;
+    dragMoved = false;
     startX = e.clientX - panX;
     startY = e.clientY - panY;
     imgWrap.style.cursor = 'grabbing';
@@ -176,6 +182,7 @@ function previewImage(src, name) {
 
   function onMove(e) {
     if (!isDragging) return;
+    if (Math.abs(e.clientX - startX - panX) > 4 || Math.abs(e.clientY - startY - panY) > 4) dragMoved = true;
     panX = e.clientX - startX;
     panY = e.clientY - startY;
     img.style.marginLeft = panX + 'px';
@@ -186,14 +193,6 @@ function previewImage(src, name) {
     isDragging = false;
     imgWrap.style.cursor = scale > 1 ? 'grab' : 'default';
   }
-
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.setAttribute('aria-label', '关闭图片预览');
-  closeBtn.innerHTML = '✕';
-  closeBtn.onclick = function() { cleanup(); overlay.remove(); };
-  closeBtn.style.cssText = 'position:fixed;top:20px;left:20px;width:40px;height:40px;border-radius:12px;border:none;background:rgba(255,255,255,.9);color:#333;font-size:20px;cursor:pointer;z-index:310;box-shadow:0 2px 12px rgba(0,0,0,.3);';
-
 
   function cleanup() {
     if (cleanedUp) return;
@@ -211,7 +210,7 @@ function previewImage(src, name) {
     if (e.key === 'Tab') {
       e.preventDefault();
       e.stopImmediatePropagation();
-      closeBtn.focus();
+      overlay.focus();
       return;
     }
     if (e.key !== 'Escape') return;
@@ -226,12 +225,11 @@ function previewImage(src, name) {
     if (!overlay.isConnected) cleanup();
   });
 
-  overlay.appendChild(closeBtn);
   overlay.appendChild(imgWrap);
   overlay.appendChild(zoomLabel);
   document.body.appendChild(overlay);
   removalObserver.observe(document.body, { childList: true });
-  requestAnimationFrame(() => closeBtn.focus({ preventScroll: true }));
+  requestAnimationFrame(() => overlay.focus({ preventScroll: true }));
   preparePresentationImageDrag(img);
 }
 

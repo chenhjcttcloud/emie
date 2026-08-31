@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
@@ -43,6 +45,35 @@ public class PointsController {
 
     @GetMapping("/rules")
     public List<PointRule> rules() { return points.rules(); }
+
+    @GetMapping("/categories")
+    public ResponseEntity<?> categories() {
+        try {
+            Set<String> values = new LinkedHashSet<>();
+            points.rules().forEach(rule -> { if (rule.getCategory() != null && !rule.getCategory().isBlank()) values.add(rule.getCategory().trim()); });
+            systemConfigs.findByConfigKey("points.rule.categories").ifPresent(config -> { try { values.addAll(new ObjectMapper().readValue(config.getConfigValue(), new TypeReference<Set<String>>() {})); } catch (Exception ignored) {} });
+            return ResponseEntity.ok(values);
+        } catch (Exception e) { return ResponseEntity.badRequest().body(Map.of("error", "类别加载失败")); }
+    }
+
+    @PostMapping("/categories")
+    public ResponseEntity<?> addCategory(@RequestBody Map<String,Object> body, HttpServletRequest request) {
+        if (!"admin".equals(session(request).role())) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可管理积分类别"));
+        String category = String.valueOf(body.getOrDefault("category", "")).trim();
+        if (category.isBlank() || category.length() > 50) return ResponseEntity.badRequest().body(Map.of("error", "类别不能为空且不能超过50个字符"));
+        try {
+            Set<String> values = new LinkedHashSet<>(); systemConfigs.findByConfigKey("points.rule.categories").ifPresent(c -> { try { values.addAll(new ObjectMapper().readValue(c.getConfigValue(), new TypeReference<Set<String>>() {})); } catch (Exception ignored) {} }); values.add(category);
+            SystemConfig c = systemConfigs.findByConfigKey("points.rule.categories").orElseGet(SystemConfig::new); c.setConfigKey("points.rule.categories"); c.setConfigGroup("points"); c.setValueType("text"); c.setDescription("积分规则类别"); c.setUpdatedBy(session(request).userId()); c.setConfigValue(new ObjectMapper().writeValueAsString(values)); systemConfigs.save(c); return ResponseEntity.ok(values);
+        } catch (Exception e) { return ResponseEntity.badRequest().body(Map.of("error", "类别保存失败")); }
+    }
+
+    @DeleteMapping("/categories/{category}")
+    public ResponseEntity<?> deleteCategory(@PathVariable String category, HttpServletRequest request) {
+        if (!"admin".equals(session(request).role())) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可管理积分类别"));
+        if (points.rules().stream().anyMatch(rule -> category.equals(rule.getCategory()))) return ResponseEntity.badRequest().body(Map.of("error", "该类别仍被积分规则使用，不能删除"));
+        try { systemConfigs.findByConfigKey("points.rule.categories").ifPresent(c -> { try { Set<String> values = new LinkedHashSet<>(new ObjectMapper().readValue(c.getConfigValue(), new TypeReference<Set<String>>() {})); values.remove(category); c.setConfigValue(new ObjectMapper().writeValueAsString(values)); systemConfigs.save(c); } catch (Exception ignored) {} }); return ResponseEntity.ok(Map.of("deleted", true)); }
+        catch (Exception e) { return ResponseEntity.badRequest().body(Map.of("error", "类别删除失败")); }
+    }
 
     @GetMapping("/difficulties")
     public List<PointDifficultyConfig> difficulties() { return points.difficulties(); }

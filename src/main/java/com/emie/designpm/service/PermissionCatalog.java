@@ -24,6 +24,7 @@ public final class PermissionCatalog {
             "page.design_requirements.view",
             "page.subtasks.mine.view",
             "page.scoring.view"
+            ,"page.image_library.view"
     );
 
     private static final Map<String, String> LEGACY_ALIASES;

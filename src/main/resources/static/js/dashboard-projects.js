@@ -214,6 +214,8 @@ async function render() {
       await renderTaskMarket(main, role, uid);
     } else if (view === 'materials') {
       await renderMaterialMarket(main);
+    } else if (view === 'image-library') {
+      await EMIE.actions.renderImageLibrary(main);
     } else if (view === 'other-tasks') {
       await renderDepartmentTasks(main, role, uid, EMIE.state.taskBucket || 'all');
     } else if (view === 'scoring') {

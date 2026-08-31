@@ -76,6 +76,7 @@ EMIE.projectState = Object.assign({
   createAttachments: [],
   formModified: false,
   deliverImages: [],
+  deliverLibraryImages: [],
   deliverAttachments: [],
   uploadingCount: 0,
   subTaskRefImages: [],

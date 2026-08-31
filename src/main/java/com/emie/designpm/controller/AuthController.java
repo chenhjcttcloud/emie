@@ -240,6 +240,10 @@ public class AuthController {
         if (target == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "目标用户不存在"));
         }
+        if (target.getStatus() != null && !target.getStatus().isBlank()
+                && !"active".equalsIgnoreCase(target.getStatus())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "停用用户不能切换视角"));
+        }
 
         // 防止初始化/重复点击时把当前用户“切换到自己”记录成身份切换日志。
         // 直接返回当前会话，不改写会话，也不写操作日志。

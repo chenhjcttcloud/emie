@@ -34,13 +34,22 @@ class UserControllerRoleGroupingTest {
                 .name("待分配用户")
                 .role("pending")
                 .build();
-        when(users.getAllUsers()).thenReturn(List.of(promotion, pending));
+        User disabled = User.builder()
+                .id(3L)
+                .userId("disabled_designer")
+                .name("停用设计师")
+                .role("designer")
+                .status("disabled")
+                .build();
+        when(users.getAllUsers()).thenReturn(List.of(promotion, pending, disabled));
 
         Map<String, List<Map<String, String>>> result = controller.getUsers().getBody();
 
         assertTrue(result.containsKey("sales"));
         assertTrue(result.get("sales").isEmpty());
         assertEquals("产品推广用户", result.get("Promotion").get(0).get("name"));
+        assertEquals("active", result.get("Promotion").get(0).get("status"));
+        assertTrue(result.get("designer").isEmpty());
         assertFalse(result.containsKey("pending"));
     }
 }

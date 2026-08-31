@@ -4,8 +4,8 @@ import com.emie.designpm.entity.MaterialMarketItem;import com.emie.designpm.serv
 public class MaterialMarketController{
  private final MaterialMarketService service; public MaterialMarketController(MaterialMarketService s){service=s;}
  private AuthController.AuthSession required(HttpServletRequest r){try{return session(r);}catch(Exception e){throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED,"未登录");}}
- @GetMapping public List<MaterialMarketItem> list(HttpServletRequest r){required(r);return service.list();}
- @GetMapping("/{id}") public ResponseEntity<?> detail(@PathVariable Long id,HttpServletRequest r){required(r);return service.list().stream().filter(x->id.equals(x.getId())).findFirst().<ResponseEntity<?>>map(ResponseEntity::ok).orElseGet(()->ResponseEntity.notFound().build());}
+ @GetMapping public List<MaterialMarketItem> list(HttpServletRequest r){var s=required(r);return service.list(s.userId());}
+ @GetMapping("/{id}") public ResponseEntity<?> detail(@PathVariable Long id,HttpServletRequest r){var s=required(r);return ResponseEntity.ok(service.detail(id,s.userId()));}
  private AuthController.AuthSession session(HttpServletRequest r){
   String token=r.getHeader("X-Auth-Token");
   if(token==null||token.isBlank()){
@@ -20,5 +20,7 @@ public class MaterialMarketController{
  @PutMapping("/{id}") public ResponseEntity<?> updateCompat(@PathVariable Long id,@RequestBody Map<String,Object> body,HttpServletRequest req){var s=session(req);return ResponseEntity.ok(service.update(id,body,s.userId()));}
  @PostMapping("/{id}/withdraw") public ResponseEntity<?> withdraw(@PathVariable Long id,HttpServletRequest req){var s=session(req);return ResponseEntity.ok(service.withdraw(id,s.userId()));}
  @DeleteMapping("/{id}") public ResponseEntity<?> delete(@PathVariable Long id,HttpServletRequest req){var s=session(req);service.delete(id,s.userId());return ResponseEntity.ok(Map.of("message","已删除"));}
- @PostMapping("/{id}/select") public ResponseEntity<?> select(@PathVariable Long id,@RequestBody(required=false) Map<String,Object> body,HttpServletRequest req){var s=session(req);return ResponseEntity.ok(service.select(id,s.userId(),s.role(),body==null?null:Objects.toString(body.get("plannerId"),null)));}
+ @PostMapping("/{id}/adopt") public ResponseEntity<?> adopt(@PathVariable Long id,@RequestBody Map<String,Object> body,HttpServletRequest req){var s=session(req);return ResponseEntity.ok(service.adopt(id,s.userId(),s.role(),Objects.toString(body.get("plannerId"),null),Objects.toString(body.get("adoptionType"),null)));}
+ @PostMapping("/{id}/select") public ResponseEntity<?> selectCompat(@PathVariable Long id,@RequestBody(required=false) Map<String,Object> body,HttpServletRequest req){var s=session(req);return ResponseEntity.ok(service.adopt(id,s.userId(),s.role(),body==null?null:Objects.toString(body.get("plannerId"),null),body==null?"direct":Objects.toString(body.getOrDefault("adoptionType","direct"),"direct")));}
+ @PostMapping("/{id}/like") public ResponseEntity<?> toggleLike(@PathVariable Long id,HttpServletRequest req){var s=session(req);return ResponseEntity.ok(service.toggleLike(id,s.userId()));}
 }

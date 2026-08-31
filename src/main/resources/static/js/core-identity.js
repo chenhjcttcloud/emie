@@ -66,6 +66,7 @@ async function renderRoleSwitcher() {
   const seenUserIds = new Set();
   for (const [groupRole, users] of Object.entries(EMIE.state.users)) {
     for (const u of users || []) {
+      if (u.status && String(u.status).toLowerCase() !== 'active') continue;
       if (!u.userId || seenUserIds.has(u.userId)) continue;
       seenUserIds.add(u.userId);
       allUsers.push({

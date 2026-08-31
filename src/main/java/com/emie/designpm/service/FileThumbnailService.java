@@ -10,11 +10,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.rendering.PDFRenderer;
 
 /** 生成并缓存图片缩略图，原图只在用户点击预览时读取。 */
 @Service
 public class FileThumbnailService {
     private static final int MAX_SIDE = 640;
+    private static final int AI_MAX_SIDE = 1800;
     private static final Semaphore THUMBNAIL_SLOTS = new Semaphore(4);
     private final FileArchiveService fileArchiveService;
 
@@ -31,7 +35,9 @@ public class FileThumbnailService {
         }
         Files.createDirectories(cacheRoot);
         String safeName = storedName.replaceAll("[^a-zA-Z0-9._-]", "_");
-        Path target = cacheRoot.resolve(safeName + ".png").normalize();
+        boolean aiFile = storedName.toLowerCase(java.util.Locale.ROOT).endsWith(".ai");
+        // AI 预览规格单独带版本，确保旧的 96 DPI / 640px 缓存自动失效。
+        Path target = cacheRoot.resolve(safeName + (aiFile ? ".ai-preview-v2.png" : ".png")).normalize();
         if (Files.exists(target) && Files.getLastModifiedTime(target).toMillis() >= Files.getLastModifiedTime(source).toMillis()) {
             return target;
         }
@@ -44,10 +50,11 @@ public class FileThumbnailService {
             if (Files.exists(target) && Files.getLastModifiedTime(target).toMillis() >= Files.getLastModifiedTime(source).toMillis()) {
                 return target;
             }
-            BufferedImage input = ImageIO.read(source.toFile());
+            BufferedImage input = aiFile ? renderPdfCompatibleAi(source) : ImageIO.read(source.toFile());
             if (input == null) throw new IOException("无法读取图片");
             try {
-                double scale = Math.min(1d, (double) MAX_SIDE / Math.max(input.getWidth(), input.getHeight()));
+                int maxSide = aiFile ? AI_MAX_SIDE : MAX_SIDE;
+                double scale = Math.min(1d, (double) maxSide / Math.max(input.getWidth(), input.getHeight()));
                 int width = Math.max(1, (int) Math.round(input.getWidth() * scale));
                 int height = Math.max(1, (int) Math.round(input.getHeight() * scale));
                 BufferedImage output = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
@@ -74,6 +81,15 @@ public class FileThumbnailService {
             throw new IOException("缩略图生成被中断", e);
         } finally {
             if (acquired) THUMBNAIL_SLOTS.release();
+        }
+    }
+
+    private BufferedImage renderPdfCompatibleAi(Path source) throws IOException {
+        try (PDDocument document = Loader.loadPDF(source.toFile())) {
+            if (document.getNumberOfPages() == 0) throw new IOException("AI 文件没有可预览页面");
+            return new PDFRenderer(document).renderImageWithDPI(0, 144);
+        } catch (IOException e) {
+            throw new IOException("AI 文件未包含 PDF 兼容预览", e);
         }
     }
 

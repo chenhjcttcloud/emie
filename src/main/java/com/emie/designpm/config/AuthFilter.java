@@ -98,6 +98,10 @@ public class AuthFilter implements Filter {
         if (path.startsWith("/api/")) {
             String token = req.getHeader("X-Auth-Token");
             if (token == null || token.isBlank()) token = cookieToken(req);
+            // 受保护图片被浏览器原生加载时无法附加自定义请求头；仅允许文件资源使用短期 URL token。
+            if ((token == null || token.isBlank()) && path.startsWith("/api/files/")) {
+                token = req.getParameter("authToken");
+            }
             AuthController.AuthSession session = AuthController.validateToken(token);
             if (token == null || session == null) {
                 res.setStatus(401);

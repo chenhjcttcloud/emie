@@ -47,6 +47,7 @@ public class UserController {
         }
 
         for (User user : userService.getAllUsers()) {
+            if (!isActive(user)) continue;
             String rawRole = user.getRole();
             String role = normalizeRole(rawRole);
             if (role == null || role.isBlank() || "pending".equals(role)) continue;
@@ -78,7 +79,13 @@ public class UserController {
         result.put("departmentId", user.getDepartmentId() != null ? String.valueOf(user.getDepartmentId()) : "");
         result.put("supervisorId", user.getSupervisorId() != null ? user.getSupervisorId() : "");
         result.put("titleLevel", user.getTitleLevel() != null ? String.valueOf(user.getTitleLevel()) : "0");
+        result.put("status", user.getStatus() == null || user.getStatus().isBlank() ? "active" : user.getStatus());
         return result;
+    }
+
+    private boolean isActive(User user) {
+        String status = user.getStatus();
+        return status == null || status.isBlank() || "active".equalsIgnoreCase(status);
     }
 
     @GetMapping("/info/{userId}")

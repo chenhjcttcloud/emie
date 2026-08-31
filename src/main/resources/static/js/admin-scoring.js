@@ -15,6 +15,9 @@ function compareRuleCodes(left, right) {
   });
 }
 
+function displayPointRuleCode(code) { return ({ MATERIAL_MARKET_LAUNCH: 'M3', TASK_APPROVED: 'T1' }[String(code || '').toUpperCase()] || String(code || '')); }
+function displayDifficultyCode(code) { return ({ STANDARD: 'D1', COMPLEX: 'D2', MAJOR: 'D3' }[String(code || '').toUpperCase()] || String(code || '')); }
+
 // ==================== 评分权重管理 ====================
 async function renderAdminScoring(container) {
   container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--gray-400);">加载中...</div>`;
@@ -130,7 +133,7 @@ async function renderAdminPoints(container) {
         <div class="admin-point-rule-filters"><div class="admin-filter-card"><span class="admin-filter-title">筛选规则</span><input class="form-input" id="adminPointRuleSearch" placeholder="搜索规则编号或说明"><select class="form-select" id="adminPointRuleCategory"><option value="">全部类别</option>${[...new Set(ruleList.map(rule => String(rule.category || '').trim()).filter(Boolean))].sort().map(category => `<option value="${escHtml(category)}">${escHtml(category)}</option>`).join('')}</select><select class="form-select" id="adminPointRuleStatus"><option value="">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select><button class="btn btn-primary btn-sm" data-emie-action="click:scoring-filter-rules">查询</button><button class="btn btn-outline btn-sm" data-emie-action="click:scoring-reset-rules">重置</button></div></div>
         ${ruleList.length ? `<div class="admin-point-rules-scroll">${ruleList.map((rule, index) => `<div class="admin-point-rule-item" data-rule-code="${escHtml(String(rule.ruleCode || '').toLowerCase())}" data-rule-description="${escHtml(String(rule.description || '').toLowerCase())}" data-rule-category="${escHtml(String(rule.category || ''))}" data-rule-enabled="${rule.enabled === false ? 'disabled' : 'enabled'}" style="${index ? 'border-top:1px solid var(--gray-200);' : ''}">
         <div style="display:grid;grid-template-columns:1.1fr 1fr .8fr .9fr .9fr;gap:10px;align-items:end;">
-          <label class="form-label">规则编号<input class="form-input" value="${escHtml(rule.ruleCode || '')}" disabled></label>
+          <label class="form-label">规则编号<input class="form-input" value="${escHtml(displayPointRuleCode(rule.ruleCode))}" disabled title="系统内部编号：${escHtml(rule.ruleCode || '')}"></label>
           <label class="form-label">类别<input class="form-input" id="pr_category_${index}" value="${escHtml(rule.category || '')}" placeholder="如 A / B / E / S"></label>
           <label class="form-label">基础分<input class="form-input" type="number" min="0" id="pr_points_${index}" value="${Number(rule.points || 0)}"></label>
           <label class="form-label">质量阈值<input class="form-input" type="number" min="0" id="pr_threshold_${index}" value="${Number(rule.qualityBonusThreshold || 0)}"></label>
@@ -145,6 +148,10 @@ async function renderAdminPoints(container) {
       </div>`).join('')}</div><div class="admin-point-rule-empty empty-state" hidden>没有符合条件的积分规则</div>` : '<div class="empty-state">暂无积分规则</div>'}</div>
       <div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><h3>难度档位</h3></div><div class="table-wrap"><table><thead><tr><th>档位</th><th>系数</th><th>说明</th><th>启用</th><th>操作</th></tr></thead><tbody>${difficultyList.map((item,index)=>`<tr><td><strong>${escHtml(item.difficultyCode || '-')}</strong></td><td><input class="form-input" type="number" min="0.1" max="10" step="0.1" id="pd_multiplier_${index}" value="${Number(item.multiplier || 1)}"></td><td><input class="form-input" id="pd_desc_${index}" value="${escHtml(item.description || '')}"></td><td><input type="checkbox" id="pd_enabled_${index}" ${item.enabled === false ? '' : 'checked'}></td><td><button class="btn btn-primary btn-sm" data-emie-action="click:scoring-save-difficulty" data-difficulty-code="${escHtml(escJsString(item.difficultyCode))}" data-difficulty-index="${index}">保存</button></td></tr>`).join('')}</tbody></table></div></div>
     </div>`;
+    const ruleHeader = container.querySelector('.admin-point-rules-card .card-header');
+    if (ruleHeader) { const actions = document.createElement('div'); actions.style = 'display:flex;gap:8px;align-items:center;'; const createButton = ruleHeader.querySelector('[data-emie-action="click:scoring-create-rule"]'); const categoryButton = document.createElement('button'); categoryButton.className = 'btn btn-outline btn-sm'; categoryButton.type = 'button'; categoryButton.textContent = '类别管理'; categoryButton.onclick = managePointCategories; if (createButton) actions.append(createButton); actions.append(categoryButton); ruleHeader.append(actions); }
+    container.querySelectorAll('[id^="pr_threshold_"]').forEach(input => { input.title = '质量阈值：质量评分达到该分数后，才触发加分。例如填90，表示质量分≥90才加分。'; input.placeholder = '如 90'; });
+    container.querySelectorAll('[id^="pr_ratio_"]').forEach(input => { input.title = '加分比例：在基础积分上额外增加的比例。例如填0.2，表示额外增加20%。'; input.placeholder = '如 0.2=20%'; });
     const appealCard = [...container.querySelectorAll('.card')].find(card => card.textContent.includes('积分异议复核'));
     const appealRows = appealCard ? appealCard.querySelectorAll('tbody tr') : [];
     appealList.forEach((item, index) => { const descriptionCell = appealRows[index]?.children?.[3]; if (descriptionCell && item.attachmentsJson) descriptionCell.insertAdjacentHTML('beforeend', renderAppealImages(item.attachmentsJson)); });
@@ -219,18 +226,39 @@ async function saveDesignerTarget(index) {
 }
 
 async function createPointRule() {
-  const ruleCode = (await EMIE.actions.showSystemInput('规则编号（字母、数字、下划线或短横线）') || '').trim().toUpperCase();
-  if (!ruleCode) return;
-  const category = (await EMIE.actions.showSystemInput('规则分类', 'GENERAL') || 'GENERAL').trim();
-  const points = Number(await EMIE.actions.showSystemInput('基础积分', '10'));
-  const description = (await EMIE.actions.showSystemInput('规则说明', '') || '').trim();
-  try {
-    await apiPost('/points/rules', { ruleCode, category, points, description });
-    const pointsContainer = EMIE.state.currentView === 'points'
-      ? document.getElementById('mainContent')
-      : document.getElementById('adminContent');
-    await renderAdminPoints(pointsContainer);
-  } catch (e) { window.EMIE.actions.showSystemAlert('新增失败：' + e.message); }
+  const categories = await apiGet('/points/categories');
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay'; overlay.id = 'createPointRuleModal'; overlay.style.zIndex = '450';
+  overlay.innerHTML = `<div class="modal" style="max-width:560px;"><div class="modal-header"><div class="modal-title">新增积分规则</div><button class="modal-close" type="button" aria-label="关闭">✕</button></div><form class="modal-body" style="padding:22px 24px;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;"><label class="form-label">规则编号<input class="form-input" name="ruleCode" required pattern="[A-Za-z0-9_-]+" placeholder="如 M1、A1"></label><label class="form-label">类别<input class="form-input" name="category" required placeholder="如 M / A / T"></label><label class="form-label">基础分<input class="form-input" name="points" type="number" min="0" value="10" required></label><label class="form-label">质量阈值<input class="form-input" name="qualityBonusThreshold" type="number" min="0" value="0"></label><label class="form-label">加分比例<input class="form-input" name="qualityBonusRatio" type="number" min="0" step="0.05" value="0"></label></div><label class="form-label" style="display:block;margin-top:14px;">规则说明<input class="form-input" name="description" placeholder="例如：设计采纳奖励"></label></form><div class="modal-footer"><button class="btn btn-outline" type="button" data-action="cancel">取消</button><button class="btn btn-primary" type="button" data-action="save">保存规则</button></div></div>`;
+  document.body.appendChild(overlay);
+  const categoryInput = overlay.querySelector('[name="category"]');
+  overlay.querySelector('[name="qualityBonusThreshold"]').title = '质量阈值：质量评分达到该分数后触发加分。例如90表示质量分≥90才加分。';
+  overlay.querySelector('[name="qualityBonusRatio"]').title = '加分比例：额外增加的比例。例如0.2表示额外加20%。';
+  if (categoryInput) { const select = document.createElement('select'); select.className = 'form-select'; select.name = 'category'; select.required = true; select.innerHTML = (Array.isArray(categories) ? categories : []).map(category => `<option value="${escHtml(category)}">${escHtml(category)}</option>`).join(''); categoryInput.replaceWith(select); }
+  const finish = () => overlay.remove();
+  const categoryButton = document.createElement('button'); categoryButton.className = 'btn btn-outline'; categoryButton.type = 'button'; categoryButton.textContent = '管理类别'; categoryButton.onclick = managePointCategories; overlay.querySelector('.modal-footer').prepend(categoryButton);
+  overlay.querySelector('.modal-close').onclick = finish;
+  overlay.querySelector('[data-action="cancel"]').onclick = finish;
+  overlay.querySelector('[data-action="save"]').onclick = async () => {
+    const form = overlay.querySelector('form'); if (!form.reportValidity()) return;
+    const data = new FormData(form); const ruleCode = String(data.get('ruleCode') || '').trim().toUpperCase();
+    try {
+      await apiPost('/points/rules', { ruleCode, category: String(data.get('category') || '').trim(), points: Number(data.get('points')), qualityBonusThreshold: Number(data.get('qualityBonusThreshold')), qualityBonusRatio: Number(data.get('qualityBonusRatio')), description: String(data.get('description') || '').trim() });
+      finish();
+      const pointsContainer = EMIE.state.currentView === 'points' ? document.getElementById('mainContent') : document.getElementById('adminContent');
+      await renderAdminPoints(pointsContainer);
+    } catch (e) { window.EMIE.actions.showSystemAlert('新增失败：' + e.message); }
+  };
+  requestAnimationFrame(() => overlay.querySelector('[name="ruleCode"]')?.focus());
+}
+
+async function managePointCategories() {
+  const categories = await apiGet('/points/categories');
+  const overlay = document.createElement('div'); overlay.className = 'modal-overlay'; overlay.id = 'pointCategoryModal'; overlay.style.zIndex = '450';
+  overlay.innerHTML = `<div class="modal" style="max-width:520px;overflow:hidden;"><div class="modal-header" style="padding:20px 24px;"><div><div class="modal-title">积分规则类别</div><div style="font-size:12px;color:var(--gray-500);margin-top:4px;">管理规则分组，新增规则时可直接选择</div></div><button class="modal-close" type="button">✕</button></div><div class="modal-body" style="padding:20px 24px;background:#f8fafc;"><div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:14px;margin-bottom:18px;"><div style="font-size:13px;font-weight:600;margin-bottom:9px;">新增类别</div><div style="display:flex;gap:8px;"><input class="form-input" id="newPointCategory" placeholder="例如：T、M、A" maxlength="50"><button class="btn btn-primary" type="button" data-action="add">＋ 新增</button></div></div><div style="font-size:13px;font-weight:600;margin-bottom:9px;">已有类别 <span style="font-weight:400;color:var(--gray-500);">共 ${(Array.isArray(categories) ? categories.length : 0)} 个</span></div><div data-role="list" style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:4px 14px;max-height:330px;overflow:auto;">${(Array.isArray(categories) ? categories : []).map(category => `<div style="display:flex;justify-content:space-between;align-items:center;padding:13px 2px;border-bottom:1px solid var(--gray-100);"><div style="display:flex;align-items:center;gap:9px;"><span style="width:28px;height:28px;border-radius:8px;background:#eef2ff;color:#4f46e5;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;">${escHtml(String(category).slice(0,1))}</span><strong>${escHtml(category)}</strong></div><button class="btn btn-danger btn-sm" type="button" data-category="${escHtml(category)}">删除</button></div>`).join('') || '<div class="empty-state" style="padding:30px 0;">暂无类别</div>'}</div></div><div class="modal-footer"><button class="btn btn-outline" type="button" data-action="close">关闭</button></div></div>`;
+  document.body.appendChild(overlay); overlay.querySelectorAll('[data-role="list"] span').forEach(icon => icon.remove()); const close = () => overlay.remove(); overlay.querySelector('.modal-close').onclick = close; overlay.querySelector('[data-action="close"]').onclick = close;
+  overlay.querySelector('[data-action="add"]').onclick = async () => { const input = overlay.querySelector('#newPointCategory'); const value = input.value.trim(); if (!value) return; try { await apiPost('/points/categories', { category: value }); input.value = ''; window.EMIE.actions.showSystemAlert('类别已添加'); close(); managePointCategories(); } catch (e) { window.EMIE.actions.showSystemAlert('类别保存失败：' + e.message); } };
+  overlay.querySelectorAll('[data-category]').forEach(button => { button.onclick = async () => { try { await apiDelete('/points/categories/' + encodeURIComponent(button.dataset.category)); window.EMIE.actions.showSystemAlert('类别已删除'); close(); managePointCategories(); } catch (e) { window.EMIE.actions.showSystemAlert('类别删除失败：' + e.message); } }; });
 }
 
 async function deletePointRule(code) {

@@ -2,6 +2,7 @@ package com.emie.designpm.controller;
 
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.SubTask;
+import com.emie.designpm.entity.FileRecord;
 import com.emie.designpm.repository.DesignRequirementRepository;
 import com.emie.designpm.repository.FileRecordRepository;
 import com.emie.designpm.repository.ProjectRepository;
@@ -125,7 +126,7 @@ public class FileController {
     /** 读取受权限保护的缩略图；原图仅用于点击后的大图预览。 */
     @GetMapping("/thumbnail/{fileName}")
     public ResponseEntity<Object> thumbnail(@PathVariable String fileName, HttpServletRequest request) {
-        if (!SecurityUtil.isValidFileName(fileName) || !fileName.matches("(?i).+\\.(png|jpe?g|gif|webp|bmp)$")) {
+        if (!SecurityUtil.isValidFileName(fileName) || !fileName.matches("(?i).+\\.(png|jpe?g|gif|webp|bmp|ai)$")) {
             return ResponseEntity.badRequest().body(Map.of("error", "不是支持的图片文件"));
         }
         boolean acquired = false;
@@ -233,6 +234,52 @@ public class FileController {
         } finally {
             UPLOAD_SLOTS.release();
         }
+    }
+
+    @GetMapping("/library")
+    public ResponseEntity<Object> library(HttpServletRequest request) {
+        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        if (session == null || !Set.of("admin", "planner", "designer").contains(session.role())) {
+            return ResponseEntity.status(403).body(Map.of("error", "没有权限查看图档库"));
+        }
+        List<Map<String, Object>> items = fileRecordRepository.findByTargetTypeOrderByCreatedAtDesc("image_library")
+                .stream().map(this::libraryItem).toList();
+        return ResponseEntity.ok(items);
+    }
+
+    @PostMapping("/library/upload")
+    public ResponseEntity<Map<String, Object>> uploadLibraryImage(@RequestParam("file") MultipartFile file,
+                                                                    HttpServletRequest request) {
+        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        if (session == null || !Set.of("admin", "planner").contains(session.role())) {
+            return ResponseEntity.status(403).body(Map.of("error", "仅产品企划和管理员可以上传图档"));
+        }
+        if (file.isEmpty() || file.getOriginalFilename() == null || !SecurityUtil.isValidAttachmentFile(file.getOriginalFilename())
+                || file.getContentType() == null || !file.getContentType().startsWith("image/")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "请上传有效的图片文件"));
+        }
+        if (file.getSize() > 200L * 1024 * 1024) return ResponseEntity.status(413).body(Map.of("error", "图片不能超过 200MB"));
+        try {
+            String originalName = file.getOriginalFilename();
+            String ext = originalName.substring(originalName.lastIndexOf('.')).toLowerCase();
+            String storedName = UUID.randomUUID() + ext;
+            file.transferTo(uploadPath.resolve(storedName).normalize().toFile());
+            fileArchiveService.recordUpload(storedName, originalName, file.getSize(), file.getContentType(),
+                    "image_library", null, session.userId());
+            return ResponseEntity.ok(libraryItem(fileRecordRepository.findByStoredName(storedName).orElseThrow()));
+        } catch (IOException e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", "图片保存失败，请稍后重试"));
+        }
+    }
+
+    private Map<String, Object> libraryItem(FileRecord file) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", file.getId()); item.put("name", file.getOriginalName()); item.put("size", file.getFileSize());
+        item.put("createdAt", file.getCreatedAt()); item.put("ownerUserId", file.getOwnerUserId());
+        item.put("storedName", file.getStoredName());
+        item.put("url", "/api/files/download/" + file.getStoredName());
+        item.put("thumbnailUrl", "/api/files/thumbnail/" + file.getStoredName());
+        return item;
     }
 
     /** 下载文件，?download=true 强制浏览器下载（弹出保存对话框）*/
@@ -449,6 +496,10 @@ public class FileController {
     }
 
     private boolean canAccessBoundTarget(AuthController.AuthSession session, String targetType, Long targetId) {
+        // 图档库是集合型资源，不绑定单个业务 targetId；必须先于 targetId 空值判断处理。
+        if ("image_library".equals(targetType)) {
+            return Set.of("admin", "planner", "designer").contains(session.role());
+        }
         if (targetType == null || targetType.isBlank() || targetId == null) {
             return false;
         }
