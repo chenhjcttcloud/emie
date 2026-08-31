@@ -24,9 +24,17 @@ function retryFilePreview() {
 }
 
 function authenticatedFileUrl(url) {
-  // 原生图片、iframe 和下载请求会自动携带 HttpOnly 会话 Cookie。
-  // 不再把长期会话 token 放进 URL，避免泄漏到历史记录、日志和 Referer。
-  return url;
+  // 原生图片/新窗口无法附加 X-Auth-Token；为兼容当前 token 会话，补充受保护资源参数。
+  // fetch 请求仍优先使用请求头，只有浏览器原生资源请求才会使用该参数。
+  const token = localStorage.getItem('design_pm_token');
+  if (!token || !url || !/^\/api\/files\//.test(url)) return url;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    parsed.searchParams.set('authToken', token);
+    return parsed.pathname + parsed.search + parsed.hash;
+  } catch (_) {
+    return url;
+  }
 }
 
 async function openFilePreview(fileUrl, fileName, fileSize, retry = false) {
