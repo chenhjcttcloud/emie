@@ -35,7 +35,9 @@ const POINT_DIFFICULTIES = [
 ];
 
 function enabledPointRules(rules) {
-  return (Array.isArray(rules) ? rules : []).filter(rule => rule.enabled !== false);
+  // 素材广场采纳积分由采纳流程自动发放，不属于子任务积分；S1 内部建设规则已下线。
+  const hiddenFromSubTasks = new Set(['S1', 'M1', 'M2', 'M3', 'MATERIAL_MARKET_LAUNCH', 'MATERIAL_MARKET_DESIGN_ADOPTION', 'MATERIAL_MARKET_DIRECT_ADOPTION']);
+  return (Array.isArray(rules) ? rules : []).filter(rule => rule.enabled !== false && !hiddenFromSubTasks.has(String(rule.ruleCode || '').toUpperCase()));
 }
 
 function pointRuleDisplayName(code, description) {
@@ -69,8 +71,9 @@ function pointRuleCategoryHint(category) {
 
 function renderDifficultyOptions(difficulties, selectedCode) {
   const configured = (Array.isArray(difficulties) ? difficulties : []).filter(item => item.enabled !== false);
-  const items = configured.length ? configured.map(item => ({ code: item.difficultyCode, label: item.difficultyCode, description: `${item.description || ''} ×${Number(item.multiplier || 1)}` })) : POINT_DIFFICULTIES;
-  return items.map(item => `<option value="${item.code}" ${item.code === String(selectedCode || 'STANDARD').toUpperCase() ? 'selected' : ''}>${escHtml(item.label)} · ${escHtml(item.description)}</option>`).join('');
+  const labels = { STANDARD: '标准任务', COMPLEX: '复杂任务', MAJOR: '重大任务' };
+  const items = configured.length ? configured.map(item => ({ code: item.difficultyCode, label: labels[String(item.difficultyCode || '').toUpperCase()] || '其他任务', multiplier: Number(item.multiplier || 1) })) : POINT_DIFFICULTIES.map(item => ({ ...item, label: `${item.label}任务`, multiplier: 1 }));
+  return items.map(item => `<option value="${escHtml(item.code)}" ${item.code === String(selectedCode || 'STANDARD').toUpperCase() ? 'selected' : ''}>${escHtml(item.label)} ×${item.multiplier} 积分</option>`).join('');
 }
 
 // ==================== 添加 / 编辑子任务 ====================

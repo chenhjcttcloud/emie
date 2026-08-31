@@ -346,6 +346,8 @@ public class ProjectController {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("id", task.getId()); item.put("name", task.getName()); item.put("status", task.getStatus());
             item.put("plannedDate", task.getPlannedDate()); item.put("designerId", task.getDesignerId());
+            item.put("pointRuleCode", task.getPointRuleCode()); item.put("basePointSnapshot", task.getBasePointSnapshot());
+            item.put("difficultyCode", task.getDifficultyCode()); item.put("difficultyMultiplierSnapshot", task.getDifficultyMultiplierSnapshot());
             item.put("designerName", task.getDesignerName()); item.put("publisherId", task.getPublisherId());
             item.put("publisherName", task.getPublisherName()); item.put("publisherRole", task.getPublisherRole());
             item.put("assigneeRole", task.getAssigneeRole()); item.put("allocationStatus", task.getAllocationStatus());

@@ -13,10 +13,15 @@ const submitTaskReview = (...args) => EMIE.actions.submitTaskReview(...args);
 const taskConfirmRevision = (...args) => EMIE.actions.taskConfirmRevision(...args);
 const openScoring = (...args) => EMIE.actions.openScoring(...args);
 const taskApprove = (...args) => EMIE.actions.taskApprove(...args);
+const closeM = (...args) => EMIE.actions.closeM(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const matchesSearchText = (...args) => EMIE.actions.matchesSearchText(...args);
 const isDateInRange = (...args) => EMIE.actions.isDateInRange(...args);
 const compareTaskPriority = (...args) => EMIE.actions.compareTaskPriority(...args);
+function taskDifficultyLabel(code, multiplier) {
+  const label = ({ STANDARD: '标准任务', COMPLEX: '复杂任务', MAJOR: '重大任务' }[String(code || '').toUpperCase()] || '未设置');
+  return multiplier != null && code ? `${label} ×${Number(multiplier)} 积分` : label;
+}
 
 async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.currentRole,
                                    endpoint = '/projects/my-subtasks', readOnly = false) {
@@ -43,6 +48,7 @@ async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.
   main.innerHTML = `
     <h2 style="font-size:22px;margin-bottom:20px;">${taskEmoji} ${pageTitle} <span style="font-size:14px;color:var(--gray-400);font-weight:400;">(${myTasks.length})</span></h2>
     <div class="filter-bar">
+      ${marketView ? '<button class="btn btn-primary btn-sm" data-emie-action="click:task-market-refresh">↻ 刷新</button>' : ''}
       ${!marketView && bucket !== 'completed' ? `<select class="form-select" data-emie-action="change:designer-filter" style="min-width:120px;" id="designerTaskFilter" aria-label="任务归属">
         <option value="all">全部任务</option>
         <option value="unassigned">待认领</option>
@@ -156,6 +162,8 @@ function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
             <div class="subtask-meta-item">👤 ${plannerView ? '产品企划' : '负责人'}：<strong>${plannerView ? (t.plannerName || '<span style="color:var(--warning);">待指定</span>') : (t.designerName || '<span style="color:var(--warning);">待认领</span>')}</strong>${!plannerView && t.assigneeRole ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;${t.assigneeRole === 'supplychain' ? 'background:#F0FDFA;color:#0D9488;' : t.assigneeRole === 'planner' ? 'background:#EFF6FF;color:#1D4ED8;' : t.assigneeRole === 'promotion' ? 'background:#F5F3FF;color:#7C3AED;' : t.assigneeRole === 'sales' ? 'background:#FFF7ED;color:#C2410C;' : 'background:#FEF2F2;color:#DC2626;'}">${t.assigneeRole === 'supplychain' ? '供应链' : t.assigneeRole === 'planner' ? '企划' : t.assigneeRole === 'promotion' ? '产品推广' : t.assigneeRole === 'sales' ? '销售' : '设计师'}</span>` : ''}</div>
             ${t.relation ? `<div class="subtask-meta-item">🔗 我的关系：<strong>${t.relationLabel || (t.relation === 'publisher' ? '我发布的任务' : t.relation === 'market' ? '接单市场' : t.relation === 'department_member' ? '部门成员关联任务' : '我负责的任务')}</strong></div>` : ''}
             <div class="subtask-meta-item">📅 ${t.status === 'rejected' && t.rejectionRecords?.length && t.rejectionRecords[t.rejectionRecords.length - 1]?.requiredCompletionDate ? '驳回后要求完成' : '计划完成'}：<strong>${formatDate(t.status === 'rejected' && t.rejectionRecords?.length ? (t.rejectionRecords[t.rejectionRecords.length - 1].requiredCompletionDate || t.plannedDate) : t.plannedDate)}</strong></div>
+            <div class="subtask-meta-item">⭐ 积分：<strong>${t.basePointSnapshot != null ? `${Number(t.basePointSnapshot)} 分` : '未设置'}</strong></div>
+            <div class="subtask-meta-item">⚡ 紧急程度：<strong>${escHtml(taskDifficultyLabel(t.difficultyCode, t.difficultyMultiplierSnapshot))}</strong></div>
             ${t.actualDate ? `<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(t.actualDate)}</strong></div>` : ''}
           </div>
           ${t.details ? `<div style="font-size:13px;color:var(--gray-600);margin-top:8px;">📝 ${escHtml(t.details)}</div>` : ''}
@@ -209,6 +217,8 @@ function openPublishedSubTaskDetail(taskId) {
           <div class="detail-item"><div class="detail-label">发布人</div><div class="detail-value">${escHtml(task.publisherName || '-')}</div></div>
           <div class="detail-item"><div class="detail-label">计划完成</div><div class="detail-value">${formatDate(task.plannedDate)}</div></div>
           <div class="detail-item"><div class="detail-label">实际完成</div><div class="detail-value">${task.actualDate ? formatDate(task.actualDate) : '-'}</div></div>
+          <div class="detail-item"><div class="detail-label">积分</div><div class="detail-value">${task.basePointSnapshot != null ? `${Number(task.basePointSnapshot)} 分` : '未设置'}</div></div>
+          <div class="detail-item"><div class="detail-label">紧急程度</div><div class="detail-value">${escHtml(taskDifficultyLabel(task.difficultyCode, task.difficultyMultiplierSnapshot))}</div></div>
         </div>
         <div class="detail-item" style="margin-top:12px;"><div class="detail-label">任务要求</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.details || '未填写')}</div></div>
         ${taskDetailFiles(task.referenceImagesJson, true)}
@@ -261,6 +271,11 @@ function openPublishedSubTaskDetail(taskId) {
       </div>
     </div>`;
   document.body.appendChild(modal);
+  // 详情抽屉的关闭按钮直接绑定兜底事件，兼容部分旧页面缓存未加载声明式事件运行时的情况。
+  modal.querySelector('.modal-close')?.addEventListener('click', () => closeM('publishedSubTaskDetailModal'));
+  modal.addEventListener('click', event => {
+    if (event.target === modal) closeM('publishedSubTaskDetailModal');
+  });
 }
 
 function renderScoringMini(task, isDone) {
@@ -323,6 +338,10 @@ const registerEventAction = EMIE.actions.registerEventAction;
 if (registerEventAction) {
   registerEventAction('designer-filter', () => filterDesignerTasks());
   registerEventAction('designer-reset', () => resetDesignerTaskFilters());
+  registerEventAction('task-market-refresh', () => {
+    const main = document.querySelector('#mainContent, main');
+    if (main) renderTaskMarket(main, EMIE.state.currentRole, getCurrentUserId());
+  });
   registerEventAction('designer-accept', (_event, el) => taskAccept(Number(el.dataset.projectId), Number(el.dataset.taskId)));
   registerEventAction('designer-withdraw', (_event, el) => withdrawAcceptedTask(Number(el.dataset.projectId), Number(el.dataset.taskId)));
   registerEventAction('designer-deliver', (_event, el) => taskDeliver(Number(el.dataset.projectId), Number(el.dataset.taskId)));
