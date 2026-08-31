@@ -43,7 +43,8 @@ public class FileThumbnailService {
         }
         boolean acquired = false;
         try {
-            if (!THUMBNAIL_SLOTS.tryAcquire(5, TimeUnit.SECONDS)) {
+            // 批量打开任务详情/图档库时允许生成任务排队，避免前端收到 429/失败占位图。
+            if (!THUMBNAIL_SLOTS.tryAcquire(30, TimeUnit.SECONDS)) {
                 throw new IOException("缩略图生成任务繁忙，请稍后重试");
             }
             acquired = true;

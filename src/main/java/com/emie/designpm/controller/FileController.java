@@ -47,8 +47,8 @@ import java.util.regex.Pattern;
 @RequestMapping("/api/files")
 public class FileController {
     private static final Semaphore UPLOAD_SLOTS = new Semaphore(4);
-    /** 缩略图先限流再做权限查询，避免批量失效图片请求耗尽主连接池。 */
-    private static final Semaphore THUMBNAIL_REQUEST_SLOTS = new Semaphore(8);
+    /** 缩略图请求允许排队，实际图片生成仍由 FileThumbnailService 控制并发。 */
+    private static final Semaphore THUMBNAIL_REQUEST_SLOTS = new Semaphore(32);
     private static final Logger log = LoggerFactory.getLogger(FileController.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
     /** 仅放行 AdminService.uploadAdminImage 生成的管理图片（admin_{logo|login-bg}_{8位hex}.{图片扩展名}）。 */
