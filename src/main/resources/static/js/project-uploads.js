@@ -44,6 +44,11 @@ function presentationImageSource(image) {
   return image.dataset.fullSrc || image.currentSrc || image.src;
 }
 
+function protectedImageHeaders() {
+  const token = localStorage.getItem('design_pm_token');
+  return token ? { 'X-Auth-Token': token } : {};
+}
+
 function presentationImageFileName(image, mimeType) {
   const extensionByType = {
     'image/png': '.png',
@@ -69,6 +74,7 @@ function getPresentationImagePayload(image) {
     presentationImagePayloadCache.delete(presentationImagePayloadCache.keys().next().value);
   }
   pending = fetch(source, {
+    headers: protectedImageHeaders(),
     credentials: 'same-origin',
     cache: 'force-cache'
   }).then(async response => {
@@ -132,6 +138,7 @@ function previewImage(src, name) {
   let dragMoved = false;
   let startX = 0, startY = 0;
   let panX = 0, panY = 0;
+  let previewBlobUrl = null;
 
   const imgWrap = document.createElement('div');
   imgWrap.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;justify-content:center;cursor:grab;user-select:none;overflow:hidden;';
@@ -150,13 +157,24 @@ function previewImage(src, name) {
   };
 
   const img = document.createElement('img');
-  img.src = src;
+  img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
   img.className = 'ppt-drag-image';
   img.dataset.fullSrc = src;
   img.alt = name || '预览';
   img.draggable = true;
   img.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,.5);transition:transform .15s ease;transform:scale(1);pointer-events:auto;user-select:auto;';
   activePreviewImage = img;
+
+  fetch(src, { headers: protectedImageHeaders(), credentials: 'same-origin' })
+    .then(response => response.ok ? response.blob() : Promise.reject(new Error(`图片请求失败（${response.status}）`)))
+    .then(blob => {
+      if (!overlay.isConnected) return;
+      previewBlobUrl = URL.createObjectURL(blob);
+      img.src = previewBlobUrl;
+    })
+    .catch(() => {
+      if (overlay.isConnected) img.alt = `${name || '图片'}（加载失败）`;
+    });
 
   imgWrap.appendChild(img);
 
@@ -201,6 +219,7 @@ function previewImage(src, name) {
     document.removeEventListener('mouseup', onUp);
     document.removeEventListener('keydown', onPreviewKeydown, true);
     removalObserver.disconnect();
+    if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl);
     if (activePreviewImage === img) activePreviewImage = null;
     if (focusOrigin?.isConnected) requestAnimationFrame(() => focusOrigin.focus({ preventScroll: true }));
   }
