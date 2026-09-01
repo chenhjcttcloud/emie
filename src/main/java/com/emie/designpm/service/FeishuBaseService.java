@@ -344,7 +344,6 @@ public class FeishuBaseService {
         for (String name : List.of("项目ID", "项目类型", "审核阶段", "审核状态", "审核人", "审核意见")) {
             scoringFields.put(name, 1);
         }
-        scoringFields.put("审核时间", 5);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("项目总表", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableProjects"), projectFields));
@@ -458,7 +457,6 @@ public class FeishuBaseService {
         ArrayNode fields = json.createArrayNode();
         addTextFields(fields, "评分ID", "评分角色", "所属子任务", "项目ID", "项目类型",
                 "审核阶段", "审核状态", "审核人", "审核意见", "同步来源");
-        addDateFields(fields, "审核时间");
         addNumberFields(fields, "评分", "权重");
         return fields;
     }
@@ -752,12 +750,6 @@ public class FeishuBaseService {
         fields.put("审核人", data.reviewerName() != null ? data.reviewerName() : "");
         fields.put("审核意见", data.comment() != null ? data.comment() : "");
         putSyncMetadata(fields, backupTable, false, null, existed != null, fieldTypes);
-        if (data.reviewedAt() != null) {
-            putDateValue(fields, "审核时间", toTimestamp(data.reviewedAt()), fieldTypes.get("审核时间"));
-        } else if (existed != null) {
-            fields.putNull("审核时间");
-        }
-
         if (data.subTaskId() != null) {
             Integer fieldType = fieldTypes.get("所属子任务");
             String linkedRecordId = null;
