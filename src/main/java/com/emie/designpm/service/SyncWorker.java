@@ -39,6 +39,7 @@ public class SyncWorker {
     private final FeishuBaseService feishuBaseService;
     private final SyncQueueService syncQueueService;
     private final SystemConfigRepository systemConfigRepository;
+    private final SubTaskDeliveryVersionRepository deliveryVersionRepository;
     /** 每条队列任务独立的主库短事务；队列状态更新走后台连接池，独立提交。 */
     private final TransactionTemplate itemTransaction;
 
@@ -51,6 +52,7 @@ public class SyncWorker {
                       FeishuBaseService feishuBaseService,
                       SyncQueueService syncQueueService,
                       SystemConfigRepository systemConfigRepository,
+                      SubTaskDeliveryVersionRepository deliveryVersionRepository,
                       PlatformTransactionManager transactionManager) {
         this.syncQueueRepository = syncQueueRepository;
         this.projectRepository = projectRepository;
@@ -60,6 +62,7 @@ public class SyncWorker {
         this.feishuBaseService = feishuBaseService;
         this.syncQueueService = syncQueueService;
         this.systemConfigRepository = systemConfigRepository;
+        this.deliveryVersionRepository = deliveryVersionRepository;
         this.itemTransaction = transactionManager == null ? null : new TransactionTemplate(transactionManager);
     }
 
@@ -72,7 +75,21 @@ public class SyncWorker {
                       FeishuBaseService feishuBaseService,
                       SyncQueueService syncQueueService) {
         this(syncQueueRepository, projectRepository, subTaskRepository, scoringRepository,
-                activityLogRepository, feishuBaseService, syncQueueService, null, null);
+                activityLogRepository, feishuBaseService, syncQueueService, null, null, null);
+    }
+
+    SyncWorker(SyncQueueOperations syncQueueRepository,
+               ProjectRepository projectRepository,
+               SubTaskRepository subTaskRepository,
+               ScoringRepository scoringRepository,
+               ActivityLogRepository activityLogRepository,
+               FeishuBaseService feishuBaseService,
+               SyncQueueService syncQueueService,
+               SystemConfigRepository systemConfigRepository,
+               PlatformTransactionManager transactionManager) {
+        this(syncQueueRepository, projectRepository, subTaskRepository, scoringRepository,
+                activityLogRepository, feishuBaseService, syncQueueService, systemConfigRepository, null,
+                transactionManager);
     }
 
     /** 每 30 秒消费队列 */
@@ -306,9 +323,7 @@ public class SyncWorker {
                 .count();
         int reviewProgress = expectedReviewCount > 0
                 ? approvedReviewCount * 100 / expectedReviewCount : 0;
-        String reviewFlow = "channel_custom".equals(p.getType())
-                ? "产品企划一审 → 销售二审"
-                : "产品企划一审 → 管理员二审";
+        String projectFlow = projectFlowLabel(p.getStatus(), p.getWorkflowStage(), p.getWorkflowStatus());
         String currentReviewStage = currentReviewStage(p, reviewRecords);
 
         String categoryName = p.getProductCategory() != null ? p.getProductCategory().getName() : null;
@@ -318,7 +333,8 @@ public class SyncWorker {
                 p.getSalesName(), p.getPlannerName(),
                 p.getDeadline(), categoryName,
                 p.getPriceRange(), taskCount, progress,
-                reviewFlow, currentReviewStage, reviewProgress,
+                projectFlow, currentReviewStage, reviewProgress,
+                projectExtraFields(p, taskProgressSummary(p.getTasks())),
                 p.getCreatedAt()
         );
     }
@@ -333,17 +349,135 @@ public class SyncWorker {
         ScoringRecord secondReview = findReview(reviews, "second");
         String projectType = t.getProject() != null ? t.getProject().getType() : "regular";
 
+        String actualDate = t.getActualDate();
+        if ((actualDate == null || actualDate.isBlank()) && deliveryVersionRepository != null) {
+            actualDate = deliveryVersionRepository
+                    .findFirstBySubTaskIdAndActualDateIsNotNullOrderByVersionNoDesc(taskId)
+                    .map(SubTaskDeliveryVersion::getActualDate)
+                    .filter(value -> !value.isBlank())
+                    .orElse(null);
+        }
+
         feishuBaseService.syncSubTask(new FeishuBaseService.SubTaskSyncData(
                 t.getId(), t.getName(), t.getStatus(),
                 t.getDesignerName(), t.getPlannedDate(),
-                t.getActualDate(), t.getSelfScore(),
+                actualDate, t.getSelfScore(),
                 t.getProject() != null ? t.getProject().getId() : null,
                 reviewRole(firstReview, "planner"), reviewStatus(firstReview), reviewScore(firstReview), reviewName(firstReview),
                 reviewRole(secondReview, "channel_custom".equals(projectType) ? "sales" : "admin"),
                 reviewStatus(secondReview), reviewScore(secondReview), reviewName(secondReview),
                 finalReviewScore(firstReview, secondReview),
-                t.getCreatedAt()
+                t.getCreatedAt(), subTaskExtraFields(t)
         ));
+    }
+
+    private Map<String, String> projectExtraFields(Project p, String taskProgress) {
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("项目编号", p.getProjectCode());
+        values.put("产品名称", p.getProductName());
+        values.put("项目名称", p.getProductName());
+        values.put("需求说明", p.getProductRequirements());
+        values.put("项目描述", p.getDescription());
+        values.put("目标市场", p.getTargetMarket());
+        values.put("合规项", p.getComplianceItems());
+        values.put("IP名称", p.getIpName());
+        values.put("创意作者", p.getCreativeAuthorName());
+        values.put("来源", p.getSource());
+        values.put("产品类目备注", p.getProductCategoryNote());
+        values.put("子任务流程", taskProgress);
+        return values;
+    }
+
+    static String projectFlowLabel(String projectStatus, String workflowStage, String workflowStatus) {
+        String terminal = switch (projectStatus == null ? "" : projectStatus) {
+            case "draft" -> "草稿";
+            case "pending_planner" -> "待企划接单";
+            case "paused" -> "已暂停";
+            case "pending_terminate" -> "终止确认中";
+            case "terminated" -> "已终止";
+            case "completed" -> "已完成";
+            default -> null;
+        };
+        if (terminal != null) return terminal;
+        String stage = workflowStageLabel(workflowStage);
+        if (stage == null) stage = "未开始";
+        return switch (workflowStatus == null ? "" : workflowStatus) {
+            case "under_review" -> stage + "（审核中）";
+            case "rejected" -> stage + "（已驳回）";
+            case "completed" -> stage + "（已完成）";
+            default -> stage;
+        };
+    }
+
+    static String taskProgressSummary(List<SubTask> tasks) {
+        List<SubTask> safeTasks = tasks == null ? List.of() : tasks;
+        int total = safeTasks.size();
+        int completed = 0;
+        int reviewing = 0;
+        int active = 0;
+        int pending = 0;
+        int rejected = 0;
+        for (SubTask task : safeTasks) {
+            String status = task.getStatus();
+            if (List.of("approved", "completed", "sales_approved", "admin_approved").contains(status)) completed++;
+            else if (List.of("delivered", "submitted_for_review", "planner_approved", "scoring_planner").contains(status)) reviewing++;
+            else if ("pending".equals(status)) pending++;
+            else if ("rejected".equals(status)) rejected++;
+            else active++;
+        }
+        List<String> parts = new ArrayList<>();
+        parts.add("已完成 " + completed + "/" + total);
+        if (reviewing > 0) parts.add("送审中 " + reviewing);
+        if (active > 0) parts.add("进行中 " + active);
+        if (pending > 0) parts.add("待认领 " + pending);
+        if (rejected > 0) parts.add("已驳回 " + rejected);
+        return String.join("｜", parts);
+    }
+
+    private Map<String, String> subTaskExtraFields(SubTask t) {
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("所属阶段", workflowStageLabel(t.getWorkflowStage()));
+        values.put("负责人类型", assigneeRoleLabel(t.getAssigneeRole()));
+        values.put("发布人", t.getPublisherName());
+        values.put("细节要求说明", t.getDetails());
+        values.put("交付成果", t.getDeliverables());
+        values.put("交付成果/完成说明", t.getDeliverables());
+        values.put("审核意见", t.getReviewComments());
+        return values;
+    }
+
+    static String workflowStageLabel(String stage) {
+        if (stage == null) return null;
+        return switch (stage) {
+            case "design" -> "设计";
+            case "design_review" -> "设计送审";
+            case "three_d_review" -> "3D送审";
+            case "sample_review" -> "打样送审";
+            case "promotion" -> "产品宣发";
+            case "bulk" -> "大货";
+            default -> stage;
+        };
+    }
+
+    private String assigneeRoleLabel(String role) {
+        if (role == null) return null;
+        return switch (role) {
+            case "designer" -> "设计师";
+            case "supplychain" -> "供应链";
+            case "planner" -> "企划";
+            case "sales" -> "销售";
+            case "promotion" -> "产品推广";
+            default -> role;
+        };
+    }
+
+    static String latestDeliveryActualDate(List<SubTaskDeliveryVersion> versions) {
+        if (versions == null) return null;
+        return versions.stream()
+                .map(SubTaskDeliveryVersion::getActualDate)
+                .filter(value -> value != null && !value.isBlank())
+                .findFirst()
+                .orElse(null);
     }
 
     private void syncScoring(Long recordId) throws Exception {

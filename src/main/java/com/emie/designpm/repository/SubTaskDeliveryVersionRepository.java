@@ -8,9 +8,11 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface SubTaskDeliveryVersionRepository extends JpaRepository<SubTaskDeliveryVersion, Long> {
     List<SubTaskDeliveryVersion> findBySubTaskIdOrderByVersionNoDesc(Long subTaskId);
+    Optional<SubTaskDeliveryVersion> findFirstBySubTaskIdAndActualDateIsNotNullOrderByVersionNoDesc(Long subTaskId);
 
     List<SubTaskDeliveryVersion> findBySubTaskIdInOrderBySubTaskIdAscVersionNoDesc(Collection<Long> subTaskIds);
     long countBySubTaskId(Long subTaskId);

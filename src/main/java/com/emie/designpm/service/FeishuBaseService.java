@@ -327,7 +327,8 @@ public class FeishuBaseService {
         String token = getToken();
 
         Map<String, Integer> projectFields = new LinkedHashMap<>();
-        projectFields.put("审核流程", 1);
+        projectFields.put("项目流程", 1);
+        projectFields.put("子任务流程", 1);
         projectFields.put("当前审核阶段", 1);
         projectFields.put("审核进度", 2);
 
@@ -433,8 +434,9 @@ public class FeishuBaseService {
     /** 项目表字段定义 */
     private JsonNode createProjectFields() {
         ArrayNode fields = json.createArrayNode();
-        addTextFields(fields, "项目ID", "类型", "状态", "销售", "产品企划", "产品类目", "参考价格",
-                "审核流程", "当前审核阶段", "同步来源");
+        addTextFields(fields, "项目ID", "项目编号", "产品名称", "类型", "状态", "销售", "产品企划",
+                "产品类目", "产品类目备注", "参考价格", "需求说明", "项目描述", "目标市场", "合规项",
+                "IP名称", "创意作者", "来源", "项目流程", "子任务流程", "当前审核阶段", "同步来源");
         addDateFields(fields, "截止日期", "创建时间");
         addNumberFields(fields, "子任务数", "完成进度", "审核进度");
         return fields;
@@ -443,9 +445,10 @@ public class FeishuBaseService {
     /** 子任务表字段定义 */
     private JsonNode createTaskFields() {
         ArrayNode fields = json.createArrayNode();
-        addTextFields(fields, "子任务ID", "任务名称", "状态", "负责人", "所属项目",
+        addTextFields(fields, "子任务ID", "任务名称", "所属阶段", "状态", "负责人类型", "负责人", "发布人",
+                "细节要求说明", "交付成果", "审核意见", "所属项目",
                 "一审角色", "一审状态", "一审审核人", "二审角色", "二审状态", "二审审核人", "同步来源");
-        addDateFields(fields, "计划日期", "实际完成", "创建时间");
+        addDateFields(fields, "计划日期", "实际完成日期", "创建时间");
         addNumberFields(fields, "自评分", "一审得分", "二审得分", "审核得分");
         return fields;
     }
@@ -532,19 +535,19 @@ public class FeishuBaseService {
                             String salesName, String plannerName,
                             String deadline, String productCategory,
                             String priceRange, int taskCount, int progress,
-                            String reviewFlow, String currentReviewStage, int reviewProgress,
-                            LocalDateTime createdAt) throws Exception {
+                            String projectFlow, String currentReviewStage, int reviewProgress,
+                            Map<String, String> extraFields, LocalDateTime createdAt) throws Exception {
         if (!isSyncEnabled()) return;
 
         syncProjectToTable(projectId, type, status, salesName, plannerName, deadline,
                 productCategory, priceRange, taskCount, progress,
-                reviewFlow, currentReviewStage, reviewProgress, createdAt,
+                projectFlow, currentReviewStage, reviewProgress, extraFields, createdAt,
                 getCfg("feishu.base.tableProjects"), false);
         String backup = getCfg("feishu.base.tableProjectsBackup");
         if (!backup.isBlank()) {
             syncProjectToTable(projectId, type, status, salesName, plannerName, deadline,
                     productCategory, priceRange, taskCount, progress,
-                    reviewFlow, currentReviewStage, reviewProgress, createdAt, backup, true);
+                    projectFlow, currentReviewStage, reviewProgress, extraFields, createdAt, backup, true);
         }
     }
 
@@ -552,8 +555,9 @@ public class FeishuBaseService {
                                     String salesName, String plannerName,
                                     String deadline, String productCategory,
                                     String priceRange, int taskCount, int progress,
-                                    String reviewFlow, String currentReviewStage, int reviewProgress,
-                                    LocalDateTime createdAt, String tableId, boolean backupTable) throws Exception {
+                                    String projectFlow, String currentReviewStage, int reviewProgress,
+                                    Map<String, String> extraFields, LocalDateTime createdAt,
+                                    String tableId, boolean backupTable) throws Exception {
 
         String appToken = getCfg("feishu.base.appToken");
         if (appToken.isBlank() || tableId.isBlank())
@@ -575,10 +579,11 @@ public class FeishuBaseService {
         if (productCategory != null && !productCategory.isBlank()) fields.put("产品类目", productCategory);
         if (priceRange != null && !priceRange.isBlank()) fields.put("参考价格", priceRange);
         fields.put("子任务数", taskCount);
-        fields.put("完成进度", progress);
-        fields.put("审核流程", reviewFlow != null ? reviewFlow : "");
+        putProgressValue(fields, "完成进度", progress);
+        fields.put("项目流程", projectFlow != null ? projectFlow : "");
         fields.put("当前审核阶段", currentReviewStage != null ? currentReviewStage : "");
-        fields.put("审核进度", reviewProgress);
+        putProgressValue(fields, "审核进度", reviewProgress);
+        putExtraFields(fields, fieldTypes, extraFields);
         putSyncMetadata(fields, backupTable, false, null, existed != null, fieldTypes);
         if (createdAt != null) {
             putDateValue(fields, "创建时间", toTimestamp(createdAt), fieldTypes.get("创建时间"));
@@ -613,7 +618,8 @@ public class FeishuBaseService {
             Integer secondReviewScore,
             String secondReviewerName,
             Double finalReviewScore,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            Map<String, String> extraFields
     ) {}
 
     public void syncSubTask(SubTaskSyncData data) throws Exception {
@@ -645,7 +651,8 @@ public class FeishuBaseService {
             putDateValue(fields, "计划日期", dateToTimestamp(data.plannedDate()), fieldTypes.get("计划日期"));
         }
         if (data.actualDate() != null && !data.actualDate().isBlank()) {
-            putDateValue(fields, "实际完成", dateToTimestamp(data.actualDate()), fieldTypes.get("实际完成"));
+            putDateValue(fields, actualCompletionField(fieldTypes), dateToTimestamp(data.actualDate()),
+                    actualCompletionFieldType(fieldTypes));
         }
         if (data.selfScore() != null) fields.put("自评分", data.selfScore().intValue());
         putReviewSummary(fields, "一审", data.firstReviewRole(), data.firstReviewStatus(),
@@ -657,6 +664,7 @@ public class FeishuBaseService {
         } else if (existed != null) {
             fields.putNull("审核得分");
         }
+        putExtraFields(fields, fieldTypes, data.extraFields());
         putSyncMetadata(fields, backupTable, false, null, existed != null, fieldTypes);
         if (data.createdAt() != null) {
             putDateValue(fields, "创建时间", toTimestamp(data.createdAt()), fieldTypes.get("创建时间"));
@@ -1125,12 +1133,13 @@ public class FeishuBaseService {
         };
     }
 
-    private static String taskStatusLabel(String s) {
+    static String taskStatusLabel(String s) {
         if (s == null) return "未知";
         return switch (s) {
             case "pending" -> "待认领";
             case "accepted" -> "进行中";
             case "delivered" -> "已交付";
+            case "submitted_for_review" -> "已送审";
             case "planner_approved" -> "企划已验收";
             case "scoring_planner" -> "待二次验收";
             case "sales_approved" -> "销售已验收";
@@ -1140,6 +1149,32 @@ public class FeishuBaseService {
             case "rejected" -> "已驳回";
             default -> s;
         };
+    }
+
+    /** 飞书百分比字段使用 0~1 小数；系统内部进度使用 0~100 整数。 */
+    static void putProgressValue(ObjectNode fields, String fieldName, int progress) {
+        int bounded = Math.max(0, Math.min(100, progress));
+        fields.put(fieldName, bounded / 100.0);
+    }
+
+    /** 兼容历史表“实际完成”和当前表“实际完成日期”两种列名。 */
+    static String actualCompletionField(Map<String, Integer> fieldTypes) {
+        if (fieldTypes.containsKey("实际完成日期")) return "实际完成日期";
+        if (fieldTypes.containsKey("实际完成")) return "实际完成";
+        if (fieldTypes.containsKey("实际完成时间")) return "实际完成时间";
+        return "实际完成日期";
+    }
+
+    static Integer actualCompletionFieldType(Map<String, Integer> fieldTypes) {
+        return fieldTypes.get(actualCompletionField(fieldTypes));
+    }
+
+    static void putExtraFields(ObjectNode fields, Map<String, Integer> fieldTypes,
+                               Map<String, String> values) {
+        if (values == null) return;
+        values.forEach((name, value) -> {
+            if (fieldTypes.containsKey(name) && value != null && !value.isBlank()) fields.put(name, value);
+        });
     }
 
     private static String roleLabel(String r) {

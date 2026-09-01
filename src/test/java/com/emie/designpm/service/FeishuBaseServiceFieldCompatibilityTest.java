@@ -68,6 +68,36 @@ class FeishuBaseServiceFieldCompatibilityTest {
     }
 
     @Test
+    void progressValuesUseFeishuPercentageScaleAndNeverExceedOneHundredPercent() {
+        ObjectNode fields = json.createObjectNode();
+
+        FeishuBaseService.putProgressValue(fields, "完成进度", 33);
+        FeishuBaseService.putProgressValue(fields, "审核进度", 150);
+
+        assertEquals(0.33, fields.path("完成进度").asDouble(), 0.0001);
+        assertEquals(1.0, fields.path("审核进度").asDouble(), 0.0001);
+    }
+
+    @Test
+    void taskStatusAndActualCompletionFieldMatchBusinessLabelsAndExistingTable() {
+        assertEquals("已送审", FeishuBaseService.taskStatusLabel("submitted_for_review"));
+        assertEquals("实际完成日期", FeishuBaseService.actualCompletionField(Map.of("实际完成日期", 5)));
+        assertEquals("实际完成", FeishuBaseService.actualCompletionField(Map.of("实际完成", 5)));
+        assertEquals("实际完成时间", FeishuBaseService.actualCompletionField(Map.of("实际完成时间", 5)));
+    }
+
+    @Test
+    void extraBusinessFieldsAreOnlyWrittenWhenTargetColumnsExist() {
+        ObjectNode fields = json.createObjectNode();
+
+        FeishuBaseService.putExtraFields(fields, Map.of("产品名称", 1),
+                Map.of("产品名称", "耳机", "预算金额", "10000"));
+
+        assertEquals("耳机", fields.path("产品名称").asText());
+        assertFalse(fields.has("预算金额"));
+    }
+
+    @Test
     void reviewLabelsExposeTwoStageWorkflow() {
         assertEquals("渠道定制", FeishuBaseService.projectTypeLabel("channel_custom"));
         assertEquals("公司常规品", FeishuBaseService.projectTypeLabel("regular"));
