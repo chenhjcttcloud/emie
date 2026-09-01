@@ -224,9 +224,7 @@ async function triggerFeishuSync(button) {
   await refreshProgress();
   poller = setInterval(refreshProgress, 2000);
   try {
-    const response = await fetch('/api/admin/sync/process', { method: 'POST', headers: authHeaders() });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.message || `请求失败（${response.status}）`);
+    const payload = await apiPost('/admin/sync/process', {});
     await refreshProgress();
     if (result) result.textContent += ` ${payload.message || '本轮同步处理完成'}。`;
   } catch (e) {
