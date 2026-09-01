@@ -10,6 +10,8 @@ import com.emie.designpm.repository.SystemConfigRepository;
 import com.emie.designpm.repository.UserRepository;
 import com.emie.designpm.util.SecurityUtil;
 import com.emie.designpm.dto.PageResponse;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +35,7 @@ import org.springframework.data.domain.Pageable;
 
 @Service
 public class AdminService {
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private static final Set<String> BUSINESS_ROLES = Set.of("sales", "planner", "designer", "supplychain", "admin");
     private static final long PUBLIC_CONFIG_CACHE_MILLIS = 5_000L;
@@ -181,6 +184,8 @@ public class AdminService {
                 .description("操作日志备份表 Table ID").valueType("text").sortOrder(9).build(),
             SystemConfig.builder().configKey("feishu.base.tableLogs").configValue("").configGroup("feishu_base")
                 .description("操作日志表 Table ID").valueType("text").sortOrder(10).build(),
+            SystemConfig.builder().configKey("feishu.base.fieldMappings").configValue("{}").configGroup("feishu_base")
+                .description("飞书同步字段选择及目标列映射（由字段配置页面维护）").valueType("textarea").sortOrder(11).build(),
 
             // ===== 通知中心 =====
             SystemConfig.builder().configKey("notification.enabled").configValue("true").configGroup("notification")
@@ -309,6 +314,7 @@ public class AdminService {
                     && !value.matches("https?://[^\\s/]+(?::\\d+)?(?:/.*)?")) {
                 throw new IllegalArgumentException("飞书通知跳转地址必须是完整的 http:// 或 https:// 地址");
             }
+            if ("feishu.base.fieldMappings".equals(key)) validateFeishuFieldMappings(value);
             configRepository.findByConfigKey(entry.getKey()).ifPresent(config -> {
                 if ("password".equalsIgnoreCase(config.getValueType())
                         && "******".equals(entry.getValue())) {
@@ -321,6 +327,33 @@ public class AdminService {
             });
         }
         invalidatePublicConfigCache();
+    }
+
+    private static void validateFeishuFieldMappings(String value) {
+        try {
+            JsonNode root = JSON.readTree(value.isBlank() ? "{}" : value);
+            if (!root.isObject()) throw new IllegalArgumentException("飞书字段配置格式不正确");
+            Map<String, String> identities = Map.of("project", "项目ID", "task", "子任务ID", "scoring", "评分ID");
+            for (Map.Entry<String, String> table : identities.entrySet()) {
+                JsonNode mappings = root.path(table.getKey());
+                if (!mappings.isMissingNode() && !mappings.isObject()) throw new IllegalArgumentException("飞书字段配置格式不正确");
+                Set<String> targets = new HashSet<>();
+                Iterator<Map.Entry<String, JsonNode>> fields = mappings.fields();
+                while (fields.hasNext()) {
+                    Map.Entry<String, JsonNode> field = fields.next();
+                    JsonNode mapping = field.getValue();
+                    boolean identity = field.getKey().equals(table.getValue());
+                    boolean enabled = identity || mapping.path("enabled").asBoolean(true);
+                    String target = identity ? field.getKey() : mapping.path("target").asText(field.getKey()).trim();
+                    if (enabled && target.isBlank()) throw new IllegalArgumentException("飞书目标列名不能为空: " + field.getKey());
+                    if (enabled && !targets.add(target)) throw new IllegalArgumentException("飞书目标列名重复: " + target);
+                }
+            }
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("飞书字段配置不是有效 JSON", e);
+        }
     }
 
     private void invalidatePublicConfigCache() {

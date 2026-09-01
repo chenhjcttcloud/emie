@@ -79,6 +79,44 @@ class FeishuBaseServiceFieldCompatibilityTest {
     }
 
     @Test
+    void configurableMappingsCanDisableAndRenameFields() {
+        ObjectNode fields = json.createObjectNode();
+        fields.put("项目ID", "42");
+        fields.put("销售", "张三");
+        fields.put("完成进度", 0.5);
+        String config = "{\"project\":{\"销售\":{\"enabled\":false},\"完成进度\":{\"enabled\":true,\"target\":\"项目总进度\"}}}";
+
+        ObjectNode result = FeishuBaseService.applyFieldMappings(fields, "project", config);
+
+        assertEquals("42", result.path("项目ID").asText());
+        assertFalse(result.has("销售"));
+        assertEquals(0.5, result.path("项目总进度").asDouble());
+    }
+
+    @Test
+    void identityFieldCannotBeDisabledOrRenamed() {
+        ObjectNode fields = json.createObjectNode();
+        fields.put("子任务ID", "7");
+        String config = "{\"task\":{\"子任务ID\":{\"enabled\":false,\"target\":\"别名\"}}}";
+
+        ObjectNode result = FeishuBaseService.applyFieldMappings(fields, "task", config);
+
+        assertEquals("7", result.path("子任务ID").asText());
+        assertFalse(result.has("别名"));
+    }
+
+    @Test
+    void duplicateTargetColumnsAreRejected() {
+        ObjectNode fields = json.createObjectNode();
+        fields.put("状态", "进行中");
+        fields.put("销售", "张三");
+        String config = "{\"project\":{\"状态\":{\"target\":\"同一列\"},\"销售\":{\"target\":\"同一列\"}}}";
+
+        assertThrows(IllegalArgumentException.class,
+                () -> FeishuBaseService.applyFieldMappings(fields, "project", config));
+    }
+
+    @Test
     void taskStatusAndActualCompletionFieldMatchBusinessLabelsAndExistingTable() {
         assertEquals("已送审", FeishuBaseService.taskStatusLabel("submitted_for_review"));
         assertEquals("实际完成日期", FeishuBaseService.actualCompletionField(Map.of("实际完成日期", 5)));

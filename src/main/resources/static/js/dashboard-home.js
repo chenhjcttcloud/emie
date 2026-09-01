@@ -219,7 +219,7 @@ async function loadDashboardExecutionTasks(uid, role) {
             </div>
             <div style="padding:0 20px 20px;">
               <div class="table-wrap"><table>
-                <thead><tr><th>子任务</th><th>所属项目</th><th>发布人</th><th>要求完成时间</th><th>状态</th><th>驳回意见</th><th>操作</th></tr></thead>
+                <thead><tr><th>子任务</th><th>所属项目</th><th>发布人</th><th>发布时间</th><th>要求完成时间</th><th>状态</th><th>驳回意见</th><th>操作</th></tr></thead>
                 <tbody>${display.map(t => {
                   const statusInfo = getTaskStatusInfo(t.status);
                   if (String(role || '').toLowerCase().replace(/[-_]/g, '') === 'supplychain'
@@ -232,7 +232,7 @@ async function loadDashboardExecutionTasks(uid, role) {
                       <td><strong>${escHtml(t.name || '-')}</strong><div style="font-size:11px;color:var(--gray-400);margin-top:2px;">#${t.id}</div></td>
                       <td>${escHtml(t.projectName || '未命名项目')}</td>
                       <td>${escHtml(t.publisherName || '-')}</td>
-                      <td>${formatDate(t.plannedDate)}</td>
+                      <td>${EMIE.actions.fmtDT(t.createdAt) || '-'}</td><td>${formatDate(t.plannedDate)}</td>
                       <td><span class="badge ${statusInfo.cls}">${statusInfo.icon} ${statusInfo.label}</span></td>
                       <td style="max-width:260px;white-space:normal;">${t.status === 'rejected' ? escHtml(t.reviewComments || '待查看详情') : '—'}</td>
                       <td><button class="btn btn-outline btn-sm" data-emie-action="click:home-subtask-detail" data-task-id="${t.id}">查看</button></td>

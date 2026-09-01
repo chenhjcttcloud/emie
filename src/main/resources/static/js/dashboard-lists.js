@@ -342,8 +342,8 @@ function renderProjectTable(orders, options = {}) {
   if (!orders.length) return `<div class="empty" style="padding:40px;"><div class="empty-icon">📭</div><p>暂无项目</p></div>`;
   const { compact = false, showType = true } = options;
   const headers = compact
-    ? `<th class="col-id">编号</th>${showType ? '<th>类型</th>' : ''}<th class="col-name">产品名称</th><th>需求方 / 企划</th><th>类目 / 市场</th><th>进度</th><th>截止</th><th>状态</th><th class="col-action">操作</th>`
-    : '<th>编号</th><th>类型</th><th>产品名称</th><th>需求方</th><th>产品企划</th><th>产品类目</th><th>目标市场</th><th>价格</th><th>子任务</th><th>评分</th><th>要求时间</th><th>状态</th><th>操作</th>';
+    ? `<th class="col-id">编号</th>${showType ? '<th>类型</th>' : ''}<th class="col-name">产品名称</th><th>需求方 / 企划</th><th>类目 / 市场</th><th>进度</th><th>发布时间</th><th>截止</th><th>状态</th><th class="col-action">操作</th>`
+    : '<th>编号</th><th>类型</th><th>产品名称</th><th>需求方</th><th>产品企划</th><th>产品类目</th><th>目标市场</th><th>价格</th><th>子任务</th><th>评分</th><th>发布时间</th><th>要求时间</th><th>状态</th><th>操作</th>';
   return `<div class="table-wrap project-table-wrap"><table class="${compact ? 'project-list-table' : ''}">
     <thead><tr>${headers}</tr></thead>
     <tbody>${orders.map(o => renderProjectRow(o, compact, showType)).join('')}</tbody>
@@ -526,6 +526,7 @@ function renderTaskProjectTable(orders) {
       <th>产品要求</th>
       <th>产品企划</th>
       <th>子任务</th>
+      <th>发布时间</th>
       <th>要求时间</th>
       <th>状态</th>
       <th>操作</th>
@@ -538,6 +539,7 @@ function renderTaskProjectTable(orders) {
         <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(o.productRequirements || '')}">${escHtml(o.productRequirements || '-')}</td>
         <td>${o.plannerName ? escHtml(o.plannerName) : '<span style="color:var(--gray-400);">未指定</span>'}</td>
         <td>${o.approvedTaskCount}/${o.taskCount}</td>
+        <td>${EMIE.actions.fmtDT(o.createdAt) || '-'}</td>
         <td>${formatDate(o.deadline)}</td>
         <td><span class="badge ${st.cls}">${st.label}</span></td>
         <td>

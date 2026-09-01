@@ -143,6 +143,7 @@ function renderProjectRow(o, compact = false, showType = true) {
       <td><div>${escHtml(o.salesName || '-')}</div><div class="project-muted">${escHtml(o.plannerName || '未指定')}</div></td>
       <td><div>${escHtml(o.productCategory || '-')}</div><div class="project-muted">${escHtml(market)} · ${escHtml(o.priceRange || '-')}</div></td>
       <td>${o.approvedTaskCount}/${o.taskCount}<span class="project-muted"> · ${renderScore(o.score)}</span></td>
+      <td>${formatDate(o.createdAt, true)}</td>
       <td>${formatDate(o.deadline)}</td>
       <td><span class="badge ${st.cls}">${st.label}</span></td>
       <td class="project-action-cell"><button class="btn btn-outline btn-sm" data-emie-action="click:project-row-open" data-project-type="${escHtml(o.type)}" data-project-id="${o.id}">查看</button></td>
@@ -159,6 +160,7 @@ function renderProjectRow(o, compact = false, showType = true) {
     <td style="font-size:12px;">${o.priceRange ? escHtml(o.priceRange) : '-'}</td>
     <td style="font-size:12px;">${o.approvedTaskCount}/${o.taskCount}</td>
     <td style="font-size:12px;">${renderScore(o.score)}</td>
+    <td style="font-size:12px;">${formatDate(o.createdAt, true)}</td>
     <td style="font-size:12px;">${formatDate(o.deadline)}</td>
     <td><span class="badge ${st.cls}" style="font-size:11px;">${st.label}</span></td>
     <td style="white-space:nowrap;">

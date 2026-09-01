@@ -42,6 +42,9 @@ public class FeishuBaseService {
 
     private record CachedFieldTypes(Map<String, Integer> types, long expiresAt) {}
 
+    private static final Map<String, String> IDENTITY_FIELDS = Map.of(
+            "project", "项目ID", "task", "子任务ID", "scoring", "评分ID");
+
     public FeishuBaseService(SystemConfigRepository configRepository) {
         this.configRepository = configRepository;
     }
@@ -572,7 +575,7 @@ public class FeishuBaseService {
         fields.put("销售", salesName != null ? salesName : "");
         fields.put("产品企划", plannerName != null ? plannerName : "");
         if (deadline != null && !deadline.isBlank()) {
-            putDateValue(fields, "截止日期", dateToTimestamp(deadline), fieldTypes.get("截止日期"));
+            putDateValue(fields, "截止日期", dateToTimestamp(deadline), mappedFieldType("project", "截止日期", fieldTypes));
         }
         if (productCategory != null && !productCategory.isBlank()) fields.put("产品类目", productCategory);
         if (priceRange != null && !priceRange.isBlank()) fields.put("参考价格", priceRange);
@@ -581,11 +584,13 @@ public class FeishuBaseService {
         fields.put("项目流程", projectFlow != null ? projectFlow : "");
         fields.put("当前审核阶段", currentReviewStage != null ? currentReviewStage : "");
         putProgressValue(fields, "审核进度", reviewProgress);
-        putExtraFields(fields, fieldTypes, extraFields);
+        putConfiguredExtraFields(fields, "project", fieldTypes, extraFields);
         putSyncMetadata(fields, backupTable, false, null, existed != null, fieldTypes);
         if (createdAt != null) {
-            putDateValue(fields, "创建时间", toTimestamp(createdAt), fieldTypes.get("创建时间"));
+            putDateValue(fields, "创建时间", toTimestamp(createdAt), mappedFieldType("project", "创建时间", fieldTypes));
         }
+
+        fields = prepareConfiguredFields(token, appToken, tableId, "project", fields, fieldTypes);
 
         if (existed != null) {
             updateRecord(token, appToken, tableId, existed, fields.toString());
@@ -646,11 +651,14 @@ public class FeishuBaseService {
         fields.put("状态", taskStatusLabel(data.status()));
         fields.put("负责人", data.designerName() != null ? data.designerName() : "");
         if (data.plannedDate() != null && !data.plannedDate().isBlank()) {
-            putDateValue(fields, "计划日期", dateToTimestamp(data.plannedDate()), fieldTypes.get("计划日期"));
+            putDateValue(fields, "计划日期", dateToTimestamp(data.plannedDate()), mappedFieldType("task", "计划日期", fieldTypes));
         }
         if (data.actualDate() != null && !data.actualDate().isBlank()) {
-            putDateValue(fields, actualCompletionField(fieldTypes), dateToTimestamp(data.actualDate()),
-                    actualCompletionFieldType(fieldTypes));
+            String rawMappings = getCfg("feishu.base.fieldMappings");
+            String actualField = mappingNode("task", "实际完成日期", rawMappings) != null
+                    ? "实际完成日期" : actualCompletionField(fieldTypes);
+            putDateValue(fields, actualField, dateToTimestamp(data.actualDate()),
+                    mappedFieldType("task", actualField, fieldTypes));
         }
         if (data.selfScore() != null) fields.put("自评分", data.selfScore().intValue());
         putReviewSummary(fields, "一审", data.firstReviewRole(), data.firstReviewStatus(),
@@ -662,14 +670,14 @@ public class FeishuBaseService {
         } else if (existed != null) {
             fields.putNull("审核得分");
         }
-        putExtraFields(fields, fieldTypes, data.extraFields());
+        putConfiguredExtraFields(fields, "task", fieldTypes, data.extraFields());
         putSyncMetadata(fields, backupTable, false, null, existed != null, fieldTypes);
         if (data.createdAt() != null) {
-            putDateValue(fields, "创建时间", toTimestamp(data.createdAt()), fieldTypes.get("创建时间"));
+            putDateValue(fields, "创建时间", toTimestamp(data.createdAt()), mappedFieldType("task", "创建时间", fieldTypes));
         }
 
         if (data.projectId() != null) {
-            Integer fieldType = fieldTypes.get("所属项目");
+            Integer fieldType = mappedFieldType("task", "所属项目", fieldTypes);
             String linkedRecordId = null;
             if (isLinkField(fieldType)) {
                 linkedRecordId = findRecordId(token, appToken, getCfg("feishu.base.tableProjects"),
@@ -677,6 +685,8 @@ public class FeishuBaseService {
             }
             putReferenceValue(fields, "所属项目", String.valueOf(data.projectId()), linkedRecordId, fieldType);
         }
+
+        fields = prepareConfiguredFields(token, appToken, tableId, "task", fields, fieldTypes);
 
         if (existed != null) {
             updateRecord(token, appToken, tableId, existed, fields.toString());
@@ -751,7 +761,7 @@ public class FeishuBaseService {
         fields.put("审核意见", data.comment() != null ? data.comment() : "");
         putSyncMetadata(fields, backupTable, false, null, existed != null, fieldTypes);
         if (data.subTaskId() != null) {
-            Integer fieldType = fieldTypes.get("所属子任务");
+            Integer fieldType = mappedFieldType("scoring", "所属子任务", fieldTypes);
             String linkedRecordId = null;
             if (isLinkField(fieldType)) {
                 linkedRecordId = findRecordId(token, appToken, getCfg("feishu.base.tableTasks"),
@@ -759,6 +769,8 @@ public class FeishuBaseService {
             }
             putReferenceValue(fields, "所属子任务", data.subTaskId().toString(), linkedRecordId, fieldType);
         }
+
+        fields = prepareConfiguredFields(token, appToken, tableId, "scoring", fields, fieldTypes);
 
         if (existed != null) {
             updateRecord(token, appToken, tableId, existed, fields.toString());
@@ -1200,6 +1212,106 @@ public class FeishuBaseService {
 
     static boolean isLinkField(Integer fieldType) {
         return fieldType != null && (fieldType == 18 || fieldType == 21);
+    }
+
+    private Integer mappedFieldType(String tableKey, String sourceName, Map<String, Integer> fieldTypes) {
+        String targetName = configuredTargetName(tableKey, sourceName, getCfg("feishu.base.fieldMappings"));
+        Integer actual = fieldTypes.get(targetName);
+        if (actual != null && actual >= 1000 && !"创建时间".equals(sourceName)) {
+            throw new IllegalArgumentException("飞书字段为只读字段，不能写入: " + targetName);
+        }
+        return actual != null ? actual : expectedFieldType(sourceName);
+    }
+
+    private void putConfiguredExtraFields(ObjectNode fields, String tableKey,
+                                          Map<String, Integer> fieldTypes, Map<String, String> values) {
+        if (values == null) return;
+        String rawConfig = getCfg("feishu.base.fieldMappings");
+        values.forEach((name, value) -> {
+            JsonNode mapping = mappingNode(tableKey, name, rawConfig);
+            boolean configured = mapping != null && mapping.path("enabled").asBoolean(true);
+            if ((fieldTypes.containsKey(name) || configured) && value != null && !value.isBlank()) {
+                fields.put(name, value);
+            }
+        });
+    }
+
+    private ObjectNode prepareConfiguredFields(String token, String appToken, String tableId,
+                                                String tableKey, ObjectNode sourceFields,
+                                                Map<String, Integer> fieldTypes) throws Exception {
+        ObjectNode configured = applyFieldMappings(sourceFields, tableKey, getCfg("feishu.base.fieldMappings"));
+        Iterator<Map.Entry<String, JsonNode>> entries = configured.fields();
+        while (entries.hasNext()) {
+            Map.Entry<String, JsonNode> entry = entries.next();
+            String target = entry.getKey();
+            Integer actual = fieldTypes.get(target);
+            String source = configuredSourceName(tableKey, target, getCfg("feishu.base.fieldMappings"));
+            int expected = expectedFieldType(source);
+            if (actual == null) {
+                addField(token, appToken, tableId, target, expected);
+            } else if (!compatibleFieldType(source, expected, actual)) {
+                throw new IllegalArgumentException("飞书字段类型不匹配: " + target + "，请检查字段配置");
+            }
+        }
+        return configured;
+    }
+
+    static ObjectNode applyFieldMappings(ObjectNode sourceFields, String tableKey, String rawConfig) {
+        ObjectNode result = json.createObjectNode();
+        Set<String> targets = new HashSet<>();
+        sourceFields.fields().forEachRemaining(entry -> {
+            String source = entry.getKey();
+            JsonNode mapping = mappingNode(tableKey, source, rawConfig);
+            boolean identity = source.equals(IDENTITY_FIELDS.get(tableKey));
+            if (!identity && mapping != null && !mapping.path("enabled").asBoolean(true)) return;
+            String target = identity ? source : configuredTargetName(tableKey, source, rawConfig);
+            if (!targets.add(target)) throw new IllegalArgumentException("飞书字段映射重复: " + target);
+            result.set(target, entry.getValue());
+        });
+        return result;
+    }
+
+    private static String configuredTargetName(String tableKey, String source, String rawConfig) {
+        JsonNode mapping = mappingNode(tableKey, source, rawConfig);
+        String target = mapping == null ? "" : mapping.path("target").asText("").trim();
+        return target.isBlank() ? source : target;
+    }
+
+    private static String configuredSourceName(String tableKey, String target, String rawConfig) {
+        try {
+            JsonNode table = json.readTree(rawConfig == null || rawConfig.isBlank() ? "{}" : rawConfig).path(tableKey);
+            Iterator<Map.Entry<String, JsonNode>> entries = table.fields();
+            while (entries.hasNext()) {
+                Map.Entry<String, JsonNode> entry = entries.next();
+                if (configuredTargetName(tableKey, entry.getKey(), rawConfig).equals(target)) return entry.getKey();
+            }
+        } catch (Exception ignored) { }
+        return target;
+    }
+
+    private static JsonNode mappingNode(String tableKey, String source, String rawConfig) {
+        try {
+            JsonNode node = json.readTree(rawConfig == null || rawConfig.isBlank() ? "{}" : rawConfig)
+                    .path(tableKey).path(source);
+            return node.isObject() ? node : null;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("飞书字段配置不是有效 JSON", e);
+        }
+    }
+
+    private static int expectedFieldType(String fieldName) {
+        if (Set.of("截止日期", "计划日期", "实际完成日期", "实际完成", "实际完成时间", "创建时间").contains(fieldName)) return 5;
+        if (Set.of("子任务数", "完成进度", "审核进度", "自评分", "一审得分", "二审得分", "审核得分", "评分", "权重").contains(fieldName)) return 2;
+        return 1;
+    }
+
+    private static boolean compatibleFieldType(String source, int expected, int actual) {
+        if (actual >= 1000) return expected == 5 && "创建时间".equals(source);
+        if (Set.of("所属项目", "所属子任务").contains(source)) {
+            return actual == 1 || actual == 3 || isLinkField(actual);
+        }
+        if (expected == 1) return actual == 1 || actual == 3;
+        return expected == actual;
     }
 
     static void putReferenceValue(ObjectNode fields, String fieldName, String businessId,
