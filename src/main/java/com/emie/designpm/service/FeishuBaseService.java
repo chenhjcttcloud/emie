@@ -1300,7 +1300,7 @@ public class FeishuBaseService {
     }
 
     private static int expectedFieldType(String fieldName) {
-        if (Set.of("截止日期", "计划日期", "实际完成日期", "实际完成", "实际完成时间", "创建时间").contains(fieldName)) return 5;
+        if (Set.of("截止日期", "计划日期", "实际完成日期", "实际完成", "实际完成时间", "创建时间", "源数据删除时间").contains(fieldName)) return 5;
         if (Set.of("子任务数", "完成进度", "审核进度", "自评分", "一审得分", "二审得分", "审核得分", "评分", "权重").contains(fieldName)) return 2;
         return 1;
     }

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.Set;
 
@@ -13,6 +14,14 @@ import static org.junit.jupiter.api.Assertions.*;
 class FeishuBaseServiceFieldCompatibilityTest {
 
     private final ObjectMapper json = new ObjectMapper();
+
+    @Test
+    void sourceDeletionTimeIsRecognizedAsDateField() throws Exception {
+        Method method = FeishuBaseService.class.getDeclaredMethod("expectedFieldType", String.class);
+        method.setAccessible(true);
+
+        assertEquals(5, method.invoke(null, "源数据删除时间"));
+    }
 
     @Test
     void relationFieldUsesLinkedRecordPayload() {

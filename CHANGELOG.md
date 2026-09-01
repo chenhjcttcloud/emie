@@ -640,6 +640,8 @@
 
 ### 🐛 Bug 修复
 
+- 修复飞书子任务备份同步中“源数据删除时间”被误判为文本字段，导致字段类型不匹配、记录无法上传的问题。
+
 - 清理 `@Repository` 多余注解 — Spring Data JPA 自动实现，无需显式声明
 - 移除 `DashboardController`、`ProjectController` 中未使用的依赖注入
 - 移除 `ProjectService`、`UserService`、`ProjectSummaryDTO` 中未使用的 import
