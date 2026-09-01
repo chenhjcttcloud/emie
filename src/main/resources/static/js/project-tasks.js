@@ -62,7 +62,7 @@ function renderPointRuleOptions(rules, selectedCode) {
   const groups = new Map();
   active.forEach(rule => { const key = String(rule.category || '其他').toUpperCase(); if (!groups.has(key)) groups.set(key, []); groups.get(key).push(rule); });
   const order = { A: 1, B: 2, E: 3, S: 4, 其他: 9 };
-  return `<option value="" ${selected ? '' : 'selected'} disabled>请选择积分规则</option>` + missingSelected + [...groups.entries()].sort((a, b) => (order[a[0]] || 8) - (order[b[0]] || 8)).map(([category, items]) => `<optgroup label="${escHtml(category)}">${items.sort((a, b) => { const na = Number(String(a.ruleCode || '').match(/\d+/)?.[0] || 0); const nb = Number(String(b.ruleCode || '').match(/\d+/)?.[0] || 0); return na - nb; }).map(rule => { const code = String(rule.ruleCode || ''); const label = pointRuleDisplayName(code, rule.description); return `<option value="${escHtml(code)}" ${code === selected ? 'selected' : ''}>${escHtml(label)}（${Number(rule.points || 0)} 分）</option>`; }).join('')}</optgroup>`).join('');
+  return `<option value="" ${selected ? '' : 'selected'}>不设置积分规则</option>` + missingSelected + [...groups.entries()].sort((a, b) => (order[a[0]] || 8) - (order[b[0]] || 8)).map(([category, items]) => `<optgroup label="${escHtml(category)}">${items.sort((a, b) => { const na = Number(String(a.ruleCode || '').match(/\d+/)?.[0] || 0); const nb = Number(String(b.ruleCode || '').match(/\d+/)?.[0] || 0); return na - nb; }).map(rule => { const code = String(rule.ruleCode || ''); const label = pointRuleDisplayName(code, rule.description); return `<option value="${escHtml(code)}" ${code === selected ? 'selected' : ''}>${escHtml(label)}（${Number(rule.points || 0)} 分）</option>`; }).join('')}</optgroup>`).join('');
 }
 
 function pointRuleCategoryHint(category) {
@@ -148,7 +148,7 @@ async function addSubTask(pid) {
           </div>
           <div class="form-row">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 积分规则</label>
-              <select class="form-select" name="pointRuleCode" required><option value="" selected>请选择积分规则</option>${renderPointRuleOptions(pointRules, '').replace(/<option value=""[^>]*>[^<]*<\/option>/, '')}</select>
+              <select class="form-select" name="pointRuleCode" required>${renderPointRuleOptions(pointRules, '')}</select>
               <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">创建后将锁定规则快照并参与积分计算。</div>
             </div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 难度档位</label>
@@ -414,9 +414,9 @@ function editTask(pid, tid) {
             </div>
             <input type="hidden" name="requiredSkillTagsText" value="">
             <div class="form-row">
-              <div class="form-group"><label class="form-label">${task.status === 'pending' ? '<span class="required">*</span>' : ''}积分规则</label>
+              <div class="form-group"><label class="form-label">积分规则（可选）</label>
                 <select class="form-select" name="pointRuleCode" ${task.status !== 'pending' ? 'disabled' : ''}>${renderPointRuleOptions(rules, task.pointRuleCode)}</select>
-                ${task.status !== 'pending' ? '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">任务已开始，积分规则快照不可修改。</div>' : '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">正式运行后必须选择积分规则，任务开始后不可修改。</div>'}
+                ${task.status !== 'pending' ? '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">任务已开始，积分规则快照不可修改。</div>' : '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">留空则不计积分；选择规则后，任务开始后不可修改。</div>'}
               </div>
               <div class="form-group"><label class="form-label">难度档位</label>
                 <select class="form-select" name="difficultyCode" ${task.status !== 'pending' ? 'disabled' : ''}>${renderDifficultyOptions(difficulties, task.difficultyCode)}</select>

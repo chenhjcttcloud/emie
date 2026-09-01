@@ -1,6 +1,7 @@
 package com.emie.designpm.service;
 
 import com.emie.designpm.entity.Project;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -22,5 +23,6 @@ public interface SubTaskCommandService {
     Project taskReject(Long projectId, Long taskId, Map<String, Object> body);
     Project submitScoring(Long projectId, Long taskId, Map<String, Object> body);
     List<Map<String, Object>> getDeliveryVersions(Long taskId);
+    default Map<Long, List<Map<String, Object>>> getDeliveryVersionsByTaskIds(Collection<Long> taskIds) { return Map.of(); }
     double currentScoringWeight(String projectType, String role);
 }

@@ -110,6 +110,8 @@ public class PointsService {
 
     private boolean eligibleForPoints(SubTask task) {
         if (task == null || task.getId() == null || task.getDesignerId() == null || task.getDesignerId().isBlank()) return false;
+        // 未配置积分规则的子任务不参与积分发放。
+        if (task.getPointRuleCode() == null || task.getPointRuleCode().isBlank()) return false;
         // 积分制度从配置的起算日开始；起算日前创建的历史子任务不补发积分。
         LocalDate earningStart = LocalDate.of(2026, 8, 25);
         if (configs != null) {

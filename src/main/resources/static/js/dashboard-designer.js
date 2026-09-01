@@ -89,7 +89,7 @@ async function renderTaskMarket(main, role, uid) {
 
 function filterDesignerTasks() {
   clearTimeout(filterDesignerTasks._timer);
-  filterDesignerTasks._timer = setTimeout(applyFilterDesignerTasks, 100);
+  filterDesignerTasks._timer = setTimeout(applyFilterDesignerTasks, 350);
 }
 
 function applyFilterDesignerTasks() {

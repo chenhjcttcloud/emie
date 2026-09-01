@@ -3,6 +3,7 @@ package com.emie.designpm.service;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.ScoringRecord;
 import com.emie.designpm.entity.SubTask;
+import com.emie.designpm.entity.SubTaskDeliveryVersion;
 import com.emie.designpm.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -90,6 +91,75 @@ class ProjectReviewWorkflowTest {
                 eq("TASK_ASSIGNED"), eq("designer-2"), eq("sub_task"), eq(22L),
                 eq("planner-1"), anyMap());
         verify(subTasks).saveAndFlush(any(SubTask.class));
+    }
+
+    @Test
+    void createsSubTaskWithoutPointRule() {
+        Project project = projectWithTask("regular", "completed");
+        project.getTasks().clear();
+        when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(users.getUserByUserId("designer-2")).thenReturn(com.emie.designpm.entity.User.builder()
+                .userId("designer-2").name("设计师乙").role("designer").status("active").build());
+        when(users.getUserName("designer-2")).thenReturn("设计师乙");
+        when(subTasks.saveAndFlush(any(SubTask.class))).thenAnswer(invocation -> {
+            SubTask saved = invocation.getArgument(0);
+            saved.setId(23L);
+            return saved;
+        });
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThrows(IllegalArgumentException.class, () -> service.addSubTask(1L, Map.ofEntries(
+                Map.entry("name", "不计积分任务"), Map.entry("plannedDate", "2026-08-10"),
+                Map.entry("designerId", "designer-2"), Map.entry("assigneeRole", "designer"),
+                Map.entry("pointRuleCode", ""), Map.entry("difficultyCode", "STANDARD"),
+                Map.entry("workflowStage", "design"), Map.entry("currentRole", "planner"),
+                Map.entry("currentUserId", "planner-1"), Map.entry("currentUser", "企划甲"),
+                Map.entry("referenceImagesJson", "[]"), Map.entry("attachmentsJson", "[]"))));
+        verify(subTasks, never()).saveAndFlush(any(SubTask.class));
+    }
+
+    @Test
+    void batchesDeliveryVersionsForMultipleTasks() {
+        SubTask first = new SubTask(); first.setId(11L);
+        SubTask second = new SubTask(); second.setId(12L);
+        SubTaskDeliveryVersion newer = deliveryVersion(first, 2);
+        SubTaskDeliveryVersion older = deliveryVersion(first, 1);
+        SubTaskDeliveryVersion other = deliveryVersion(second, 1);
+        when(deliveryVersions.findBySubTaskIdInOrderBySubTaskIdAscVersionNoDesc(List.of(11L, 12L)))
+                .thenReturn(List.of(newer, older, other));
+
+        Map<Long, List<Map<String, Object>>> result = service.getDeliveryVersionsByTaskIds(List.of(11L, 12L));
+
+        assertEquals(List.of(2, 1), result.get(11L).stream().map(item -> item.get("versionNo")).toList());
+        assertEquals(1, result.get(12L).size());
+        verify(deliveryVersions).findBySubTaskIdInOrderBySubTaskIdAscVersionNoDesc(List.of(11L, 12L));
+    }
+
+    @Test
+    void updatePendingSubTaskCanClearPointRuleSnapshot() {
+        Project project = projectWithTask("regular", "pending");
+        SubTask task = project.getTasks().get(0);
+        task.setPointRuleCode("A1"); task.setDifficultyCode("COMPLEX");
+        task.setBasePointSnapshot(20); task.setDifficultyMultiplierSnapshot(1.5);
+        task.setQualityBonusThresholdSnapshot(90); task.setQualityBonusRatioSnapshot(.3);
+        task.setQualityTopThresholdSnapshot(97); task.setQualityTopRatioSnapshot(.6);
+        task.setMaxTotalMultiplierSnapshot(3d); task.setCountInPerformanceSnapshot(true);
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+        when(users.getUserByUserId("designer-1")).thenReturn(com.emie.designpm.entity.User.builder()
+                .userId("designer-1").name("设计师甲").role("designer").status("active").build());
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.updateSubTask(1L, 11L, Map.of(
+                "currentRole", "admin", "currentUserId", "admin-1", "currentUser", "管理员甲",
+                "pointRuleCode", "", "difficultyCode", "STANDARD"));
+
+        assertNull(task.getPointRuleCode());
+        assertEquals("STANDARD", task.getDifficultyCode());
+        assertNull(task.getBasePointSnapshot());
+        assertNull(task.getDifficultyMultiplierSnapshot());
+        assertNull(task.getCountInPerformanceSnapshot());
+        verify(points, never()).bindRuleSnapshot(any(), anyString(), anyString());
     }
 
     @Test
@@ -462,6 +532,13 @@ class ProjectReviewWorkflowTest {
                 "attachmentsJson", "[]",
                 "selfScore", 88
         );
+    }
+
+    private SubTaskDeliveryVersion deliveryVersion(SubTask task, int versionNo) {
+        SubTaskDeliveryVersion version = new SubTaskDeliveryVersion();
+        version.setSubTask(task); version.setVersionNo(versionNo); version.setSubmissionType("initial");
+        version.setSubmittedAt(java.time.LocalDateTime.of(2026, 9, 1, 9, 0));
+        return version;
     }
 
     private ScoringRecord review(SubTask task, String role, String stage) {

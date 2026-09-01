@@ -286,7 +286,13 @@ public class ProjectController {
         AuthController.AuthSession session = getSession(request);
         if (session == null) return ResponseEntity.status(401).build();
         List<SubTask> tasks = subTaskRepository.findMySubTasks(session.userId());
-        Map<Long, List<Map<String, Object>>> scoringByTask = loadScoringDetails(tasks.stream().map(SubTask::getId).toList());
+        List<Long> taskIds = tasks.stream().map(SubTask::getId).toList();
+        Map<Long, List<Map<String, Object>>> scoringByTask = loadScoringDetails(taskIds);
+        Map<Long, List<Map<String, Object>>> deliveriesByTask = Optional.ofNullable(
+                subTaskCommandService.getDeliveryVersionsByTaskIds(taskIds)).orElse(Map.of());
+        Map<Long, List<PointLedger>> ledgersByTask = pointLedgerRepository == null ? Map.of()
+                : pointLedgerRepository.findBySubTaskIdIn(taskIds).stream()
+                .collect(Collectors.groupingBy(PointLedger::getSubTaskId));
         Map<Long, List<ActivityLog>> logsByProject = new HashMap<>();
         List<Map<String, Object>> result = tasks.stream().map(task -> {
             Project project = task.getProject();
@@ -323,11 +329,12 @@ public class ProjectController {
             item.put("plannerName", project.getPlannerName());
             item.put("scoringRecords", scoringByTask.getOrDefault(task.getId(), List.of()));
             item.put("rejectionRecords", rejectionRecords(project, task, projectLogs));
-            item.put("deliveryVersions", subTaskCommandService.getDeliveryVersions(task.getId()));
+            item.put("deliveryVersions", deliveriesByTask.getOrDefault(task.getId(), List.of()));
             item.put("relation", session.userId().equals(task.getDesignerId()) ? "assignee" : "publisher");
-            item.put("issuedPoints", pointLedgerRepository == null ? 0d : pointLedgerRepository.findBySubTaskId(task.getId()).stream()
+            List<PointLedger> ledgers = ledgersByTask.getOrDefault(task.getId(), List.of());
+            item.put("issuedPoints", ledgers.stream()
                     .map(PointLedger::getPoints).filter(Objects::nonNull).mapToDouble(Double::doubleValue).sum());
-            item.put("issuedLedgerCount", pointLedgerRepository == null ? 0 : pointLedgerRepository.findBySubTaskId(task.getId()).size());
+            item.put("issuedLedgerCount", ledgers.size());
             return item;
         }).toList();
         return ResponseEntity.ok(result);
@@ -371,6 +378,8 @@ public class ProjectController {
         // 真正的部门范围仍由 departmentTaskUserIds 在服务端严格计算，不会扩大可见数据。
         if (userIds.isEmpty()) return ResponseEntity.ok(List.of());
         List<SubTask> tasks = subTaskRepository.findDepartmentSubTasks(userIds);
+        Map<Long, List<Map<String, Object>>> deliveriesByTask = Optional.ofNullable(subTaskCommandService
+                .getDeliveryVersionsByTaskIds(tasks.stream().map(SubTask::getId).toList())).orElse(Map.of());
         Map<Long, List<ActivityLog>> logsByProject = new HashMap<>();
         return ResponseEntity.ok(tasks.stream().map(task -> {
             Project project = task.getProject();
@@ -390,7 +399,7 @@ public class ProjectController {
             item.put("projectName", projectDisplayName(project)); item.put("readOnly", true);
             item.put("plannerId", project.getPlannerId()); item.put("plannerName", project.getPlannerName());
             item.put("rejectionRecords", rejectionRecords(project, task, projectLogs));
-            item.put("deliveryVersions", subTaskCommandService.getDeliveryVersions(task.getId()));
+            item.put("deliveryVersions", deliveriesByTask.getOrDefault(task.getId(), List.of()));
             String uid = session.userId();
             item.put("relation", uid.equals(task.getPublisherId()) ? "publisher" : "department_member");
             item.put("relationLabel", uid.equals(task.getPublisherId()) ? "我发布的任务" : "部门成员关联任务");

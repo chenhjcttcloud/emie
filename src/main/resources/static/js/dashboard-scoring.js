@@ -104,7 +104,7 @@ async function renderScoringView(main, role, uid) {
 function filterScoringView() {
   clearTimeout(filterScoringView._timer);
   EMIE.dashboardState.scoringPage = 1;
-  filterScoringView._timer = setTimeout(applyFilterScoringView, 100);
+  filterScoringView._timer = setTimeout(applyFilterScoringView, 350);
 }
 
 function applyFilterScoringView() {

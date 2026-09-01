@@ -87,6 +87,21 @@ class PointsServiceSnapshotTest {
     }
 
     @Test
+    void taskWithoutPointRuleDoesNotAwardPoints() {
+        PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
+        ScoringRepository scoring = mock(ScoringRepository.class);
+        PointsService service = new PointsService(mock(PointRuleRepository.class), ledgers, scoring,
+                mock(PointDifficultyConfigRepository.class));
+        SubTask task = new SubTask();
+        task.setId(10L); task.setDesignerId("designer-1"); task.setAssigneeRole("designer");
+
+        service.awardBaseSubmission(task);
+        service.awardQualityCompletion(task);
+
+        verifyNoInteractions(ledgers, scoring);
+    }
+
+    @Test
     void disabledRuleCannotBeBound() {
         PointRuleRepository rules = mock(PointRuleRepository.class);
         PointRule rule = rule("A1", 10, 1d, false);

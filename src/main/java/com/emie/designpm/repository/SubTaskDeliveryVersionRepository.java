@@ -11,6 +11,8 @@ import java.util.List;
 
 public interface SubTaskDeliveryVersionRepository extends JpaRepository<SubTaskDeliveryVersion, Long> {
     List<SubTaskDeliveryVersion> findBySubTaskIdOrderByVersionNoDesc(Long subTaskId);
+
+    List<SubTaskDeliveryVersion> findBySubTaskIdInOrderBySubTaskIdAscVersionNoDesc(Collection<Long> subTaskIds);
     long countBySubTaskId(Long subTaskId);
 
     @Query("SELECT COALESCE(MAX(v.versionNo), 0) FROM SubTaskDeliveryVersion v WHERE v.subTask.id = :subTaskId")

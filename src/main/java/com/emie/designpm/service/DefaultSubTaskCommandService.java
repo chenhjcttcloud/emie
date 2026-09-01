@@ -346,7 +346,21 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                     ? (String) body.get("pointRuleCode") : task.getPointRuleCode();
             String difficultyCode = body.containsKey("difficultyCode")
                     ? (String) body.get("difficultyCode") : task.getDifficultyCode();
-            pointsService.bindRuleSnapshot(task, ruleCode, difficultyCode);
+            if (ruleCode == null || ruleCode.isBlank()) {
+                task.setPointRuleCode(null);
+                task.setDifficultyCode(difficultyCode == null || difficultyCode.isBlank()
+                        ? null : difficultyCode.trim().toUpperCase(Locale.ROOT));
+                task.setBasePointSnapshot(null);
+                task.setDifficultyMultiplierSnapshot(null);
+                task.setQualityBonusThresholdSnapshot(null);
+                task.setQualityBonusRatioSnapshot(null);
+                task.setQualityTopThresholdSnapshot(null);
+                task.setQualityTopRatioSnapshot(null);
+                task.setMaxTotalMultiplierSnapshot(null);
+                task.setCountInPerformanceSnapshot(null);
+            } else {
+                pointsService.bindRuleSnapshot(task, ruleCode, difficultyCode);
+            }
         }
         if (body.containsKey("requiredSkillTags")) {
             if (!"pending".equals(task.getStatus())) {
@@ -1008,7 +1022,19 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getDeliveryVersions(Long taskId) {
-        return deliveryVersionRepository.findBySubTaskIdOrderByVersionNoDesc(taskId).stream().map(version -> {
+        return deliveryVersions(deliveryVersionRepository.findBySubTaskIdOrderByVersionNoDesc(taskId));
+    }
+
+    @Transactional(readOnly = true)
+    public Map<Long, List<Map<String, Object>>> getDeliveryVersionsByTaskIds(Collection<Long> taskIds) {
+        if (taskIds == null || taskIds.isEmpty()) return Map.of();
+        return deliveryVersionRepository.findBySubTaskIdInOrderBySubTaskIdAscVersionNoDesc(taskIds).stream()
+                .collect(Collectors.groupingBy(version -> version.getSubTask().getId(), LinkedHashMap::new,
+                        Collectors.collectingAndThen(Collectors.toList(), this::deliveryVersions)));
+    }
+
+    private List<Map<String, Object>> deliveryVersions(List<SubTaskDeliveryVersion> versions) {
+        return versions.stream().map(version -> {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("id", version.getId());
             item.put("versionNo", version.getVersionNo());

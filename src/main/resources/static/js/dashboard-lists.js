@@ -397,7 +397,7 @@ function jumpProjectListPage() {
 
 function filterProjectList() {
   clearTimeout(filterProjectList._timer);
-  filterProjectList._timer = setTimeout(applyFilterProjectList, 100);
+  filterProjectList._timer = setTimeout(applyFilterProjectList, 350);
 }
 
 async function applyFilterProjectList() {
@@ -565,7 +565,7 @@ async function renderDepartmentTasks(main, role, uid, bucket = 'all') {
 
 function filterTaskProjects() {
   clearTimeout(filterTaskProjects._timer);
-  filterTaskProjects._timer = setTimeout(applyFilterTaskProjects, 100);
+  filterTaskProjects._timer = setTimeout(applyFilterTaskProjects, 350);
 }
 
 async function applyFilterTaskProjects() {
@@ -574,6 +574,8 @@ async function applyFilterTaskProjects() {
   const dateStart = document.getElementById('taskProjectDateStart')?.value;
   const dateEnd = document.getElementById('taskProjectDateEnd')?.value;
   const state = EMIE.taskProjectListState || { filters: {} };
+  const requestId = (state.filterRequestId || 0) + 1;
+  state.filterRequestId = requestId;
   state.filters = {};
   if (filter !== 'all') state.filters.status = filter;
   const type = document.getElementById('taskProjectTypeFilter')?.value || 'all';
@@ -585,6 +587,7 @@ async function applyFilterTaskProjects() {
   const c = document.getElementById('taskProjectContainer');
   if (c) c.innerHTML = renderProjectListLoading();
   const result = await loadTaskProjectPage(0);
+  if (state.filterRequestId !== requestId) return;
   if (c) c.innerHTML = renderTaskProjectTable(result.items || []);
   EMIE.dashboardState.taskProjectsCache = result.items || [];
 }
