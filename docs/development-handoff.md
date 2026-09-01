@@ -1197,4 +1197,5 @@
 
 - 已完成添加子任务表单及后端创建服务校验，积分规则和难度档位均不能为空。
 - 本地定向测试及 `./scripts/test-update.sh` 已通过，测试容器和浏览器回归正常。
-- 当前工作区包含本次待提交变更，下一步为按用户授权提交、推送仓库并发布生产。
+- 已提交 `de13dcc87cba1a1aa4130e345e5a9f3e9e9ead5f`，推送 Gitee `master`、GitHub `main` 并完成生产发布；生产公网 HTTP 200。
+- 生产备份目录：`/home/emie/emie-deploy-backups/20260901_092543`。
