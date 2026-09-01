@@ -78,12 +78,13 @@ class ProjectReviewWorkflowTest {
             return invocation.getArgument(0);
         });
 
-        service.addSubTask(1L, Map.of(
-                "name", "包装延展", "plannedDate", "2026-08-10",
-                "designerId", "designer-2", "assigneeRole", "designer",
-                "workflowStage", "design", "currentRole", "planner",
-                "currentUserId", "planner-1", "currentUser", "企划甲",
-                "referenceImagesJson", "[]", "attachmentsJson", "[]"));
+        service.addSubTask(1L, Map.ofEntries(
+                Map.entry("name", "包装延展"), Map.entry("plannedDate", "2026-08-10"),
+                Map.entry("designerId", "designer-2"), Map.entry("assigneeRole", "designer"),
+                Map.entry("pointRuleCode", "A1"), Map.entry("difficultyCode", "STANDARD"),
+                Map.entry("workflowStage", "design"), Map.entry("currentRole", "planner"),
+                Map.entry("currentUserId", "planner-1"), Map.entry("currentUser", "企划甲"),
+                Map.entry("referenceImagesJson", "[]"), Map.entry("attachmentsJson", "[]")));
 
         verify(notifications).notifyUserAfterCommit(
                 eq("TASK_ASSIGNED"), eq("designer-2"), eq("sub_task"), eq(22L),

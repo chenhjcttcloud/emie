@@ -147,12 +147,12 @@ async function addSubTask(pid) {
           <div class="form-row">
           </div>
           <div class="form-row">
-            <div class="form-group"><label class="form-label">积分规则（可选）</label>
-              <select class="form-select" name="pointRuleCode"><option value="" selected>暂不设置积分规则</option>${renderPointRuleOptions(pointRules, '').replace(/<option value=""[^>]*>[^<]*<\/option>/, '')}</select>
-              <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">可暂不设置；设置后会锁定规则快照并参与积分计算。</div>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 积分规则</label>
+              <select class="form-select" name="pointRuleCode" required><option value="" selected>请选择积分规则</option>${renderPointRuleOptions(pointRules, '').replace(/<option value=""[^>]*>[^<]*<\/option>/, '')}</select>
+              <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">创建后将锁定规则快照并参与积分计算。</div>
             </div>
-            <div class="form-group"><label class="form-label">难度档位（未启用时可留空）</label>
-              <select class="form-select" name="difficultyCode"><option value="" selected>暂不设置难度</option>${renderDifficultyOptions(pointDifficulties, '').replace(/ selected/g, '')}</select>
+            <div class="form-group"><label class="form-label"><span class="required">*</span> 难度档位</label>
+              <select class="form-select" name="difficultyCode" required><option value="" selected>请选择难度档位</option>${renderDifficultyOptions(pointDifficulties, '').replace(/ selected/g, '')}</select>
               <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">任务开始执行后不可修改。</div>
             </div>
           </div>
@@ -292,6 +292,8 @@ async function submitAddSubTask(pid) {
 
   if (!data.name) { showError('name', '请填写子任务名称'); hasErr = true; }
   if (!data.workflowStage) { showError('workflowStage', '请选择子任务所属阶段'); hasErr = true; }
+  if (!data.pointRuleCode) { showError('pointRuleCode', '请选择积分规则'); hasErr = true; }
+  if (!data.difficultyCode) { showError('difficultyCode', '请选择难度档位'); hasErr = true; }
   if (!data.plannedDate) { showError('plannedDate', '请选择计划完成时间'); hasErr = true; }
   else if (!/^\d{4}-\d{2}-\d{2}$/.test(data.plannedDate) || isNaN(new Date(data.plannedDate).getTime())) {
     showError('plannedDate', '日期格式不正确（yyyy-mm-dd）');

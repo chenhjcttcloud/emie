@@ -170,6 +170,14 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (!ProjectWorkflowService.STAGES.contains(workflowStage)) {
             throw new RuntimeException("请选择有效的子任务所属阶段");
         }
+        String pointRuleCode = (String) body.get("pointRuleCode");
+        String difficultyCode = (String) body.get("difficultyCode");
+        if (pointRuleCode == null || pointRuleCode.isBlank()) {
+            throw new IllegalArgumentException("请选择积分规则");
+        }
+        if (difficultyCode == null || difficultyCode.isBlank()) {
+            throw new IllegalArgumentException("请选择难度档位");
+        }
 
         SubTask task = new SubTask();
         task.setName(name);
@@ -182,8 +190,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         task.setPublisherName((String) body.getOrDefault("currentUser", ""));
         task.setPublisherRole(role);
         if (pointsService != null) {
-            pointsService.bindRuleSnapshot(task, (String) body.get("pointRuleCode"),
-                    (String) body.get("difficultyCode"));
+            pointsService.bindRuleSnapshot(task, pointRuleCode, difficultyCode);
         }
         task.setRequiredSkillTagsJson(subTaskInputPolicy == null ? validateSkillTags(body.get("requiredSkillTags")) : subTaskInputPolicy.skillTags(body.get("requiredSkillTags")));
         task.setCollaboratorAllocationsJson(subTaskInputPolicy == null ? validateCollaboratorAllocations(body.get("collaboratorAllocations"), designerId) : subTaskInputPolicy.collaboratorAllocations(body.get("collaboratorAllocations"), designerId));

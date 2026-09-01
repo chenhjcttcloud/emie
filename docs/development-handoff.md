@@ -1193,3 +1193,8 @@
 - `scripts/publish.sh` 已改为将本地业务分支映射推送到两个目标分支；`scripts/release-production.sh` 改为校验 Gitee `master`。
 - GitHub Actions 已改为仅监听 `main` 的 push/pull_request，避免旧业务分支触发 CI。
 - 本轮只修改规则和脚本，尚未提交、推送或改变远端分支内容。
+## 2026-09-01 子任务积分规则与难度必填
+
+- 已完成添加子任务表单及后端创建服务校验，积分规则和难度档位均不能为空。
+- 本地定向测试及 `./scripts/test-update.sh` 已通过，测试容器和浏览器回归正常。
+- 当前工作区包含本次待提交变更，下一步为按用户授权提交、推送仓库并发布生产。
