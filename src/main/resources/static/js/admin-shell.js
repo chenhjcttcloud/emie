@@ -183,7 +183,7 @@ async function renderAdminDashboard(container) {
         ${[['待处理', sync.pending], ['处理中', sync.processing], ['失败', sync.fail], ['已完成', sync.done]].map(([label, value], index) => `<div class="tone-${index}"><span>${label}</span><strong>${value ?? 0}</strong></div>`).join('')}
       </div>
       <div class="admin-sync-footer"><span>最近成功：${sync.lastSuccessAt || '暂无'}</span><button class="btn btn-outline btn-sm" data-emie-action="click:admin-feishu-sync">立即同步</button></div>
-      ${sync.lastFailure ? `<div style="margin-top:8px;padding:10px;background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;font-size:12px;color:#9f1239;">最近失败：${escHtml(sync.lastFailure.entityType || '')} #${sync.lastFailure.entityId || '-'} · ${escHtml(sync.lastFailure.error || '未知错误')}</div>` : ''}
+      ${sync.lastFailure ? `<div style="margin-top:8px;padding:10px;background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;font-size:12px;color:#9f1239;">最近失败：${escHtml(sync.lastFailure.entityType || '')} #${sync.lastFailure.entityId || '-'} · ${escHtml(sync.lastFailure.error || '未知错误')} <button class="btn btn-sm btn-outline" style="margin-left:8px" data-emie-action="click:admin-retry-sync" data-queue-id="${sync.lastFailure.id}">重试此条</button></div>` : ''}
       <div id="feishuSyncResult" style="margin-top:8px;font-size:12px;color:var(--gray-500);"></div>
     </section>
     <section class="admin-overview-card admin-integrity-card">
@@ -354,6 +354,9 @@ const FEISHU_FIELD_CATALOG = {
   ]},
   scoring: { label: '评分记录表', identity: '评分ID', fields: [
     ['评分ID','文本'],['评分角色','文本'],['评分','数字'],['权重','数字'],['项目ID','文本'],['项目类型','文本'],['审核阶段','文本'],['审核状态','文本'],['审核人','文本'],['审核意见','文本'],['同步来源','文本'],['所属子任务','关联/文本']
+  ]},
+  log: { label: '操作日志表', identity: '日志ID', fields: [
+    ['日志ID','文本'],['操作内容','文本'],['操作人','文本'],['角色','文本'],['所属项目','关联/文本'],['时间','日期'],['同步来源','文本']
   ]}
 };
 
@@ -363,9 +366,30 @@ async function renderFeishuFieldMappings(container) {
   const item = (configs.feishu_base || []).find(row => row.configKey === 'feishu.base.fieldMappings');
   let saved = {};
   try { saved = JSON.parse(item?.configValue || '{}'); } catch (_) { saved = {}; }
-  container.innerHTML = `<div class="config-card"><div class="config-card-header"><div><h3>📋 同步字段配置</h3><p style="margin:5px 0 0;color:var(--gray-500);font-size:12px;">关闭的字段不会传到飞书；目标列不存在时系统会自动创建。ID 字段用于更新记录，不能关闭或改名。</p></div><button class="btn btn-sm btn-primary" data-emie-action="click:admin-save-feishu-fields">💾 保存字段配置</button></div><div class="config-card-body">
+  container.innerHTML = `<div class="config-card"><div class="config-card-header"><div><h3>📋 同步字段配置</h3><p style="margin:5px 0 0;color:var(--gray-500);font-size:12px;">关闭的字段不会传到飞书；目标列不存在时系统会自动创建。非关键类型冲突会写入“系统文本/数字/日期”兼容列，不修改人工列。</p></div><div><button class="btn btn-sm btn-secondary" data-emie-action="click:admin-diagnose-feishu-fields">结构预检</button> <button class="btn btn-sm btn-primary" data-emie-action="click:admin-save-feishu-fields">💾 保存字段配置</button></div></div><div class="config-card-body"><div id="feishuSchemaDiagnostics" style="margin-bottom:12px"></div>
     ${Object.entries(FEISHU_FIELD_CATALOG).map(([key, table]) => `<div style="margin-bottom:24px"><h4 style="margin:0 0 10px">${table.label}</h4><div style="overflow:auto"><table class="data-table"><thead><tr><th style="width:80px">同步</th><th>系统字段</th><th>飞书目标列名</th><th style="width:120px">字段类型</th></tr></thead><tbody>${table.fields.map(([name,type]) => { const cfg = saved[key]?.[name] || {}; const locked = name === table.identity; return `<tr><td><input type="checkbox" class="feishu-field-enabled" data-table="${key}" data-source="${name}" ${cfg.enabled !== false || locked ? 'checked' : ''} ${locked ? 'disabled' : ''}></td><td>${name}${locked ? ' <span style="color:var(--gray-400)">（必需）</span>' : ''}</td><td><input class="config-input feishu-field-target" data-table="${key}" data-source="${name}" value="${escHtml(locked ? name : (cfg.target || name))}" ${locked ? 'disabled' : ''}></td><td>${type}</td></tr>`; }).join('')}</tbody></table></div></div>`).join('')}
   </div></div>`;
+}
+
+async function diagnoseFeishuFields() {
+  const box = document.getElementById('feishuSchemaDiagnostics');
+  if (box) box.innerHTML = '<div class="loading">正在读取飞书字段结构…</div>';
+  try {
+    const report = await apiGet('/admin/sync/schema-diagnostics');
+    const issues = (report.tables || []).flatMap(table => (table.issues || []).map(issue => ({ ...issue, table })));
+    if (!box) return;
+    box.innerHTML = `<div style="padding:10px;border:1px solid ${report.valid ? '#bbf7d0' : '#fecaca'};background:${report.valid ? '#f0fdf4' : '#fff1f2'};border-radius:8px;font-size:12px;"><strong>${report.valid ? '关键字段结构可安全同步' : `存在 ${report.blockingConflicts} 个阻断冲突`}</strong> · ${report.fallbackFields || 0} 个字段将使用兼容列${issues.length ? `<div style="margin-top:7px">${issues.map(({ table, source, target, actualType, severity, fallback }) => `<div>${table.table}${table.backup ? '备份表' : '主表'}：${escHtml(source)} → ${escHtml(target)}（实际类型 ${actualType}）${severity === 'fallback' ? `，写入 ${escHtml(fallback)}` : '，必须修复'}</div>`).join('')}</div>` : ''}</div>`;
+  } catch (e) {
+    if (box) box.innerHTML = `<div style="color:var(--danger);font-size:12px;">预检失败：${escHtml(e.message || '未知错误')}</div>`;
+  }
+}
+
+async function retrySyncQueue(queueId) {
+  try {
+    await apiPost(`/admin/sync/queue/${queueId}/retry`, {});
+    showAdminToast('✅ 已重新入队，将在下一轮同步处理', 'success');
+    await renderAdminDashboard(document.getElementById('adminContent'));
+  } catch (e) { showAdminToast('❌ 重试失败：' + e.message, 'error'); }
 }
 
 async function saveFeishuFieldMappings() {
@@ -717,6 +741,8 @@ if (registerEventAction) {
   registerEventAction('admin-test-notification', () => sendNotificationTest());
   registerEventAction('admin-save-config', (_event, el) => saveConfigGroup(el.dataset.configGroup));
   registerEventAction('admin-save-feishu-fields', () => saveFeishuFieldMappings());
+  registerEventAction('admin-diagnose-feishu-fields', () => diagnoseFeishuFields());
+  registerEventAction('admin-retry-sync', (_event, el) => retrySyncQueue(Number(el.dataset.queueId)));
   registerEventAction('admin-temp-broadcast', () => sendTemporaryBroadcast());
   registerEventAction('admin-notification-refresh', () => loadNotificationFailures());
   registerEventAction('admin-retry-notification', (_event, el) => retryNotificationDelivery(Number(el.dataset.deliveryId)));

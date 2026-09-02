@@ -74,6 +74,27 @@ class FeishuSyncControllerTest {
         verifyNoInteractions(queueService);
     }
 
+    @Test
+    void retryEndpointDelegatesSingleQueueItemToService() {
+        SyncQueueService queueService = mock(SyncQueueService.class);
+        FeishuBaseService feishu = mock(FeishuBaseService.class);
+        when(queueService.retryFailed(7748L)).thenReturn(Map.of(
+                "id", 7748L, "entityType", "sub_task", "entityId", 1081L, "status", "pending"));
+
+        FeishuSyncController controller = controller(queueService, feishu);
+
+        var response = controller.retryFailed(7748L, adminRequest());
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        verify(queueService).retryFailed(7748L);
+    }
+
+    private jakarta.servlet.http.HttpServletRequest adminRequest() {
+        var request = mock(jakarta.servlet.http.HttpServletRequest.class);
+        when(request.getAttribute("authSession")).thenReturn(new AuthController.AuthSession("admin", "admin", "管理员"));
+        return request;
+    }
+
     private FeishuSyncController controller(SyncQueueService queueService, FeishuBaseService feishu) {
         return new FeishuSyncController(queueService, feishu,
                 mock(ProjectRepository.class), mock(SubTaskRepository.class), mock(ScoringRepository.class),

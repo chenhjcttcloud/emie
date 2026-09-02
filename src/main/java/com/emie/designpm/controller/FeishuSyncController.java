@@ -89,6 +89,20 @@ public class FeishuSyncController {
         return ResponseEntity.ok(result);
     }
 
+    /** 精准重试单条失败同步任务。 */
+    @PostMapping("/queue/{queueId}/retry")
+    public ResponseEntity<Map<String, Object>> retryFailed(@PathVariable Long queueId,
+                                                            HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return forbidden();
+        try {
+            return ResponseEntity.ok(syncQueueService.retryFailed(queueId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.unprocessableEntity().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     /**
      * 只读检查备份表是否属于当前 Base 且当前应用可访问。
      * 不创建、更新或重试任何飞书记录。
@@ -105,6 +119,17 @@ public class FeishuSyncController {
             return ResponseEntity.status(502).body(Map.of(
                     "valid", false,
                     "message", "无法读取飞书数据表，请检查应用权限和网络后重试"));
+        }
+    }
+
+    /** 只读返回全部业务字段与飞书实际列类型的差异。 */
+    @GetMapping("/schema-diagnostics")
+    public ResponseEntity<Map<String, Object>> schemaDiagnostics(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return forbidden();
+        try {
+            return ResponseEntity.ok(feishuBaseService.diagnoseFieldSchema());
+        } catch (Exception e) {
+            return ResponseEntity.status(502).body(Map.of("error", "无法读取飞书字段结构"));
         }
     }
 

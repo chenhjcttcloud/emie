@@ -43,7 +43,7 @@ public class FeishuBaseService {
     private record CachedFieldTypes(Map<String, Integer> types, long expiresAt) {}
 
     private static final Map<String, String> IDENTITY_FIELDS = Map.of(
-            "project", "项目ID", "task", "子任务ID", "scoring", "评分ID");
+            "project", "项目ID", "task", "子任务ID", "scoring", "评分ID", "log", "日志ID");
 
     public FeishuBaseService(SystemConfigRepository configRepository) {
         this.configRepository = configRepository;
@@ -180,6 +180,73 @@ public class FeishuBaseService {
                 "valid", valid,
                 "message", valid ? "备份表预检通过" : "备份表预检失败，请核对 Base、Table ID 与应用权限",
                 "tables", results);
+    }
+
+    /**
+     * V2 字段契约预检：只读取飞书结构，不创建字段或写入记录。
+     * 非关键冲突会报告将使用的兼容列；关键冲突必须由管理员修复后才能安全同步。
+     */
+    public Map<String, Object> diagnoseFieldSchema() throws Exception {
+        String appToken = getCfg("feishu.base.appToken");
+        if (appToken.isBlank()) throw new Exception("飞书 Base App Token 未配置");
+        String token = getToken();
+        String mappings = getCfg("feishu.base.fieldMappings");
+
+        List<Map<String, Object>> tables = new java.util.ArrayList<>();
+        int conflicts = 0;
+        int fallbacks = 0;
+        for (Map.Entry<String, Map<String, Integer>> catalog : FeishuFieldSchema.catalog().entrySet()) {
+            String tableKey = catalog.getKey();
+            String configSuffix = switch (tableKey) {
+                case "project" -> "Projects";
+                case "task" -> "Tasks";
+                case "scoring" -> "Scoring";
+                default -> "Logs";
+            };
+            for (boolean backup : List.of(false, true)) {
+                String configKey = "feishu.base.table" + configSuffix + (backup ? "Backup" : "");
+                String tableId = getCfg(configKey);
+                if (tableId.isBlank()) continue;
+                Map<String, Integer> actualTypes = getFieldTypes(token, appToken, tableId);
+                List<Map<String, Object>> issues = new java.util.ArrayList<>();
+                Map<String, Integer> expectedFields = new LinkedHashMap<>(catalog.getValue());
+                if (backup) {
+                    expectedFields.put("备份状态", FeishuFieldSchema.TEXT);
+                    expectedFields.put("源数据删除时间", FeishuFieldSchema.DATE);
+                }
+                for (Map.Entry<String, Integer> field : expectedFields.entrySet()) {
+                    JsonNode mapping = mappingNode(tableKey, field.getKey(), mappings);
+                    if (mapping != null && !mapping.path("enabled").asBoolean(true)
+                            && !IDENTITY_FIELDS.get(tableKey).equals(field.getKey())) continue;
+                    String target = configuredTargetName(tableKey, field.getKey(), mappings);
+                    Integer actual = actualTypes.get(target);
+                    if (actual == null || compatibleFieldType(field.getKey(), field.getValue(), actual)) continue;
+                    boolean critical = FeishuFieldSchema.critical(field.getKey());
+                    String fallback = critical ? "" : FeishuFieldSchema.fallbackName(target, field.getValue());
+                    Map<String, Object> issue = new LinkedHashMap<>();
+                    issue.put("source", field.getKey());
+                    issue.put("target", target);
+                    issue.put("expectedType", field.getValue());
+                    issue.put("actualType", actual);
+                    issue.put("severity", critical ? "blocking" : "fallback");
+                    if (!fallback.isBlank()) issue.put("fallback", fallback);
+                    issues.add(issue);
+                    if (critical) conflicts++; else fallbacks++;
+                }
+                Map<String, Object> table = new LinkedHashMap<>();
+                table.put("table", tableKey);
+                table.put("backup", backup);
+                table.put("tableId", tableId);
+                table.put("issues", issues);
+                tables.add(table);
+            }
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("valid", conflicts == 0);
+        result.put("blockingConflicts", conflicts);
+        result.put("fallbackFields", fallbacks);
+        result.put("tables", tables);
+        return result;
     }
 
     private Map<String, String> listTables(String token, String appToken) throws Exception {
@@ -811,6 +878,7 @@ public class FeishuBaseService {
         if (time != null) {
             putDateValue(fields, "时间", toTimestamp(time), fieldTypes.get("时间"));
         }
+        fields = prepareConfiguredFields(token, appToken, tableId, "log", fields, fieldTypes);
         if (existed != null) updateRecord(token, appToken, tableId, existed, fields.toString());
         else createRecord(token, appToken, tableId, fields.toString());
     }
@@ -1220,7 +1288,13 @@ public class FeishuBaseService {
         if (actual != null && actual >= 1000 && !"创建时间".equals(sourceName)) {
             throw new IllegalArgumentException("飞书字段为只读字段，不能写入: " + targetName);
         }
-        return actual != null ? actual : expectedFieldType(sourceName);
+        int expected = expectedFieldType(sourceName);
+        // 非关键历史列冲突先按系统值类型构造载荷，prepareConfiguredFields 随后改写到兼容列。
+        if (actual != null && !compatibleFieldType(sourceName, expected, actual)
+                && !FeishuFieldSchema.critical(sourceName)) {
+            return expected;
+        }
+        return actual != null ? actual : expected;
     }
 
     private void putConfiguredExtraFields(ObjectNode fields, String tableKey,
@@ -1240,6 +1314,7 @@ public class FeishuBaseService {
                                                 String tableKey, ObjectNode sourceFields,
                                                 Map<String, Integer> fieldTypes) throws Exception {
         ObjectNode configured = applyFieldMappings(sourceFields, tableKey, getCfg("feishu.base.fieldMappings"));
+        ObjectNode compatible = json.createObjectNode();
         Iterator<Map.Entry<String, JsonNode>> entries = configured.fields();
         while (entries.hasNext()) {
             Map.Entry<String, JsonNode> entry = entries.next();
@@ -1249,11 +1324,26 @@ public class FeishuBaseService {
             int expected = expectedFieldType(source);
             if (actual == null) {
                 addField(token, appToken, tableId, target, expected);
+                compatible.set(target, entry.getValue());
             } else if (!compatibleFieldType(source, expected, actual)) {
-                throw new IllegalArgumentException("飞书字段类型不匹配: " + target + "，请检查字段配置");
+                if (FeishuFieldSchema.critical(source)) {
+                    throw new IllegalArgumentException("飞书关键字段类型不匹配: " + target + "，请检查字段配置");
+                }
+                String fallback = FeishuFieldSchema.fallbackName(target, expected);
+                Integer fallbackType = fieldTypes.get(fallback);
+                if (fallbackType == null) {
+                    addField(token, appToken, tableId, fallback, expected);
+                } else if (!compatibleFieldType(source, expected, fallbackType)) {
+                    throw new IllegalArgumentException("飞书兼容字段类型不匹配: " + fallback + "，请检查字段配置");
+                }
+                compatible.set(fallback, entry.getValue());
+                log.warn("飞书字段使用兼容列: table={} source={} target={} actualType={} fallback={}",
+                        tableKey, source, target, actual, fallback);
+            } else {
+                compatible.set(target, entry.getValue());
             }
         }
-        return configured;
+        return compatible;
     }
 
     static ObjectNode applyFieldMappings(ObjectNode sourceFields, String tableKey, String rawConfig) {
@@ -1300,18 +1390,11 @@ public class FeishuBaseService {
     }
 
     private static int expectedFieldType(String fieldName) {
-        if (Set.of("截止日期", "计划日期", "实际完成日期", "实际完成", "实际完成时间", "创建时间", "源数据删除时间").contains(fieldName)) return 5;
-        if (Set.of("子任务数", "完成进度", "审核进度", "自评分", "一审得分", "二审得分", "审核得分", "评分", "权重").contains(fieldName)) return 2;
-        return 1;
+        return FeishuFieldSchema.expectedType(fieldName);
     }
 
     private static boolean compatibleFieldType(String source, int expected, int actual) {
-        if (actual >= 1000) return expected == 5 && "创建时间".equals(source);
-        if (Set.of("所属项目", "所属子任务").contains(source)) {
-            return actual == 1 || actual == 3 || isLinkField(actual);
-        }
-        if (expected == 1) return actual == 1 || actual == 3;
-        return expected == actual;
+        return FeishuFieldSchema.compatible(source, expected, actual);
     }
 
     static void putReferenceValue(ObjectNode fields, String fieldName, String businessId,

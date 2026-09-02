@@ -143,6 +143,23 @@ public class SyncQueueService {
                         "pending", "pending", LocalDateTime.now());
     }
 
+    /** 管理员精准重试一条已失败任务，避免为单条字段问题触发全量重刷。 */
+    @Transactional
+    public Map<String, Object> retryFailed(Long queueId) {
+        SyncQueue item = syncQueueRepository.findById(queueId)
+                .orElseThrow(() -> new IllegalArgumentException("同步任务不存在"));
+        if (!"fail".equals(item.getStatus())) {
+            throw new IllegalStateException("仅失败任务可以重试");
+        }
+        item.setStatus("pending");
+        item.setRetryCount(0);
+        item.setErrorMsg(null);
+        item.setNextRetryAt(null);
+        syncQueueRepository.save(item);
+        return Map.of("id", item.getId(), "entityType", item.getEntityType(),
+                "entityId", item.getEntityId(), "status", item.getStatus());
+    }
+
     /** 统计 */
     public Map<String, Object> getStats() {
         long pending = syncQueueRepository.countByStatus("pending");

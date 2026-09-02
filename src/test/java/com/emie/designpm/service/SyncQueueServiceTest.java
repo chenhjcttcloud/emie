@@ -9,10 +9,29 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SyncQueueServiceTest {
+
+    @Test
+    void retryFailedResetsOnlyTheSelectedQueueItem() {
+        SyncQueueRepository repository = mock(SyncQueueRepository.class);
+        SyncQueue failed = SyncQueue.builder().id(77L).entityType("sub_task").entityId(1081L)
+                .action("update").status("fail").retryCount(3).errorMsg("字段类型不匹配")
+                .nextRetryAt(LocalDateTime.now()).build();
+        when(repository.findById(77L)).thenReturn(Optional.of(failed));
+
+        Map<String, Object> result = new SyncQueueService(repository).retryFailed(77L);
+
+        assertEquals("pending", result.get("status"));
+        assertEquals(0, failed.getRetryCount());
+        assertNull(failed.getErrorMsg());
+        assertNull(failed.getNextRetryAt());
+        verify(repository).save(failed);
+    }
 
     @Test
     void statsExposeQueueHealthAndLatestFailure() {

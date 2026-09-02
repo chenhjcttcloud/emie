@@ -1222,3 +1222,12 @@
 - 定向 Maven 测试和 `./scripts/test-update.sh` 已通过。
 - 本地工具目录 `.brain/`、`.reasonix/` 未纳入本次发布。
 - 提交 `f9ab54bd0338a60f3b8e4fbae6fd1773a12c689d` 已推送并部署生产，公网 HTTP 200；数据库备份目录为 `/home/emie/emie-deploy-backups/20260901_173146`。
+
+## 2026-09-02 飞书同步 V2 兼容层（本地验证）
+
+- 新增集中字段契约 `FeishuFieldSchema`，统一字段类型、关键字段和兼容列规则。
+- 普通字段类型冲突时保留人工列，自动写入“（系统文本/数字/日期）”兼容列；关键字段仍阻断并报告。
+- 新增管理员只读结构预检 `/api/admin/sync/schema-diagnostics`、单条失败任务重试 `/api/admin/sync/queue/{id}/retry`，并接入管理端界面。
+- 操作日志同步也纳入统一字段转换路径。
+- `./mvnw -B clean package` 通过，272 项测试通过；`./scripts/test-update.sh`、前端语法检查和浏览器回归通过。
+- 当前仅本地修改，尚未提交、推送或部署生产；`.brain/`、`.reasonix/` 为本地工具目录，未纳入版本控制。

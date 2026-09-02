@@ -24,6 +24,21 @@ class FeishuBaseServiceFieldCompatibilityTest {
     }
 
     @Test
+    void incompatibleOptionalFieldUsesNonDestructiveFallbackName() {
+        assertFalse(FeishuFieldSchema.compatible("交付成果", FeishuFieldSchema.TEXT, 17));
+        assertFalse(FeishuFieldSchema.critical("交付成果"));
+        assertEquals("交付成果（系统文本）",
+                FeishuFieldSchema.fallbackName("交付成果", FeishuFieldSchema.TEXT));
+    }
+
+    @Test
+    void identityAndMirrorFieldsRemainBlocking() {
+        assertTrue(FeishuFieldSchema.critical("子任务ID"));
+        assertTrue(FeishuFieldSchema.critical("同步来源"));
+        assertTrue(FeishuFieldSchema.critical("源数据删除时间"));
+    }
+
+    @Test
     void relationFieldUsesLinkedRecordPayload() {
         ObjectNode fields = json.createObjectNode();
 
