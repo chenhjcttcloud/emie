@@ -329,7 +329,7 @@ public class SyncWorker {
         if (feishuBaseService.isV2Active()) {
             List<Long> taskIds = p.getTasks() == null ? List.of() : p.getTasks().stream().map(SubTask::getId).toList();
             feishuBaseService.syncV2Project(new FeishuBaseService.V2ProjectData(
-                    p.getId(), p.getProjectCode(), p.getProductName(), p.getStatus(), p.getSalesName(),
+                    p.getId(), p.getProjectCode(), p.getProductName(), p.getType(), p.getStatus(), p.getSalesName(),
                     p.getPlannerName(), categoryName, p.getPriceRange(), p.getReferenceImagesJson(),
                     p.getAttachmentsJson(), taskCount, p.getCreatedAt(), p.getDeadline(), p.getUpdatedAt(),
                     taskIds, taskProgressSummary(p.getTasks()), progress, projectFlowLabel(p.getStatus(),
@@ -528,7 +528,7 @@ public class SyncWorker {
             Double weighted = score == null ? null : score * (r.getWeight() == null ? 1d : r.getWeight());
             feishuBaseService.syncV2Scoring(new FeishuBaseService.V2ScoringData(
                     r.getId(), r.getRole(), r.getReviewerName(), task != null ? task.getId() : null,
-                    r.getReviewedAt(), r.getWeight(), weighted, r.getComment()), includeBackup);
+                    r.getReviewedAt(), score == null ? null : score.doubleValue(), r.getWeight(), weighted, r.getComment()), includeBackup);
             return;
         }
         feishuBaseService.syncScoring(new FeishuBaseService.ScoringSyncData(
