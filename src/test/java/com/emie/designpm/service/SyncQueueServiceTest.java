@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -15,6 +16,20 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SyncQueueServiceTest {
+
+    @Test
+    void businessUpdatePromotesPendingReconcileSoBackupIsNotSkipped() {
+        SyncQueueRepository repository = mock(SyncQueueRepository.class);
+        SyncQueue reconcile = SyncQueue.builder().entityType("project").entityId(9L)
+                .action("reconcile").status("pending").retryCount(0).build();
+        when(repository.findByEntityTypeAndEntityIdAndStatusIn("project", 9L,
+                List.of("pending", "processing"))).thenReturn(List.of(reconcile));
+
+        new SyncQueueService(repository).enqueue("project", 9L, "update");
+
+        assertEquals("update", reconcile.getAction());
+        verify(repository).save(reconcile);
+    }
 
     @Test
     void retryFailedResetsOnlyTheSelectedQueueItem() {

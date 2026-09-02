@@ -133,6 +133,50 @@ public class FeishuSyncController {
         }
     }
 
+    /** 创建/续建独立 V2 Base，仅写 staging 配置，不切换当前同步。 */
+    @PostMapping("/v2/prepare")
+    public ResponseEntity<Map<String, Object>> prepareV2(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return forbidden();
+        try {
+            return ResponseEntity.ok(feishuBaseService.prepareV2Base());
+        } catch (Exception e) {
+            return ResponseEntity.status(502).body(Map.of(
+                    "error", "创建飞书 V2 Base 失败，请检查应用建表、字段和云空间权限"));
+        }
+    }
+
+    @PostMapping("/v2/activate")
+    public ResponseEntity<Map<String, Object>> activateV2(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return forbidden();
+        try {
+            Map<String, Object> activated = feishuBaseService.activateV2Base();
+            ResponseEntity<Map<String, Object>> queued = fullResyncInternal();
+            if (!queued.getStatusCode().is2xxSuccessful()) {
+                feishuBaseService.rollbackV2Base();
+                return ResponseEntity.status(queued.getStatusCode()).body(Map.of(
+                        "error", "V2 首次全量同步无法入队，已自动回滚旧 Base 配置"));
+            }
+            Map<String, Object> result = new LinkedHashMap<>(activated);
+            result.put("initialSync", queued.getBody());
+            result.put("message", "V2 已激活，首次全量同步已入队；定时主表对账会补齐关联字段");
+            return ResponseEntity.ok(result);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.unprocessableEntity().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(502).body(Map.of("error", "V2 激活前校验失败，当前 Base 未切换"));
+        }
+    }
+
+    @PostMapping("/v2/rollback")
+    public ResponseEntity<Map<String, Object>> rollbackV2(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return forbidden();
+        try {
+            return ResponseEntity.ok(feishuBaseService.rollbackV2Base());
+        } catch (IllegalStateException e) {
+            return ResponseEntity.unprocessableEntity().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     /** 全量重刷（重新入队所有数据） */
     @PostMapping("/full-resync")
     public ResponseEntity<Map<String, Object>> fullResync(HttpServletRequest request) {

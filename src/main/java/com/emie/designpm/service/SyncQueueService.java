@@ -55,9 +55,23 @@ public class SyncQueueService {
             }
         } else {
             boolean hasDelete = activeItems.stream().anyMatch(item -> "delete".equals(item.getAction()));
-            if (hasDelete || !activeItems.isEmpty()) {
+            if (hasDelete) {
                 return "skipped";
             }
+            Optional<SyncQueue> pendingReconcile = activeItems.stream()
+                    .filter(item -> "pending".equals(item.getStatus()) && "reconcile".equals(item.getAction()))
+                    .findFirst();
+            if (!"reconcile".equals(action) && pendingReconcile.isPresent()) {
+                SyncQueue item = pendingReconcile.get();
+                item.setAction(action);
+                syncQueueRepository.save(item);
+                return "updated";
+            }
+            boolean processingReconcile = activeItems.stream().anyMatch(item ->
+                    "processing".equals(item.getStatus()) && "reconcile".equals(item.getAction()));
+            if (!processingReconcile && !activeItems.isEmpty()) return "skipped";
+            // 对账正在写主表时发生真实业务更新，另建后续任务，确保备份增量不丢失。
+            if (processingReconcile && "reconcile".equals(action)) return "skipped";
         }
 
         // 失败任务应在业务记录再次变更或全量重刷时复用并重置，避免不断产生重复失败记录。
@@ -124,12 +138,13 @@ public class SyncQueueService {
                 SyncQueue item = completed.get(completed.size() - 1);
                 item.setStatus("pending");
                 item.setRetryCount(0);
+                item.setAction("reconcile");
                 item.setErrorMsg(null);
                 item.setNextRetryAt(null);
                 syncQueueRepository.save(item);
                 requeued++;
             } else {
-                enqueueDeduplicated(entityType, id, "update");
+                enqueueDeduplicated(entityType, id, "reconcile");
                 added++;
             }
         }

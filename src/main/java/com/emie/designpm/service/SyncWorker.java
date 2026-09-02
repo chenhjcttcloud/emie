@@ -144,24 +144,24 @@ public class SyncWorker {
                     if ("delete".equals(item.getAction())) {
                         deleteProject(item.getEntityId());
                     } else {
-                        syncProject(item.getEntityId());
+                        syncProject(item.getEntityId(), !"reconcile".equals(item.getAction()));
                     }
                 }
                 case "sub_task" -> {
                     if ("delete".equals(item.getAction())) {
                         deleteSubTask(item.getEntityId());
                     } else {
-                        syncSubTask(item.getEntityId());
+                        syncSubTask(item.getEntityId(), !"reconcile".equals(item.getAction()));
                     }
                 }
                 case "scoring_record" -> {
                     if ("delete".equals(item.getAction())) {
                         deleteScoring(item.getEntityId());
                     } else {
-                        syncScoring(item.getEntityId());
+                        syncScoring(item.getEntityId(), !"reconcile".equals(item.getAction()));
                     }
                 }
-                case "activity_log" -> syncActivityLog(item.getEntityId());
+                case "activity_log" -> syncActivityLog(item.getEntityId(), !"reconcile".equals(item.getAction()));
                 default -> log.warn("未知同步类型: {}", item.getEntityType());
             }
 
@@ -245,13 +245,11 @@ public class SyncWorker {
         }
 
         LocalDateTime until = LocalDateTime.now();
-        LocalDateTime after = systemConfigRepository == null ? SAFE_SYNC_CURSOR_FALLBACK
-                : systemConfigRepository.findByConfigKey("feishu.sync.cursor")
-                .map(SystemConfig::getConfigValue).map(this::parseCursor).orElse(SAFE_SYNC_CURSOR_FALLBACK);
-        enqueueUpdated("project", projectRepository::findIdsUpdatedBetween, after, until);
-        enqueueUpdated("sub_task", subTaskRepository::findIdsUpdatedBetween, after, until);
-        enqueueUpdated("scoring_record", scoringRepository::findIdsUpdatedBetween, after, until);
-        enqueueUpdated("activity_log", activityLogRepository::findIdsUpdatedBetween, after, until);
+        // 主表按要求做全量对账；action=reconcile 保证这一轮不覆盖增量备份表。
+        syncQueueService.enqueueAllForReconciliation("project", projectIds);
+        syncQueueService.enqueueAllForReconciliation("sub_task", taskIds);
+        syncQueueService.enqueueAllForReconciliation("scoring_record", scoringIds);
+        syncQueueService.enqueueAllForReconciliation("activity_log", logIds);
         if (systemConfigRepository != null) {
             SystemConfig cursor = systemConfigRepository.findByConfigKey("feishu.sync.cursor")
                     .orElseGet(() -> SystemConfig.builder().configKey("feishu.sync.cursor").configGroup("system").valueType("text").description("飞书增量同步游标").build());
@@ -304,7 +302,7 @@ public class SyncWorker {
         }
     }
 
-    private void syncProject(Long projectId) throws Exception {
+    private void syncProject(Long projectId, boolean includeBackup) throws Exception {
         Project p = projectRepository.findByIdWithTasks(projectId)
                 .or(() -> projectRepository.findById(projectId))
                 .orElseThrow(() -> new Exception("项目不存在: " + projectId));
@@ -328,6 +326,17 @@ public class SyncWorker {
 
         String categoryName = p.getProductCategory() != null ? p.getProductCategory().getName() : null;
 
+        if (feishuBaseService.isV2Active()) {
+            List<Long> taskIds = p.getTasks() == null ? List.of() : p.getTasks().stream().map(SubTask::getId).toList();
+            feishuBaseService.syncV2Project(new FeishuBaseService.V2ProjectData(
+                    p.getId(), p.getProjectCode(), p.getProductName(), p.getStatus(), p.getSalesName(),
+                    p.getPlannerName(), categoryName, p.getPriceRange(), p.getReferenceImagesJson(),
+                    p.getAttachmentsJson(), taskCount, p.getCreatedAt(), p.getDeadline(), p.getUpdatedAt(),
+                    taskIds, taskProgressSummary(p.getTasks()), progress, projectFlowLabel(p.getStatus(),
+                    p.getWorkflowStage(), p.getWorkflowStatus()), progress, p.getDescription()), includeBackup);
+            return;
+        }
+
         feishuBaseService.syncProject(
                 p.getId(), p.getType(), p.getStatus(),
                 p.getSalesName(), p.getPlannerName(),
@@ -339,7 +348,7 @@ public class SyncWorker {
         );
     }
 
-    private void syncSubTask(Long taskId) throws Exception {
+    private void syncSubTask(Long taskId, boolean includeBackup) throws Exception {
         SubTask t = subTaskRepository.findByIdWithProject(taskId)
                 .or(() -> subTaskRepository.findById(taskId))
                 .orElseThrow(() -> new Exception("子任务不存在: " + taskId));
@@ -348,6 +357,33 @@ public class SyncWorker {
         ScoringRecord firstReview = findReview(reviews, "first");
         ScoringRecord secondReview = findReview(reviews, "second");
         String projectType = t.getProject() != null ? t.getProject().getType() : "regular";
+
+        if (feishuBaseService.isV2Active()) {
+            Map<String, Integer> roleScores = new HashMap<>();
+            double weighted = 0;
+            double weights = 0;
+            for (ScoringRecord review : reviews) {
+                Integer score = reviewScore(review);
+                if (score != null) roleScores.put(review.getRole(), score);
+                if (score != null && review.getWeight() != null && review.getWeight() > 0) {
+                    weighted += score * review.getWeight(); weights += review.getWeight();
+                }
+            }
+            List<SubTaskDeliveryVersion> versions = deliveryVersionRepository == null ? List.of()
+                    : deliveryVersionRepository.findBySubTaskIdOrderByVersionNoDesc(taskId);
+            SubTaskDeliveryVersion latest = versions.isEmpty() ? null : versions.get(0);
+            String deliveryImages = latest != null ? latest.getReferenceImagesJson() : t.getReferenceImagesJson();
+            String deliveryFiles = latest != null ? latest.getAttachmentsJson() : t.getAttachmentsJson();
+            double aggregate = weights > 0 ? Math.round(weighted / weights * 10d) / 10d : 0;
+            feishuBaseService.syncV2Task(new FeishuBaseService.V2TaskData(
+                    t.getId(), t.getProject() != null ? t.getProject().getId() : null, t.getName(), t.getStatus(),
+                    latest == null ? t.getReferenceImagesJson() : null, latest == null ? t.getAttachmentsJson() : null,
+                    t.getDesignerName(), t.getDetails(), t.getCreatedAt(), t.getPlannedDate(), t.getUpdatedAt(),
+                    deliveryImages, deliveryFiles, t.getSelfScore(), roleScores.get("sales"), roleScores.get("planner"),
+                    roleScores.get("admin"), weights > 0 ? aggregate : null, reviews.stream().map(ScoringRecord::getId).toList(),
+                    workflowStageLabel(t.getWorkflowStage()), taskProgress(t.getStatus()), t.getReviewComments()), includeBackup);
+            return;
+        }
 
         String actualDate = t.getActualDate();
         if ((actualDate == null || actualDate.isBlank()) && deliveryVersionRepository != null) {
@@ -480,13 +516,21 @@ public class SyncWorker {
                 .orElse(null);
     }
 
-    private void syncScoring(Long recordId) throws Exception {
+    private void syncScoring(Long recordId, boolean includeBackup) throws Exception {
         ScoringRecord r = scoringRepository.findByIdWithTaskAndProject(recordId)
                 .or(() -> scoringRepository.findById(recordId))
                 .orElseThrow(() -> new Exception("评分记录不存在: " + recordId));
 
         SubTask task = r.getSubTask();
         Project project = task != null ? task.getProject() : null;
+        if (feishuBaseService.isV2Active()) {
+            Integer score = reviewScore(r);
+            Double weighted = score == null ? null : score * (r.getWeight() == null ? 1d : r.getWeight());
+            feishuBaseService.syncV2Scoring(new FeishuBaseService.V2ScoringData(
+                    r.getId(), r.getRole(), r.getReviewerName(), task != null ? task.getId() : null,
+                    r.getReviewedAt(), r.getWeight(), weighted, r.getComment()), includeBackup);
+            return;
+        }
         feishuBaseService.syncScoring(new FeishuBaseService.ScoringSyncData(
                 r.getId(), r.getRole(), r.getScore(), r.getWeight(),
                 task != null ? task.getId() : null,
@@ -574,11 +618,26 @@ public class SyncWorker {
         return Math.round(((firstScore * firstWeight + secondScore * secondWeight) / totalWeight) * 10.0) / 10.0;
     }
 
-    private void syncActivityLog(Long logId) throws Exception {
+    private void syncActivityLog(Long logId, boolean includeBackup) throws Exception {
         ActivityLog log = activityLogRepository.findById(logId)
                 .orElseThrow(() -> new Exception("操作日志不存在: " + logId));
+        if (feishuBaseService.isV2Active()) {
+            feishuBaseService.syncV2Log(new FeishuBaseService.V2LogData(log.getId(), log.getTime(), log.getRole(),
+                    log.getUsername(), log.getAction(), log.getChangedFields()), includeBackup);
+            return;
+        }
         feishuBaseService.syncActivityLog(log.getId(), log.getAction(), log.getUsername(), log.getRole(),
                 log.getProjectRefId(), log.getTime());
+    }
+
+    private double taskProgress(String status) {
+        if (status == null) return 0;
+        return switch (status) {
+            case "completed", "approved", "sales_approved", "admin_approved" -> 100;
+            case "delivered", "submitted_for_review", "planner_approved", "scoring_planner" -> 80;
+            case "accepted", "in_progress", "rejected" -> 40;
+            default -> 0;
+        };
     }
 
     private void deleteProject(Long projectId) throws Exception {

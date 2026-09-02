@@ -39,6 +39,20 @@ class FeishuBaseServiceFieldCompatibilityTest {
     }
 
     @Test
+    void v2SchemaContainsEightTablesAndRequiredAttachmentFields() {
+        Map<String, FeishuV2Schema.Table> tables = FeishuV2Schema.allTables();
+
+        assertEquals(8, tables.size());
+        assertEquals("系统项目ID", tables.get("project").identity());
+        assertTrue(tables.get("project").fields().stream()
+                .anyMatch(field -> field.name().equals("参考图片") && field.type() == FeishuV2Schema.ATTACHMENT));
+        assertTrue(tables.get("task").fields().stream()
+                .anyMatch(field -> field.name().equals("交付附件") && field.type() == FeishuV2Schema.ATTACHMENT));
+        assertTrue(tables.get("projectBackup").fields().stream()
+                .anyMatch(field -> field.name().equals("源数据删除时间")));
+    }
+
+    @Test
     void relationFieldUsesLinkedRecordPayload() {
         ObjectNode fields = json.createObjectNode();
 
