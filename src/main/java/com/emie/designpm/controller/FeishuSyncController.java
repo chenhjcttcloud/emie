@@ -149,8 +149,9 @@ public class FeishuSyncController {
             String appToken = body == null || body.get("appToken") == null ? "" : String.valueOf(body.get("appToken")).trim();
             return ResponseEntity.ok(feishuBaseService.prepareV2Base(appToken));
         } catch (Exception e) {
+            // 保留飞书返回的可诊断错误（不包含凭据），避免把请求体错误误报成权限问题。
             return ResponseEntity.status(502).body(Map.of(
-                    "error", "创建飞书 V2 Base 失败，请检查应用建表、字段和云空间权限"));
+                    "error", "飞书 V2 准备失败：" + (e.getMessage() == null ? "未知错误" : e.getMessage())));
         }
     }
 

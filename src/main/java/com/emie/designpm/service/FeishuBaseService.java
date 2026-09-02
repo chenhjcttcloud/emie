@@ -558,7 +558,7 @@ public class FeishuBaseService {
         JsonNode root = json.readTree(bearerPost(
                 API + "/bitable/v1/apps/" + appToken + "/tables/" + tableId + "/fields",
                 token, body.toString()));
-        checkResponse(root, "新增 V2 字段");
+        checkResponse(root, "新增 V2 字段 " + tableId + "/" + field.name());
         fieldTypesCache.remove(appToken + ":" + tableId);
     }
 
