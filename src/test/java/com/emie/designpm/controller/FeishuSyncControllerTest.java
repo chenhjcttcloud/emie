@@ -19,6 +19,36 @@ import static org.mockito.Mockito.*;
 class FeishuSyncControllerTest {
 
     @Test
+    void v2StatusIsAvailableToAdministrator() {
+        SyncQueueService queueService = mock(SyncQueueService.class);
+        FeishuBaseService feishu = mock(FeishuBaseService.class);
+        when(feishu.getV2Status()).thenReturn(Map.of("active", false, "tables", List.of()));
+
+        var response = controller(queueService, feishu).v2Status(adminRequest());
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(false, response.getBody().get("active"));
+        verify(feishu).getV2Status();
+    }
+
+    @Test
+    void activateRollsBackWhenInitialQueueingThrows() throws Exception {
+        SyncQueueService queueService = mock(SyncQueueService.class);
+        FeishuBaseService feishu = mock(FeishuBaseService.class);
+        ProjectRepository projects = mock(ProjectRepository.class);
+        when(feishu.activateV2Base()).thenReturn(Map.of("active", true));
+        when(feishu.validateBackupTables()).thenReturn(Map.of("valid", true, "tables", List.of()));
+        when(projects.findIdsAfter(anyLong(), any())).thenThrow(new IllegalStateException("database unavailable"));
+        FeishuSyncController controller = new FeishuSyncController(queueService, feishu, projects,
+                mock(SubTaskRepository.class), mock(ScoringRepository.class), mock(ActivityLogRepository.class));
+
+        var response = controller.activateV2(adminRequest());
+
+        assertEquals(HttpStatus.BAD_GATEWAY, response.getStatusCode());
+        verify(feishu).rollbackV2Base();
+    }
+
+    @Test
     void fullResyncStopsBeforeQueueingWhenBackupPreflightFails() throws Exception {
         SyncQueueService queueService = mock(SyncQueueService.class);
         FeishuBaseService feishu = mock(FeishuBaseService.class);

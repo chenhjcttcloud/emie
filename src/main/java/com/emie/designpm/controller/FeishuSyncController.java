@@ -134,6 +134,13 @@ public class FeishuSyncController {
     }
 
     /** 创建/续建独立 V2 Base，仅写 staging 配置，不切换当前同步。 */
+    @GetMapping("/v2/status")
+    public ResponseEntity<Map<String, Object>> v2Status(HttpServletRequest request) {
+        if (!AuthController.isAdmin(request)) return forbidden();
+        return ResponseEntity.ok(feishuBaseService.getV2Status());
+    }
+
+    /** 创建/续建独立 V2 Base，仅写 staging 配置，不切换当前同步。 */
     @PostMapping("/v2/prepare")
     public ResponseEntity<Map<String, Object>> prepareV2(HttpServletRequest request) {
         if (!AuthController.isAdmin(request)) return forbidden();
@@ -148,22 +155,40 @@ public class FeishuSyncController {
     @PostMapping("/v2/activate")
     public ResponseEntity<Map<String, Object>> activateV2(HttpServletRequest request) {
         if (!AuthController.isAdmin(request)) return forbidden();
+        boolean activated = false;
         try {
-            Map<String, Object> activated = feishuBaseService.activateV2Base();
+            Map<String, Object> activationResult = feishuBaseService.activateV2Base();
+            activated = true;
             ResponseEntity<Map<String, Object>> queued = fullResyncInternal();
             if (!queued.getStatusCode().is2xxSuccessful()) {
                 feishuBaseService.rollbackV2Base();
                 return ResponseEntity.status(queued.getStatusCode()).body(Map.of(
                         "error", "V2 首次全量同步无法入队，已自动回滚旧 Base 配置"));
             }
-            Map<String, Object> result = new LinkedHashMap<>(activated);
+            Map<String, Object> result = new LinkedHashMap<>(activationResult);
             result.put("initialSync", queued.getBody());
             result.put("message", "V2 已激活，首次全量同步已入队；定时主表对账会补齐关联字段");
             return ResponseEntity.ok(result);
         } catch (IllegalStateException e) {
+            if (activated) {
+                try {
+                    feishuBaseService.rollbackV2Base();
+                    return ResponseEntity.status(502).body(Map.of("error", "V2 全量同步入队失败，已自动回滚旧 Base 配置"));
+                } catch (Exception rollbackError) {
+                    return ResponseEntity.status(500).body(Map.of("error", "V2 入队失败且自动回滚失败，请立即检查飞书同步配置"));
+                }
+            }
             return ResponseEntity.unprocessableEntity().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
-            return ResponseEntity.status(502).body(Map.of("error", "V2 激活前校验失败，当前 Base 未切换"));
+            if (!activated) {
+                return ResponseEntity.status(502).body(Map.of("error", "V2 激活前校验失败，当前 Base 未切换"));
+            }
+            try {
+                feishuBaseService.rollbackV2Base();
+                return ResponseEntity.status(502).body(Map.of("error", "V2 全量同步入队失败，已自动回滚旧 Base 配置"));
+            } catch (Exception rollbackError) {
+                return ResponseEntity.status(500).body(Map.of("error", "V2 入队失败且自动回滚失败，请立即检查飞书同步配置"));
+            }
         }
     }
 

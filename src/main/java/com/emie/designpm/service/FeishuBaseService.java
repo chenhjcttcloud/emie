@@ -69,6 +69,23 @@ public class FeishuBaseService {
         return "true".equals(getCfg("feishu.base.v2.active"));
     }
 
+    public Map<String, Object> getV2Status() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("active", isV2Active());
+        String stagingStatus = getCfg("feishu.base.v2.staging.status");
+        result.put("stagingStatus", stagingStatus);
+        result.put("activatable", !isV2Active() && "prepared".equals(stagingStatus));
+        result.put("stagingConfigured", !getCfg("feishu.base.v2.staging.appToken").isBlank());
+        result.put("rollbackAvailable", !getCfg("feishu.base.v2.legacy.appToken").isBlank());
+        List<Map<String, Object>> tables = new ArrayList<>();
+        for (FeishuV2Schema.Table table : FeishuV2Schema.allTables().values()) {
+            tables.add(Map.of("key", table.key(), "name", table.name(),
+                    "configured", !getCfg(v2StagingTableConfigKey(table.key())).isBlank()));
+        }
+        result.put("tables", tables);
+        return result;
+    }
+
     private String getCfg(String key) {
         return configRepository.findByConfigKey(key)
                 .map(SystemConfig::getConfigValue).orElse("");

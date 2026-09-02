@@ -32,7 +32,7 @@ async function renderAdmin(main, role, uid) {
       </div>
       <div class="admin-layout"><aside class="admin-tabs" id="adminTabs">
         <div class="admin-tab-group"><div class="admin-tab-group-title">总览</div><button class="admin-tab ${EMIE.adminState.currentTab === 'dashboard' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="dashboard">📊 概览</button></div>
-        <div class="admin-tab-group"><div class="admin-tab-group-title">系统与外观</div><button class="admin-tab ${EMIE.adminState.currentTab === 'config' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="config">🔧 系统配置</button><button class="admin-tab ${EMIE.adminState.currentTab === 'feishuFields' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="feishuFields">📋 飞书同步字段</button><button class="admin-tab ${EMIE.adminState.currentTab === 'appearance' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="appearance">🎨 外观</button><button class="admin-tab ${EMIE.adminState.currentTab === 'filestorage' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="filestorage">📦 文件与存储</button></div>
+        <div class="admin-tab-group"><div class="admin-tab-group-title">系统与外观</div><button class="admin-tab ${EMIE.adminState.currentTab === 'config' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="config">🔧 系统配置</button><button class="admin-tab ${EMIE.adminState.currentTab === 'feishuV2' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="feishuV2">🔄 飞书 V2 同步</button><button class="admin-tab ${EMIE.adminState.currentTab === 'feishuFields' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="feishuFields">📋 飞书同步字段</button><button class="admin-tab ${EMIE.adminState.currentTab === 'appearance' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="appearance">🎨 外观</button><button class="admin-tab ${EMIE.adminState.currentTab === 'filestorage' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="filestorage">📦 文件与存储</button></div>
         <div class="admin-tab-group"><div class="admin-tab-group-title">用户与权限</div><button class="admin-tab ${EMIE.adminState.currentTab === 'users' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="users">👥 用户管理</button><button class="admin-tab ${EMIE.adminState.currentTab === 'roles' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="roles">🔐 角色与权限</button><button class="admin-tab ${EMIE.adminState.currentTab === 'org' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="org">🏢 组织架构</button></div>
         <div class="admin-tab-group"><div class="admin-tab-group-title">业务配置</div><button class="admin-tab ${EMIE.adminState.currentTab === 'categories' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="categories">📂 产品类目</button><button class="admin-tab ${EMIE.adminState.currentTab === 'ipOptions' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="ipOptions">🏷️ IP配置</button><button class="admin-tab ${EMIE.adminState.currentTab === 'compliance' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="compliance">⚖️ 合规处罚</button><button class="admin-tab ${EMIE.adminState.currentTab === 'priceRanges' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="priceRanges">💰 参考零售价</button><button class="admin-tab ${EMIE.adminState.currentTab === 'scoring' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="scoring">⭐ 评分管理</button><button class="admin-tab ${EMIE.adminState.currentTab === 'points' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="points">🏅 积分规则</button></div>
         <div class="admin-tab-group"><div class="admin-tab-group-title">通知中心</div><button class="admin-tab ${EMIE.adminState.currentTab === 'notificationCenter' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="notificationCenter">🔔 通知设置与发送记录</button><button class="admin-tab ${EMIE.adminState.currentTab === 'notificationTemplates' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="notificationTemplates">💬 通知文案</button></div>
@@ -70,6 +70,8 @@ async function renderAdminContent() {
       await renderAdminConfig(container);
     } else if (EMIE.adminState.currentTab === 'feishuFields') {
       await renderFeishuFieldMappings(container);
+    } else if (EMIE.adminState.currentTab === 'feishuV2') {
+      await renderFeishuV2(container);
     } else if (EMIE.adminState.currentTab === 'notificationTemplates') {
       await renderAdminNotificationTemplates(container);
     } else if (EMIE.adminState.currentTab === 'appearance') {
@@ -113,6 +115,7 @@ function renderAdminSectionHeader() {
     dashboard: ['管理概览', '快速掌握系统配置、成员规模与服务运行状态', '⌂'],
     config: ['系统配置', '维护系统基础参数与外部服务连接配置', '⚙'],
     feishuFields: ['飞书同步字段', '选择要同步的系统字段，并设置对应的飞书列名', '▤'],
+    feishuV2: ['飞书 V2 数据同步', '创建、核验并安全切换系统到全新飞书八表镜像', '↻'],
     appearance: ['外观设置', '统一系统名称、品牌标识与界面展示', '◐'],
     filestorage: ['文件与存储', '查看文件存储使用情况并维护归档策略', '▣'],
     users: ['用户管理', '维护成员账号、角色、状态与登录信息', '♙'],
@@ -369,6 +372,75 @@ async function renderFeishuFieldMappings(container) {
   container.innerHTML = `<div class="config-card"><div class="config-card-header"><div><h3>📋 同步字段配置</h3><p style="margin:5px 0 0;color:var(--gray-500);font-size:12px;">关闭的字段不会传到飞书；目标列不存在时系统会自动创建。非关键类型冲突会写入“系统文本/数字/日期”兼容列，不修改人工列。</p></div><div><button class="btn btn-sm btn-secondary" data-emie-action="click:admin-diagnose-feishu-fields">结构预检</button> <button class="btn btn-sm btn-primary" data-emie-action="click:admin-save-feishu-fields">💾 保存字段配置</button></div></div><div class="config-card-body"><div id="feishuSchemaDiagnostics" style="margin-bottom:12px"></div>
     ${Object.entries(FEISHU_FIELD_CATALOG).map(([key, table]) => `<div style="margin-bottom:24px"><h4 style="margin:0 0 10px">${table.label}</h4><div style="overflow:auto"><table class="data-table"><thead><tr><th style="width:80px">同步</th><th>系统字段</th><th>飞书目标列名</th><th style="width:120px">字段类型</th></tr></thead><tbody>${table.fields.map(([name,type]) => { const cfg = saved[key]?.[name] || {}; const locked = name === table.identity; return `<tr><td><input type="checkbox" class="feishu-field-enabled" data-table="${key}" data-source="${name}" ${cfg.enabled !== false || locked ? 'checked' : ''} ${locked ? 'disabled' : ''}></td><td>${name}${locked ? ' <span style="color:var(--gray-400)">（必需）</span>' : ''}</td><td><input class="config-input feishu-field-target" data-table="${key}" data-source="${name}" value="${escHtml(locked ? name : (cfg.target || name))}" ${locked ? 'disabled' : ''}></td><td>${type}</td></tr>`; }).join('')}</tbody></table></div></div>`).join('')}
   </div></div>`;
+}
+
+async function renderFeishuV2(container) {
+  const [v2, sync] = await Promise.all([
+    apiGet('/admin/sync/v2/status'),
+    apiGet('/admin/sync/stats'),
+  ]);
+  const tables = Array.isArray(v2.tables) ? v2.tables : [];
+  const readyCount = tables.filter(item => item.configured).length;
+  const activeLabel = v2.active ? 'V2 已激活' : '旧版同步运行中';
+  const activeTone = v2.active ? '#047857' : '#92400e';
+  container.innerHTML = `
+    <div class="config-card">
+      <div class="config-card-header"><div><h3>🔄 飞书 V2 数据镜像</h3><p style="margin:5px 0 0;color:var(--gray-500);font-size:12px;">系统单向同步至飞书；四张主表全量对账，四张备份表仅随业务变更增量保留。</p></div><button class="btn btn-sm btn-outline" data-emie-action="click:admin-feishu-v2-refresh">刷新状态</button></div>
+      <div class="config-card-body">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px;">
+          <div style="padding:14px;border:1px solid var(--gray-200);border-radius:10px;"><span style="font-size:12px;color:var(--gray-500);">当前模式</span><strong style="display:block;margin-top:5px;color:${activeTone};">${activeLabel}</strong></div>
+          <div style="padding:14px;border:1px solid var(--gray-200);border-radius:10px;"><span style="font-size:12px;color:var(--gray-500);">V2 表结构</span><strong style="display:block;margin-top:5px;">${readyCount} / 8</strong></div>
+          <div style="padding:14px;border:1px solid var(--gray-200);border-radius:10px;"><span style="font-size:12px;color:var(--gray-500);">待处理 / 失败</span><strong style="display:block;margin-top:5px;">${sync.pending || 0} / <span style="color:${sync.fail ? '#b91c1c' : 'inherit'}">${sync.fail || 0}</span></strong></div>
+          <div style="padding:14px;border:1px solid var(--gray-200);border-radius:10px;"><span style="font-size:12px;color:var(--gray-500);">回滚保护</span><strong style="display:block;margin-top:5px;">${v2.rollbackAvailable ? '可回滚旧 Base' : '尚未生成'}</strong></div>
+        </div>
+        <div style="overflow:auto;margin-bottom:18px;"><table class="data-table"><thead><tr><th>数据表</th><th style="width:120px;">配置状态</th></tr></thead><tbody>${tables.map(item => `<tr><td>${escHtml(item.name)}</td><td>${item.configured ? '<span style="color:#047857;">✓ 已创建</span>' : '<span style="color:#92400e;">待创建</span>'}</td></tr>`).join('')}</tbody></table></div>
+        ${sync.lastFailure ? `<div style="padding:11px 13px;margin-bottom:14px;background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;color:#9f1239;font-size:12px;">最近失败：${escHtml(sync.lastFailure.entityType || '')} #${sync.lastFailure.entityId || '-'} · ${escHtml(sync.lastFailure.error || '未知错误')} <button class="btn btn-sm btn-outline" style="margin-left:8px" data-emie-action="click:admin-retry-sync" data-queue-id="${sync.lastFailure.id}">重试此条</button></div>` : ''}
+        <div style="display:flex;flex-wrap:wrap;gap:10px;">
+          <button class="btn btn-secondary" data-emie-action="click:admin-feishu-v2-prepare" ${v2.active ? 'disabled' : ''}>① 创建并检查 V2 Base</button>
+          <button class="btn btn-primary" data-emie-action="click:admin-feishu-v2-activate" ${!v2.activatable ? 'disabled' : ''}>② 激活并全量同步</button>
+          <button class="btn btn-outline" data-emie-action="click:admin-feishu-sync">处理一轮队列</button>
+          <button class="btn btn-outline" style="color:#b91c1c;border-color:#fecaca;" data-emie-action="click:admin-feishu-v2-rollback" ${!v2.active || !v2.rollbackAvailable ? 'disabled' : ''}>回滚旧 Base</button>
+        </div>
+        <p style="margin:14px 0 0;color:var(--gray-500);font-size:12px;line-height:1.7;">激活会先校验八张表，然后切换配置并自动将系统现有数据全量入队。失败会自动恢复旧 Base。旧表不会在此页面自动删除。</p>
+      </div>
+    </div>`;
+}
+
+async function postAdminLong(url) {
+  const token = localStorage.getItem('design_pm_token');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 180000);
+  try {
+    const response = await fetch(`${API}${url}`, {
+      method: 'POST', signal: controller.signal,
+      headers: token ? { 'Content-Type': 'application/json', 'X-Auth-Token': token } : { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `请求失败 (${response.status})`);
+    return payload;
+  } finally { clearTimeout(timer); }
+}
+
+async function prepareFeishuV2(button) {
+  if (!await EMIE.actions.showSystemConfirm('将创建一套全新的飞书 Base 和 8 张数据表，不会切换当前同步。确认继续吗？')) return;
+  button.disabled = true; button.textContent = '正在创建字段，请稍候…';
+  try { await postAdminLong('/admin/sync/v2/prepare'); showAdminToast('✅ V2 Base 与八张表准备完成', 'success'); await renderAdminContent(); }
+  catch (e) { button.disabled = false; button.textContent = '① 创建并检查 V2 Base'; EMIE.actions.showSystemAlert('V2 Base 创建失败：' + e.message); }
+}
+
+async function activateFeishuV2(button) {
+  if (!await EMIE.actions.showSystemConfirm('确认激活飞书 V2？\n\n系统会切换到新 Base 并将现有项目、子任务、评分和日志全量入队。若初始化失败会自动回滚。')) return;
+  button.disabled = true; button.textContent = '正在激活并入队…';
+  try { await postAdminLong('/admin/sync/v2/activate'); showAdminToast('✅ V2 已激活，全量同步正在后台执行', 'success'); await renderAdminContent(); }
+  catch (e) { button.disabled = false; button.textContent = '② 激活并全量同步'; EMIE.actions.showSystemAlert('V2 激活失败：' + e.message); await renderAdminContent(); }
+}
+
+async function rollbackFeishuV2(button) {
+  if (!await EMIE.actions.showSystemConfirm('确认回滚到旧飞书 Base？\n\nV2 Base 和其中的数据会保留，但后续同步将重新写入旧 Base。')) return;
+  button.disabled = true;
+  try { await postAdminLong('/admin/sync/v2/rollback'); showAdminToast('已回滚到旧飞书 Base', 'success'); await renderAdminContent(); }
+  catch (e) { button.disabled = false; EMIE.actions.showSystemAlert('回滚失败：' + e.message); }
 }
 
 async function diagnoseFeishuFields() {
@@ -717,6 +789,7 @@ EMIE.registerActions({
   runDataIntegrityScan,
   groupLabel,
   renderAdminConfig,
+  renderFeishuV2,
   renderFeishuFieldMappings,
   saveFeishuFieldMappings,
   saveConfigGroup,
@@ -741,6 +814,10 @@ if (registerEventAction) {
   registerEventAction('admin-test-notification', () => sendNotificationTest());
   registerEventAction('admin-save-config', (_event, el) => saveConfigGroup(el.dataset.configGroup));
   registerEventAction('admin-save-feishu-fields', () => saveFeishuFieldMappings());
+  registerEventAction('admin-feishu-v2-refresh', () => renderAdminContent());
+  registerEventAction('admin-feishu-v2-prepare', (_event, el) => prepareFeishuV2(el));
+  registerEventAction('admin-feishu-v2-activate', (_event, el) => activateFeishuV2(el));
+  registerEventAction('admin-feishu-v2-rollback', (_event, el) => rollbackFeishuV2(el));
   registerEventAction('admin-diagnose-feishu-fields', () => diagnoseFeishuFields());
   registerEventAction('admin-retry-sync', (_event, el) => retrySyncQueue(Number(el.dataset.queueId)));
   registerEventAction('admin-temp-broadcast', () => sendTemporaryBroadcast());
