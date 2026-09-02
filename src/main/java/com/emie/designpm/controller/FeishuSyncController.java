@@ -142,10 +142,12 @@ public class FeishuSyncController {
 
     /** 创建/续建独立 V2 Base，仅写 staging 配置，不切换当前同步。 */
     @PostMapping("/v2/prepare")
-    public ResponseEntity<Map<String, Object>> prepareV2(HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> prepareV2(@RequestBody(required = false) Map<String, Object> body,
+                                                         HttpServletRequest request) {
         if (!AuthController.isAdmin(request)) return forbidden();
         try {
-            return ResponseEntity.ok(feishuBaseService.prepareV2Base());
+            String appToken = body == null || body.get("appToken") == null ? "" : String.valueOf(body.get("appToken")).trim();
+            return ResponseEntity.ok(feishuBaseService.prepareV2Base(appToken));
         } catch (Exception e) {
             return ResponseEntity.status(502).body(Map.of(
                     "error", "创建飞书 V2 Base 失败，请检查应用建表、字段和云空间权限"));

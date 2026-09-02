@@ -396,7 +396,8 @@ async function renderFeishuV2(container) {
         <div style="overflow:auto;margin-bottom:18px;"><table class="data-table"><thead><tr><th>数据表</th><th style="width:120px;">配置状态</th></tr></thead><tbody>${tables.map(item => `<tr><td>${escHtml(item.name)}</td><td>${item.configured ? '<span style="color:#047857;">✓ 已创建</span>' : '<span style="color:#92400e;">待创建</span>'}</td></tr>`).join('')}</tbody></table></div>
         ${sync.lastFailure ? `<div style="padding:11px 13px;margin-bottom:14px;background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;color:#9f1239;font-size:12px;">最近失败：${escHtml(sync.lastFailure.entityType || '')} #${sync.lastFailure.entityId || '-'} · ${escHtml(sync.lastFailure.error || '未知错误')} <button class="btn btn-sm btn-outline" style="margin-left:8px" data-emie-action="click:admin-retry-sync" data-queue-id="${sync.lastFailure.id}">重试此条</button></div>` : ''}
         <div style="display:flex;flex-wrap:wrap;gap:10px;">
-          <button class="btn btn-secondary" data-emie-action="click:admin-feishu-v2-prepare" ${v2.active ? 'disabled' : ''}>① 创建并检查 V2 Base</button>
+          <input id="feishuV2AppToken" class="config-input" style="min-width:260px" placeholder="粘贴已有 Base Token" value="${escHtml(v2.stagingAppToken || '')}" ${v2.active ? 'disabled' : ''}>
+          <button class="btn btn-secondary" data-emie-action="click:admin-feishu-v2-prepare" ${v2.active ? 'disabled' : ''}>① 绑定并检查 V2 Base</button>
           <button class="btn btn-primary" data-emie-action="click:admin-feishu-v2-activate" ${!v2.activatable ? 'disabled' : ''}>② 激活并全量同步</button>
           <button class="btn btn-outline" data-emie-action="click:admin-feishu-sync">处理一轮队列</button>
           <button class="btn btn-outline" style="color:#b91c1c;border-color:#fecaca;" data-emie-action="click:admin-feishu-v2-rollback" ${!v2.active || !v2.rollbackAvailable ? 'disabled' : ''}>回滚旧 Base</button>
@@ -406,7 +407,7 @@ async function renderFeishuV2(container) {
     </div>`;
 }
 
-async function postAdminLong(url) {
+async function postAdminLong(url, requestBody = {}) {
   const token = localStorage.getItem('design_pm_token');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 180000);
@@ -414,7 +415,7 @@ async function postAdminLong(url) {
     const response = await fetch(`/api${url}`, {
       method: 'POST', signal: controller.signal,
       headers: token ? { 'Content-Type': 'application/json', 'X-Auth-Token': token } : { 'Content-Type': 'application/json' },
-      body: '{}',
+      body: JSON.stringify(requestBody),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || `请求失败 (${response.status})`);
@@ -423,10 +424,12 @@ async function postAdminLong(url) {
 }
 
 async function prepareFeishuV2(button) {
-  if (!await EMIE.actions.showSystemConfirm('将创建一套全新的飞书 Base 和 8 张数据表，不会切换当前同步。确认继续吗？')) return;
-  button.disabled = true; button.textContent = '正在创建字段，请稍候…';
-  try { await postAdminLong('/admin/sync/v2/prepare'); showAdminToast('✅ V2 Base 与八张表准备完成', 'success'); await renderAdminContent(); }
-  catch (e) { button.disabled = false; button.textContent = '① 创建并检查 V2 Base'; EMIE.actions.showSystemAlert('V2 Base 创建失败：' + e.message); }
+  const appToken = document.getElementById('feishuV2AppToken')?.value.trim();
+  if (!appToken) { EMIE.actions.showSystemAlert('请先粘贴已有飞书多维表格 Base Token'); return; }
+  if (!await EMIE.actions.showSystemConfirm('将使用这个已有 Base，并自动创建或补齐八张数据表，不会切换当前同步。确认继续吗？')) return;
+  button.disabled = true; button.textContent = '正在检查并创建字段，请稍候…';
+  try { await postAdminLong('/admin/sync/v2/prepare', { appToken }); showAdminToast('✅ V2 Base 与八张表准备完成', 'success'); await renderAdminContent(); }
+  catch (e) { button.disabled = false; button.textContent = '① 绑定并检查 V2 Base'; EMIE.actions.showSystemAlert('V2 Base 检查失败：' + e.message); }
 }
 
 async function activateFeishuV2(button) {

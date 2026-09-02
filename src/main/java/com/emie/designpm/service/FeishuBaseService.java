@@ -426,13 +426,16 @@ public class FeishuBaseService {
      * 不会改变当前生产同步目标；只有显式 activateV2Base 后才切换。
      */
     public synchronized Map<String, Object> prepareV2Base() throws Exception {
+        return prepareV2Base("");
+    }
+
+    public synchronized Map<String, Object> prepareV2Base(String requestedAppToken) throws Exception {
         setCfg("feishu.base.v2.staging.status", "preparing");
         String token = getToken();
-        String appToken = getCfg("feishu.base.v2.staging.appToken");
-        if (appToken.isBlank()) {
-            appToken = createBase("EMIE 数据镜像 V2");
-            setCfg("feishu.base.v2.staging.appToken", appToken);
-        }
+        String appToken = requestedAppToken == null || requestedAppToken.isBlank()
+                ? getCfg("feishu.base.v2.staging.appToken") : requestedAppToken;
+        if (appToken.isBlank()) throw new IllegalArgumentException("请先填写已有飞书多维表格 Base Token");
+        setCfg("feishu.base.v2.staging.appToken", appToken);
 
         Map<String, FeishuV2Schema.Table> schemas = FeishuV2Schema.allTables();
         Map<String, String> tableIds = new LinkedHashMap<>();
