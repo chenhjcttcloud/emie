@@ -217,26 +217,15 @@ function closeDownloadOptions() {
   document.getElementById('downloadOptionPanel')?.remove();
 }
 
-/** 直接下载：先用认证请求取文件，再由浏览器保存，避免原生链接丢失自定义认证头。 */
-async function doDirectDownload(url, fileName = '') {
-  try {
-    const token = localStorage.getItem('design_pm_token');
-    const response = await fetch(appendDownloadParam(url), {
-      headers: token ? { 'X-Auth-Token': token } : {},
-      credentials: 'same-origin',
-    });
-    if (!response.ok) throw new Error('下载失败（HTTP ' + response.status + '）');
-    const blobUrl = URL.createObjectURL(await response.blob());
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = fileName || url.split('/').pop() || 'download';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-  } catch (error) {
-    window.EMIE.actions.showSystemAlert(error.message || '下载失败，请重新登录后重试');
-  }
+/** 直接下载：使用带认证参数的同源链接，保留服务端文件字节和 Content-Disposition。 */
+function doDirectDownload(url, fileName = '') {
+  const downloadUrl = appendDownloadParam(authenticatedFileUrl(url));
+  const link = document.createElement('a');
+  link.href = downloadUrl;
+  link.download = fileName || url.split('/').pop()?.split('?')[0] || 'download';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 /** 给 URL 追加 ?download=true 参数 */

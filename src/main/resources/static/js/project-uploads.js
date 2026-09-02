@@ -49,6 +49,14 @@ function protectedImageHeaders() {
   return token ? { 'X-Auth-Token': token } : {};
 }
 
+async function readImageBlob(response) {
+  if (!response.ok) throw new Error(`图片请求失败（${response.status}）`);
+  const blob = await response.blob();
+  const type = (blob.type || '').toLowerCase();
+  if (!type.startsWith('image/')) throw new Error('服务器未返回有效图片');
+  return blob;
+}
+
 function presentationImageFileName(image, mimeType) {
   const extensionByType = {
     'image/png': '.png',
@@ -78,8 +86,7 @@ function getPresentationImagePayload(image) {
     credentials: 'same-origin',
     cache: 'force-cache'
   }).then(async response => {
-    if (!response.ok) throw new Error('原图读取失败');
-    const blob = await response.blob();
+    const blob = await readImageBlob(response);
     const type = (blob.type || 'image/png').toLowerCase();
     return {
       source,
@@ -166,7 +173,7 @@ function previewImage(src, name) {
   activePreviewImage = img;
 
   fetch(src, { headers: protectedImageHeaders(), credentials: 'same-origin' })
-    .then(response => response.ok ? response.blob() : Promise.reject(new Error(`图片请求失败（${response.status}）`)))
+    .then(readImageBlob)
     .then(blob => {
       if (!overlay.isConnected) return;
       previewBlobUrl = URL.createObjectURL(blob);
@@ -270,7 +277,7 @@ document.addEventListener('error', function(e) {
   const source = img.src;
   if (token && source.startsWith(window.location.origin)) {
     fetch(source, { headers: { 'X-Auth-Token': token }, credentials: 'same-origin' })
-      .then(response => response.ok ? response.blob() : Promise.reject(new Error('图片请求失败')))
+      .then(readImageBlob)
       .then(blob => { img.src = URL.createObjectURL(blob); })
       .catch(() => {
         if (img.dataset.fullFallback !== 'true' && img.dataset.fullSrc) {
@@ -297,7 +304,7 @@ function hydrateProtectedImages(root = document) {
     const token = localStorage.getItem('design_pm_token');
     const headers = token ? { 'X-Auth-Token': token } : {};
     fetch(source, { headers, credentials: 'same-origin' })
-      .then(response => response.ok ? response.blob() : Promise.reject(new Error('图片请求失败')))
+      .then(readImageBlob)
       .then(blob => {
         img.src = URL.createObjectURL(blob);
         img.dataset.authLoaded = 'true';

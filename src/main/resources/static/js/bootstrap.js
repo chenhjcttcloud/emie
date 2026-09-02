@@ -14,7 +14,7 @@ import './dashboard-designer.js?v=556';
 import './dashboard.js?v=219';
 import './material-market.js?v=123';
 import './image-library.js?v=22';
-import './project-uploads.js?v=470';
+import './project-uploads.js?v=472';
 import './project-form.js?v=417';
 import './project-detail.js?v=591';
 import './project-tasks.js?v=643';
@@ -30,7 +30,7 @@ import './admin-audit.js?v=357';
 import './admin-storage.js?v=321';
 import './admin-workload.js?v=430';
 import './admin.js?v=147';
-import './files.js?v=278';
+import './files.js?v=280';
 
 const EMIE = window.EMIE;
 const requiredEmieModules = [
