@@ -1230,4 +1230,4 @@
 - 新增管理员只读结构预检 `/api/admin/sync/schema-diagnostics`、单条失败任务重试 `/api/admin/sync/queue/{id}/retry`，并接入管理端界面。
 - 操作日志同步也纳入统一字段转换路径。
 - `./mvnw -B clean package` 通过，272 项测试通过；`./scripts/test-update.sh`、前端语法检查和浏览器回归通过。
-- 当前仅本地修改，尚未提交、推送或部署生产；`.brain/`、`.reasonix/` 为本地工具目录，未纳入版本控制。
+- 已提交 `3da65e22fb24358c962037f8119a12d6b3334281` 并部署生产，生产版本 `1.9.3`、公网 HTTP 200；`sub_task #1081` 重试后同步成功。`.brain/`、`.reasonix/` 为本地工具目录，未纳入版本控制。
