@@ -428,7 +428,10 @@ async function prepareFeishuV2(button) {
   if (!appToken) { EMIE.actions.showSystemAlert('请先粘贴已有飞书多维表格 Base Token'); return; }
   if (!await EMIE.actions.showSystemConfirm('将使用这个已有 Base，并自动创建或补齐八张数据表，不会切换当前同步。确认继续吗？')) return;
   button.disabled = true; button.textContent = '正在检查并创建字段，请稍候…';
-  try { await postAdminLong('/admin/sync/v2/prepare', { appToken }); showAdminToast('✅ V2 Base 与八张表准备完成', 'success'); await renderAdminContent(); }
+  try { await postAdminLong('/admin/sync/v2/prepare', { appToken }); showAdminToast('✅ 已开始后台检查，页面将自动刷新状态', 'success');
+    for (let i = 0; i < 60; i++) { await new Promise(r => setTimeout(r, 3000)); const status = await apiGet('/admin/sync/v2/status'); if (status.stagingStatus === 'prepared') { await renderAdminContent(); return; } }
+    await renderAdminContent();
+  }
   catch (e) { button.disabled = false; button.textContent = '① 绑定并检查 V2 Base'; EMIE.actions.showSystemAlert('V2 Base 检查失败：' + e.message); }
 }
 

@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 飞书同步管理接口
@@ -147,7 +148,11 @@ public class FeishuSyncController {
         if (!AuthController.isAdmin(request)) return forbidden();
         try {
             String appToken = body == null || body.get("appToken") == null ? "" : String.valueOf(body.get("appToken")).trim();
-            return ResponseEntity.ok(feishuBaseService.prepareV2Base(appToken));
+            CompletableFuture.runAsync(() -> {
+                try { feishuBaseService.prepareV2Base(appToken); }
+                catch (Exception e) { /* 状态保留 preparing；下一次检查会重试并显示具体错误 */ }
+            });
+            return ResponseEntity.accepted().body(Map.of("started", true));
         } catch (Exception e) {
             // 保留飞书返回的可诊断错误（不包含凭据），避免把请求体错误误报成权限问题。
             return ResponseEntity.status(502).body(Map.of(
