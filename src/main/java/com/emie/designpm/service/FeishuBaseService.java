@@ -553,7 +553,7 @@ public class FeishuBaseService {
             property.put("table_id", linkedTableId);
             property.put("multiple", true);
         } else if (field.percentage()) {
-            body.putObject("property").put("formatter", "0%");
+            // 飞书新增数字字段接口对 formatter 的接受值并不稳定；进度值仍按 0~1 数字写入，显示格式由 Base 中人工设置。
         }
         JsonNode root = json.readTree(bearerPost(
                 API + "/bitable/v1/apps/" + appToken + "/tables/" + tableId + "/fields",
