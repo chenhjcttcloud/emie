@@ -411,7 +411,7 @@ async function postAdminLong(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 180000);
   try {
-    const response = await fetch(`${API}${url}`, {
+    const response = await fetch(`/api${url}`, {
       method: 'POST', signal: controller.signal,
       headers: token ? { 'Content-Type': 'application/json', 'X-Auth-Token': token } : { 'Content-Type': 'application/json' },
       body: '{}',
