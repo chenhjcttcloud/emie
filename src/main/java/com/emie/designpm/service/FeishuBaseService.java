@@ -775,7 +775,7 @@ public class FeishuBaseService {
 
     // ==================== V2 固定契约同步 ====================
 
-    public record V2ProjectData(Long id, String code, String name, String status, String sales,
+    public record V2ProjectData(Long id, String code, String name, String type, String status, String sales,
                                 String planner, String category, String price, String imagesJson,
                                 String filesJson, int taskCount, LocalDateTime createdAt,
                                 String deadline, LocalDateTime updatedAt, List<Long> taskIds,
@@ -791,7 +791,7 @@ public class FeishuBaseService {
                              List<Long> scoringIds, String stage, double progress, String note) {}
 
     public record V2ScoringData(Long id, String role, String reviewer, Long taskId,
-                                LocalDateTime reviewedAt, Double weight, Double weightedScore,
+                                LocalDateTime reviewedAt, Double score, Double weight, Double weightedScore,
                                 String note) {}
 
     public record V2LogData(Long id, LocalDateTime time, String role, String user,
@@ -801,7 +801,7 @@ public class FeishuBaseService {
         if (!isSyncEnabled()) return;
         ObjectNode fields = json.createObjectNode();
         fields.put("系统项目ID", data.id().toString());
-        fields.put("项目编号", text(data.code())); fields.put("项目名称", text(data.name()));
+        fields.put("项目编号", text(data.code())); fields.put("项目名称", text(data.name())); fields.put("项目类型", projectTypeLabel(data.type()));
         fields.put("状态", statusLabel(data.status())); fields.put("销售", text(data.sales()));
         fields.put("产品企划", text(data.planner())); fields.put("产品类目", text(data.category()));
         fields.put("参考零售价", text(data.price())); fields.put("子任务数", data.taskCount());
@@ -837,7 +837,7 @@ public class FeishuBaseService {
         ObjectNode fields = json.createObjectNode();
         fields.put("系统评分ID", data.id().toString()); fields.put("评分编号", data.id().toString());
         fields.put("评分角色", roleLabel(data.role())); fields.put("评分人", text(data.reviewer()));
-        putDate(fields, "评分时间", data.reviewedAt()); putNumber(fields, "权重", data.weight());
+        putDate(fields, "评分时间", data.reviewedAt()); putNumber(fields, "评分", data.score()); putNumber(fields, "权重", data.weight());
         putNumber(fields, "加权得分", data.weightedScore()); fields.put("备注", text(data.note()));
         writeV2("scoring", data.id(), fields, null, null, null, null, nullableId(data.taskId()),
                 "所属子任务", "task", includeBackup);
@@ -870,7 +870,6 @@ public class FeishuBaseService {
                 addLinks(fields, field, ids, "scoring", false, token, appToken);
             }
         }
-        putV2Metadata(fields, false, false, null);
         upsertV2(key, id, fields, false, token, appToken);
         if (includeBackup) {
             ObjectNode backupFields = fields.deepCopy();
@@ -937,8 +936,8 @@ public class FeishuBaseService {
         if (value != null && !value.isBlank()) fields.put(name, dateToTimestamp(value)); else fields.putNull(name);
     }
     private static void putV2Metadata(ObjectNode fields, boolean backup, boolean deleted, LocalDateTime deletedAt) {
-        fields.put("同步来源", "系统"); fields.put("系统最近同步时间", toTimestamp(LocalDateTime.now()));
         if (backup) { fields.put("备份状态", deleted ? "源数据已删除" : "有效");
+            fields.put("最后变更时间", toTimestamp(LocalDateTime.now()));
             if (deletedAt != null) fields.put("源数据删除时间", toTimestamp(deletedAt)); }
     }
 

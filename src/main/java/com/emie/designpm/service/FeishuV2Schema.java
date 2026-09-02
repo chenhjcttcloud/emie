@@ -28,13 +28,12 @@ final class FeishuV2Schema {
     static Map<String, Table> primaryTables() {
         Map<String, Table> tables = new LinkedHashMap<>();
         tables.put("project", new Table("project", "项目总表_V2", "系统项目ID", List.of(
-                Field.text("项目编号"), Field.text("项目名称"), Field.text("状态"), Field.text("销售"),
+                Field.text("项目编号"), Field.text("项目名称"), Field.text("项目类型"), Field.text("状态"), Field.text("销售"),
                 Field.text("产品企划"), Field.text("产品类目"), Field.text("参考零售价"),
                 Field.attachment("参考图片"), Field.attachment("附件"), Field.number("子任务数"),
                 Field.date("创建时间"), Field.date("计划完成时间"), Field.date("最近更新时间"),
                 Field.link("关联子任务", "task"), Field.text("子任务阶段"), Field.percentage("子任务进度"),
-                Field.text("项目阶段"), Field.percentage("项目总进度"), Field.text("备注"),
-                Field.text("同步来源"), Field.date("系统最近同步时间"))));
+                Field.text("项目阶段"), Field.percentage("项目总进度"), Field.text("备注"))));
         tables.put("task", new Table("task", "子任务表_V2", "系统子任务ID", List.of(
                 Field.link("关联项目", "project"), Field.text("子任务编号"), Field.text("子任务名称"),
                 Field.text("状态"), Field.attachment("参考图片"), Field.attachment("参考附件"),
@@ -43,16 +42,14 @@ final class FeishuV2Schema {
                 Field.attachment("交付附件"), Field.number("设计师自评分"), Field.number("销售评分"),
                 Field.number("产品企划评分"), Field.number("管理员评分"), Field.number("加权综合"),
                 Field.link("关联评分", "scoring"), Field.text("子任务阶段"), Field.percentage("子任务进度"),
-                Field.text("备注"), Field.text("同步来源"), Field.date("系统最近同步时间"))));
+                Field.text("备注"))));
         tables.put("scoring", new Table("scoring", "评分记录表_V2", "系统评分ID", List.of(
                 Field.text("评分编号"), Field.text("评分角色"), Field.text("评分人"),
                 Field.link("所属子任务", "task"), Field.date("评分时间"), Field.percentage("权重"),
-                Field.number("加权得分"), Field.text("备注"), Field.text("同步来源"),
-                Field.date("系统最近同步时间"))));
+                Field.number("评分"), Field.number("加权得分"), Field.text("备注"))));
         tables.put("log", new Table("log", "操作日志表_V2", "系统日志ID", List.of(
                 Field.text("日志编号"), Field.date("时间"), Field.text("角色"), Field.text("操作人"),
-                Field.text("行为记录"), Field.text("备注"), Field.text("同步来源"),
-                Field.date("系统最近同步时间"))));
+                Field.text("行为记录"), Field.text("备注"))));
         return tables;
     }
 
@@ -62,6 +59,7 @@ final class FeishuV2Schema {
             List<Field> fields = new java.util.ArrayList<>(table.fields());
             fields.add(Field.text("备份状态"));
             fields.add(Field.date("源数据删除时间"));
+            fields.add(Field.date("最后变更时间"));
             result.put(key + "Backup", new Table(key + "Backup", table.name() + "_backup",
                     table.identity(), List.copyOf(fields)));
         });
