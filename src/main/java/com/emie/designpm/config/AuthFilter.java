@@ -81,6 +81,7 @@ public class AuthFilter implements Filter {
             path.equals("/api/admin/public-config") ||
             path.equals("/api/admin/version/stream") ||
             path.equals("/api/health/live") ||
+            path.startsWith("/api/files/permanent/") ||
             path.equals("/favicon.ico") ||
             // P1-7 遗留闭环：uploads/admin 下的管理图片（logo/login-bg）需匿名可访问。
             // 精确前缀白名单 + FileController.checkDownloadAccess 的 ADMIN_MANAGED_IMAGE

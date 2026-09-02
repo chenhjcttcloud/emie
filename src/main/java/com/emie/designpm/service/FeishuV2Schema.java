@@ -31,12 +31,14 @@ final class FeishuV2Schema {
                 Field.text("项目编号"), Field.text("项目名称"), Field.text("项目类型"), Field.text("状态"), Field.text("销售"),
                 Field.text("产品企划"), Field.text("产品类目"), Field.text("参考零售价"),
                 Field.attachment("参考图片"), Field.attachment("附件"), Field.number("子任务数"),
+                Field.text("超大附件名称"), Field.text("超大附件大小"), Field.text("超大附件链接"),
                 Field.date("创建时间"), Field.date("计划完成时间"), Field.date("最近更新时间"),
                 Field.link("关联子任务", "task"), Field.text("子任务阶段"), Field.percentage("子任务进度"),
                 Field.text("项目阶段"), Field.percentage("项目总进度"), Field.text("备注"))));
         tables.put("task", new Table("task", "子任务表_V2", "系统子任务ID", List.of(
                 Field.link("关联项目", "project"), Field.text("子任务编号"), Field.text("子任务名称"),
                 Field.text("状态"), Field.attachment("参考图片"), Field.attachment("参考附件"),
+                Field.text("超大附件名称"), Field.text("超大附件大小"), Field.text("超大附件链接"),
                 Field.text("子任务负责人"), Field.text("细节要求说明"), Field.date("创建子任务时间"),
                 Field.date("计划完成时间"), Field.date("最后更新时间"), Field.attachment("交付图片"),
                 Field.attachment("交付附件"), Field.number("设计师自评分"), Field.number("销售评分"),

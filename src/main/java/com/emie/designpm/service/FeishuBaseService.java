@@ -861,6 +861,7 @@ public class FeishuBaseService {
         String token = getToken();
         addAttachments(fields, imageField, imagesJson, appToken, token);
         addAttachments(fields, fileField, filesJson, appToken, token);
+        addOversizedFiles(fields, imagesJson, filesJson);
         addLinks(fields, linkField, links, linkTarget, false, token, appToken);
         for (int i = 0; i + 1 < extras.length; i += 2) {
             if (extras[i] instanceof String raw && extras[i + 1] instanceof String field) {
@@ -903,6 +904,22 @@ public class FeishuBaseService {
         for (String fileToken : attachmentService.uploadJsonFiles(raw, appToken, token)) {
             values.addObject().put("file_token", fileToken);
         }
+    }
+
+    private void addOversizedFiles(ObjectNode fields, String... rawValues) throws Exception {
+        if (attachmentService == null || !(fields.has("系统项目ID") || fields.has("系统子任务ID"))) return;
+        List<FeishuAttachmentService.OversizedFile> all = new ArrayList<>();
+        for (String raw : rawValues) all.addAll(attachmentService.oversizedJsonFiles(raw));
+        fields.put("超大附件名称", all.stream().map(FeishuAttachmentService.OversizedFile::name)
+                .collect(java.util.stream.Collectors.joining("\n")));
+        fields.put("超大附件大小", all.stream().map(f -> humanFileSize(f.size()))
+                .collect(java.util.stream.Collectors.joining("\n")));
+        fields.put("超大附件链接", all.stream().map(FeishuAttachmentService.OversizedFile::url)
+                .filter(s -> s != null && !s.isBlank()).collect(java.util.stream.Collectors.joining("\n")));
+    }
+
+    private static String humanFileSize(long size) {
+        return String.format(java.util.Locale.ROOT, "%.1f MB", size / 1024d / 1024d);
     }
 
     private void addLinks(ObjectNode fields, String field, List<Long> ids, String target, boolean backup,

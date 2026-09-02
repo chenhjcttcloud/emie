@@ -5,6 +5,7 @@ import com.emie.designpm.repository.FeishuAttachmentCacheRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -29,11 +30,19 @@ public class FeishuAttachmentService {
 
     private final FileArchiveService files;
     private final FeishuAttachmentCacheRepository cache;
+    private final PermanentFileLinkService permanentLinks;
     private final ConcurrentHashMap<String, Object> uploadLocks = new ConcurrentHashMap<>();
 
-    public FeishuAttachmentService(FileArchiveService files, FeishuAttachmentCacheRepository cache) {
+    @Autowired
+    public FeishuAttachmentService(FileArchiveService files, FeishuAttachmentCacheRepository cache,
+                                   PermanentFileLinkService permanentLinks) {
         this.files = files;
         this.cache = cache;
+        this.permanentLinks = permanentLinks;
+    }
+
+    public FeishuAttachmentService(FileArchiveService files, FeishuAttachmentCacheRepository cache) {
+        this(files, cache, null);
     }
 
     public List<String> uploadJsonFiles(String rawJson, String appToken, String tenantToken) throws Exception {
@@ -46,10 +55,29 @@ public class FeishuAttachmentService {
             if (storedName.isBlank()) storedName = storedNameFromUrl(item.path("url").asText(""));
             if (storedName.isBlank()) continue;
             String originalName = item.path("name").asText(storedName);
-            tokens.add(resolveOrUpload(appToken, tenantToken, storedName, originalName));
+            if (Files.size(files.resolveFile(storedName)) <= UPLOAD_ALL_LIMIT)
+                tokens.add(resolveOrUpload(appToken, tenantToken, storedName, originalName));
         }
         return tokens;
     }
+
+    public List<OversizedFile> oversizedJsonFiles(String rawJson) throws Exception {
+        List<OversizedFile> result = new ArrayList<>();
+        if (rawJson == null || rawJson.isBlank() || permanentLinks == null) return result;
+        JsonNode root = JSON.readTree(rawJson);
+        if (!root.isArray()) return result;
+        for (JsonNode item : root) {
+            String storedName = item.path("storedName").asText("");
+            if (storedName.isBlank()) storedName = storedNameFromUrl(item.path("url").asText(""));
+            if (storedName.isBlank()) continue;
+            Path path = files.resolveFile(storedName); long size = Files.size(path);
+            if (size > UPLOAD_ALL_LIMIT) result.add(new OversizedFile(
+                    item.path("name").asText(storedName), size, permanentLinks.create(storedName)));
+        }
+        return result;
+    }
+
+    public record OversizedFile(String name, long size, String url) {}
 
     public String resolveOrUpload(String appToken, String tenantToken,
                                   String storedName, String originalName) throws Exception {
