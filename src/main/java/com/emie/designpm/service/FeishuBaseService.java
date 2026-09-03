@@ -892,9 +892,35 @@ public class FeishuBaseService {
                 : FeishuV2Schema.primaryTables().get(key);
         String tableId = getCfg("feishu.base.table" + tableSuffix(key) + (backup ? "Backup" : ""));
         if (tableId.isBlank()) throw new Exception("飞书 V2 " + schema.name() + "未配置");
+        ensureV2WriteSchema(schema, tableId, appToken, token, backup);
         String recordId = findRecordId(token, appToken, tableId, schema.identity(), id.toString());
         if (recordId == null) createRecord(token, appToken, tableId, fields.toString());
         else updateRecord(token, appToken, tableId, recordId, fields.toString());
+    }
+
+    /**
+     * V2 字段升级与数据写入解耦：发布新增字段后，首次同步会自动补齐缺列，
+     * 避免管理员尚未手工执行结构检查时整批记录因 FieldNameNotFound 失败。
+     */
+    private synchronized void ensureV2WriteSchema(FeishuV2Schema.Table schema, String tableId,
+                                                  String appToken, String token, boolean backup) throws Exception {
+        Map<String, Integer> existing = new LinkedHashMap<>(getFieldTypes(token, appToken, tableId));
+        for (FeishuV2Schema.Field field : schema.fields()) {
+            Integer actual = existing.get(field.name());
+            if (actual != null) {
+                if (actual != field.type()) throw new Exception("V2 表字段类型不匹配: " + schema.name() + "/" + field.name());
+                continue;
+            }
+            String linkedKey = field.linkedTable();
+            if (linkedKey != null && backup) linkedKey += "Backup";
+            String linkedTableId = linkedKey == null ? null : getCfg(v2StagingTableConfigKey(linkedKey));
+            if (linkedTableId == null || linkedTableId.isBlank()) {
+                linkedTableId = linkedKey == null ? null : getCfg("feishu.base.table" + tableSuffix(field.linkedTable())
+                        + (backup ? "Backup" : ""));
+            }
+            addV2Field(token, appToken, tableId, field, linkedTableId);
+            existing.put(field.name(), field.type());
+        }
     }
 
     private void addAttachments(ObjectNode fields, String field, String raw, String appToken, String token) throws Exception {
