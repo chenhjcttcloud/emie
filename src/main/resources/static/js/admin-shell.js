@@ -396,8 +396,8 @@ async function renderFeishuV2(container) {
         <div style="overflow:auto;margin-bottom:18px;"><table class="data-table"><thead><tr><th>数据表</th><th style="width:120px;">配置状态</th></tr></thead><tbody>${tables.map(item => `<tr><td>${escHtml(item.name)}</td><td>${item.configured ? '<span style="color:#047857;">✓ 已创建</span>' : '<span style="color:#92400e;">待创建</span>'}</td></tr>`).join('')}</tbody></table></div>
         ${sync.lastFailure ? `<div style="padding:11px 13px;margin-bottom:14px;background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;color:#9f1239;font-size:12px;">最近失败：${escHtml(sync.lastFailure.entityType || '')} #${sync.lastFailure.entityId || '-'} · ${escHtml(sync.lastFailure.error || '未知错误')} <button class="btn btn-sm btn-outline" style="margin-left:8px" data-emie-action="click:admin-retry-sync" data-queue-id="${sync.lastFailure.id}">重试此条</button></div>` : ''}
         <div style="display:flex;flex-wrap:wrap;gap:10px;">
-          <input id="feishuV2AppToken" class="config-input" style="min-width:260px" placeholder="粘贴已有 Base Token" value="${escHtml(v2.stagingAppToken || '')}" ${v2.active ? 'disabled' : ''}>
-          <button class="btn btn-secondary" data-emie-action="click:admin-feishu-v2-prepare" ${v2.active ? 'disabled' : ''}>① 绑定并检查 V2 Base</button>
+          <input id="feishuV2AppToken" class="config-input" style="min-width:260px" placeholder="${v2.active ? 'V2 已激活，将使用当前 Base' : '粘贴已有 Base Token'}" value="" ${v2.active ? 'disabled' : ''}>
+          <button class="btn btn-secondary" data-active="${v2.active}" data-emie-action="click:admin-feishu-v2-prepare">${v2.active ? '检查并补齐当前 Base 字段' : '① 绑定并检查 V2 Base'}</button>
           <button class="btn btn-primary" data-emie-action="click:admin-feishu-v2-activate" ${!v2.activatable ? 'disabled' : ''}>② 激活并全量同步</button>
           <button class="btn btn-outline" data-emie-action="click:admin-feishu-sync">处理一轮队列</button>
           <button class="btn btn-outline" style="color:#b91c1c;border-color:#fecaca;" data-emie-action="click:admin-feishu-v2-rollback" ${!v2.active || !v2.rollbackAvailable ? 'disabled' : ''}>回滚旧 Base</button>
@@ -425,7 +425,8 @@ async function postAdminLong(url, requestBody = {}) {
 
 async function prepareFeishuV2(button) {
   const appToken = document.getElementById('feishuV2AppToken')?.value.trim();
-  if (!appToken) { EMIE.actions.showSystemAlert('请先粘贴已有飞书多维表格 Base Token'); return; }
+  const active = button?.dataset?.active === 'true';
+  if (!appToken && !active) { EMIE.actions.showSystemAlert('请先粘贴已有飞书多维表格 Base Token'); return; }
   if (!await EMIE.actions.showSystemConfirm('将使用这个已有 Base，并自动创建或补齐八张数据表，不会切换当前同步。确认继续吗？')) return;
   button.disabled = true; button.textContent = '正在检查并创建字段，请稍候…';
   try { await postAdminLong('/admin/sync/v2/prepare', { appToken }); showAdminToast('✅ 已开始后台检查，页面将自动刷新状态', 'success');
