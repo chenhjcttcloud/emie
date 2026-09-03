@@ -181,26 +181,6 @@ async function apiPost(url, data) {
 
 function invalidateApiCache() { cachedApiGets.clear(); }
 
-async function optimizeUploadFile(file) {
-  // 仅压缩大尺寸 JPEG/WebP，保留 PNG 透明通道和办公附件原文件。
-  if (file.size <= 3 * 1024 * 1024 || !/^image\/(jpeg|webp)$/i.test(file.type)) return file;
-  try {
-    const bitmap = await createImageBitmap(file);
-    const maxSide = 2400;
-    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
-    if (scale === 1 && file.size <= 8 * 1024 * 1024) return file;
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, file.type, 0.84));
-    bitmap.close();
-    return blob && blob.size < file.size ? new File([blob], file.name, { type: file.type, lastModified: file.lastModified }) : file;
-  } catch (e) {
-    return file;
-  }
-}
-
 // 文件上传（XMLHttpRequest 流式上传，支持进度条）
 async function uploadFile(file, onProgress) {
   // 客户端前置检查：限制 200MB
@@ -208,7 +188,6 @@ async function uploadFile(file, onProgress) {
   if (file.size > MAX_BYTES) {
     return Promise.reject(new Error('文件大小超过限制（最大 200MB），当前文件 ' + (file.size / 1024 / 1024).toFixed(1) + 'MB'));
   }
-  file = await optimizeUploadFile(file);
   return new Promise((resolve, reject) => {
     const fd = new FormData();
     fd.append('file', file);
@@ -365,7 +344,6 @@ EMIE.registerActions({
   authHeaders,
   apiGet,
   apiPost,
-  optimizeUploadFile,
   uploadFile,
   apiPut,
   tryOpenModal,

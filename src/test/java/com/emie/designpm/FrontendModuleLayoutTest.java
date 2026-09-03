@@ -117,7 +117,11 @@ class FrontendModuleLayoutTest {
                 "全员飞书通知应提交后台任务并轮询最终结果");
         String coreAuth = readResource("/static/js/core-auth.js");
         String coreShell = readResource("/static/js/core-shell.js");
+        String coreRuntime = readResource("/static/js/core-runtime.js");
         String dashboardLists = readResource("/static/js/dashboard-lists.js");
+        assertFalse(coreRuntime.contains("optimizeUploadFile")
+                        || coreRuntime.contains("canvas.toBlob(resolve, file.type"),
+                "上传必须保留用户选择的原文件字节，不得在客户端压缩图片");
         assertTrue(coreAuth.contains("apiGet('/auth/permissions')"),
                 "登录后应加载后端统一能力清单");
         assertTrue(readResource("/static/js/core-identity.js").contains("apiGet('/auth/permissions')"),
