@@ -10,6 +10,7 @@ import com.emie.designpm.entity.*;
 import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.repository.ScoringRepository;
 import com.emie.designpm.repository.SubTaskRepository;
+import com.emie.designpm.repository.SubTaskRejectionCycleRepository;
 import com.emie.designpm.service.ProjectService;
 import com.emie.designpm.service.SubTaskCommandService;
 import com.emie.designpm.service.ProjectLifecycleCommandService;
@@ -51,6 +52,8 @@ public class ProjectController {
     private com.emie.designpm.repository.PointLedgerRepository pointLedgerRepository;
     @Autowired(required = false)
     private com.emie.designpm.service.FeishuChatService feishuChatService;
+    @Autowired(required = false)
+    private SubTaskRejectionCycleRepository rejectionCycleRepository;
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
@@ -118,6 +121,7 @@ public class ProjectController {
             public Project taskCorrectDelivery(Long id, Long taskId, Map<String,Object> body) { throw unsupported(); }
             public Project taskApprove(Long id, Long taskId, Map<String,Object> body) { throw unsupported(); }
             public Project taskReject(Long id, Long taskId, Map<String,Object> body) { throw unsupported(); }
+            public Project taskCancelReject(Long id, Long taskId, Long cycleId, Map<String,Object> body) { throw unsupported(); }
             public Project submitScoring(Long id, Long taskId, Map<String,Object> body) { throw unsupported(); }
             public List<Map<String,Object>> getDeliveryVersions(Long taskId) { return List.of(); }
             public double currentScoringWeight(String type, String role) { throw unsupported(); }
@@ -840,6 +844,26 @@ public class ProjectController {
         }
     }
 
+    /** 取消当前最新一次误驳回，并精确恢复驳回前状态。 */
+    @PostMapping("/{projectId}/tasks/{taskId}/rejections/{cycleId}/cancel")
+    public ResponseEntity<?> taskCancelReject(
+            @PathVariable Long projectId,
+            @PathVariable Long taskId,
+            @PathVariable Long cycleId,
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        try {
+            String permission = reviewPermission(getSession(request), false);
+            ResponseEntity<?> denied = denyUnless(request, permission);
+            if (denied != null) return denied;
+            Project p = subTaskCommandService.taskCancelReject(
+                    projectId, taskId, cycleId, withSessionContext(body, request));
+            return ResponseEntity.ok(toDetail(p));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     /** 提交评分 */
     @PostMapping("/{projectId}/tasks/{taskId}/score")
     public ResponseEntity<?> submitScore(
@@ -1153,10 +1177,19 @@ public class ProjectController {
                 scoringMap.computeIfAbsent(sr.getSubTask().getId(), k -> new java.util.ArrayList<>()).add(m);
             });
         }
+        Map<Long, List<SubTaskRejectionCycle>> rejectionCycles = rejectionCycleRepository == null ? Map.of()
+                : rejectionCycleRepository.findBySubTaskIdInOrderBySubTaskIdAscSequenceNoAsc(
+                        taskList.stream().map(SubTask::getId).toList()).stream()
+                .collect(Collectors.groupingBy(c -> c.getSubTask().getId(), LinkedHashMap::new, Collectors.toList()));
         dto.setTasks(taskList.stream().map(t -> {
             TaskDetailDTO tDto = toTaskDetail(t);
             tDto.setScoringRecords(scoringMap.getOrDefault(t.getId(), List.of()));
-            tDto.setRejectionRecords(rejectionRecords(p, t, effectiveLogs));
+            List<SubTaskRejectionCycle> cycles = rejectionCycles.getOrDefault(t.getId(), List.of());
+            tDto.setRejectionRecords(rejectionRecords(p, t, effectiveLogs, cycles));
+            cycles.stream().filter(c -> "ACTIVE".equals(c.getStatus())).findFirst().ifPresent(c -> {
+                tDto.setActiveRejectionCycleId(c.getId());
+                tDto.setActiveRejectionRole(c.getRejectionRole());
+            });
             tDto.setDeliveryVersions(subTaskCommandService.getDeliveryVersions(t.getId()));
             return tDto;
         }).collect(Collectors.toList()));
@@ -1178,7 +1211,8 @@ public class ProjectController {
     }
 
     private List<Map<String, Object>> rejectionRecords(Project project, SubTask task,
-                                                        List<ActivityLog> preloadedLogs) {
+                                                        List<ActivityLog> preloadedLogs,
+                                                        List<SubTaskRejectionCycle> cycles) {
         String legacyPrefix = "子任务驳回：" + task.getName() + "（意见：";
         List<ActivityLog> logs = (preloadedLogs != null ? preloadedLogs : project.getLogs()).stream()
                 .filter(log -> log.getAction() != null && log.getAction().startsWith("子任务驳回："))
@@ -1212,9 +1246,23 @@ public class ProjectController {
             record.put("actualDate", snapshot.getOrDefault("actualDate", task.getActualDate()));
             record.put("submittedByName", snapshot.getOrDefault("submittedByName", task.getDesignerName()));
             record.put("legacy", snapshot.isEmpty());
+            Long rejectionCycleId = rejection.get("rejectionCycleId") instanceof Number n ? n.longValue() : null;
+            cycles.stream().filter(c -> Objects.equals(c.getId(), rejectionCycleId)).findFirst().ifPresent(c -> {
+                record.put("cycleId", c.getId());
+                record.put("cancelled", "CANCELLED".equals(c.getStatus()));
+                record.put("cancelledAt", c.getCancelledAt() == null ? null : c.getCancelledAt().format(DTF));
+                record.put("cancelledByName", c.getCancelledByName());
+            });
             records.add(record);
         }
         return records;
+    }
+
+    private List<Map<String, Object>> rejectionRecords(Project project, SubTask task,
+                                                        List<ActivityLog> preloadedLogs) {
+        List<SubTaskRejectionCycle> cycles = rejectionCycleRepository == null ? List.of()
+                : rejectionCycleRepository.findBySubTaskIdInOrderBySubTaskIdAscSequenceNoAsc(List.of(task.getId()));
+        return rejectionRecords(project, task, preloadedLogs, cycles);
     }
 
     private Map<String, Object> parseJsonMap(String json) {

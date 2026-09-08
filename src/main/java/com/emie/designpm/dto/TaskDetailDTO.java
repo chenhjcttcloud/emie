@@ -47,5 +47,7 @@ public class TaskDetailDTO {
     private List<Map<String, Object>> scoringRecords;
     private List<Map<String, Object>> rejectionRecords;
     private List<Map<String, Object>> deliveryVersions;
+    private Long activeRejectionCycleId;
+    private String activeRejectionRole;
     private String createdAt;
 }

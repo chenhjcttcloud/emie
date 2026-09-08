@@ -21,6 +21,7 @@ public interface SubTaskCommandService {
     Project taskCorrectDelivery(Long projectId, Long taskId, Map<String, Object> body);
     Project taskApprove(Long projectId, Long taskId, Map<String, Object> body);
     Project taskReject(Long projectId, Long taskId, Map<String, Object> body);
+    Project taskCancelReject(Long projectId, Long taskId, Long cycleId, Map<String, Object> body);
     Project submitScoring(Long projectId, Long taskId, Map<String, Object> body);
     List<Map<String, Object>> getDeliveryVersions(Long taskId);
     default Map<Long, List<Map<String, Object>>> getDeliveryVersionsByTaskIds(Collection<Long> taskIds) { return Map.of(); }

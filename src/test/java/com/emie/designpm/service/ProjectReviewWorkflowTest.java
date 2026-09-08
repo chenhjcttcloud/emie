@@ -4,6 +4,7 @@ import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.ScoringRecord;
 import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.entity.SubTaskDeliveryVersion;
+import com.emie.designpm.entity.SubTaskRejectionCycle;
 import com.emie.designpm.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,7 @@ class ProjectReviewWorkflowTest {
     private SystemConfigRepository configs;
     private ProjectAccessService access;
     private NotificationWorkflowService notifications;
+    private SubTaskRejectionCycleRepository rejectionCycles;
     private UserService users;
     private DefaultSubTaskCommandService service;
     private ProjectService queryService;
@@ -42,6 +44,7 @@ class ProjectReviewWorkflowTest {
         access = mock(ProjectAccessService.class);
         notifications = mock(NotificationWorkflowService.class);
         users = mock(UserService.class);
+        rejectionCycles = mock(SubTaskRejectionCycleRepository.class);
         when(configs.findByConfigKey(anyString())).thenReturn(Optional.empty());
         service = new DefaultSubTaskCommandService(
                 projects,
@@ -57,6 +60,7 @@ class ProjectReviewWorkflowTest {
                 access,
                 notifications
         );
+        service.setRejectionCycleRepository(rejectionCycles);
         queryService = new ProjectService(projects, subTasks, scoring, deliveryVersions, users,
                 mock(ProductCategoryRepository.class), mock(IpOptionRepository.class), configs,
                 mock(SyncQueueService.class), mock(FileArchiveService.class), access, notifications);
@@ -329,6 +333,70 @@ class ProjectReviewWorkflowTest {
         assertTrue(project.getLogs().get(0).getAfterData().contains("二审需修改"));
         assertTrue(project.getLogs().get(0).getAfterData().contains("rejectionReferenceImagesJson"));
         assertTrue(project.getLogs().get(0).getAfterData().contains("rejectionAttachmentsJson"));
+    }
+
+    @Test
+    void cancellingSalesRejectionRestoresExactSecondReviewAndTaskState() {
+        Project project = projectWithTask("channel_custom", "planner_approved");
+        SubTask task = project.getTasks().get(0);
+        task.setPlannedDate("2026-08-01");
+        task.setReviewComments("一审通过");
+        ScoringRecord secondReview = review(task, "sales", "second");
+        secondReview.setReviewerId("sales-old");
+        secondReview.setReviewerName("销售旧审核人");
+        secondReview.setComment("待确认");
+        secondReview.setScore(86);
+        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scoring.findBySubTaskIdAndRole(11L, "sales")).thenReturn(Optional.of(secondReview));
+        when(rejectionCycles.findFirstBySubTaskIdOrderBySequenceNoDesc(11L)).thenReturn(Optional.empty());
+        when(rejectionCycles.save(any(SubTaskRejectionCycle.class))).thenAnswer(invocation -> {
+            SubTaskRejectionCycle cycle = invocation.getArgument(0);
+            if (cycle.getId() == null) cycle.setId(201L);
+            return cycle;
+        });
+
+        service.taskReject(1L, 11L, Map.of(
+                "currentRole", "sales", "currentUserId", "sales-1", "currentUser", "销售甲",
+                "comments", "错误驳回", "requiredCompletionDate", "2026-08-15"));
+
+        ArgumentCaptor<SubTaskRejectionCycle> captor = ArgumentCaptor.forClass(SubTaskRejectionCycle.class);
+        verify(rejectionCycles, atLeastOnce()).save(captor.capture());
+        SubTaskRejectionCycle cycle = captor.getAllValues().getFirst();
+        when(rejectionCycles.findById(201L)).thenReturn(Optional.of(cycle));
+        when(rejectionCycles.findFirstBySubTaskIdAndStatusOrderBySequenceNoDesc(11L, "ACTIVE"))
+                .thenReturn(Optional.of(cycle));
+
+        service.taskCancelReject(1L, 11L, 201L, Map.of(
+                "currentRole", "sales", "currentUserId", "sales-1", "currentUser", "销售甲"));
+
+        assertEquals("planner_approved", task.getStatus());
+        assertEquals("2026-08-01", task.getPlannedDate());
+        assertEquals("一审通过", task.getReviewComments());
+        assertEquals("pending", secondReview.getReviewStatus());
+        assertEquals("sales-old", secondReview.getReviewerId());
+        assertEquals("销售旧审核人", secondReview.getReviewerName());
+        assertEquals("待确认", secondReview.getComment());
+        assertEquals(86, secondReview.getScore());
+        assertEquals("CANCELLED", cycle.getStatus());
+        assertNotNull(cycle.getCancelledAt());
+        assertTrue(project.getLogs().stream().anyMatch(log -> log.getAction().startsWith("取消子任务驳回：")));
+    }
+
+    @Test
+    void cancelRejectionIsRejectedAfterAssigneeStartsRevision() {
+        Project project = projectWithTask("regular", "rejected");
+        SubTaskRejectionCycle cycle = new SubTaskRejectionCycle();
+        cycle.setId(202L); cycle.setSubTask(project.getTasks().get(0)); cycle.setSequenceNo(1);
+        cycle.setStatus("ACTIVE"); cycle.setRejectionRole("planner"); cycle.setPriorTaskStatus("delivered");
+        when(rejectionCycles.findById(202L)).thenReturn(Optional.of(cycle));
+
+        project.getTasks().get(0).setStatus("accepted");
+        RuntimeException error = assertThrows(RuntimeException.class, () -> service.taskCancelReject(
+                1L, 11L, 202L, Map.of("currentRole", "planner", "currentUserId", "planner-1", "currentUser", "企划甲")));
+
+        assertTrue(error.getMessage().contains("已开始修改"));
+        verify(rejectionCycles, never()).save(any());
     }
 
     @Test

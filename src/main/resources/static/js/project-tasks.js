@@ -852,6 +852,16 @@ async function taskConfirmRevision(pid, tid) {
   } catch (e) { window.EMIE.actions.showSystemAlert('确认修改失败: ' + e.message); }
 }
 
+async function taskCancelReject(pid, tid, cycleId) {
+  if (!await EMIE.actions.showSystemConfirm('确认取消这次驳回吗？子任务将恢复到驳回前的状态、截止时间和审核进度。')) return;
+  try {
+    await apiPost(`/projects/${pid}/tasks/${tid}/rejections/${cycleId}/cancel`, {
+      currentUser: getCurrentUserName(), currentRole: EMIE.state.currentRole, currentUserId: getCurrentUserId()
+    });
+    await refreshAfterMutation(pid);
+  } catch (e) { window.EMIE.actions.showSystemAlert('取消驳回失败: ' + e.message); }
+}
+
 async function submitTaskRedeliver(pid, tid) {
   if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
   if (EMIE.projectState.deliverImages.length + EMIE.projectState.deliverLibraryImages.length > 6) { window.EMIE.actions.showSystemAlert('本地图片和关联图档合计最多 6 张'); return; }
@@ -1140,6 +1150,7 @@ EMIE.registerActions({
   submitTaskReview,
   taskRedeliver,
   taskConfirmRevision,
+  taskCancelReject,
   taskCorrectDelivery,
   submitTaskCorrectDelivery,
   submitTaskRedeliver,
@@ -1176,6 +1187,7 @@ EMIE.registerModule('projectTasks', {
   submitTaskReview,
   taskRedeliver,
   taskConfirmRevision,
+  taskCancelReject,
   taskCorrectDelivery,
   submitTaskCorrectDelivery,
   submitTaskRedeliver,

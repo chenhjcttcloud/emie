@@ -62,6 +62,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
     private NotificationRepository notificationRepository;
     private FileRecordRepository fileRecordRepository;
     private DesignRequirementScoringService designRequirementScoringService;
+    private SubTaskRejectionCycleRepository rejectionCycleRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public DefaultSubTaskCommandService(ProjectRepository projectRepository,
@@ -110,6 +111,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
     void setFileRecordRepository(FileRecordRepository repository) { this.fileRecordRepository = repository; }
     @Autowired(required = false)
     void setDesignRequirementScoringService(DesignRequirementScoringService service) { this.designRequirementScoringService = service; }
+    @Autowired
+    void setRejectionCycleRepository(SubTaskRejectionCycleRepository repository) { this.rejectionCycleRepository = repository; }
     @Autowired(required = false)
     void setSubTaskAssignmentPolicy(SubTaskAssignmentPolicy policy) { this.subTaskAssignmentPolicy = policy; }
     @Autowired(required = false)
@@ -1343,6 +1346,25 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (!canReject || !canReviewTask(p, task, currentRole, currentUserId)) {
             throw new RuntimeException("当前角色或任务状态无法驳回");
         }
+        ScoringRecord priorReview = scoringRepository.findBySubTaskIdAndRole(task.getId(), currentRole).orElse(null);
+        SubTaskRejectionCycle latestCycle = rejectionCycleRepository
+                .findFirstBySubTaskIdOrderBySequenceNoDesc(task.getId()).orElse(null);
+        SubTaskRejectionCycle cycle = new SubTaskRejectionCycle();
+        cycle.setSubTask(task);
+        cycle.setSequenceNo(latestCycle == null ? 1 : latestCycle.getSequenceNo() + 1);
+        cycle.setRejectionRole(currentRole);
+        cycle.setRejectedById(currentUserId);
+        cycle.setRejectedByName(currentUser);
+        cycle.setRejectedAt(LocalDateTime.now());
+        cycle.setPriorTaskStatus(task.getStatus());
+        cycle.setPriorPlannedDate(task.getPlannedDate());
+        cycle.setPriorReviewComments(task.getReviewComments());
+        cycle.setPriorReviewSnapshotJson(toJson(reviewSnapshot(priorReview)));
+        cycle.setReason(comments);
+        cycle.setRequiredCompletionDate(requiredCompletionDate);
+        cycle.setReferenceImagesJson(rejectionReferenceImagesJson);
+        cycle.setAttachmentsJson(rejectionAttachmentsJson);
+        rejectionCycleRepository.save(cycle);
         rejectReviewRecord(task, currentRole, currentUserId, currentUser, comments);
         task.setStatus("rejected");
         task.setReviewComments(comments);
@@ -1359,6 +1381,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         rejectionSnapshot.put("requiredCompletionDate", requiredCompletionDate);
         rejectionSnapshot.put("rejectionReferenceImagesJson", rejectionReferenceImagesJson);
         rejectionSnapshot.put("rejectionAttachmentsJson", rejectionAttachmentsJson);
+        rejectionSnapshot.put("rejectionCycleId", cycle.getId());
         p.getLogs().add(new ActivityLog(
                 "子任务驳回：" + task.getName() + "（意见：" + comments + "）",
                 currentUser, currentRole, p, "sub_task", task.getId(),
@@ -1372,6 +1395,104 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                 notificationContext(p, task, currentUser, comments));
         return saved;
     }
+
+    public Project taskCancelReject(Long projectId, Long taskId, Long cycleId, Map<String, Object> body) {
+        Project p = lockProject(projectId);
+        if (List.of("terminated", "paused", "pending_terminate").contains(p.getStatus())) {
+            throw new RuntimeException("当前项目状态不允许取消驳回");
+        }
+        SubTask task = lockSubTask(projectId, taskId);
+        if (!"rejected".equals(task.getStatus())) {
+            throw new RuntimeException("子任务已开始修改或重新交付，无法取消驳回");
+        }
+        SubTaskRejectionCycle cycle = rejectionCycleRepository.findById(cycleId)
+                .orElseThrow(() -> new RuntimeException("驳回记录不存在或属于旧版本，无法取消"));
+        SubTaskRejectionCycle latest = rejectionCycleRepository
+                .findFirstBySubTaskIdAndStatusOrderBySequenceNoDesc(taskId, "ACTIVE")
+                .orElseThrow(() -> new RuntimeException("当前没有可取消的驳回记录"));
+        if (!Objects.equals(cycle.getSubTask().getId(), taskId) || !Objects.equals(latest.getId(), cycleId)
+                || !"ACTIVE".equals(cycle.getStatus())) {
+            throw new RuntimeException("只能取消当前生效的最近一次驳回");
+        }
+        String currentRole = (String) body.getOrDefault("currentRole", "");
+        String currentUserId = (String) body.getOrDefault("currentUserId", "");
+        if (!Objects.equals(currentRole, cycle.getRejectionRole())
+                || !canReviewTask(p, task, currentRole, currentUserId)) {
+            throw new RuntimeException("仅当前审核阶段的审核人可取消驳回");
+        }
+
+        task.setStatus(cycle.getPriorTaskStatus());
+        task.setPlannedDate(cycle.getPriorPlannedDate());
+        task.setReviewComments(cycle.getPriorReviewComments());
+        restoreReviewSnapshot(task, cycle.getRejectionRole(), cycle.getPriorReviewSnapshotJson());
+
+        String currentUser = (String) body.getOrDefault("currentUser", "");
+        cycle.setStatus("CANCELLED");
+        cycle.setCancelledById(currentUserId);
+        cycle.setCancelledByName(currentUser);
+        cycle.setCancelledByRole(currentRole);
+        cycle.setCancelledAt(LocalDateTime.now());
+        rejectionCycleRepository.save(cycle);
+        p.getLogs().add(new ActivityLog(
+                "取消子任务驳回：" + task.getName() + "（恢复至：" + cycle.getPriorTaskStatus() + "）",
+                currentUser, currentRole, p, "sub_task", task.getId(),
+                toJson(Map.of("status", "rejected", "rejectionCycleId", cycle.getId())),
+                toJson(Map.of("status", cycle.getPriorTaskStatus(), "rejectionCycleId", cycle.getId())),
+                "status,plannedDate,reviewComments,scoringRecord"));
+        return projectRepository.saveAndFlush(p);
+    }
+
+    private Map<String, Object> reviewSnapshot(ScoringRecord record) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("existed", record != null);
+        if (record == null) return snapshot;
+        snapshot.put("role", record.getRole());
+        snapshot.put("scoreType", record.getScoreType());
+        snapshot.put("reviewStage", record.getReviewStage());
+        snapshot.put("reviewStatus", record.getReviewStatus());
+        snapshot.put("reviewerId", record.getReviewerId());
+        snapshot.put("reviewerName", record.getReviewerName());
+        snapshot.put("reviewedAt", record.getReviewedAt() == null ? null : record.getReviewedAt().toString());
+        snapshot.put("comment", record.getComment());
+        snapshot.put("score", record.getScore());
+        snapshot.put("aesthetics", record.getAesthetics());
+        snapshot.put("innovation", record.getInnovation());
+        snapshot.put("weight", record.getWeight());
+        return snapshot;
+    }
+
+    private void restoreReviewSnapshot(SubTask task, String role, String json) {
+        Map<String, Object> snapshot;
+        try {
+            snapshot = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception e) {
+            throw new RuntimeException("驳回前审核快照损坏，无法安全恢复");
+        }
+        ScoringRecord current = scoringRepository.findBySubTaskIdAndRole(task.getId(), role).orElse(null);
+        if (!Boolean.TRUE.equals(snapshot.get("existed"))) {
+            if (current != null) scoringRepository.delete(current);
+            return;
+        }
+        ScoringRecord record = current == null ? new ScoringRecord() : current;
+        record.setSubTask(task);
+        record.setRole((String) snapshot.get("role"));
+        record.setScoreType((String) snapshot.get("scoreType"));
+        record.setReviewStage((String) snapshot.get("reviewStage"));
+        record.setReviewStatus((String) snapshot.get("reviewStatus"));
+        record.setReviewerId((String) snapshot.get("reviewerId"));
+        record.setReviewerName((String) snapshot.get("reviewerName"));
+        Object reviewedAt = snapshot.get("reviewedAt");
+        record.setReviewedAt(reviewedAt == null ? null : LocalDateTime.parse(String.valueOf(reviewedAt)));
+        record.setComment((String) snapshot.get("comment"));
+        record.setScore(integerNumber(snapshot.get("score")));
+        record.setAesthetics(doubleNumber(snapshot.get("aesthetics")));
+        record.setInnovation(doubleNumber(snapshot.get("innovation")));
+        record.setWeight(doubleNumber(snapshot.get("weight")));
+        scoringRepository.save(record);
+    }
+
+    private Integer integerNumber(Object value) { return value instanceof Number n ? n.intValue() : null; }
+    private Double doubleNumber(Object value) { return value instanceof Number n ? n.doubleValue() : null; }
 
     private void rejectReviewRecord(SubTask task, String role, String reviewerId,
                                     String reviewerName, String comment) {

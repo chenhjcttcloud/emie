@@ -31,6 +31,7 @@ const taskRedeliver = (...args) => EMIE.actions.taskRedeliver(...args);
 const taskConfirmRevision = (...args) => EMIE.actions.taskConfirmRevision(...args);
 const taskApprove = (...args) => EMIE.actions.taskApprove(...args);
 const taskReject = (...args) => EMIE.actions.taskReject(...args);
+const taskCancelReject = (...args) => EMIE.actions.taskCancelReject(...args);
 const taskCorrectDelivery = (...args) => EMIE.actions.taskCorrectDelivery(...args);
 const submitTaskReview = (...args) => EMIE.actions.submitTaskReview(...args);
 const clearSWRCache = (...args) => EMIE.actions.clearSWRCache(...args);
@@ -307,6 +308,11 @@ function renderSubTaskCard(detail, task, idx) {
       ` : ''}
       ${myTask && task.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-accept" data-project-id="${detail.id}" data-task-id="${task.id}">✅ 接单</button>` : ''}
       ${myTask && task.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-deliver" data-project-id="${detail.id}" data-task-id="${task.id}">📤 交付成果</button>` : ''}
+      ${task.status === 'rejected' && task.activeRejectionCycleId && task.activeRejectionRole === EMIE.state.currentRole && (
+        (isPlanner && task.activeRejectionRole === 'planner')
+        || (EMIE.state.currentRole === 'sales' && detail.type === 'channel_custom')
+        || (EMIE.state.currentRole === 'admin' && detail.type !== 'channel_custom')
+      ) ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-cancel-reject" data-project-id="${detail.id}" data-task-id="${task.id}" data-cycle-id="${task.activeRejectionCycleId}">↩️ 取消驳回</button>` : ''}
       ${myTask && task.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-action="click:detail-task-confirm-revision" data-project-id="${detail.id}" data-task-id="${task.id}">🛠️ 确认修改</button>` : ''}
       ${myTask && ['delivered', 'planner_approved', 'sales_approved', 'admin_approved'].includes(task.status) ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-correct" data-project-id="${detail.id}" data-task-id="${task.id}">📝 修正交付</button>` : ''}
       ${isPlanner && detail.status !== 'paused' && (task.status === 'pending' || task.status === 'accepted') ? `
@@ -386,7 +392,7 @@ function openProjectSubTaskDetail(event, taskId) {
           ${records.length ? records.map(record => `
             <button type="button" data-emie-action="click:detail-rejection-record" data-task-id="${task.id}" data-attempt-no="${record.attemptNo}"
               style="width:100%;display:flex;align-items:center;gap:8px;padding:10px 12px;margin-bottom:8px;border:1px solid #F3C1C1;border-radius:9px;background:#FFF8F8;cursor:pointer;text-align:left;">
-              <strong style="color:#A32D2D;white-space:nowrap;">第 ${record.attemptNo} 次修改要求</strong>
+              <strong style="color:#A32D2D;white-space:nowrap;">第 ${record.attemptNo} 次修改要求${record.cancelled ? '（已取消）' : ''}</strong>
               <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray-600);">${escHtml(record.reason || '未填写修改意见')}</span>
               <span style="font-size:11px;color:var(--gray-400);white-space:nowrap;">${fmtDT(record.reviewedAt)}</span>
               <span style="color:var(--primary);white-space:nowrap;">查看详情 ›</span>
@@ -416,7 +422,7 @@ function openTaskRejectionRecord(taskId, attemptNo) {
       <div class="modal-header">
         <button class="modal-close" data-emie-action="click:detail-rejection-close">✕</button>
         <div class="modal-header-left">
-          <div class="modal-title">↩ 第 ${record.attemptNo} 次驳回详情</div>
+          <div class="modal-title">↩ 第 ${record.attemptNo} 次驳回详情${record.cancelled ? '（已取消）' : ''}</div>
           <div style="font-size:12px;color:var(--gray-400);margin-top:3px;">${escHtml(task.name)} · ${fmtDT(record.reviewedAt)}</div>
         </div>
       </div>
@@ -441,6 +447,7 @@ function openTaskRejectionRecord(taskId, attemptNo) {
           <div style="font-size:13px;line-height:1.7;color:var(--gray-700);white-space:pre-wrap;">${escHtml(record.reason || '未填写驳回意见')}</div>
           ${rejectionImages ? `<div style="margin-top:14px;"><div class="detail-label">驳回参考图</div>${rejectionImages}</div>` : ''}
           ${rejectionAttachments ? `<div style="margin-top:14px;"><div class="detail-label">驳回附件</div>${rejectionAttachments}</div>` : ''}
+          ${record.cancelled ? `<div style="margin-top:10px;font-size:12px;color:var(--success);">该次驳回已由 ${escHtml(record.cancelledByName || '审核人')} 于 ${fmtDT(record.cancelledAt)} 取消，历史记录保留。</div>` : ''}
         </div>
       </div>
       <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:detail-rejection-close">关闭</button></div>
@@ -1143,6 +1150,8 @@ if (registerEventAction) {
     taskApprove(Number(element.dataset.projectId), Number(element.dataset.taskId), element.dataset.projectType));
   registerEventAction('detail-task-reject', (_event, element) =>
     taskReject(Number(element.dataset.projectId), Number(element.dataset.taskId)));
+  registerEventAction('detail-task-cancel-reject', (_event, element) =>
+    taskCancelReject(Number(element.dataset.projectId), Number(element.dataset.taskId), Number(element.dataset.cycleId)));
   registerEventAction('detail-task-accept', (_event, element) =>
     taskAccept(Number(element.dataset.projectId), Number(element.dataset.taskId)));
   registerEventAction('detail-task-deliver', (_event, element) =>
