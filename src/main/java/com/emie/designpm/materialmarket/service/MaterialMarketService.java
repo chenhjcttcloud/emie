@@ -1,7 +1,7 @@
 package com.emie.designpm.materialmarket.service;
 
 import com.emie.designpm.file.service.FileArchiveService;
-import com.emie.designpm.service.NotificationWorkflowService;
+import com.emie.designpm.notification.service.NotificationWorkflowService;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.repository.*;
 import com.emie.designpm.util.SecurityUtil;

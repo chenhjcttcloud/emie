@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
     @Index(name = "idx_scoring_task_role", columnList = "sub_task_id,role"),
     @Index(name = "idx_scoring_role_status_task", columnList = "role,reviewStatus,sub_task_id")
 })
-@EntityListeners(com.emie.designpm.service.ScoringSyncListener.class)
+@EntityListeners(com.emie.designpm.sync.service.ScoringSyncListener.class)
 public class ScoringRecord {
 
     @Id

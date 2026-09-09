@@ -1,5 +1,7 @@
 package com.emie.designpm.service;
 
+import com.emie.designpm.notification.service.NotificationWorkflowService;
+import com.emie.designpm.sync.service.SyncQueueService;
 import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.entity.DesignerMarketEligibility;
 import com.emie.designpm.entity.Project;

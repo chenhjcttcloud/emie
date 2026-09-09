@@ -9,7 +9,7 @@ import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.service.ProjectAccessService;
 import com.emie.designpm.service.ProjectService;
 import com.emie.designpm.service.ProjectWorkflowService;
-import com.emie.designpm.service.FeishuChatService;
+import com.emie.designpm.feishu.service.FeishuChatService;
 import com.emie.designpm.service.SubTaskCommandService;
 import com.emie.designpm.service.ProjectLifecycleCommandService;
 import org.junit.jupiter.api.Test;

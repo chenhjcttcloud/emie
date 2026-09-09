@@ -1,0 +1,321 @@
+package com.emie.designpm.feishu.controller;
+
+import com.emie.designpm.auth.AuthSessions;
+import com.emie.designpm.repository.ProjectRepository;
+import com.emie.designpm.repository.ActivityLogRepository;
+import com.emie.designpm.repository.ScoringRepository;
+import com.emie.designpm.repository.SubTaskRepository;
+import com.emie.designpm.feishu.service.FeishuBaseService;
+import com.emie.designpm.sync.service.SyncQueueService;
+import com.emie.designpm.sync.service.SyncWorker;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+
+import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+
+/**
+ * 飞书同步管理接口
+ */
+@RestController
+@RequestMapping("/api/admin/sync")
+public class FeishuSyncController {
+
+    private static final int SYNC_ID_BATCH_SIZE = 500;
+
+    private final SyncQueueService syncQueueService;
+    private final FeishuBaseService feishuBaseService;
+    private final ProjectRepository projectRepository;
+    private final SubTaskRepository subTaskRepository;
+    private final ScoringRepository scoringRepository;
+    private final ActivityLogRepository activityLogRepository;
+    private final SyncWorker syncWorker;
+
+    @Autowired
+    public FeishuSyncController(SyncQueueService syncQueueService,
+                                FeishuBaseService feishuBaseService,
+                                ProjectRepository projectRepository,
+                                SubTaskRepository subTaskRepository,
+                                ScoringRepository scoringRepository,
+                                ActivityLogRepository activityLogRepository,
+                                Optional<SyncWorker> syncWorker) {
+        this.syncQueueService = syncQueueService;
+        this.feishuBaseService = feishuBaseService;
+        this.projectRepository = projectRepository;
+        this.subTaskRepository = subTaskRepository;
+        this.scoringRepository = scoringRepository;
+        this.activityLogRepository = activityLogRepository;
+        this.syncWorker = syncWorker.orElse(null);
+    }
+
+    /** 保留无 worker 的单元测试构造方式。 */
+    public FeishuSyncController(SyncQueueService syncQueueService,
+                                FeishuBaseService feishuBaseService,
+                                ProjectRepository projectRepository,
+                                SubTaskRepository subTaskRepository,
+                                ScoringRepository scoringRepository,
+                                ActivityLogRepository activityLogRepository) {
+        this(syncQueueService, feishuBaseService, projectRepository, subTaskRepository,
+                scoringRepository, activityLogRepository, Optional.empty());
+    }
+
+    /** 同步状态统计 */
+    @GetMapping("/stats")
+    public ResponseEntity<Map<String, Object>> getStats(HttpServletRequest request) {
+        if (!AuthSessions.isAdmin(request)) return forbidden();
+        return ResponseEntity.ok(syncQueueService.getStats());
+    }
+
+    /** 飞书 Base 配置 */
+    @GetMapping("/config")
+    public ResponseEntity<Map<String, String>> getConfig(HttpServletRequest request) {
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
+        return ResponseEntity.ok(feishuBaseService.getConfig());
+    }
+
+    /** 管理员手动消费一轮同步队列；复用定时任务的并发锁和失败重试逻辑。 */
+    @PostMapping("/process")
+    public ResponseEntity<Map<String, Object>> processOnce(HttpServletRequest request) {
+        if (!AuthSessions.isAdmin(request)) return forbidden();
+        if (syncWorker == null) return ResponseEntity.status(503).body(Map.of("message", "同步服务暂不可用"));
+        syncWorker.processQueue();
+        Map<String, Object> result = new LinkedHashMap<>(syncQueueService.getStats());
+        result.put("message", "已触发一轮同步处理");
+        return ResponseEntity.ok(result);
+    }
+
+    /** 精准重试单条失败同步任务。 */
+    @PostMapping("/queue/{queueId}/retry")
+    public ResponseEntity<Map<String, Object>> retryFailed(@PathVariable Long queueId,
+                                                            HttpServletRequest request) {
+        if (!AuthSessions.isAdmin(request)) return forbidden();
+        try {
+            return ResponseEntity.ok(syncQueueService.retryFailed(queueId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.unprocessableEntity().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * 只读检查备份表是否属于当前 Base 且当前应用可访问。
+     * 不创建、更新或重试任何飞书记录。
+     */
+    @PostMapping("/validate-backups")
+    public ResponseEntity<Map<String, Object>> validateBackups(HttpServletRequest request) {
+        if (!AuthSessions.isAdmin(request)) return forbidden();
+        try {
+            Map<String, Object> result = feishuBaseService.validateBackupTables();
+            return Boolean.TRUE.equals(result.get("valid"))
+                    ? ResponseEntity.ok(result)
+                    : ResponseEntity.unprocessableEntity().body(result);
+        } catch (Exception e) {
+            return ResponseEntity.status(502).body(Map.of(
+                    "valid", false,
+                    "message", "无法读取飞书数据表，请检查应用权限和网络后重试"));
+        }
+    }
+
+    /** 只读返回全部业务字段与飞书实际列类型的差异。 */
+    @GetMapping("/schema-diagnostics")
+    public ResponseEntity<Map<String, Object>> schemaDiagnostics(HttpServletRequest request) {
+        if (!AuthSessions.isAdmin(request)) return forbidden();
+        try {
+            return ResponseEntity.ok(feishuBaseService.diagnoseFieldSchema());
+        } catch (Exception e) {
+            return ResponseEntity.status(502).body(Map.of("error", "无法读取飞书字段结构"));
+        }
+    }
+
+    /** 创建/续建独立 V2 Base，仅写 staging 配置，不切换当前同步。 */
+    @GetMapping("/v2/status")
+    public ResponseEntity<Map<String, Object>> v2Status(HttpServletRequest request) {
+        if (!AuthSessions.isAdmin(request)) return forbidden();
+        return ResponseEntity.ok(feishuBaseService.getV2Status());
+    }
+
+    /** 创建/续建独立 V2 Base，仅写 staging 配置，不切换当前同步。 */
+    @PostMapping("/v2/prepare")
+    public ResponseEntity<Map<String, Object>> prepareV2(@RequestBody(required = false) Map<String, Object> body,
+                                                         HttpServletRequest request) {
+        if (!AuthSessions.isAdmin(request)) return forbidden();
+        try {
+            String appToken = body == null || body.get("appToken") == null ? "" : String.valueOf(body.get("appToken")).trim();
+            CompletableFuture.runAsync(() -> {
+                try { feishuBaseService.prepareV2Base(appToken); }
+                catch (Exception e) { /* 状态保留 preparing；下一次检查会重试并显示具体错误 */ }
+            });
+            return ResponseEntity.accepted().body(Map.of("started", true));
+        } catch (Exception e) {
+            // 保留飞书返回的可诊断错误（不包含凭据），避免把请求体错误误报成权限问题。
+            return ResponseEntity.status(502).body(Map.of(
+                    "error", "飞书 V2 准备失败：" + (e.getMessage() == null ? "未知错误" : e.getMessage())));
+        }
+    }
+
+    @PostMapping("/v2/activate")
+    public ResponseEntity<Map<String, Object>> activateV2(HttpServletRequest request) {
+        if (!AuthSessions.isAdmin(request)) return forbidden();
+        boolean activated = false;
+        try {
+            Map<String, Object> activationResult = feishuBaseService.activateV2Base();
+            activated = true;
+            ResponseEntity<Map<String, Object>> queued = fullResyncInternal();
+            if (!queued.getStatusCode().is2xxSuccessful()) {
+                feishuBaseService.rollbackV2Base();
+                return ResponseEntity.status(queued.getStatusCode()).body(Map.of(
+                        "error", "V2 首次全量同步无法入队，已自动回滚旧 Base 配置"));
+            }
+            Map<String, Object> result = new LinkedHashMap<>(activationResult);
+            result.put("initialSync", queued.getBody());
+            result.put("message", "V2 已激活，首次全量同步已入队；定时主表对账会补齐关联字段");
+            return ResponseEntity.ok(result);
+        } catch (IllegalStateException e) {
+            if (activated) {
+                try {
+                    feishuBaseService.rollbackV2Base();
+                    return ResponseEntity.status(502).body(Map.of("error", "V2 全量同步入队失败，已自动回滚旧 Base 配置"));
+                } catch (Exception rollbackError) {
+                    return ResponseEntity.status(500).body(Map.of("error", "V2 入队失败且自动回滚失败，请立即检查飞书同步配置"));
+                }
+            }
+            return ResponseEntity.unprocessableEntity().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            if (!activated) {
+                return ResponseEntity.status(502).body(Map.of("error", "V2 激活前校验失败，当前 Base 未切换"));
+            }
+            try {
+                feishuBaseService.rollbackV2Base();
+                return ResponseEntity.status(502).body(Map.of("error", "V2 全量同步入队失败，已自动回滚旧 Base 配置"));
+            } catch (Exception rollbackError) {
+                return ResponseEntity.status(500).body(Map.of("error", "V2 入队失败且自动回滚失败，请立即检查飞书同步配置"));
+            }
+        }
+    }
+
+    @PostMapping("/v2/rollback")
+    public ResponseEntity<Map<String, Object>> rollbackV2(HttpServletRequest request) {
+        if (!AuthSessions.isAdmin(request)) return forbidden();
+        try {
+            return ResponseEntity.ok(feishuBaseService.rollbackV2Base());
+        } catch (IllegalStateException e) {
+            return ResponseEntity.unprocessableEntity().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** 全量重刷（重新入队所有数据） */
+    @PostMapping("/full-resync")
+    public ResponseEntity<Map<String, Object>> fullResync(HttpServletRequest request) {
+        if (!AuthSessions.isAdmin(request)) return forbidden();
+        return fullResyncInternal();
+    }
+
+    /** 保留服务层单元测试的无参调用入口；不暴露为 HTTP 映射。 */
+    ResponseEntity<Map<String, Object>> fullResync() {
+        return fullResyncInternal();
+    }
+
+    private ResponseEntity<Map<String, Object>> fullResyncInternal() {
+        try {
+            Map<String, Object> validation = feishuBaseService.validateBackupTables();
+            if (!Boolean.TRUE.equals(validation.get("valid"))) {
+                Map<String, Object> result = new LinkedHashMap<>(validation);
+                result.put("message", "备份表预检失败，未执行全量重刷");
+                return ResponseEntity.unprocessableEntity().body(result);
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(502).body(Map.of(
+                    "valid", false,
+                    "message", "无法完成备份表预检，未执行全量重刷"));
+        }
+        List<Long> projectIds = readIdsInBatches(projectRepository::findIdsAfter);
+        List<Long> taskIds = readIdsInBatches(subTaskRepository::findIdsAfter);
+        List<Long> scoringIds = readIdsInBatches(scoringRepository::findIdsAfter);
+        List<Long> logIds = readIdsInBatches(activityLogRepository::findIdsAfter);
+
+        try {
+            feishuBaseService.reconcileMirrors(
+                    new java.util.HashSet<>(projectIds), new java.util.HashSet<>(taskIds),
+                    new java.util.HashSet<>(scoringIds), new java.util.HashSet<>(logIds));
+        } catch (Exception e) {
+            return ResponseEntity.status(502).body(Map.of(
+                    "message", "主表镜像删除对账失败，未执行全量重刷"));
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("project", syncQueueService.enqueueAll("project", projectIds));
+        result.put("sub_task", syncQueueService.enqueueAll("sub_task", taskIds));
+        result.put("scoring_record", syncQueueService.enqueueAll("scoring_record", scoringIds));
+        result.put("activity_log", syncQueueService.enqueueAll("activity_log", logIds));
+        result.put("message", "全量重刷已入队");
+        return ResponseEntity.ok(result);
+    }
+
+    @FunctionalInterface
+    private interface IdBatchReader {
+        List<Long> read(Long afterId, Pageable pageRequest);
+    }
+
+    private List<Long> readIdsInBatches(IdBatchReader reader) {
+        List<Long> ids = new java.util.ArrayList<>();
+        long afterId = 0L;
+        while (true) {
+            List<Long> batch = reader.read(afterId, PageRequest.of(0, SYNC_ID_BATCH_SIZE));
+            if (batch.isEmpty()) break;
+            ids.addAll(batch);
+            afterId = batch.get(batch.size() - 1);
+            if (batch.size() < SYNC_ID_BATCH_SIZE) break;
+        }
+        return ids;
+    }
+
+    /** 初始化飞书 Base（机器人自动创建多维表格） */
+    @PostMapping("/init")
+    public ResponseEntity<Map<String, Object>> initBase(HttpServletRequest request) {
+        if (!AuthSessions.isAdmin(request)) return forbidden();
+        try {
+            Map<String, Object> result = feishuBaseService.initBase();
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            Map<String, Object> err = new LinkedHashMap<>();
+            err.put("error", "飞书 Base 初始化失败，请检查配置后重试");
+            return ResponseEntity.status(500).body(err);
+        }
+    }
+
+    /** 为当前主表和备份表补齐两级审核同步字段。 */
+    @PostMapping("/ensure-review-fields")
+    public ResponseEntity<Map<String, Object>> ensureReviewFields(HttpServletRequest request) {
+        if (!AuthSessions.isAdmin(request)) return forbidden();
+        try {
+            return ResponseEntity.ok(feishuBaseService.ensureReviewWorkflowFields());
+        } catch (Exception e) {
+            return ResponseEntity.status(502).body(Map.of(
+                    "error", "补充飞书审核字段失败，请检查表格权限及同名字段类型"));
+        }
+    }
+
+    /** 为当前八张表补齐主表镜像与备份保留策略字段。 */
+    @PostMapping("/ensure-mirror-fields")
+    public ResponseEntity<Map<String, Object>> ensureMirrorFields(HttpServletRequest request) {
+        if (!AuthSessions.isAdmin(request)) return forbidden();
+        try {
+            return ResponseEntity.ok(feishuBaseService.ensureMirrorStrategyFields());
+        } catch (Exception e) {
+            return ResponseEntity.status(502).body(Map.of(
+                    "error", "补充飞书镜像字段失败，请检查表格权限及同名字段类型"));
+        }
+    }
+
+    private ResponseEntity<Map<String, Object>> forbidden() {
+        return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
+    }
+}
