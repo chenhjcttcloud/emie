@@ -26,5 +26,34 @@ jobs:
       - name: Verify Java version
         run: java -version
 
+      # 单元测试 + 架构护栏（ArchitectureRulesTest / ClassSizeCeilingTest）
       - name: Build and test
         run: ./mvnw -B clean package
+
+  container-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # compose 文件要求这些变量存在；CI 用一次性容器，随便给值即可。
+      - name: Write ephemeral test env
+        run: |
+          cat > .env <<'ENV'
+          DESIGNPM_TEST_DB_NAME=designpmtest
+          DESIGNPM_TEST_DB_USER=ci
+          DESIGNPM_TEST_DB_PASSWORD=ci-pass
+          DESIGNPM_TEST_DB_ROOT_PASSWORD=ci-root-pass
+          SPRING_DATA_REDIS_PASSWORD=ci-redis-pass
+          APP_DB_POOL_ISOLATION_ENABLED=true
+          ENV
+
+      - name: Container smoke (compose up + health + assets + startup log)
+        run: ./scripts/container-smoke.sh
