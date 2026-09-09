@@ -1,5 +1,8 @@
 package com.emie.designpm;
 
+import com.emie.designpm.admin.service.UserService;
+import com.emie.designpm.project.service.ProjectAccessService;
+import com.emie.designpm.project.service.ProjectService;
 import com.emie.designpm.notification.service.NotificationWorkflowService;
 import com.emie.designpm.sync.service.SyncQueueService;
 import com.emie.designpm.file.service.FileArchiveService;
@@ -7,7 +10,6 @@ import com.emie.designpm.entity.IpOption;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.*;
-import com.emie.designpm.service.*;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;

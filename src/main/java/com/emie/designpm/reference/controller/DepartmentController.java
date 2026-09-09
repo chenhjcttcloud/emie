@@ -4,7 +4,7 @@ import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.Department;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.DepartmentRepository;
-import com.emie.designpm.service.UserService;
+import com.emie.designpm.admin.service.UserService;
 import com.emie.designpm.util.SecurityUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;

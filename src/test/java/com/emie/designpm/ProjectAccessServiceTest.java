@@ -8,8 +8,8 @@ import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.DepartmentRepository;
 import com.emie.designpm.repository.ProjectRepository;
 import com.emie.designpm.repository.UserRepository;
-import com.emie.designpm.service.ProjectAccessService;
-import com.emie.designpm.service.PermissionService;
+import com.emie.designpm.project.service.ProjectAccessService;
+import com.emie.designpm.admin.service.PermissionService;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

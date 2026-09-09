@@ -9,7 +9,7 @@ import com.emie.designpm.repository.ProjectRepository;
 import com.emie.designpm.repository.ScoringRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.repository.UserRepository;
-import com.emie.designpm.service.ProjectService;
+import com.emie.designpm.project.service.ProjectService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.data.domain.Page;

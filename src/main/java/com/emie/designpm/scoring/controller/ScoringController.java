@@ -1,7 +1,7 @@
 package com.emie.designpm.scoring.controller;
 
 import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.service.ProjectService;
+import com.emie.designpm.project.service.ProjectService;
 import com.emie.designpm.designrequirement.service.DesignRequirementScoringService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;

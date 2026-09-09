@@ -2,7 +2,7 @@ package com.emie.designpm.config;
 
 import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.service.PermissionService;
+import com.emie.designpm.admin.service.PermissionService;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

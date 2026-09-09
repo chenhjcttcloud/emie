@@ -1,6 +1,6 @@
 package com.emie.designpm.config;
 
-import com.emie.designpm.service.ProjectExcelImportService;
+import com.emie.designpm.project.service.ProjectExcelImportService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
