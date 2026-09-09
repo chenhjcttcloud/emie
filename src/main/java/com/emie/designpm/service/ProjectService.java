@@ -1,5 +1,7 @@
 package com.emie.designpm.service;
 
+import com.emie.designpm.designrequirement.service.DesignRequirementScoringService;
+import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.dto.ProjectListQuery;
 import com.emie.designpm.entity.*;

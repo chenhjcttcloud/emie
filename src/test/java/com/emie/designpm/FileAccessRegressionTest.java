@@ -1,7 +1,7 @@
 package com.emie.designpm;
 
 import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.controller.FileController;
+import com.emie.designpm.file.controller.FileController;
 import com.emie.designpm.entity.FileRecord;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.repository.FileRecordRepository;
@@ -9,8 +9,8 @@ import com.emie.designpm.repository.DesignRequirementRepository;
 import com.emie.designpm.repository.MaterialMarketItemRepository;
 import com.emie.designpm.repository.ProjectRepository;
 import com.emie.designpm.repository.SubTaskRepository;
-import com.emie.designpm.service.FileArchiveService;
-import com.emie.designpm.service.FilePreviewService;
+import com.emie.designpm.file.service.FileArchiveService;
+import com.emie.designpm.file.service.FilePreviewService;
 import com.emie.designpm.service.ProjectAccessService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
@@ -232,7 +232,7 @@ class FileAccessRegressionTest {
         SubTaskRepository tasks = mock(SubTaskRepository.class);
         DesignRequirementRepository requirements = mock(DesignRequirementRepository.class);
         FileController controller = new FileController(mock(FileArchiveService.class), records, access, tasks,
-                mock(FilePreviewService.class), mock(com.emie.designpm.service.FileThumbnailService.class),
+                mock(FilePreviewService.class), mock(com.emie.designpm.file.service.FileThumbnailService.class),
                 requirements);
 
         FileRecord deliveryImage = FileRecord.builder()
@@ -262,7 +262,7 @@ class FileAccessRegressionTest {
         SubTaskRepository tasks = mock(SubTaskRepository.class);
         MaterialMarketItemRepository materials = mock(MaterialMarketItemRepository.class);
         FileController controller = new FileController(mock(FileArchiveService.class), records, access, tasks,
-                mock(FilePreviewService.class), mock(com.emie.designpm.service.FileThumbnailService.class),
+                mock(FilePreviewService.class), mock(com.emie.designpm.file.service.FileThumbnailService.class),
                 mock(DesignRequirementRepository.class), mock(ProjectRepository.class), materials);
 
         FileRecord referenceImage = FileRecord.builder()

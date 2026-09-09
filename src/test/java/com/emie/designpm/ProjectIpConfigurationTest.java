@@ -1,5 +1,6 @@
 package com.emie.designpm;
 
+import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.entity.IpOption;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.User;
