@@ -306,6 +306,28 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
+    void regularPlannerApprovalNotifiesAdminsAfterCommit() {
+        Project project = projectWithTask("regular", "submitted_for_review");
+        ScoringRecord firstReview = review(project.getTasks().get(0), "planner", "first");
+        ScoringRecord secondReview = review(project.getTasks().get(0), "admin", "second");
+        secondReview.setReviewStatus("waiting");
+        when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scoring.findBySubTaskIdAndRole(11L, "planner")).thenReturn(Optional.of(firstReview));
+        when(scoring.findBySubTaskIdAndRole(11L, "admin")).thenReturn(Optional.of(secondReview));
+
+        service.taskApprove(1L, 11L, Map.of(
+                "currentRole", "planner", "currentUserId", "planner-1", "currentUser", "企划甲",
+                "comments", "一审通过", "score", 82));
+
+        assertEquals("planner_approved", project.getTasks().get(0).getStatus());
+        assertReview(secondReview, "admin", "second", "pending", null);
+        verify(notifications).notifyRoleAfterCommit(
+                eq("REVIEW_PENDING"), eq("admin"), eq("sub_task"), eq(11L), eq("system"), anyMap());
+        verify(notifications, never()).notifyRole(anyString(), anyString(), anyString(), anyLong(), anyString(), anyMap());
+    }
+
+    @Test
     void salesRejectionMarksSecondReviewRejected() {
         Project project = projectWithTask("channel_custom", "planner_approved");
         ScoringRecord secondReview = review(project.getTasks().get(0), "sales", "second");
