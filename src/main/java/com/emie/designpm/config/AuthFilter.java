@@ -1,5 +1,6 @@
 package com.emie.designpm.config;
 
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.controller.AuthController;
 import com.emie.designpm.service.PermissionService;
 import jakarta.servlet.*;
@@ -103,7 +104,7 @@ public class AuthFilter implements Filter {
             if ((token == null || token.isBlank()) && path.startsWith("/api/files/")) {
                 token = req.getParameter("authToken");
             }
-            AuthController.AuthSession session = AuthController.validateToken(token);
+            AuthSession session = AuthController.validateToken(token);
             if (token == null || session == null) {
                 res.setStatus(401);
                 res.setContentType("application/json;charset=UTF-8");
@@ -152,7 +153,7 @@ public class AuthFilter implements Filter {
         return null;
     }
 
-    private boolean hasPermission(AuthController.AuthSession session, String permission) {
+    private boolean hasPermission(AuthSession session, String permission) {
         return permissionService == null
                 ? "admin".equals(session.role())
                 : permissionService.has(session.role(), permission);

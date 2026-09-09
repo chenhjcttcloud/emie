@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.service.ShareLinkService;
 import com.emie.designpm.service.PermissionService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,7 +36,7 @@ public class ShareLinkController {
     public ResponseEntity<?> create(@RequestBody Map<String, Object> body,
                                     @RequestHeader("X-Auth-Token") String token) {
         try {
-            AuthController.AuthSession session = AuthController.validateToken(token);
+            AuthSession session = AuthController.validateToken(token);
             if (session == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "未登录"));
             }
@@ -70,7 +71,7 @@ public class ShareLinkController {
     /** 获取我的分享列表 */
     @GetMapping("/list")
     public ResponseEntity<?> list(@RequestHeader("X-Auth-Token") String token) {
-        AuthController.AuthSession session = AuthController.validateToken(token);
+        AuthSession session = AuthController.validateToken(token);
         if (session == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未登录"));
         }
@@ -82,7 +83,7 @@ public class ShareLinkController {
     @GetMapping("/admin/all")
     public ResponseEntity<?> adminList(@RequestHeader("X-Auth-Token") String token,
                                        HttpServletRequest request) {
-        AuthController.AuthSession session = AuthController.validateToken(token);
+        AuthSession session = AuthController.validateToken(token);
         if (session == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未登录"));
         }
@@ -99,7 +100,7 @@ public class ShareLinkController {
                                          @RequestHeader("X-Auth-Token") String token,
                                          HttpServletRequest request) {
         try {
-            AuthController.AuthSession session = AuthController.validateToken(token);
+            AuthSession session = AuthController.validateToken(token);
             if (session == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "未登录"));
             }
@@ -120,7 +121,7 @@ public class ShareLinkController {
                                          @RequestHeader("X-Auth-Token") String token,
                                          HttpServletRequest request) {
         try {
-            AuthController.AuthSession session = AuthController.validateToken(token);
+            AuthSession session = AuthController.validateToken(token);
             if (session == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "未登录"));
             }
@@ -142,7 +143,7 @@ public class ShareLinkController {
     public ResponseEntity<?> revoke(@PathVariable Long id,
                                     @RequestHeader("X-Auth-Token") String token) {
         try {
-            AuthController.AuthSession session = AuthController.validateToken(token);
+            AuthSession session = AuthController.validateToken(token);
             if (session == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "未登录"));
             }

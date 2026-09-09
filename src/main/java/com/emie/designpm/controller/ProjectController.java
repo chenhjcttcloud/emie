@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.dto.ProjectDetailDTO;
 import com.emie.designpm.dto.ApiErrorResponse;
 import com.emie.designpm.dto.PageResponse;
@@ -148,7 +149,7 @@ public class ProjectController {
             @RequestParam(required = false, defaultValue = "false") boolean participating,
             HttpServletRequest request) {
 
-        AuthController.AuthSession session = getSession(request);
+        AuthSession session = getSession(request);
         role = session.role();
         userId = session.userId();
 
@@ -195,7 +196,7 @@ public class ProjectController {
             @RequestParam(required = false, defaultValue = "0") int page,
             @RequestParam(required = false, defaultValue = "15") int size,
             HttpServletRequest request) {
-        AuthController.AuthSession session = getSession(request);
+        AuthSession session = getSession(request);
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 50);
         try {
@@ -273,7 +274,7 @@ public class ProjectController {
     /** 执行角色工作台一次性读取可见项目及子任务，避免前端逐项目请求详情。 */
     @GetMapping("/my-tasks")
     public ResponseEntity<List<ProjectDetailDTO>> getMyTaskProjects(HttpServletRequest request) {
-        AuthController.AuthSession session = getSession(request);
+        AuthSession session = getSession(request);
         if (session == null || !("admin".equals(session.role()) || "designer".equals(session.role())
                 || "supplychain".equals(session.role()) || "planner".equals(session.role()))) {
             return ResponseEntity.status(403).build();
@@ -287,7 +288,7 @@ public class ProjectController {
     /** 独立的“我的子任务”查询：只返回当前用户作为负责人或发布人关联的任务。 */
     @GetMapping("/my-subtasks")
     public ResponseEntity<List<Map<String, Object>>> getMySubTasks(HttpServletRequest request) {
-        AuthController.AuthSession session = getSession(request);
+        AuthSession session = getSession(request);
         if (session == null) return ResponseEntity.status(401).build();
         List<SubTask> tasks = subTaskRepository.findMySubTasks(session.userId());
         List<Long> taskIds = tasks.stream().map(SubTask::getId).toList();
@@ -348,7 +349,7 @@ public class ProjectController {
     /** 设计师接单市场：仅返回仍开放、未指定负责人的设计师子任务。 */
     @GetMapping("/task-market")
     public ResponseEntity<?> getTaskMarket(HttpServletRequest request) {
-        AuthController.AuthSession session = getSession(request);
+        AuthSession session = getSession(request);
         if (session == null) return ResponseEntity.status(401).build();
         if (!List.of("designer", "planner", "admin").contains(session.role())) {
             return ResponseEntity.status(403).body(Map.of("error", "当前角色无权查看接单市场"));
@@ -377,7 +378,7 @@ public class ProjectController {
     /** 部门负责人/管理员只读查看部门成员关联任务。 */
     @GetMapping("/department-subtasks")
     public ResponseEntity<List<Map<String, Object>>> getDepartmentSubTasks(HttpServletRequest request) {
-        AuthController.AuthSession session = getSession(request);
+        AuthSession session = getSession(request);
         if (session == null) return ResponseEntity.status(401).build();
         List<String> userIds = projectAccessService.departmentTaskUserIds(session.role(), session.userId());
         // 普通成员没有部门负责人范围时返回空列表，而不是让页面出现权限错误。
@@ -417,7 +418,7 @@ public class ProjectController {
     /** 获取项目详情 */
     @GetMapping("/{id}")
     public ResponseEntity<ProjectDetailDTO> getProjectDetail(@PathVariable Long id, HttpServletRequest request) {
-        AuthController.AuthSession session = getSession(request);
+        AuthSession session = getSession(request);
         Optional<Project> projectOpt = projectService.getProjectById(id);
         if (projectOpt.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -439,7 +440,7 @@ public class ProjectController {
     @PostMapping
     public ResponseEntity<?> createProject(@RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
-            AuthController.AuthSession session = getSession(request);
+            AuthSession session = getSession(request);
             if (session == null) return ResponseEntity.status(401).build();
             String type = Objects.toString(body.get("type"), "");
             String permission = switch (type) {
@@ -468,7 +469,7 @@ public class ProjectController {
     @PostMapping("/{id}/feishu-chat/create")
     public ResponseEntity<?> createProjectChat(@PathVariable Long id, HttpServletRequest request) {
         try {
-            AuthController.AuthSession session = getSession(request);
+            AuthSession session = getSession(request);
             Project p = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
             if (!canCreateProjectChat(p, session)) return ResponseEntity.status(403).body(Map.of("error", "无权创建该项目群"));
             if (feishuChatService == null || !feishuChatService.enabled()) return ResponseEntity.badRequest().body(Map.of("error", "飞书应用配置未完成"));
@@ -486,7 +487,7 @@ public class ProjectController {
     @PostMapping("/{id}/feishu-chat/dissolve")
     public ResponseEntity<?> dissolveProjectChat(@PathVariable Long id, HttpServletRequest request) {
         try {
-            AuthController.AuthSession session = getSession(request);
+            AuthSession session = getSession(request);
             Project p = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
             if (!canManageProjectChat(p, session)) return ResponseEntity.status(403).body(Map.of("error", "无权解散该项目群"));
             if (!List.of("completed", "terminated", "pending_terminate").contains(p.getStatus())) return ResponseEntity.badRequest().body(Map.of("error", "项目未完成或未终止，不能解散群聊"));
@@ -496,13 +497,13 @@ public class ProjectController {
         } catch (Exception e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
     }
 
-    private boolean canManageProjectChat(Project p, AuthController.AuthSession s) {
+    private boolean canManageProjectChat(Project p, AuthSession s) {
         if (s == null) return false;
         return "admin".equals(s.role()) || ("channel_custom".equals(p.getType()) ? Objects.equals(p.getSalesId(), s.userId()) : Objects.equals(p.getPlannerId(), s.userId()));
     }
 
     /** 产品企划可为任意渠道定制或公司常规品项目补建群；原项目负责人权限保持不变。 */
-    private boolean canCreateProjectChat(Project p, AuthController.AuthSession s) {
+    private boolean canCreateProjectChat(Project p, AuthSession s) {
         if (s == null || p == null || !List.of("channel_custom", "regular").contains(p.getType())) return false;
         return "planner".equals(s.role()) || canManageProjectChat(p, s);
     }
@@ -514,7 +515,7 @@ public class ProjectController {
             @RequestBody Map<String, Object> body,
             HttpServletRequest request) {
         try {
-            AuthController.AuthSession session = getSession(request);
+            AuthSession session = getSession(request);
             if (session == null) return ResponseEntity.status(401).build();
             Project project = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
             String permission = switch (project.getType()) {
@@ -566,7 +567,7 @@ public class ProjectController {
             @RequestBody Map<String, Object> body,
             HttpServletRequest request) {
         try {
-            AuthController.AuthSession session = getSession(request);
+            AuthSession session = getSession(request);
             if (permissionService != null && !permissionService.has(session.role(), "subtask.create")) {
                 return ResponseEntity.status(403).body(Map.of(
                         "error", "当前账号没有新建子任务的权限",
@@ -622,7 +623,7 @@ public class ProjectController {
     public ResponseEntity<?> completeWorkflowExecution(@PathVariable Long id, HttpServletRequest request) {
         ResponseEntity<?> denied = denyUnless(request, "project.workflow.advance");
         if (denied != null) return denied;
-        AuthController.AuthSession session = getSession(request);
+        AuthSession session = getSession(request);
         try {
             Project project = projectWorkflowService.completeExecution(
                     id, session.userId(), session.name(), session.role());
@@ -636,7 +637,7 @@ public class ProjectController {
     public ResponseEntity<?> submitWorkflowReview(@PathVariable Long id, HttpServletRequest request) {
         ResponseEntity<?> denied = denyUnless(request, "project.workflow.advance");
         if (denied != null) return denied;
-        AuthController.AuthSession session = getSession(request);
+        AuthSession session = getSession(request);
         try {
             return ResponseEntity.ok(projectWorkflowService.submitReview(
                     id, session.userId(), session.name(), session.role()));
@@ -651,7 +652,7 @@ public class ProjectController {
                                              HttpServletRequest request) {
         ResponseEntity<?> denied = denyUnless(request, "project.workflow.review");
         if (denied != null) return denied;
-        AuthController.AuthSession session = getSession(request);
+        AuthSession session = getSession(request);
         try {
             return ResponseEntity.ok(projectWorkflowService.review(
                     id, body.get("decision"), body.get("comment"),
@@ -886,7 +887,7 @@ public class ProjectController {
     public ResponseEntity<Map<String, Object>> roleStatus(@RequestParam String role,
                                                           @RequestParam(defaultValue = "all") String scope,
                                                           HttpServletRequest request) {
-        AuthController.AuthSession session = getSession(request);
+        AuthSession session = getSession(request);
         if (session == null) return ResponseEntity.status(401).build();
         boolean allowed = "admin".equals(session.role())
                 || Objects.equals(session.role(), role)
@@ -900,7 +901,7 @@ public class ProjectController {
     /** 设计师状态看板（兼容旧版） */
     @GetMapping("/designer-status")
     public ResponseEntity<Map<String, Object>> designerStatus(HttpServletRequest request) {
-        AuthController.AuthSession session = getSession(request);
+        AuthSession session = getSession(request);
         if (session == null) return ResponseEntity.status(401).build();
         if (!List.of("admin", "designer").contains(session.role())) {
             return ResponseEntity.status(403).body(Map.of("error", "无权查看设计师状态看板"));
@@ -911,7 +912,7 @@ public class ProjectController {
     /** 左侧导航徽章统计：角色与用户由会话确定，禁止客户端伪造统计范围。 */
     @GetMapping("/badge-stats")
     public ResponseEntity<Map<String, Long>> badgeStats(HttpServletRequest request) {
-        AuthController.AuthSession session = getSession(request);
+        AuthSession session = getSession(request);
         return ResponseEntity.ok(projectService.getNavigationBadgeStats(session.role(), session.userId()));
     }
 
@@ -984,7 +985,7 @@ public class ProjectController {
         try {
             ResponseEntity<?> denied = denyUnless(request, "subtask.delete");
             if (denied != null) return denied;
-            AuthController.AuthSession session = getSession(request);
+            AuthSession session = getSession(request);
             Project project = projectService.getProjectById(projectId).orElseThrow(() -> new RuntimeException("项目不存在"));
             if (session == null || !("admin".equals(session.role()) ||
                     ("planner".equals(session.role()) && Objects.equals(session.userId(), project.getPlannerId())))) {
@@ -1013,7 +1014,7 @@ public class ProjectController {
     }
 
     private ResponseEntity<?> denyUnless(HttpServletRequest request, String permission) {
-        AuthController.AuthSession session = getSession(request);
+        AuthSession session = getSession(request);
         if (permission != null && (permissionService == null || permissionService.has(session.role(), permission))) {
             return null;
         }
@@ -1023,7 +1024,7 @@ public class ProjectController {
     }
 
     private ResponseEntity<?> denyUnlessProjectManager(Long projectId, HttpServletRequest request) {
-        AuthController.AuthSession session = getSession(request);
+        AuthSession session = getSession(request);
         Project project = projectService.getProjectById(projectId)
                 .orElseThrow(() -> new RuntimeException("项目不存在"));
         return ProjectAccessPolicy.canManage(project, session)
@@ -1031,7 +1032,7 @@ public class ProjectController {
                 : ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
     }
 
-    private String reviewPermission(AuthController.AuthSession session, boolean approve) {
+    private String reviewPermission(AuthSession session, boolean approve) {
         String action = approve ? "approve" : "reject";
         return switch (session.role()) {
             case "planner" -> "subtask.review.first." + action;
@@ -1351,8 +1352,8 @@ public class ProjectController {
         return dto;
     }
 
-    private AuthController.AuthSession getSession(HttpServletRequest request) {
-        return (AuthController.AuthSession) request.getAttribute("authSession");
+    private AuthSession getSession(HttpServletRequest request) {
+        return (AuthSession) request.getAttribute("authSession");
     }
 
     private Map<String, Object> withSessionContext(Map<String, Object> body, HttpServletRequest request) {
@@ -1360,7 +1361,7 @@ public class ProjectController {
         if (body != null) {
             safeBody.putAll(body);
         }
-        AuthController.AuthSession session = getSession(request);
+        AuthSession session = getSession(request);
         safeBody.put("currentUser", session.name());
         safeBody.put("currentRole", session.role());
         safeBody.put("currentUserId", session.userId());

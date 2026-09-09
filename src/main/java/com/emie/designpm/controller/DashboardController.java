@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.dto.ProjectSummaryDTO;
 import com.emie.designpm.entity.Department;
 import com.emie.designpm.entity.Project;
@@ -60,7 +61,7 @@ public class DashboardController {
             @RequestParam(required = false, defaultValue = "mine") String scope,
             @RequestParam(required = false, defaultValue = "true") boolean includeRoleStatus,
             HttpServletRequest request) {
-        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        AuthSession session = (AuthSession) request.getAttribute("authSession");
         role = session.role();
         userId = session.userId();
 
@@ -120,7 +121,7 @@ public class DashboardController {
     @GetMapping("/role-status")
     public ResponseEntity<Map<String, Object>> getRoleStatus(@RequestParam(defaultValue = "all") String scope,
                                                              HttpServletRequest request) {
-        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        AuthSession session = (AuthSession) request.getAttribute("authSession");
         return ResponseEntity.ok(loadRoleStatus(session.role(), session.userId(), scope));
     }
 
@@ -299,7 +300,7 @@ public class DashboardController {
             @RequestParam(required = false) String role,
             @RequestParam(required = false) String userId,
             HttpServletRequest request) {
-        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        AuthSession session = (AuthSession) request.getAttribute("authSession");
         role = session.role();
         userId = session.userId();
         List<Project> projects = projectService.getProjectsByRoleAndUser(role, userId);

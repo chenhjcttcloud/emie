@@ -1,6 +1,6 @@
 package com.emie.designpm.service;
 
-import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.repository.*;
 import org.junit.jupiter.api.*;
@@ -83,6 +83,6 @@ class PointManualAdjustmentServiceTest {
   verify(adjustments,never()).save(any());
  }
  private User userWithRole(String role){User u=new User();u.setRole(role);return u;}
- private AuthController.AuthSession admin(){return session("admin-1","admin");}
- private AuthController.AuthSession session(String id,String role){return new AuthController.AuthSession(id,role,id);}
+ private AuthSession admin(){return session("admin-1","admin");}
+ private AuthSession session(String id,String role){return new AuthSession(id,role,id);}
 }

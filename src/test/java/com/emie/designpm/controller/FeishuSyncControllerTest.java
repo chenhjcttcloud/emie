@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.repository.ProjectRepository;
 import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.repository.ScoringRepository;
@@ -121,7 +122,7 @@ class FeishuSyncControllerTest {
 
     private jakarta.servlet.http.HttpServletRequest adminRequest() {
         var request = mock(jakarta.servlet.http.HttpServletRequest.class);
-        when(request.getAttribute("authSession")).thenReturn(new AuthController.AuthSession("admin", "admin", "管理员"));
+        when(request.getAttribute("authSession")).thenReturn(new AuthSession("admin", "admin", "管理员"));
         return request;
     }
 

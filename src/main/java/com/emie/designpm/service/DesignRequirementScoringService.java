@@ -1,6 +1,6 @@
 package com.emie.designpm.service;
 
-import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.DesignRequirement;
 import com.emie.designpm.entity.DesignRequirementScore;
 import com.emie.designpm.repository.DesignRequirementRepository;
@@ -60,7 +60,7 @@ public class DesignRequirementScoringService {
     }
 
     @Transactional
-    public void submitSelfScore(DesignRequirement d, AuthController.AuthSession session, int score) {
+    public void submitSelfScore(DesignRequirement d, AuthSession session, int score) {
         if (!Objects.equals(d.getDesignerId(), session.userId()) || !"designer".equals(normalizeRole(session.role()))) {
             throw new IllegalArgumentException("仅该需求的设计师可以自评");
         }
@@ -79,7 +79,7 @@ public class DesignRequirementScoringService {
     }
 
     @Transactional
-    public void submitReview(DesignRequirement d, AuthController.AuthSession session, int score) {
+    public void submitReview(DesignRequirement d, AuthSession session, int score) {
         // 对需求行加锁（FOR UPDATE）后重算两位复评人状态：并发提交时双方若都读到
         // 对方尚未完成的状态，会双双落入 pending_review，丢失“全部完成→自动结束”判定
         // 导致需求永久卡在处理中（P2-15）。行锁将两位复评人的提交串行化，后者必然看到前者已完成。
@@ -146,7 +146,7 @@ public class DesignRequirementScoringService {
         }).toList();
     }
 
-    private DesignRequirementScore ownPending(DesignRequirement d, AuthController.AuthSession session, String stage) {
+    private DesignRequirementScore ownPending(DesignRequirement d, AuthSession session, String stage) {
         String role = normalizeRole(session.role());
         return scores.findByRequirementIdOrderByIdAsc(d.getId()).stream()
                 .filter(s -> stage.equals(s.getStage()) && "pending".equals(s.getStatus()))
@@ -155,7 +155,7 @@ public class DesignRequirementScoringService {
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("当前没有需要您完成的评分"));
     }
 
-    private void complete(DesignRequirementScore record, AuthController.AuthSession session, int value) {
+    private void complete(DesignRequirementScore record, AuthSession session, int value) {
         if (value < 1 || value > 100) throw new IllegalArgumentException("评分必须为1-100分");
         record.setScore(value);
         record.setStatus("completed");

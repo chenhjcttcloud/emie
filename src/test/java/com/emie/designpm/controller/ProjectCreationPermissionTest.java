@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.repository.ScoringRepository;
 import com.emie.designpm.repository.SubTaskRepository;
@@ -110,7 +111,7 @@ class ProjectCreationPermissionTest {
 
     private MockHttpServletRequest request(String userId, String role) {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setAttribute("authSession", new AuthController.AuthSession(userId, role, "测试用户"));
+        request.setAttribute("authSession", new AuthSession(userId, role, "测试用户"));
         return request;
     }
 }

@@ -1,6 +1,6 @@
 package com.emie.designpm;
 
-import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.Department;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.SubTask;
@@ -53,7 +53,7 @@ class ProjectAccessServiceTest {
         assertEquals(List.of(memberProject), visible);
         assertEquals(List.of(head, member), access.visibleUsers("designer", head.getUserId(), "designer"));
         assertTrue(access.canView(memberProject,
-                new AuthController.AuthSession(head.getUserId(), "designer", "负责人")));
+                new AuthSession(head.getUserId(), "designer", "负责人")));
     }
 
     @Test
@@ -74,7 +74,7 @@ class ProjectAccessServiceTest {
         when(departments.findByHeadUserId(member.getUserId())).thenReturn(Optional.empty());
 
         assertFalse(access.canView(otherProject,
-                new AuthController.AuthSession(member.getUserId(), "designer", "成员")));
+                new AuthSession(member.getUserId(), "designer", "成员")));
         assertEquals(List.of(member), access.visibleUsers("designer", member.getUserId(), "designer"));
     }
 
@@ -96,7 +96,7 @@ class ProjectAccessServiceTest {
         when(permissions.scopes("designer", "project.detail.view")).thenReturn(List.of("own"));
 
         assertFalse(access.canView(memberProject,
-                new AuthController.AuthSession(head.getUserId(), "designer", "负责人")));
+                new AuthSession(head.getUserId(), "designer", "负责人")));
     }
 
     @Test
@@ -110,7 +110,7 @@ class ProjectAccessServiceTest {
         when(permissions.scopes("observer", "project.detail.view")).thenReturn(List.of("all"));
 
         assertTrue(access.canView(new Project(),
-                new AuthController.AuthSession("observer-1", "observer", "观察员")));
+                new AuthSession("observer-1", "observer", "观察员")));
     }
 
     @Test
@@ -126,7 +126,7 @@ class ProjectAccessServiceTest {
         project.getTasks().add(task);
 
         assertTrue(access.canView(project,
-                new AuthController.AuthSession("promotion-1", "Promotion", "产品推广")));
+                new AuthSession("promotion-1", "Promotion", "产品推广")));
     }
 
     private User user(String userId, String role, Long departmentId) {

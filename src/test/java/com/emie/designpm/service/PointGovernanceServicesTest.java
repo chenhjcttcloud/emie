@@ -1,6 +1,6 @@
 package com.emie.designpm.service;
 
-import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.repository.*;
 import org.junit.jupiter.api.*;
@@ -114,5 +114,5 @@ class PointGovernanceServicesTest {
  private MonthlyPointArchive archive(String month,int earned,int target,boolean protection){
   MonthlyPointArchive a=new MonthlyPointArchive();a.setMonthKey(month);a.setEarnedPoints(earned);a.setTargetPoints(target);a.setInsufficientSupplyProtection(protection);return a;
  }
- private AuthController.AuthSession session(String id,String role){return new AuthController.AuthSession(id,role,id);}
+ private AuthSession session(String id,String role){return new AuthSession(id,role,id);}
 }

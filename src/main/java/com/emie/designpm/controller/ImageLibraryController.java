@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.FileRecord;
 import com.emie.designpm.entity.ImageLibraryItem;
 import com.emie.designpm.repository.FileRecordRepository;
@@ -154,7 +155,7 @@ public class ImageLibraryController {
     }
 
     private List<FileRecord> validateUpdateImages(List<Map<String, Object>> images, ImageLibraryItem item,
-                                                   AuthController.AuthSession session) {
+                                                   AuthSession session) {
         List<FileRecord> result = new ArrayList<>();
         for (Map<String, Object> image : images) {
             String storedName = clean(image.get("storedName"), 255);
@@ -174,8 +175,8 @@ public class ImageLibraryController {
         result.put("images", parseMaps(item.getImagesJson())); result.put("ownerUserId", item.getOwnerUserId()); result.put("createdAt", item.getCreatedAt());
         return result;
     }
-    private static AuthController.AuthSession session(HttpServletRequest request) { return (AuthController.AuthSession) request.getAttribute("authSession"); }
-    private static boolean canManage(AuthController.AuthSession session) { return session != null && Set.of("admin", "planner").contains(session.role()); }
+    private static AuthSession session(HttpServletRequest request) { return (AuthSession) request.getAttribute("authSession"); }
+    private static boolean canManage(AuthSession session) { return session != null && Set.of("admin", "planner").contains(session.role()); }
     private static boolean isAllowedLibraryFile(FileRecord record) {
         return (record.getMimeType() != null && record.getMimeType().startsWith("image/"))
                 || (record.getOriginalName() != null && record.getOriginalName().toLowerCase(Locale.ROOT).endsWith(".ai"));

@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.DesignRequirement;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.DesignRequirementRepository;
@@ -240,7 +241,7 @@ class DesignRequirementControllerTest {
 
     private MockHttpServletRequest authenticated(String userId, String role, String name) {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setAttribute("authSession", new AuthController.AuthSession(userId, role, name));
+        request.setAttribute("authSession", new AuthSession(userId, role, name));
         return request;
     }
 
