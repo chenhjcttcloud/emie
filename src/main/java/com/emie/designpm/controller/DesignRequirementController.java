@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.dto.PageResponse;
 import com.emie.designpm.entity.DesignRequirement;
 import com.emie.designpm.repository.DesignRequirementRepository;
@@ -84,7 +85,7 @@ public class DesignRequirementController {
                                   @RequestParam(defaultValue = "0") int page,
                                   @RequestParam(defaultValue = "15") int size,
                                   HttpServletRequest request) {
-        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        AuthSession session = (AuthSession) request.getAttribute("authSession");
         if (session == null) return ResponseEntity.status(401).build();
         String userId = "admin".equals(session.role()) ? null : session.userId();
         var result = repository.findPage(blankToNull(keyword), blankToNull(status), userId,
@@ -96,7 +97,7 @@ public class DesignRequirementController {
 
     @GetMapping("/{id}")
     public ResponseEntity<?> detail(@PathVariable Long id, HttpServletRequest request) {
-        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        AuthSession session = (AuthSession) request.getAttribute("authSession");
         if (session == null) return ResponseEntity.status(401).build();
         DesignRequirement requirement = repository.findById(id).orElse(null);
         if (requirement == null) return ResponseEntity.notFound().build();
@@ -112,7 +113,7 @@ public class DesignRequirementController {
     @PostMapping
     @Transactional
     public ResponseEntity<?> create(@RequestBody java.util.Map<String, Object> body, HttpServletRequest request) {
-        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        AuthSession session = (AuthSession) request.getAttribute("authSession");
         if (session == null) return ResponseEntity.status(401).build();
         String creatorRole = normalizeRole(session.role());
         if (permissionService != null && !permissionService.has(creatorRole, "design_requirement.create")) {
@@ -165,7 +166,7 @@ public class DesignRequirementController {
         return ResponseEntity.ok(java.util.Map.of("id", saved.getId(), "requirementCode", saved.getRequirementCode()));
     }
 
-    private void notifyAssignees(DesignRequirement requirement, AuthController.AuthSession actor) {
+    private void notifyAssignees(DesignRequirement requirement, AuthSession actor) {
         if (notificationWorkflowService == null) return;
         java.util.Map<String, String> context = notificationContext(requirement, actor.name());
         notificationWorkflowService.notifyUserAfterCommit(
@@ -178,7 +179,7 @@ public class DesignRequirementController {
 
     @GetMapping("/dashboard")
     public ResponseEntity<?> dashboard(HttpServletRequest request) {
-        AuthController.AuthSession session = session(request);
+        AuthSession session = session(request);
         if (session == null) return ResponseEntity.status(401).build();
         String userId = "admin".equals(normalizeRole(session.role())) ? null : session.userId();
         return ResponseEntity.ok(repository.findDashboardItems(userId).stream().map(this::toDetail).toList());
@@ -188,7 +189,7 @@ public class DesignRequirementController {
     @Transactional
     public ResponseEntity<?> deliver(@PathVariable Long id, @RequestBody java.util.Map<String, Object> body,
                                      HttpServletRequest request) {
-        AuthController.AuthSession session = session(request);
+        AuthSession session = session(request);
         if (session == null) return ResponseEntity.status(401).build();
         if (permissionService != null && !permissionService.has(session.role(), "design_requirement.deliver")) {
             return forbidden("design_requirement.deliver");
@@ -227,7 +228,7 @@ public class DesignRequirementController {
     @PostMapping("/{id}/confirm-revision")
     @Transactional
     public ResponseEntity<?> confirmRevision(@PathVariable Long id, HttpServletRequest request) {
-        AuthController.AuthSession session = session(request);
+        AuthSession session = session(request);
         if (session == null) return ResponseEntity.status(401).build();
         if (permissionService != null && !permissionService.has(session.role(), "design_requirement.deliver")) {
             return forbidden("design_requirement.deliver");
@@ -249,7 +250,7 @@ public class DesignRequirementController {
     @Transactional
     public ResponseEntity<?> reject(@PathVariable Long id, @RequestBody java.util.Map<String, Object> body,
                                     HttpServletRequest request) {
-        AuthController.AuthSession session = session(request);
+        AuthSession session = session(request);
         if (session == null) return ResponseEntity.status(401).build();
         if (permissionService != null && !permissionService.has(session.role(), "design_requirement.score.review")) {
             return forbidden("design_requirement.score.review");
@@ -279,7 +280,7 @@ public class DesignRequirementController {
     @PostMapping("/{id}/terminate")
     @Transactional
     public ResponseEntity<?> terminate(@PathVariable Long id, HttpServletRequest request) {
-        AuthController.AuthSession session = session(request);
+        AuthSession session = session(request);
         if (session == null) return ResponseEntity.status(401).build();
         DesignRequirement d = repository.findById(id).orElse(null);
         if (d == null) return ResponseEntity.notFound().build();
@@ -322,7 +323,7 @@ public class DesignRequirementController {
 
     private ResponseEntity<?> score(Long id, java.util.Map<String, Object> body, HttpServletRequest request,
                                     boolean self) {
-        AuthController.AuthSession session = session(request);
+        AuthSession session = session(request);
         if (session == null) return ResponseEntity.status(401).build();
         String permission = self ? "design_requirement.score.self" : "design_requirement.score.review";
         if (permissionService != null && !permissionService.has(session.role(), permission)) {
@@ -377,7 +378,7 @@ public class DesignRequirementController {
         return context;
     }
 
-    private void notifyDistinct(String eventType, DesignRequirement d, AuthController.AuthSession actor,
+    private void notifyDistinct(String eventType, DesignRequirement d, AuthSession actor,
                                 java.util.Map<String, String> context, String... recipients) {
         java.util.Arrays.stream(recipients).filter(java.util.Objects::nonNull)
                 .filter(id -> !id.isBlank()).distinct()
@@ -432,7 +433,7 @@ public class DesignRequirementController {
     @Transactional
     public ResponseEntity<?> createChat(@PathVariable Long id, HttpServletRequest request) {
         try {
-            AuthController.AuthSession s = session(request);
+            AuthSession s = session(request);
             DesignRequirement d = repository.findById(id).orElseThrow(() -> new IllegalArgumentException("设计需求不存在"));
             if (!canManageChat(d, s)) return ResponseEntity.status(403).body(java.util.Map.of("error", "仅管理员或相关产品企划可创建设计需求群"));
             if (feishuChatService == null || !feishuChatService.enabled()) return ResponseEntity.badRequest().body(java.util.Map.of("error", "飞书应用配置未完成"));
@@ -448,7 +449,7 @@ public class DesignRequirementController {
     @Transactional
     public ResponseEntity<?> dissolveChat(@PathVariable Long id, HttpServletRequest request) {
         try {
-            AuthController.AuthSession s = session(request);
+            AuthSession s = session(request);
             DesignRequirement d = repository.findById(id).orElseThrow(() -> new IllegalArgumentException("设计需求不存在"));
             if (!canManageChat(d, s)) return ResponseEntity.status(403).body(java.util.Map.of("error", "无权解散该设计需求群"));
             if (!java.util.Set.of("completed", "terminated").contains(d.getStatus())) return ResponseEntity.badRequest().body(java.util.Map.of("error", "设计需求未完成或终止，不能解散群聊"));
@@ -457,7 +458,7 @@ public class DesignRequirementController {
         } catch (Exception e) { return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage())); }
     }
 
-    private boolean canManageChat(DesignRequirement d, AuthController.AuthSession s) {
+    private boolean canManageChat(DesignRequirement d, AuthSession s) {
         return s != null && ("admin".equals(s.role()) || ("planner".equals(s.role()) && java.util.Objects.equals(s.userId(), d.getPlannerId())));
     }
 
@@ -489,8 +490,8 @@ public class DesignRequirementController {
     }
 
     private String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
-    private AuthController.AuthSession session(HttpServletRequest request) {
-        return (AuthController.AuthSession) request.getAttribute("authSession");
+    private AuthSession session(HttpServletRequest request) {
+        return (AuthSession) request.getAttribute("authSession");
     }
     private String normalizeRole(String role) {
         if (role == null) return "";

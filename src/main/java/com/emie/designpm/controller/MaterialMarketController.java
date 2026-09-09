@@ -1,12 +1,14 @@
 package com.emie.designpm.controller;
+
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.MaterialMarketItem;import com.emie.designpm.service.MaterialMarketService;import jakarta.servlet.http.HttpServletRequest;import org.springframework.web.bind.annotation.*;import org.springframework.http.ResponseEntity;import java.util.*;
 @RestController @RequestMapping({"/api/material-market","/api/materials"})
 public class MaterialMarketController{
  private final MaterialMarketService service; public MaterialMarketController(MaterialMarketService s){service=s;}
- private AuthController.AuthSession required(HttpServletRequest r){try{return session(r);}catch(Exception e){throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED,"未登录");}}
+ private AuthSession required(HttpServletRequest r){try{return session(r);}catch(Exception e){throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED,"未登录");}}
  @GetMapping public List<MaterialMarketItem> list(HttpServletRequest r){var s=required(r);return service.list(s.userId());}
  @GetMapping("/{id}") public ResponseEntity<?> detail(@PathVariable Long id,HttpServletRequest r){var s=required(r);return ResponseEntity.ok(service.detail(id,s.userId()));}
- private AuthController.AuthSession session(HttpServletRequest r){
+ private AuthSession session(HttpServletRequest r){
   String token=r.getHeader("X-Auth-Token");
   if(token==null||token.isBlank()){
    String authorization=r.getHeader("Authorization");

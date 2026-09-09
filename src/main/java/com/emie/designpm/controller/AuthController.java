@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.entity.ActivityLog;
 import com.emie.designpm.repository.UserRepository;
@@ -28,8 +29,6 @@ public class AuthController {
     public static final String AUTH_COOKIE = "designpm_auth";
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
-    /** 按产品要求，会话不因时间自动失效；0 明确表示永久有效。 */
-    private static final long PERMANENT_SESSION_EXPIRES_AT = 0L;
     private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
 
     private final UserRepository userRepository;
@@ -201,12 +200,12 @@ public class AuthController {
         }
         // 返回当前模拟用户信息 + 原始用户信息
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("userId", session.userId);
-        result.put("name", session.name);
-        result.put("role", session.role);
-        result.put("status", "pending".equals(session.role) ? "pending" : "active");
-        result.put("originalUserId", session.originalUserId);
-        result.put("originalRole", session.originalRole);
+        result.put("userId", session.userId());
+        result.put("name", session.name());
+        result.put("role", session.role());
+        result.put("status", "pending".equals(session.role()) ? "pending" : "active");
+        result.put("originalUserId", session.originalUserId());
+        result.put("originalRole", session.originalRole());
         return ResponseEntity.ok(result);
     }
 
@@ -313,23 +312,8 @@ public class AuthController {
 
     // 清除用户的所有 token（切换账号时）
     public static void clearUserTokens(String userId) {
-        TOKENS.values().removeIf(s -> s.userId.equals(userId));
+        TOKENS.values().removeIf(s -> s.userId().equals(userId));
         if (redisSessionStore != null) redisSessionStore.removeUserTokens(userId);
-    }
-
-    // ==================== 内部类 ====================
-
-    public record AuthSession(String userId, String role, String name, String originalUserId,
-                              String originalRole, long expiresAt) {
-        public AuthSession(String userId, String role, String name) {
-            this(userId, role, name, userId, role, PERMANENT_SESSION_EXPIRES_AT);
-        }
-
-        public AuthSession(String userId, String role, String name,
-                           String originalUserId, String originalRole) {
-            this(userId, role, name, originalUserId, originalRole,
-                    PERMANENT_SESSION_EXPIRES_AT);
-        }
     }
 
     // ==================== 工具方法 ====================

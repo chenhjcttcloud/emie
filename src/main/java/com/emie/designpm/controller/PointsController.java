@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.PointLedger;
 import com.emie.designpm.entity.PointRule;
 import com.emie.designpm.entity.PointDifficultyConfig;
@@ -80,12 +81,12 @@ public class PointsController {
 
     @GetMapping("/market-eligibility/{userId}")
     public ResponseEntity<?> marketEligibility(@PathVariable String userId, HttpServletRequest request) {
-        AuthController.AuthSession current=session(request); if(!"admin".equals(current.role())&&!userId.equals(current.userId()))return ResponseEntity.status(403).body(Map.of("error","只能查看自己的接单资格"));
+        AuthSession current=session(request); if(!"admin".equals(current.role())&&!userId.equals(current.userId()))return ResponseEntity.status(403).body(Map.of("error","只能查看自己的接单资格"));
         return ResponseEntity.ok(marketEligibility.findByUserId(userId).orElseGet(()->{DesignerMarketEligibility e=new DesignerMarketEligibility();e.setUserId(userId);return e;}));
     }
     @PutMapping("/market-eligibility/{userId}")
     public ResponseEntity<?> updateMarketEligibility(@PathVariable String userId,@RequestBody Map<String,Object> body,HttpServletRequest request){
-        AuthController.AuthSession current=session(request);if(!"admin".equals(current.role()))return ResponseEntity.status(403).body(Map.of("error","仅管理员可管理接单资格"));
+        AuthSession current=session(request);if(!"admin".equals(current.role()))return ResponseEntity.status(403).body(Map.of("error","仅管理员可管理接单资格"));
         DesignerMarketEligibility e=marketEligibility.findByUserId(userId).orElseGet(DesignerMarketEligibility::new);e.setUserId(userId);
         Object until=body.get("suspendedUntil");e.setSuspendedUntil(until==null||String.valueOf(until).isBlank()?null:java.time.LocalDateTime.parse(String.valueOf(until)));
         e.setReason(body.get("reason")==null?null:String.valueOf(body.get("reason")).trim());
@@ -94,7 +95,7 @@ public class PointsController {
 
     @GetMapping("/skills/{userId}")
     public ResponseEntity<?> skills(@PathVariable String userId, HttpServletRequest request) {
-        AuthController.AuthSession current = session(request);
+        AuthSession current = session(request);
         if (!"admin".equals(current.role()) && !userId.equals(current.userId())) {
             return ResponseEntity.status(403).body(Map.of("error", "只能查看自己的能力标签"));
         }
@@ -106,7 +107,7 @@ public class PointsController {
     @PutMapping("/skills/{userId}")
     public ResponseEntity<?> updateSkills(@PathVariable String userId, @RequestBody Map<String, Object> body,
                                           HttpServletRequest request) {
-        AuthController.AuthSession current = session(request);
+        AuthSession current = session(request);
         if (!"admin".equals(current.role())) {
             return ResponseEntity.status(403).body(Map.of("error", "仅管理员可配置能力标签"));
         }
@@ -187,8 +188,8 @@ public class PointsController {
         catch (IllegalArgumentException e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
     }
 
-    private AuthController.AuthSession session(HttpServletRequest request) {
-        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+    private AuthSession session(HttpServletRequest request) {
+        AuthSession session = (AuthSession) request.getAttribute("authSession");
         if (session == null) throw new IllegalStateException("未登录或会话已过期");
         return session;
     }

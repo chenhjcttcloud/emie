@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.entity.FileRecord;
@@ -192,7 +193,7 @@ public class FileController {
             if (file.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "文件为空"));
             }
-            AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+            AuthSession session = (AuthSession) request.getAttribute("authSession");
             long maxBytes = 200L * 1024 * 1024;
             if (file.getSize() > maxBytes) {
                 return ResponseEntity.status(413).body(Map.of("error", "文件超过当前角色允许的大小限制"));
@@ -220,7 +221,7 @@ public class FileController {
                         mimeType != null ? mimeType : "application/octet-stream",
                         null, null,
                                 Optional.ofNullable(session)
-                                .map(AuthController.AuthSession::userId).orElse(null));
+                                .map(AuthSession::userId).orElse(null));
 
                 Map<String, Object> result = new LinkedHashMap<>();
                 result.put("name", originalName);
@@ -238,7 +239,7 @@ public class FileController {
 
     @GetMapping("/library")
     public ResponseEntity<Object> library(HttpServletRequest request) {
-        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        AuthSession session = (AuthSession) request.getAttribute("authSession");
         if (session == null || !Set.of("admin", "planner", "designer").contains(session.role())) {
             return ResponseEntity.status(403).body(Map.of("error", "没有权限查看图档库"));
         }
@@ -250,7 +251,7 @@ public class FileController {
     @PostMapping("/library/upload")
     public ResponseEntity<Map<String, Object>> uploadLibraryImage(@RequestParam("file") MultipartFile file,
                                                                     HttpServletRequest request) {
-        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        AuthSession session = (AuthSession) request.getAttribute("authSession");
         if (session == null || !Set.of("admin", "planner").contains(session.role())) {
             return ResponseEntity.status(403).body(Map.of("error", "仅产品企划和管理员可以上传图档"));
         }
@@ -460,7 +461,7 @@ public class FileController {
         if ("admin".equals(subDir) && fileName != null && ADMIN_MANAGED_IMAGE.matcher(fileName).matches()) {
             return null;
         }
-        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        AuthSession session = (AuthSession) request.getAttribute("authSession");
         if (session == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未登录或会话已过期，请重新登录"));
         }
@@ -474,7 +475,7 @@ public class FileController {
         return ResponseEntity.status(403).body(Map.of("error", "无权访问该文件"));
     }
 
-    private boolean canAccessFile(AuthController.AuthSession session, String storedName, String relativePath) {
+    private boolean canAccessFile(AuthSession session, String storedName, String relativePath) {
         return fileRecordRepository.findByStoredName(storedName)
                 .map(record -> {
                     // 历史文件可能没有 owner/target 绑定，但仍被业务数据 JSON 引用。
@@ -495,7 +496,7 @@ public class FileController {
                         || isFileVisibleInAccessibleDesignRequirements(session, storedName));
     }
 
-    private boolean canAccessBoundTarget(AuthController.AuthSession session, String targetType, Long targetId) {
+    private boolean canAccessBoundTarget(AuthSession session, String targetType, Long targetId) {
         // 图档库是集合型资源，不绑定单个业务 targetId；必须先于 targetId 空值判断处理。
         if ("image_library".equals(targetType)) {
             return Set.of("admin", "planner", "designer").contains(session.role());
@@ -522,7 +523,7 @@ public class FileController {
         };
     }
 
-    private boolean isFileVisibleInAccessibleProjects(AuthController.AuthSession session, String storedName, String relativePath) {
+    private boolean isFileVisibleInAccessibleProjects(AuthSession session, String storedName, String relativePath) {
         List<Long> projectIds = projectAccessService.findVisibleProjectIds(session.role(), session.userId());
         if (projectIds.isEmpty() || projectRepository == null) {
             List<Project> accessibleProjects = getAccessibleProjectsWithTasks(session);
@@ -538,11 +539,11 @@ public class FileController {
                 || subTaskRepository.countFileReferencesByProjectIds(projectIds, storedName) > 0);
     }
 
-    private List<Project> getAccessibleProjectsWithTasks(AuthController.AuthSession session) {
+    private List<Project> getAccessibleProjectsWithTasks(AuthSession session) {
         return projectAccessService.findVisibleProjectsWithTasks(session);
     }
 
-    private boolean isFileVisibleInAccessibleDesignRequirements(AuthController.AuthSession session,
+    private boolean isFileVisibleInAccessibleDesignRequirements(AuthSession session,
                                                                  String storedName) {
         return designRequirementRepository != null
                 && designRequirementRepository.countVisibleFileReferences(session.userId(), storedName) > 0;

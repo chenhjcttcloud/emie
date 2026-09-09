@@ -1,5 +1,6 @@
 package com.emie.designpm.config;
 
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.controller.AuthController;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -27,8 +28,8 @@ class AuthFilterTokenTransportTest {
 
     @Test
     void permanentSessionsUseZeroExpiry() {
-        AuthController.AuthSession direct = new AuthController.AuthSession("user-1", "sales", "销售");
-        AuthController.AuthSession impersonated = new AuthController.AuthSession(
+        AuthSession direct = new AuthSession("user-1", "sales", "销售");
+        AuthSession impersonated = new AuthSession(
                 "user-2", "designer", "设计师", "admin-1", "admin");
 
         assertEquals(0L, direct.expiresAt());

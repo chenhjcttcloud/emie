@@ -1,6 +1,6 @@
 package com.emie.designpm.util;
 
-import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.SubTask;
 
@@ -12,7 +12,7 @@ public final class ProjectAccessPolicy {
     private ProjectAccessPolicy() {
     }
 
-    public static boolean canView(Project project, AuthController.AuthSession session) {
+    public static boolean canView(Project project, AuthSession session) {
         if (project == null || session == null) return false;
         return switch (session.role()) {
             case "admin" -> true;
@@ -25,7 +25,7 @@ public final class ProjectAccessPolicy {
         };
     }
 
-    public static boolean canManage(Project project, AuthController.AuthSession session) {
+    public static boolean canManage(Project project, AuthSession session) {
         if (project == null || session == null) return false;
         return switch (session.role()) {
             case "admin" -> true;
@@ -41,7 +41,7 @@ public final class ProjectAccessPolicy {
      * 渠道定制项目只能由项目所属销售编辑，常规品只能由项目所属产品企划编辑；
      * 此规则有意不为管理员提供绕过权限，避免代替创建人修改项目归属资料。
      */
-    public static boolean canEditProjectInformation(Project project, AuthController.AuthSession session) {
+    public static boolean canEditProjectInformation(Project project, AuthSession session) {
         if (project == null || session == null) return false;
         return ("channel_custom".equals(project.getType())
                 && "sales".equals(session.role())

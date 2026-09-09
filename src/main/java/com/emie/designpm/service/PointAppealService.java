@@ -1,6 +1,6 @@
 package com.emie.designpm.service;
 
-import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.repository.*;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -15,8 +15,8 @@ public class PointAppealService {
  private static final Set<String> TYPES=Set.of("CATEGORY","BASE_POINTS","DIFFICULTY","QUALITY_BONUS","ELIGIBILITY","OTHER");
  private final PointAppealRepository appeals; private final PointLedgerRepository ledgers; private final PointAdjustmentLedgerRepository adjustments;
  public PointAppealService(PointAppealRepository a,PointLedgerRepository l,PointAdjustmentLedgerRepository x){appeals=a;ledgers=l;adjustments=x;}
- @Transactional public PointAppeal submit(Long ledgerId,String type,String reason,AuthController.AuthSession s){return submit(ledgerId,type,reason,0d,null,s);}
- @Transactional public PointAppeal submit(Long ledgerId,String type,String reason,Double correctedScore,String attachmentsJson,AuthController.AuthSession s){
+ @Transactional public PointAppeal submit(Long ledgerId,String type,String reason,AuthSession s){return submit(ledgerId,type,reason,0d,null,s);}
+ @Transactional public PointAppeal submit(Long ledgerId,String type,String reason,Double correctedScore,String attachmentsJson,AuthSession s){
   PointLedger ledger=ledgers.findById(ledgerId).orElseThrow(()->new IllegalArgumentException("积分记录不存在"));
   if(!ledger.getUserId().equals(s.userId()))throw new SecurityException("只能对本人的积分记录发起异议");
   String t=type==null?"":type.trim().toUpperCase(Locale.ROOT); if(!TYPES.contains(t))throw new IllegalArgumentException("异议类型无效");
@@ -32,11 +32,11 @@ public class PointAppealService {
    throw new IllegalStateException("该积分记录已有处理中异议，请勿重复提交",e);
   }
  }
- @Transactional public PointAppeal plannerProcess(Long id,String decision,String comment,AuthController.AuthSession s){
+ @Transactional public PointAppeal plannerProcess(Long id,String decision,String comment,AuthSession s){
   requireRole(s,"planner","admin"); PointAppeal a=get(id); if(!"SUBMITTED".equals(a.getStatus()))throw new IllegalStateException("异议当前状态不可进行企划处理");
   a.setPlannerDecision(decision(decision));a.setPlannerComment(required(comment,"处理说明",1000));a.setPlannerUserId(s.userId());a.setPlannerName(s.name());a.setPlannerProcessedAt(LocalDateTime.now());a.setStatus("PLANNER_PROCESSED");return appeals.save(a);
  }
-    @Transactional public PointAppeal adminReview(Long id,String decision,String comment,Number rawAdjustmentPoints,AuthController.AuthSession s){
+    @Transactional public PointAppeal adminReview(Long id,String decision,String comment,Number rawAdjustmentPoints,AuthSession s){
         requireRole(s,"admin");PointAppeal a=get(id);if(!List.of("SUBMITTED","PLANNER_PROCESSED").contains(a.getStatus()))throw new IllegalStateException("异议当前状态不可进行管理复核");Double adjustmentPoints=rawAdjustmentPoints==null?null:rawAdjustmentPoints.doubleValue();
         String d=decision(decision);if("APPROVE".equals(d)&&adjustmentPoints==null)throw new IllegalArgumentException("通过异议时必须提供更正后的分数");if(adjustmentPoints!=null&&adjustmentPoints<0)throw new IllegalArgumentException("更正后的分数不能为负数");if(adjustmentPoints!=null&&adjustmentPoints>100000)throw new IllegalArgumentException("更正后的分数不得超过100000");if(adjustmentPoints!=null&&Math.abs(adjustmentPoints*10-Math.rint(adjustmentPoints*10))>0.000001)throw new IllegalArgumentException("更正后的分数最多保留一位小数");a.setAdminDecision(d);a.setAdminComment("APPROVE".equals(d)?optional(comment,1000):required(comment,"驳回备注",1000));a.setAdminUserId(s.userId());a.setAdminName(s.name());a.setAdminReviewedAt(LocalDateTime.now());a.setStatus("APPROVE".equals(d)?"APPROVED":"REJECTED");
   try{
@@ -51,12 +51,12 @@ public class PointAppealService {
   }
         if("APPROVE".equals(d)&&adjustmentPoints!=null&&adjustments.findBySourceTypeAndSourceId("APPEAL",a.getId()).isEmpty()){double delta=ledgers.findById(a.getPointLedgerId()).map(ledger -> adjustmentPoints-ledger.getPoints()).orElse(adjustmentPoints);if(Math.abs(delta)>0.000001){PointAdjustmentLedger x=new PointAdjustmentLedger();x.setUserId(a.getApplicantUserId());x.setSourceType("APPEAL");x.setSourceId(a.getId());x.setPoints(delta);x.setReason("积分异议终审：更正后分数="+adjustmentPoints+"；"+a.getAdminComment());x.setCreatedBy(s.userId());adjustments.save(x);}}return a;
  }
- @Transactional(readOnly=true) public List<PointAppeal> list(AuthController.AuthSession s){return "admin".equals(role(s))||"planner".equals(role(s))?appeals.findAllByOrderByCreatedAtDesc():appeals.findByApplicantUserIdOrderByCreatedAtDesc(s.userId());}
+ @Transactional(readOnly=true) public List<PointAppeal> list(AuthSession s){return "admin".equals(role(s))||"planner".equals(role(s))?appeals.findAllByOrderByCreatedAtDesc():appeals.findByApplicantUserIdOrderByCreatedAtDesc(s.userId());}
  private PointAppeal get(Long id){return appeals.findById(id).orElseThrow(()->new IllegalArgumentException("异议不存在"));}
  private String decision(String v){String d=v==null?"":v.trim().toUpperCase(Locale.ROOT);if(!Set.of("APPROVE","REJECT").contains(d))throw new IllegalArgumentException("处理决定必须为APPROVE或REJECT");return d;}
  private String required(String v,String n,int max){String x=v==null?"":v.trim();if(x.isEmpty()||x.length()>max)throw new IllegalArgumentException(n+"不能为空且不得超过"+max+"字");return x;}
  private String optional(String v,int max){String x=v==null?"":v.trim();if(x.length()>max)throw new IllegalArgumentException("备注不得超过"+max+"字");return x;}
- private void requireRole(AuthController.AuthSession s,String... allowed){if(Arrays.stream(allowed).noneMatch(x->x.equals(role(s))))throw new SecurityException("无权执行此操作");}
- private String role(AuthController.AuthSession s){return PermissionCatalog.normalizeRole(s.role());}
+ private void requireRole(AuthSession s,String... allowed){if(Arrays.stream(allowed).noneMatch(x->x.equals(role(s))))throw new SecurityException("无权执行此操作");}
+ private String role(AuthSession s){return PermissionCatalog.normalizeRole(s.role());}
  private LocalDateTime addWorkdays(LocalDateTime start,int days){LocalDateTime value=start;int added=0;while(added<days){value=value.plusDays(1);if(value.getDayOfWeek()!=DayOfWeek.SATURDAY&&value.getDayOfWeek()!=DayOfWeek.SUNDAY)added++;}return value;}
 }

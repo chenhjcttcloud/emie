@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.service.ProjectService;
 import com.emie.designpm.service.DesignRequirementScoringService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -29,7 +30,7 @@ public class ScoringController {
             @RequestParam String role,
             @RequestParam String userId,
             HttpServletRequest request) {
-        AuthController.AuthSession session = (AuthController.AuthSession) request.getAttribute("authSession");
+        AuthSession session = (AuthSession) request.getAttribute("authSession");
         role = session.role();
         userId = session.userId();
         List<Map<String, Object>> result = new ArrayList<>(projectService.getPendingScoringTasks(role, userId));

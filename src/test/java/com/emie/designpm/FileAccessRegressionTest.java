@@ -1,6 +1,6 @@
 package com.emie.designpm;
 
-import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.controller.FileController;
 import com.emie.designpm.entity.FileRecord;
 import com.emie.designpm.entity.Project;
@@ -55,7 +55,7 @@ class FileAccessRegressionTest {
                 .build();
 
         when(records.findByStoredName(storedName)).thenReturn(Optional.of(record));
-        AuthController.AuthSession session = new AuthController.AuthSession("sales-1", "sales", "销售");
+        AuthSession session = new AuthSession("sales-1", "sales", "销售");
         when(access.findVisibleProjectsWithTasks(session)).thenReturn(List.of());
 
         Boolean allowed = ReflectionTestUtils.invokeMethod(controller, "canAccessFile",
@@ -85,7 +85,7 @@ class FileAccessRegressionTest {
                 + "\",\"storedName\":\"" + storedName + "\"}]");
 
         when(records.findByStoredName(storedName)).thenReturn(Optional.of(legacyRecord));
-        AuthController.AuthSession session = new AuthController.AuthSession("designer-1", "designer", "设计师");
+        AuthSession session = new AuthSession("designer-1", "designer", "设计师");
         when(access.findVisibleProjectsWithTasks(session)).thenReturn(List.of(visibleProject));
 
         Boolean allowed = ReflectionTestUtils.invokeMethod(controller, "canAccessFile",
@@ -112,7 +112,7 @@ class FileAccessRegressionTest {
                 .build();
 
         when(records.findByStoredName(storedName)).thenReturn(Optional.of(pendingUpload));
-        AuthController.AuthSession session = new AuthController.AuthSession("designer-1", "designer", "设计师");
+        AuthSession session = new AuthSession("designer-1", "designer", "设计师");
         when(access.findVisibleProjectsWithTasks(session)).thenReturn(List.of());
 
         Boolean allowed = ReflectionTestUtils.invokeMethod(controller, "canAccessFile",
@@ -140,7 +140,7 @@ class FileAccessRegressionTest {
         visibleProject.setId(2L);
 
         when(records.findByStoredName(storedName)).thenReturn(Optional.of(legacyRecord));
-        AuthController.AuthSession session = new AuthController.AuthSession("designer-1", "designer", "设计师");
+        AuthSession session = new AuthSession("designer-1", "designer", "设计师");
         when(access.findVisibleProjectsWithTasks(session)).thenReturn(List.of(visibleProject));
         when(tasks.countFileReferencesByProjectIds(List.of(2L), storedName)).thenReturn(1L);
 
@@ -244,7 +244,7 @@ class FileAccessRegressionTest {
                 .build();
 
         when(records.findByStoredName(storedName)).thenReturn(Optional.of(deliveryImage));
-        AuthController.AuthSession session = new AuthController.AuthSession("planner-1", "planner", "产品企划");
+        AuthSession session = new AuthSession("planner-1", "planner", "产品企划");
         when(access.findVisibleProjectsWithTasks(session)).thenReturn(List.of());
         when(requirements.countVisibleFileReferences("planner-1", storedName)).thenReturn(1L);
 
@@ -278,7 +278,7 @@ class FileAccessRegressionTest {
         when(records.findByStoredName(storedName)).thenReturn(Optional.of(referenceImage));
         when(materials.countFileReferencesByStoredName(storedName)).thenReturn(1L);
 
-        AuthController.AuthSession session = new AuthController.AuthSession("planner-1", "planner", "产品企划");
+        AuthSession session = new AuthSession("planner-1", "planner", "产品企划");
         Boolean allowed = ReflectionTestUtils.invokeMethod(controller, "canAccessFile",
                 session, storedName, storedName);
 
@@ -303,7 +303,7 @@ class FileAccessRegressionTest {
         when(records.findByStoredName(storedName)).thenReturn(Optional.of(libraryImage));
 
         Boolean allowed = ReflectionTestUtils.invokeMethod(controller, "canAccessFile",
-                new AuthController.AuthSession("designer-1", "designer", "设计师"), storedName, storedName);
+                new AuthSession("designer-1", "designer", "设计师"), storedName, storedName);
 
         assertTrue(allowed, "图档库文件不应因没有业务 targetId 被拒绝");
     }

@@ -1,6 +1,6 @@
 package com.emie.designpm.service;
 
-import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.auth.AuthSession;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +25,7 @@ public class RedisSessionStore {
         this.objectMapper = objectMapper;
     }
 
-    public void put(String token, AuthController.AuthSession session) {
+    public void put(String token, AuthSession session) {
         try {
             long ttlMillis = session.expiresAt() - System.currentTimeMillis();
             if (session.expiresAt() <= 0 || session.expiresAt() >= Long.MAX_VALUE / 2) {
@@ -39,11 +39,11 @@ public class RedisSessionStore {
         }
     }
 
-    public AuthController.AuthSession get(String token) {
+    public AuthSession get(String token) {
         if (token == null || token.isBlank()) return null;
         try {
             String value = redis.opsForValue().get(key(token));
-            return value == null ? null : objectMapper.readValue(value, AuthController.AuthSession.class);
+            return value == null ? null : objectMapper.readValue(value, AuthSession.class);
         } catch (Exception e) {
             log.warn("Redis 会话读取失败，将使用本地会话缓存 reason={}", e.getClass().getSimpleName());
             return null;
@@ -69,7 +69,7 @@ public class RedisSessionStore {
                     String key = keys.next();
                     String value = redis.opsForValue().get(key);
                     if (value == null) continue;
-                    AuthController.AuthSession session = objectMapper.readValue(value, AuthController.AuthSession.class);
+                    AuthSession session = objectMapper.readValue(value, AuthSession.class);
                     if (userId.equals(session.userId())) redis.delete(key);
                 }
             }

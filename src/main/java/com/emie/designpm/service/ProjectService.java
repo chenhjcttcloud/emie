@@ -1,11 +1,11 @@
 package com.emie.designpm.service;
 
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.dto.ProjectListQuery;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.repository.*;
 import com.emie.designpm.util.SecurityUtil;
 import com.emie.designpm.util.ProjectAccessPolicy;
-import com.emie.designpm.controller.AuthController;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -457,7 +457,7 @@ public class ProjectService {
         Project p = projectRepository.findById(projectId)
                 .orElseThrow(() -> new RuntimeException("项目不存在"));
 
-        AuthController.AuthSession session = new AuthController.AuthSession(
+        AuthSession session = new AuthSession(
                 (String) body.getOrDefault("currentUserId", ""),
                 (String) body.getOrDefault("currentRole", ""),
                 (String) body.getOrDefault("currentUser", ""));

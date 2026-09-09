@@ -1,6 +1,6 @@
 package com.emie.designpm.service;
 
-import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.Department;
 import com.emie.designpm.dto.ProjectListQuery;
 import com.emie.designpm.entity.Project;
@@ -104,7 +104,7 @@ public class ProjectAccessService {
         return projectRepository.findVisibleIds(query, queryRole, userIds);
     }
 
-    public List<Project> findVisibleProjectsWithTasks(AuthController.AuthSession session) {
+    public List<Project> findVisibleProjectsWithTasks(AuthSession session) {
         if (session == null) return List.of();
         String role = PermissionCatalog.normalizeRole(session.role());
         if (!hasPermission(role, "project.view")) return List.of();
@@ -114,7 +114,7 @@ public class ProjectAccessService {
                 .toList());
     }
 
-    public boolean canView(Project project, AuthController.AuthSession session) {
+    public boolean canView(Project project, AuthSession session) {
         if (project == null || session == null) return false;
         // 素材广场立项的项目对素材广场可见角色开放详情查看；编辑权限仍由各操作接口单独校验。
         if ("素材广场".equals(project.getSource())) return true;

@@ -1,6 +1,6 @@
 package com.emie.designpm.service;
 
-import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.DesignRequirement;
 import com.emie.designpm.entity.DesignRequirementScore;
 import com.emie.designpm.repository.DesignRequirementRepository;
@@ -169,8 +169,8 @@ class DesignRequirementScoringServiceTest {
         return new LockedFixture(service, requirement, records, requirements, locked);
     }
 
-    private AuthController.AuthSession session(String id, String role, String name) {
-        return new AuthController.AuthSession(id, role, name);
+    private AuthSession session(String id, String role, String name) {
+        return new AuthSession(id, role, name);
     }
 
     private DesignRequirementScore record(List<DesignRequirementScore> records, String role) {
