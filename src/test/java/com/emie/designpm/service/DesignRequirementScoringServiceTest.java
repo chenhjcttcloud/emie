@@ -1,5 +1,6 @@
 package com.emie.designpm.service;
 
+import com.emie.designpm.designrequirement.service.DesignRequirementScoringService;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.DesignRequirement;
 import com.emie.designpm.entity.DesignRequirementScore;

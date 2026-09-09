@@ -1,5 +1,7 @@
 package com.emie.designpm.service;
 
+import com.emie.designpm.file.service.FileArchiveService;
+import com.emie.designpm.materialmarket.service.MaterialMarketService;
 import com.emie.designpm.entity.FileRecord;
 import com.emie.designpm.entity.IpOption;
 import com.emie.designpm.entity.MaterialMarketItem;

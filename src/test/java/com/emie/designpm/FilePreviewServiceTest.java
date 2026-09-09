@@ -1,7 +1,7 @@
 package com.emie.designpm;
 
-import com.emie.designpm.service.FileArchiveService;
-import com.emie.designpm.service.FilePreviewService;
+import com.emie.designpm.file.service.FileArchiveService;
+import com.emie.designpm.file.service.FilePreviewService;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

@@ -1,5 +1,6 @@
 package com.emie.designpm.service;
 
+import com.emie.designpm.sharing.service.ShareLinkService;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.ShareLink;
 import com.emie.designpm.entity.User;
