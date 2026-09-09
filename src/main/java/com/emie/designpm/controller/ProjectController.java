@@ -52,7 +52,7 @@ public class ProjectController {
     @Autowired(required = false)
     private com.emie.designpm.repository.PointLedgerRepository pointLedgerRepository;
     @Autowired(required = false)
-    private com.emie.designpm.service.FeishuChatService feishuChatService;
+    private com.emie.designpm.feishu.service.FeishuChatService feishuChatService;
     @Autowired(required = false)
     private SubTaskRejectionCycleRepository rejectionCycleRepository;
     private static final ObjectMapper JSON = new ObjectMapper();

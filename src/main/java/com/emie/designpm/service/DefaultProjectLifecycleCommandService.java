@@ -1,5 +1,8 @@
 package com.emie.designpm.service;
 
+import com.emie.designpm.notification.service.NotificationWorkflowService;
+import com.emie.designpm.points.service.PointsService;
+import com.emie.designpm.sync.service.SyncQueueService;
 import com.emie.designpm.designrequirement.service.DesignRequirementScoringService;
 import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.dto.ProjectListQuery;

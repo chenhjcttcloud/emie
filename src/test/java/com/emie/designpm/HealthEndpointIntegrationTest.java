@@ -1,9 +1,9 @@
 package com.emie.designpm;
 
-import com.emie.designpm.service.NotificationRetryService;
-import com.emie.designpm.service.NotificationBroadcastJobService;
+import com.emie.designpm.notification.service.NotificationRetryService;
+import com.emie.designpm.notification.service.NotificationBroadcastJobService;
 import com.emie.designpm.service.RedisSessionStore;
-import com.emie.designpm.service.SyncQueueService;
+import com.emie.designpm.sync.service.SyncQueueService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;

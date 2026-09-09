@@ -8,7 +8,7 @@ import com.emie.designpm.repository.DesignRequirementScoreRepository;
 import com.emie.designpm.designrequirement.service.DesignRequirementScoringService;
 import com.emie.designpm.service.UserService;
 import com.emie.designpm.service.PermissionService;
-import com.emie.designpm.service.NotificationWorkflowService;
+import com.emie.designpm.notification.service.NotificationWorkflowService;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.http.HttpStatus;

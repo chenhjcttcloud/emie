@@ -23,7 +23,7 @@ import java.util.List;
     @Index(name = "idx_project_sales_type_created", columnList = "salesId,type,createdAt"),
     @Index(name = "idx_project_planner_type_created", columnList = "plannerId,type,createdAt")
 })
-@EntityListeners(com.emie.designpm.service.ProjectSyncListener.class)
+@EntityListeners(com.emie.designpm.sync.service.ProjectSyncListener.class)
 public class Project {
 
     @Id
