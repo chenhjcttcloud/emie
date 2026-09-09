@@ -1,7 +1,7 @@
 package com.emie.designpm.sync.service;
 
 import com.emie.designpm.entity.SyncQueue;
-import com.emie.designpm.repository.SyncQueueRepository;
+import com.emie.designpm.sync.repository.SyncQueueRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;

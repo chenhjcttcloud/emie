@@ -2,9 +2,9 @@ package com.emie.designpm;
 
 import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.User;
-import com.emie.designpm.repository.RoleRepository;
-import com.emie.designpm.repository.SystemConfigRepository;
-import com.emie.designpm.repository.UserRepository;
+import com.emie.designpm.admin.repository.RoleRepository;
+import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.admin.repository.UserRepository;
 import com.emie.designpm.admin.service.AdminService;
 import com.emie.designpm.admin.service.UserService;
 import org.junit.jupiter.api.Test;

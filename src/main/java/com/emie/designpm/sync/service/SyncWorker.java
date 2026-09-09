@@ -1,8 +1,14 @@
 package com.emie.designpm.sync.service;
 
+import com.emie.designpm.admin.repository.ActivityLogRepository;
+import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.project.repository.SubTaskDeliveryVersionRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
+import com.emie.designpm.scoring.repository.ScoringRepository;
+import com.emie.designpm.sync.repository.SyncQueueOperations;
 import com.emie.designpm.feishu.service.FeishuBaseService;
 import com.emie.designpm.entity.*;
-import com.emie.designpm.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

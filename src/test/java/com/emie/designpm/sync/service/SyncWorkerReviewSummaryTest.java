@@ -1,12 +1,18 @@
 package com.emie.designpm.sync.service;
 
+import com.emie.designpm.sync.repository.SyncQueueRepository;
+import com.emie.designpm.admin.repository.ActivityLogRepository;
+import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.project.repository.SubTaskDeliveryVersionRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
+import com.emie.designpm.scoring.repository.ScoringRepository;
 import com.emie.designpm.feishu.service.FeishuBaseService;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.ScoringRecord;
 import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.entity.SubTaskDeliveryVersion;
 import com.emie.designpm.entity.SyncQueue;
-import com.emie.designpm.repository.*;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 

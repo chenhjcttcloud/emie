@@ -1,8 +1,8 @@
 package com.emie.designpm;
 
 import com.emie.designpm.entity.FileRecord;
-import com.emie.designpm.repository.FileRecordRepository;
-import com.emie.designpm.repository.SystemConfigRepository;
+import com.emie.designpm.file.repository.FileRecordRepository;
+import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.file.service.FileThumbnailService;
 import org.junit.jupiter.api.Test;

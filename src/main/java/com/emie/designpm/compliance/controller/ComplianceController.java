@@ -2,7 +2,7 @@ package com.emie.designpm.compliance.controller;
 
 import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.ComplianceItem;
-import com.emie.designpm.repository.ComplianceItemRepository;
+import com.emie.designpm.compliance.repository.ComplianceItemRepository;
 import com.emie.designpm.util.SecurityUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

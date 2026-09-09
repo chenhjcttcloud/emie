@@ -4,8 +4,8 @@ import com.emie.designpm.designrequirement.service.DesignRequirementScoringServi
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.DesignRequirement;
 import com.emie.designpm.entity.DesignRequirementScore;
-import com.emie.designpm.repository.DesignRequirementRepository;
-import com.emie.designpm.repository.DesignRequirementScoreRepository;
+import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
+import com.emie.designpm.designrequirement.repository.DesignRequirementScoreRepository;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

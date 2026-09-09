@@ -1,5 +1,13 @@
 package com.emie.designpm.project.service;
 
+import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.project.repository.SubTaskDeliveryVersionRepository;
+import com.emie.designpm.project.repository.SubTaskRejectionCycleRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
+import com.emie.designpm.reference.repository.IpOptionRepository;
+import com.emie.designpm.reference.repository.ProductCategoryRepository;
+import com.emie.designpm.scoring.repository.ScoringRepository;
 import com.emie.designpm.admin.service.UserService;
 import com.emie.designpm.notification.service.NotificationWorkflowService;
 import com.emie.designpm.points.service.PointsService;
@@ -10,7 +18,6 @@ import com.emie.designpm.entity.ScoringRecord;
 import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.entity.SubTaskDeliveryVersion;
 import com.emie.designpm.entity.SubTaskRejectionCycle;
-import com.emie.designpm.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

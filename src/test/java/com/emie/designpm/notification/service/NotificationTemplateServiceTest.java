@@ -1,7 +1,7 @@
 package com.emie.designpm.notification.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.emie.designpm.repository.SystemConfigRepository;
+import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.entity.SystemConfig;
 import org.junit.jupiter.api.Test;
 

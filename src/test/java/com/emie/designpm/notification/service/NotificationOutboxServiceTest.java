@@ -2,8 +2,8 @@ package com.emie.designpm.notification.service;
 
 import com.emie.designpm.entity.NotificationAuditLog;
 import com.emie.designpm.entity.NotificationEvent;
-import com.emie.designpm.repository.NotificationAuditLogRepository;
-import com.emie.designpm.repository.NotificationEventRepository;
+import com.emie.designpm.notification.repository.NotificationAuditLogRepository;
+import com.emie.designpm.notification.repository.NotificationEventRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;

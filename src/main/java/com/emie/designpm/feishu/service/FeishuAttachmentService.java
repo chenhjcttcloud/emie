@@ -3,7 +3,7 @@ package com.emie.designpm.feishu.service;
 import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.file.service.PermanentFileLinkService;
 import com.emie.designpm.entity.FeishuAttachmentCache;
-import com.emie.designpm.repository.FeishuAttachmentCacheRepository;
+import com.emie.designpm.feishu.repository.FeishuAttachmentCacheRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;

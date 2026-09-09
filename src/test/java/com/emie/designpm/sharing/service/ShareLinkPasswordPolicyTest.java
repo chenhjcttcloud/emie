@@ -4,10 +4,10 @@ import com.emie.designpm.sharing.service.ShareLinkService;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.ShareLink;
 import com.emie.designpm.entity.User;
-import com.emie.designpm.repository.ProjectRepository;
-import com.emie.designpm.repository.ShareLinkRepository;
-import com.emie.designpm.repository.SubTaskRepository;
-import com.emie.designpm.repository.UserRepository;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.sharing.repository.ShareLinkRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
+import com.emie.designpm.admin.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;

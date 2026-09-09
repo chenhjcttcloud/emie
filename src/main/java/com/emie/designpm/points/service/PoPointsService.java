@@ -1,8 +1,12 @@
 package com.emie.designpm.points.service;
 
+import com.emie.designpm.points.repository.PoMonthlyProgressRepository;
+import com.emie.designpm.points.repository.PoPointLedgerRepository;
+import com.emie.designpm.points.repository.PoPointProjectRepository;
+import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
 import com.emie.designpm.admin.service.PermissionCatalog;
 import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.auth.controller.AuthController; import com.emie.designpm.entity.*; import com.emie.designpm.repository.*; import org.springframework.stereotype.Service; import org.springframework.transaction.annotation.Transactional; import java.time.*; import java.util.*;
+import com.emie.designpm.auth.controller.AuthController; import com.emie.designpm.entity.*;  import org.springframework.stereotype.Service; import org.springframework.transaction.annotation.Transactional; import java.time.*; import java.util.*;
 @Service public class PoPointsService {
  private final PoPointProjectRepository projects;private final PoMonthlyProgressRepository progress;private final PoPointLedgerRepository ledgers;private final PointAdjustmentLedgerRepository adjustments;
  public PoPointsService(PoPointProjectRepository p,PoMonthlyProgressRepository g,PoPointLedgerRepository l,PointAdjustmentLedgerRepository a){projects=p;progress=g;ledgers=l;adjustments=a;}

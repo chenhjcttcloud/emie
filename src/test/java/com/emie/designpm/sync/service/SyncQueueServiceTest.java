@@ -1,7 +1,7 @@
 package com.emie.designpm.sync.service;
 
 import com.emie.designpm.entity.SyncQueue;
-import com.emie.designpm.repository.SyncQueueRepository;
+import com.emie.designpm.sync.repository.SyncQueueRepository;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;

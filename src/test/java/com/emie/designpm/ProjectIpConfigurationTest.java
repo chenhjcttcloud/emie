@@ -1,5 +1,12 @@
 package com.emie.designpm;
 
+import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.project.repository.SubTaskDeliveryVersionRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
+import com.emie.designpm.reference.repository.IpOptionRepository;
+import com.emie.designpm.reference.repository.ProductCategoryRepository;
+import com.emie.designpm.scoring.repository.ScoringRepository;
 import com.emie.designpm.admin.service.UserService;
 import com.emie.designpm.project.service.ProjectAccessService;
 import com.emie.designpm.project.service.ProjectService;
@@ -9,7 +16,6 @@ import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.entity.IpOption;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.User;
-import com.emie.designpm.repository.*;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;

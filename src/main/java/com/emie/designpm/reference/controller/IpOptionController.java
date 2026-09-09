@@ -2,7 +2,7 @@ package com.emie.designpm.reference.controller;
 
 import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.IpOption;
-import com.emie.designpm.repository.IpOptionRepository;
+import com.emie.designpm.reference.repository.IpOptionRepository;
 import com.emie.designpm.util.SecurityUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;

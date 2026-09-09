@@ -1,7 +1,7 @@
 package com.emie.designpm.admin.service;
 
 import com.emie.designpm.entity.ActivityLog;
-import com.emie.designpm.repository.ActivityLogRepository;
+import com.emie.designpm.admin.repository.ActivityLogRepository;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;

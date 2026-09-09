@@ -2,8 +2,8 @@ package com.emie.designpm.admin.controller;
 
 import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.User;
-import com.emie.designpm.repository.DepartmentRepository;
-import com.emie.designpm.repository.RoleRepository;
+import com.emie.designpm.reference.repository.DepartmentRepository;
+import com.emie.designpm.admin.repository.RoleRepository;
 import com.emie.designpm.admin.service.UserService;
 import com.emie.designpm.util.TextEncodingUtil;
 import jakarta.servlet.http.HttpServletRequest;

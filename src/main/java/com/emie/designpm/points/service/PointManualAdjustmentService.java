@@ -1,9 +1,10 @@
 package com.emie.designpm.points.service;
 
+import com.emie.designpm.admin.repository.UserRepository;
+import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
 import com.emie.designpm.admin.service.PermissionCatalog;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.*;
-import com.emie.designpm.repository.*;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

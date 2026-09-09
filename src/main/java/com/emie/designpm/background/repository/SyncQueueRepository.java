@@ -1,7 +1,7 @@
 package com.emie.designpm.background.repository;
 
 import com.emie.designpm.entity.SyncQueue;
-import com.emie.designpm.repository.SyncQueueOperations;
+import com.emie.designpm.sync.repository.SyncQueueOperations;
 import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 

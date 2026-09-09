@@ -1,8 +1,9 @@
 package com.emie.designpm.points.service;
 
+import com.emie.designpm.admin.repository.UserRepository;
+import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.*;
-import com.emie.designpm.repository.*;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 import org.springframework.dao.DataIntegrityViolationException;

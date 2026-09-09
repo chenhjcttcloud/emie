@@ -1,10 +1,10 @@
 package com.emie.designpm.admin.service;
 
 import com.emie.designpm.entity.Role;
-import com.emie.designpm.repository.RoleRepository;
-import com.emie.designpm.repository.PermissionVersionRepository;
-import com.emie.designpm.repository.RolePermissionRepository;
-import com.emie.designpm.repository.RolePermissionScopeRepository;
+import com.emie.designpm.admin.repository.RoleRepository;
+import com.emie.designpm.admin.repository.PermissionVersionRepository;
+import com.emie.designpm.admin.repository.RolePermissionRepository;
+import com.emie.designpm.admin.repository.RolePermissionScopeRepository;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;

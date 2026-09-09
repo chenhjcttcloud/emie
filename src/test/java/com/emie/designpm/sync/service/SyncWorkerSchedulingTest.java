@@ -5,11 +5,11 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import com.emie.designpm.repository.ProjectRepository;
-import com.emie.designpm.repository.ActivityLogRepository;
-import com.emie.designpm.repository.ScoringRepository;
-import com.emie.designpm.repository.SubTaskRepository;
-import com.emie.designpm.repository.SyncQueueRepository;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.admin.repository.ActivityLogRepository;
+import com.emie.designpm.scoring.repository.ScoringRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
+import com.emie.designpm.sync.repository.SyncQueueRepository;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 

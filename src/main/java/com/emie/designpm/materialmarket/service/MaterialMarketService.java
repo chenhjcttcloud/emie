@@ -1,9 +1,17 @@
 package com.emie.designpm.materialmarket.service;
 
+import com.emie.designpm.admin.repository.UserRepository;
+import com.emie.designpm.file.repository.FileRecordRepository;
+import com.emie.designpm.materialmarket.repository.MaterialMarketAdoptionRepository;
+import com.emie.designpm.materialmarket.repository.MaterialMarketItemRepository;
+import com.emie.designpm.materialmarket.repository.MaterialMarketLikeRepository;
+import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
+import com.emie.designpm.points.repository.PointRuleRepository;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.reference.repository.IpOptionRepository;
 import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.notification.service.NotificationWorkflowService;
 import com.emie.designpm.entity.*;
-import com.emie.designpm.repository.*;
 import com.emie.designpm.util.SecurityUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;

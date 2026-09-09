@@ -1,5 +1,19 @@
 package com.emie.designpm.project.service;
 
+import com.emie.designpm.notification.repository.NotificationRepository;
+import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.file.repository.FileRecordRepository;
+import com.emie.designpm.materialmarket.repository.DesignerMarketEligibilityRepository;
+import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
+import com.emie.designpm.points.repository.PointAppealRepository;
+import com.emie.designpm.points.repository.PointLedgerRepository;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.project.repository.SubTaskDeliveryVersionRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
+import com.emie.designpm.project.repository.TaskWithdrawalRepository;
+import com.emie.designpm.reference.repository.IpOptionRepository;
+import com.emie.designpm.reference.repository.ProductCategoryRepository;
+import com.emie.designpm.scoring.repository.ScoringRepository;
 import com.emie.designpm.admin.service.UserService;
 import com.emie.designpm.notification.service.NotificationWorkflowService;
 import com.emie.designpm.points.service.PointsService;
@@ -9,7 +23,6 @@ import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.dto.ProjectListQuery;
 import com.emie.designpm.entity.*;
-import com.emie.designpm.repository.*;
 import com.emie.designpm.util.SecurityUtil;
 import com.emie.designpm.util.ProjectAccessPolicy;
 import com.fasterxml.jackson.core.type.TypeReference;

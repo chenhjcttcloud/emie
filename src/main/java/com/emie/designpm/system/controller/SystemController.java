@@ -1,9 +1,9 @@
 package com.emie.designpm.system.controller;
 
 import com.emie.designpm.auth.AuthSessions;
-import com.emie.designpm.repository.ActivityLogRepository;
+import com.emie.designpm.admin.repository.ActivityLogRepository;
 import com.emie.designpm.admin.service.LogArchiveService;
-import com.emie.designpm.repository.SyncQueueRepository;
+import com.emie.designpm.sync.repository.SyncQueueRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;

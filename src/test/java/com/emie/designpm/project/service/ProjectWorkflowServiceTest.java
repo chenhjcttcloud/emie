@@ -2,8 +2,8 @@ package com.emie.designpm.project.service;
 
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.ProjectWorkflowAttempt;
-import com.emie.designpm.repository.ProjectRepository;
-import com.emie.designpm.repository.ProjectWorkflowAttemptRepository;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.project.repository.ProjectWorkflowAttemptRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 

@@ -2,8 +2,8 @@ package com.emie.designpm.file.service;
 
 import com.emie.designpm.entity.FileRecord;
 import com.emie.designpm.entity.SystemConfig;
-import com.emie.designpm.repository.FileRecordRepository;
-import com.emie.designpm.repository.SystemConfigRepository;
+import com.emie.designpm.file.repository.FileRecordRepository;
+import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jcraft.jsch.ChannelSftp;

@@ -1,7 +1,7 @@
 package com.emie.designpm.notification.service;
 
 import com.emie.designpm.entity.NotificationBroadcastJob;
-import com.emie.designpm.repository.NotificationBroadcastJobRepository;
+import com.emie.designpm.notification.repository.NotificationBroadcastJobRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
