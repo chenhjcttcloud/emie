@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.ProductCategory;
 import com.emie.designpm.repository.ProductCategoryRepository;
 import com.emie.designpm.util.SecurityUtil;
@@ -29,14 +30,14 @@ public class CategoryController {
     /** 获取全部类目（管理后台用） */
     @GetMapping("/all")
     public ResponseEntity<List<ProductCategory>> listAll(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         return ResponseEntity.ok(repo.findAllByOrderBySortOrderAsc());
     }
 
     /** 新增类目 */
     @PostMapping
     public ResponseEntity<ProductCategory> create(@RequestBody Map<String, String> body, HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         String name = body.get("name");
         if (name == null || name.isBlank()) {
             return ResponseEntity.badRequest().build();
@@ -52,7 +53,7 @@ public class CategoryController {
     /** 更新类目 */
     @PutMapping("/{id}")
     public ResponseEntity<ProductCategory> update(@PathVariable Long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         ProductCategory cat = repo.findById(id).orElse(null);
         if (cat == null) return ResponseEntity.notFound().build();
 
@@ -67,7 +68,7 @@ public class CategoryController {
     /** 删除类目 */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id, HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         if (!repo.existsById(id)) return ResponseEntity.notFound().build();
         repo.deleteById(id);
         return ResponseEntity.ok().build();

@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.Department;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.DepartmentRepository;
@@ -36,7 +37,7 @@ public class DepartmentController {
     @PostMapping
     @Transactional
     public ResponseEntity<Department> create(@RequestBody Department dept, HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         if (dept.getName() == null || dept.getName().isBlank()) {
             return ResponseEntity.badRequest().build();
         }
@@ -60,7 +61,7 @@ public class DepartmentController {
     @PutMapping("/{id}")
     @Transactional
     public ResponseEntity<Department> update(@PathVariable Long id, @RequestBody Department dept, HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         return departmentRepository.findById(id)
                 .map(existing -> {
                     if (!isValidHeadRole(dept.getRole(), dept.getHeadUserId())) {
@@ -122,7 +123,7 @@ public class DepartmentController {
     @DeleteMapping("/{id}")
     @Transactional
     public ResponseEntity<?> delete(@PathVariable Long id, HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
         // 清空部门成员的 departmentId
         List<User> members = userService.getUsersByDepartmentId(id);
         for (User u : members) {

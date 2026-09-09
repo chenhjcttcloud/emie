@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.IpOption;
 import com.emie.designpm.repository.IpOptionRepository;
 import com.emie.designpm.util.SecurityUtil;
@@ -32,13 +33,13 @@ public class IpOptionController {
 
     @GetMapping("/all")
     public ResponseEntity<List<IpOption>> listAll(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         return ResponseEntity.ok(repository.findAllByOrderBySortOrderAsc());
     }
 
     @PostMapping
     public ResponseEntity<?> create(@RequestBody Map<String, String> body, HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         String name = normalizeName(body.get("name"));
         if (name == null) return ResponseEntity.badRequest().body(Map.of("error", "请输入IP名称"));
         if (repository.findByName(name).isPresent()) {
@@ -57,7 +58,7 @@ public class IpOptionController {
     public ResponseEntity<?> update(@PathVariable Long id,
                                     @RequestBody Map<String, String> body,
                                     HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         IpOption item = repository.findById(id).orElse(null);
         if (item == null) return ResponseEntity.notFound().build();
         if (body.containsKey("name")) {
@@ -80,7 +81,7 @@ public class IpOptionController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id, HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         if (!repository.existsById(id)) return ResponseEntity.notFound().build();
         repository.deleteById(id);
         return ResponseEntity.ok(Map.of("message", "IP配置已删除"));

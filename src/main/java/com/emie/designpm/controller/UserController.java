@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.DepartmentRepository;
 import com.emie.designpm.repository.RoleRepository;
@@ -99,7 +100,7 @@ public class UserController {
     @PutMapping("/org/{userId}")
     public ResponseEntity<?> updateOrgInfo(@PathVariable String userId, @RequestBody Map<String, Object> body,
                                            HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
         User u = userService.getUserByUserId(userId);
         if (u == null) return ResponseEntity.notFound().build();
         if (body.containsKey("departmentId")) {

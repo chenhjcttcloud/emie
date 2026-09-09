@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.service.LogArchiveService;
 import com.emie.designpm.repository.SyncQueueRepository;
@@ -38,14 +39,14 @@ public class SystemController {
     /** 只读数据完整性报告，管理员手动执行。 */
     @GetMapping("/data-integrity")
     public ResponseEntity<Map<String, Object>> dataIntegrity(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         return ResponseEntity.ok(dataIntegrityService.scan());
     }
 
     /** 管理员运行指标：用于快速判断 JVM、队列和同步是否有压力。 */
     @GetMapping("/metrics")
     public ResponseEntity<Map<String, Object>> metrics(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         Runtime runtime = Runtime.getRuntime();
         Map<String, Object> result = new HashMap<>();
         result.put("jvmUsedMb", (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024);
@@ -68,7 +69,7 @@ public class SystemController {
             @RequestParam(defaultValue = "30") int size,
             HttpServletRequest request) {
 
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
 
         LocalDateTime start, end;
 
@@ -98,7 +99,7 @@ public class SystemController {
     @PostMapping("/archive")
     public ResponseEntity<Map<String, Object>> triggerArchive(@RequestBody Map<String, String> body,
                                                                HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         String yearMonth = body.get("yearMonth");
         if (yearMonth == null || yearMonth.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "请指定年月（yyyy-MM）"));

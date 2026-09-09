@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.MaterialMarketItem;import com.emie.designpm.service.MaterialMarketService;import jakarta.servlet.http.HttpServletRequest;import org.springframework.web.bind.annotation.*;import org.springframework.http.ResponseEntity;import java.util.*;
 @RestController @RequestMapping({"/api/material-market","/api/materials"})
@@ -15,7 +16,7 @@ public class MaterialMarketController{
    if(authorization!=null&&authorization.startsWith("Bearer ")) token=authorization.substring(7);
   }
   if(token==null||token.isBlank()) throw new SecurityException("未登录");
-  var s=AuthController.validateToken(token); if(s==null) throw new SecurityException("未登录"); return s;
+  var s=AuthSessions.validateToken(token); if(s==null) throw new SecurityException("未登录"); return s;
  }
  @PostMapping public ResponseEntity<?> publish(@RequestBody Map<String,Object> body,HttpServletRequest req){var s=session(req);return ResponseEntity.ok(service.publish(body,s.userId()));}
  @PatchMapping("/{id}") public ResponseEntity<?> update(@PathVariable Long id,@RequestBody Map<String,Object> body,HttpServletRequest req){var s=session(req);return ResponseEntity.ok(service.update(id,body,s.userId()));}

@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.repository.UserRepository;
@@ -19,7 +20,7 @@ class AuthControllerImpersonationTest {
 
     @AfterEach
     void clearSession() {
-        AuthController.clearUserTokens(ADMIN_ID);
+        AuthSessions.clearUserTokens(ADMIN_ID);
     }
 
     @Test
@@ -31,12 +32,12 @@ class AuthControllerImpersonationTest {
                 .role("designer").status("disabled").build();
         when(permissions.has("admin", "admin.identity.switch")).thenReturn(true);
         when(users.findByUserId("disabled-1")).thenReturn(Optional.of(disabled));
-        String token = AuthController.generateToken(ADMIN_ID, "admin", "管理员");
+        String token = AuthSessions.generateToken(ADMIN_ID, "admin", "管理员");
 
         var response = controller.impersonate(token, Map.of("userId", "disabled-1"));
 
         assertEquals(400, response.getStatusCode().value());
         assertEquals("停用用户不能切换视角", response.getBody().get("error"));
-        assertEquals(ADMIN_ID, AuthController.validateToken(token).userId());
+        assertEquals(ADMIN_ID, AuthSessions.validateToken(token).userId());
     }
 }

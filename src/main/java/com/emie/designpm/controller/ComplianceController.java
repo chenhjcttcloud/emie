@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.ComplianceItem;
 import com.emie.designpm.repository.ComplianceItemRepository;
 import com.emie.designpm.util.SecurityUtil;
@@ -27,13 +28,13 @@ public class ComplianceController {
 
     @GetMapping("/all")
     public ResponseEntity<List<ComplianceItem>> listAll(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         return ResponseEntity.ok(repo.findAllByOrderBySortOrderAsc());
     }
 
     @PostMapping
     public ResponseEntity<ComplianceItem> create(@RequestBody Map<String, String> body, HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         String name = body.get("name");
         if (name == null || name.isBlank()) {
             return ResponseEntity.badRequest().build();
@@ -48,7 +49,7 @@ public class ComplianceController {
 
     @PutMapping("/{id}")
     public ResponseEntity<ComplianceItem> update(@PathVariable Long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         ComplianceItem item = repo.findById(id).orElse(null);
         if (item == null) return ResponseEntity.notFound().build();
 
@@ -62,7 +63,7 @@ public class ComplianceController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id, HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         if (!repo.existsById(id)) return ResponseEntity.notFound().build();
         repo.deleteById(id);
         return ResponseEntity.ok().build();

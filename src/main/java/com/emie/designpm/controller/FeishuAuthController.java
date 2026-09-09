@@ -1,5 +1,7 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.PasswordHasher;
+import com.emie.designpm.auth.AuthSessions;
 import com.lark.oapi.Client;
 import com.lark.oapi.core.request.RequestOptions;
 import com.lark.oapi.service.authen.v1.model.*;
@@ -70,7 +72,7 @@ public class FeishuAuthController {
             }
 
             // 通过一次性票据交付 token，避免 token 出现在浏览器地址栏、历史记录和 Referer 中。
-            String token = AuthController.generateToken(user.getUserId(), user.getRole(), user.getName());
+            String token = AuthSessions.generateToken(user.getUserId(), user.getRole(), user.getName());
             String ticket = UUID.randomUUID().toString();
             long now = System.currentTimeMillis();
             PENDING_LOGINS.entrySet().removeIf(entry -> entry.getValue().expiresAt < now);
@@ -119,7 +121,7 @@ public class FeishuAuthController {
                 return ResponseEntity.badRequest().body(Map.of("error", "飞书登录失败"));
             }
 
-            String token = AuthController.generateToken(user.getUserId(), user.getRole(), user.getName());
+            String token = AuthSessions.generateToken(user.getUserId(), user.getRole(), user.getName());
             Map<String, Object> userData = Map.of(
                     "userId", user.getUserId(),
                     "userName", user.getName(),
@@ -210,7 +212,7 @@ public class FeishuAuthController {
     }
 
     private String buildPendingUserId(String openId) {
-        String base = "feishu_" + AuthController.sha256(openId).substring(0, 16);
+        String base = "feishu_" + PasswordHasher.sha256(openId).substring(0, 16);
         if (userRepository.findByUserId(base).isEmpty()) return base;
         return "feishu_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
     }

@@ -1,6 +1,6 @@
 package com.emie.designpm.service;
 
-import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.auth.PasswordHasher;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.ShareLink;
 import com.emie.designpm.entity.SubTask;
@@ -148,7 +148,7 @@ public class ShareLinkService {
             String storedPassword = link.getPassword();
             boolean matches = storedPassword.startsWith("$2")
                     ? PASSWORD_ENCODER.matches(password, storedPassword)
-                    : AuthController.sha256(password).equals(storedPassword);
+                    : PasswordHasher.sha256(password).equals(storedPassword);
             if (!matches) {
                 registerPasswordFailure(token);
                 throw new IllegalArgumentException("密码错误");

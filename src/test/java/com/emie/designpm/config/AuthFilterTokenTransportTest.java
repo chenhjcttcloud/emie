@@ -1,7 +1,7 @@
 package com.emie.designpm.config;
 
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.controller.AuthController;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
@@ -23,7 +23,7 @@ class AuthFilterTokenTransportTest {
 
     @AfterEach
     void clearSessions() {
-        userIds.forEach(AuthController::clearUserTokens);
+        userIds.forEach(AuthSessions::clearUserTokens);
     }
 
     @Test
@@ -68,7 +68,7 @@ class AuthFilterTokenTransportTest {
         String token = tokenFor("header-precedence-user");
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/files/preview/example.pdf");
         request.addHeader("X-Auth-Token", "invalid-token");
-        request.setCookies(new jakarta.servlet.http.Cookie(AuthController.AUTH_COOKIE, token));
+        request.setCookies(new jakarta.servlet.http.Cookie(AuthSessions.AUTH_COOKIE, token));
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain();
 
@@ -142,7 +142,7 @@ class AuthFilterTokenTransportTest {
     private void assertCookieAccepted(String method, String path) throws Exception {
         String token = tokenFor(method + path);
         MockHttpServletRequest request = new MockHttpServletRequest(method, path);
-        request.setCookies(new jakarta.servlet.http.Cookie(AuthController.AUTH_COOKIE, token));
+        request.setCookies(new jakarta.servlet.http.Cookie(AuthSessions.AUTH_COOKIE, token));
         MockFilterChain chain = execute(request);
 
         assertNotNull(chain.getRequest());
@@ -173,6 +173,6 @@ class AuthFilterTokenTransportTest {
     private String tokenFor(String suffix) {
         String userId = "auth-filter-" + Integer.toUnsignedString(suffix.hashCode());
         userIds.add(userId);
-        return AuthController.generateToken(userId, "sales", "测试用户");
+        return AuthSessions.generateToken(userId, "sales", "测试用户");
     }
 }

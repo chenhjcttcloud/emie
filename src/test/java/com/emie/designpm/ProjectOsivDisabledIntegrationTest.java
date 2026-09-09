@@ -1,6 +1,6 @@
 package com.emie.designpm;
 
-import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.ActivityLog;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.SubTask;
@@ -108,7 +108,7 @@ class ProjectOsivDisabledIntegrationTest {
             projectId = project.getId();
             taskId = task.getId();
         });
-        token = AuthController.generateToken("planner-osiv", "admin", "OSIV 测试员");
+        token = AuthSessions.generateToken("planner-osiv", "admin", "OSIV 测试员");
     }
 
     @Test

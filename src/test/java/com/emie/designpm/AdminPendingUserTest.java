@@ -1,6 +1,6 @@
 package com.emie.designpm;
 
-import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.RoleRepository;
 import com.emie.designpm.repository.SystemConfigRepository;
@@ -30,7 +30,7 @@ class AdminPendingUserTest {
         when(users.findById(42L)).thenReturn(Optional.of(pending));
         when(users.save(pending)).thenReturn(pending);
 
-        String oldToken = AuthController.generateToken(pending.getUserId(), pending.getRole(), pending.getName());
+        String oldToken = AuthSessions.generateToken(pending.getUserId(), pending.getRole(), pending.getName());
         AdminService service = new AdminService(mock(SystemConfigRepository.class), users,
                 mock(RoleRepository.class), userService);
 
@@ -39,7 +39,7 @@ class AdminPendingUserTest {
         assertEquals("designer", updated.getRole());
         assertEquals("active", updated.getStatus());
         assertEquals("设计师", updated.getTitle());
-        assertNull(AuthController.validateToken(oldToken));
+        assertNull(AuthSessions.validateToken(oldToken));
         verify(userService).refreshCache();
     }
 }

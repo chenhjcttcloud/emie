@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.SystemConfig;
 import com.emie.designpm.entity.User;
@@ -94,7 +95,7 @@ public class AdminController {
     @PostMapping("/notifications/test")
     public ResponseEntity<Map<String, Object>> sendNotificationTest(
             @RequestHeader("X-Auth-Token") String token) {
-        AuthSession session = AuthController.validateToken(token);
+        AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
         if (!"admin".equals(session.role())) return ResponseEntity.status(403).build();
         try {
@@ -107,7 +108,7 @@ public class AdminController {
     @PostMapping("/notifications/temporary-broadcast")
     public ResponseEntity<?> sendTemporaryBroadcast(@RequestBody Map<String, String> body,
                                                      @RequestHeader("X-Auth-Token") String token) {
-        AuthSession session = AuthController.validateToken(token);
+        AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
         if (!"admin".equals(session.role())) return ResponseEntity.status(403).build();
         try {
@@ -121,7 +122,7 @@ public class AdminController {
     @GetMapping("/notifications/temporary-broadcast/{jobId}")
     public ResponseEntity<?> getTemporaryBroadcastStatus(@PathVariable String jobId,
                                                           @RequestHeader("X-Auth-Token") String token) {
-        AuthSession session = AuthController.validateToken(token);
+        AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
         try {
             return ResponseEntity.ok(notificationBroadcastJobService.status(jobId));
@@ -132,14 +133,14 @@ public class AdminController {
 
     @GetMapping("/notifications/failures")
     public ResponseEntity<?> getNotificationFailures(@RequestHeader("X-Auth-Token") String token) {
-        AuthSession session = AuthController.validateToken(token);
+        AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
         return ResponseEntity.ok(notificationRetryService.recentFeishuDeliveries());
     }
 
     @PostMapping("/notifications/deliveries/{id}/retry")
     public ResponseEntity<?> retryNotification(@PathVariable Long id, @RequestHeader("X-Auth-Token") String token) {
-        AuthSession session = AuthController.validateToken(token);
+        AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
         try {
             notificationRetryService.retryNow(id, session.userId());
@@ -358,7 +359,7 @@ public class AdminController {
     @DeleteMapping("/clear-data")
     public ResponseEntity<Map<String, Object>> clearAllProjectData(
             @RequestHeader("X-Auth-Token") String token) {
-        AuthSession session = AuthController.validateToken(token);
+        AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
         Map<String, Object> result = adminService.clearAllProjectData();
         if (Boolean.TRUE.equals(result.get("success"))) {
@@ -373,7 +374,7 @@ public class AdminController {
     @GetMapping("/workload")
     public ResponseEntity<Map<String, Object>> getWorkload(
             @RequestHeader("X-Auth-Token") String token) {
-        AuthSession session = AuthController.validateToken(token);
+        AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
         if (!"admin".equals(session.role())) return ResponseEntity.status(403).build();
         return ResponseEntity.ok(adminService.getWorkloadStats());
@@ -385,7 +386,7 @@ public class AdminController {
             @RequestParam(value = "startDate", required = false) LocalDate startDate,
             @RequestParam(value = "endDate", required = false) LocalDate endDate,
             @RequestHeader("X-Auth-Token") String token) {
-        AuthSession session = AuthController.validateToken(token);
+        AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
         if (!"admin".equals(session.role())) return ResponseEntity.status(403).build();
         if ((startDate == null) != (endDate == null)) {
@@ -401,13 +402,13 @@ public class AdminController {
     // ==================== 辅助方法 ====================
 
     private String getUserFromToken(String token) {
-        AuthSession session = AuthController.validateToken(token);
+        AuthSession session = AuthSessions.validateToken(token);
         return session != null ? session.name() : "未知";
     }
 
     private PermissionManagementService.Actor permissionActor(
             String token, String reason, HttpServletRequest request) {
-        AuthSession session = AuthController.validateToken(token);
+        AuthSession session = AuthSessions.validateToken(token);
         if (session == null) throw new IllegalArgumentException("登录状态已失效");
         return new PermissionManagementService.Actor(
                 session.userId(), session.name(), reason,

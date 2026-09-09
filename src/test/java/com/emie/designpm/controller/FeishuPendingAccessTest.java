@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.config.AuthFilter;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.SystemConfigRepository;
@@ -27,7 +28,7 @@ class FeishuPendingAccessTest {
 
     @AfterEach
     void clearSession() {
-        AuthController.clearUserTokens(PENDING_USER_ID);
+        AuthSessions.clearUserTokens(PENDING_USER_ID);
     }
 
     @Test
@@ -83,7 +84,7 @@ class FeishuPendingAccessTest {
 
     @Test
     void pendingSessionCanReadOwnStateButCannotAccessBusinessApis() throws Exception {
-        String token = AuthController.generateToken(PENDING_USER_ID, "pending", "待授权员工");
+        String token = AuthSessions.generateToken(PENDING_USER_ID, "pending", "待授权员工");
         AuthFilter filter = new AuthFilter();
 
         MockHttpServletRequest deniedRequest = new MockHttpServletRequest("GET", "/api/projects");
@@ -119,7 +120,7 @@ class FeishuPendingAccessTest {
     @Test
     void systemManagementRouteUsesSpecificPermissionInsteadOfAdminRoleName() throws Exception {
         String userId = "security-manager-test";
-        String token = AuthController.generateToken(userId, "security_manager", "安全管理员");
+        String token = AuthSessions.generateToken(userId, "security_manager", "安全管理员");
         PermissionService permissions = mock(PermissionService.class);
         when(permissions.has("security_manager", "admin.user.manage")).thenReturn(true);
         AuthFilter filter = new AuthFilter(permissions);
@@ -133,6 +134,6 @@ class FeishuPendingAccessTest {
         assertNotNull(chain.getRequest());
         assertEquals(Boolean.TRUE, request.getAttribute("permissionGranted"));
         assertEquals("admin.user.manage", request.getAttribute("requiredPermission"));
-        AuthController.clearUserTokens(userId);
+        AuthSessions.clearUserTokens(userId);
     }
 }

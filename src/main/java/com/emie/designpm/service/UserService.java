@@ -1,8 +1,8 @@
 package com.emie.designpm.service;
 
+import com.emie.designpm.auth.PasswordHasher;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.UserRepository;
-import com.emie.designpm.controller.AuthController;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 import org.springframework.core.env.Environment;
@@ -52,7 +52,7 @@ public class UserService {
     }
 
     private String pwd(String id) {
-        return AuthController.hashPassword(id);
+        return PasswordHasher.hashPassword(id);
     }
 
     public List<User> getUsersByRole(String role) {
