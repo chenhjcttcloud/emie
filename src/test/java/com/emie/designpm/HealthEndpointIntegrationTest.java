@@ -2,7 +2,7 @@ package com.emie.designpm;
 
 import com.emie.designpm.notification.service.NotificationRetryService;
 import com.emie.designpm.notification.service.NotificationBroadcastJobService;
-import com.emie.designpm.service.RedisSessionStore;
+import com.emie.designpm.auth.RedisSessionStore;
 import com.emie.designpm.sync.service.SyncQueueService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

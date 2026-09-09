@@ -12,7 +12,7 @@ import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.file.service.FilePreviewService;
 import com.emie.designpm.file.service.FileThumbnailService;
-import com.emie.designpm.service.ProjectAccessService;
+import com.emie.designpm.project.service.ProjectAccessService;
 import com.emie.designpm.util.SecurityUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;

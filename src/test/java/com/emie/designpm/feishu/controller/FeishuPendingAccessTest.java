@@ -1,12 +1,12 @@
 package com.emie.designpm.feishu.controller;
 
-import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.auth.controller.AuthController;
 import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.config.AuthFilter;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.SystemConfigRepository;
 import com.emie.designpm.repository.UserRepository;
-import com.emie.designpm.service.PermissionService;
+import com.emie.designpm.admin.service.PermissionService;
 import com.lark.oapi.service.authen.v1.model.GetUserInfoRespBody;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

@@ -1,6 +1,6 @@
 package com.emie.designpm.points.service;
 
-import com.emie.designpm.service.PermissionCatalog;
+import com.emie.designpm.admin.service.PermissionCatalog;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.repository.*;

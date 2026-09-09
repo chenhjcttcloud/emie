@@ -1,6 +1,5 @@
 package com.emie.designpm.auth;
 
-import com.emie.designpm.service.RedisSessionStore;
 import jakarta.servlet.http.HttpServletRequest;
 
 import java.security.SecureRandom;

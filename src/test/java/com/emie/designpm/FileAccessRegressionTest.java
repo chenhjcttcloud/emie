@@ -11,7 +11,7 @@ import com.emie.designpm.repository.ProjectRepository;
 import com.emie.designpm.repository.SubTaskRepository;
 import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.file.service.FilePreviewService;
-import com.emie.designpm.service.ProjectAccessService;
+import com.emie.designpm.project.service.ProjectAccessService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

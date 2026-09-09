@@ -3,7 +3,7 @@ package com.emie.designpm.sharing.controller;
 import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.sharing.service.ShareLinkService;
-import com.emie.designpm.service.PermissionService;
+import com.emie.designpm.admin.service.PermissionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

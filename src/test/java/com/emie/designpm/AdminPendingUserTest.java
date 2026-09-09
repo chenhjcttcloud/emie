@@ -5,8 +5,8 @@ import com.emie.designpm.entity.User;
 import com.emie.designpm.repository.RoleRepository;
 import com.emie.designpm.repository.SystemConfigRepository;
 import com.emie.designpm.repository.UserRepository;
-import com.emie.designpm.service.AdminService;
-import com.emie.designpm.service.UserService;
+import com.emie.designpm.admin.service.AdminService;
+import com.emie.designpm.admin.service.UserService;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
