@@ -1,7 +1,7 @@
 package com.emie.designpm;
 
-import com.emie.designpm.repository.ProjectRepository;
-import com.emie.designpm.repository.SubTaskRepository;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.domain.Pageable;

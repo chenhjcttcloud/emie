@@ -1,10 +1,10 @@
 package com.emie.designpm.admin.service;
 
-import com.emie.designpm.repository.DesignRequirementRepository;
-import com.emie.designpm.repository.FileRecordRepository;
-import com.emie.designpm.repository.ProjectRepository;
-import com.emie.designpm.repository.MaterialMarketItemRepository;
-import com.emie.designpm.repository.SubTaskRepository;
+import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
+import com.emie.designpm.file.repository.FileRecordRepository;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.materialmarket.repository.MaterialMarketItemRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.PageRequest;

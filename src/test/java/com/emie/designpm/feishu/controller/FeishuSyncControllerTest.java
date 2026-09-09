@@ -1,10 +1,10 @@
 package com.emie.designpm.feishu.controller;
 
 import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.repository.ProjectRepository;
-import com.emie.designpm.repository.ActivityLogRepository;
-import com.emie.designpm.repository.ScoringRepository;
-import com.emie.designpm.repository.SubTaskRepository;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.admin.repository.ActivityLogRepository;
+import com.emie.designpm.scoring.repository.ScoringRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
 import com.emie.designpm.feishu.service.FeishuBaseService;
 import com.emie.designpm.sync.service.SyncQueueService;
 import org.junit.jupiter.api.Test;

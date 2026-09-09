@@ -5,10 +5,10 @@ import com.emie.designpm.entity.PointDifficultyConfig;
 import com.emie.designpm.entity.PointRule;
 import com.emie.designpm.entity.ScoringRecord;
 import com.emie.designpm.entity.SubTask;
-import com.emie.designpm.repository.PointLedgerRepository;
-import com.emie.designpm.repository.PointDifficultyConfigRepository;
-import com.emie.designpm.repository.PointRuleRepository;
-import com.emie.designpm.repository.ScoringRepository;
+import com.emie.designpm.points.repository.PointLedgerRepository;
+import com.emie.designpm.points.repository.PointDifficultyConfigRepository;
+import com.emie.designpm.points.repository.PointRuleRepository;
+import com.emie.designpm.scoring.repository.ScoringRepository;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;

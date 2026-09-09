@@ -3,7 +3,7 @@ package com.emie.designpm.reference.controller;
 import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.Department;
 import com.emie.designpm.entity.User;
-import com.emie.designpm.repository.DepartmentRepository;
+import com.emie.designpm.reference.repository.DepartmentRepository;
 import com.emie.designpm.admin.service.UserService;
 import com.emie.designpm.util.SecurityUtil;
 import jakarta.servlet.http.HttpServletRequest;

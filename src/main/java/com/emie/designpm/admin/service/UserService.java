@@ -2,7 +2,7 @@ package com.emie.designpm.admin.service;
 
 import com.emie.designpm.auth.PasswordHasher;
 import com.emie.designpm.entity.User;
-import com.emie.designpm.repository.UserRepository;
+import com.emie.designpm.admin.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 import org.springframework.core.env.Environment;

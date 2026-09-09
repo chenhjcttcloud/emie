@@ -1,7 +1,7 @@
 package com.emie.designpm.system.controller;
 
 import com.emie.designpm.entity.SystemConfig;
-import com.emie.designpm.repository.SystemConfigRepository;
+import com.emie.designpm.admin.repository.SystemConfigRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;

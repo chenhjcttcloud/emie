@@ -2,11 +2,11 @@ package com.emie.designpm.notification.service;
 
 import com.emie.designpm.feishu.service.FeishuBaseService;
 import com.emie.designpm.entity.SystemConfig;
-import com.emie.designpm.repository.NotificationAuditLogRepository;
-import com.emie.designpm.repository.NotificationDeliveryRepository;
-import com.emie.designpm.repository.NotificationRepository;
-import com.emie.designpm.repository.SystemConfigRepository;
-import com.emie.designpm.repository.UserRepository;
+import com.emie.designpm.notification.repository.NotificationAuditLogRepository;
+import com.emie.designpm.notification.repository.NotificationDeliveryRepository;
+import com.emie.designpm.notification.repository.NotificationRepository;
+import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.admin.repository.UserRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;

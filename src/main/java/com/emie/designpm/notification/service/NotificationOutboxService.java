@@ -2,8 +2,8 @@ package com.emie.designpm.notification.service;
 
 import com.emie.designpm.entity.NotificationAuditLog;
 import com.emie.designpm.entity.NotificationEvent;
-import com.emie.designpm.repository.NotificationAuditLogRepository;
-import com.emie.designpm.repository.NotificationEventRepository;
+import com.emie.designpm.notification.repository.NotificationAuditLogRepository;
+import com.emie.designpm.notification.repository.NotificationEventRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

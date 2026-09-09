@@ -1,7 +1,7 @@
 package com.emie.designpm.feishu.service;
 
 import com.emie.designpm.entity.SystemConfig;
-import com.emie.designpm.repository.SystemConfigRepository;
+import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;

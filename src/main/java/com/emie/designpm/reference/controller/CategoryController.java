@@ -2,7 +2,7 @@ package com.emie.designpm.reference.controller;
 
 import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.ProductCategory;
-import com.emie.designpm.repository.ProductCategoryRepository;
+import com.emie.designpm.reference.repository.ProductCategoryRepository;
 import com.emie.designpm.util.SecurityUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

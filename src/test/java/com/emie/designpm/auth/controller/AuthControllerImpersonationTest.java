@@ -2,8 +2,8 @@ package com.emie.designpm.auth.controller;
 
 import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.User;
-import com.emie.designpm.repository.ActivityLogRepository;
-import com.emie.designpm.repository.UserRepository;
+import com.emie.designpm.admin.repository.ActivityLogRepository;
+import com.emie.designpm.admin.repository.UserRepository;
 import com.emie.designpm.admin.service.PermissionService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

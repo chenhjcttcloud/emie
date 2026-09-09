@@ -1,8 +1,8 @@
 package com.emie.designpm.admin.service;
 
 import com.emie.designpm.entity.RuntimeAlert;
-import com.emie.designpm.repository.RuntimeAlertRepository;
-import com.emie.designpm.repository.SyncQueueRepository;
+import com.emie.designpm.admin.repository.RuntimeAlertRepository;
+import com.emie.designpm.sync.repository.SyncQueueRepository;
 import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

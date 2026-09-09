@@ -7,7 +7,9 @@ import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.boot.orm.jpa.EntityManagerFactoryBuilder;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.orm.jpa.JpaTransactionManager;
@@ -20,10 +22,17 @@ import com.zaxxer.hikari.HikariDataSource;
  *
  * 当后台连接池开启后，Spring Boot 不再能可靠地从默认包扫描中区分两套
  * Repository，因此主库也必须显式声明扫描范围。
+ *
+ * 包结构按业务域拆分后，主库 Repository 分散在 com.emie.designpm.&lt;domain&gt;.repository，
+ * 这里扫描整个根包并显式排除后台库专用的 com.emie.designpm.background.repository，
+ * 避免每加一个域就要来改 basePackages。
  */
 @Configuration
 @EnableJpaRepositories(
-        basePackages = "com.emie.designpm.repository",
+        basePackages = "com.emie.designpm",
+        excludeFilters = @ComponentScan.Filter(
+                type = FilterType.REGEX,
+                pattern = "com\\.emie\\.designpm\\.background\\.repository\\..*"),
         entityManagerFactoryRef = "entityManagerFactory",
         transactionManagerRef = "transactionManager")
 public class PrimaryJpaConfig {

@@ -1,8 +1,9 @@
 package com.emie.designpm.points.service;
 
+import com.emie.designpm.points.repository.PointTaskForecastRepository;
 import com.emie.designpm.admin.service.PermissionCatalog;
 import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.auth.controller.AuthController;import com.emie.designpm.entity.*;import com.emie.designpm.repository.*;import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.Transactional;import java.time.*;import java.util.*;
+import com.emie.designpm.auth.controller.AuthController;import com.emie.designpm.entity.*;import org.springframework.stereotype.Service;import org.springframework.transaction.annotation.Transactional;import java.time.*;import java.util.*;
 @Service public class PointProgramOperationsService{
  private final PointTaskForecastRepository forecasts;
  public PointProgramOperationsService(PointTaskForecastRepository f){forecasts=f;}

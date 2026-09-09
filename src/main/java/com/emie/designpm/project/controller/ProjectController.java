@@ -8,10 +8,10 @@ import com.emie.designpm.dto.ProjectListQuery;
 import com.emie.designpm.dto.ProjectSummaryDTO;
 import com.emie.designpm.dto.TaskDetailDTO;
 import com.emie.designpm.entity.*;
-import com.emie.designpm.repository.ActivityLogRepository;
-import com.emie.designpm.repository.ScoringRepository;
-import com.emie.designpm.repository.SubTaskRepository;
-import com.emie.designpm.repository.SubTaskRejectionCycleRepository;
+import com.emie.designpm.admin.repository.ActivityLogRepository;
+import com.emie.designpm.scoring.repository.ScoringRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
+import com.emie.designpm.project.repository.SubTaskRejectionCycleRepository;
 import com.emie.designpm.project.service.ProjectService;
 import com.emie.designpm.project.service.SubTaskCommandService;
 import com.emie.designpm.project.service.ProjectLifecycleCommandService;
@@ -50,7 +50,7 @@ public class ProjectController {
     @Autowired(required = false)
     private UserService userService;
     @Autowired(required = false)
-    private com.emie.designpm.repository.PointLedgerRepository pointLedgerRepository;
+    private com.emie.designpm.points.repository.PointLedgerRepository pointLedgerRepository;
     @Autowired(required = false)
     private com.emie.designpm.feishu.service.FeishuChatService feishuChatService;
     @Autowired(required = false)

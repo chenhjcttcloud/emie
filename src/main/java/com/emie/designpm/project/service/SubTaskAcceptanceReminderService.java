@@ -2,8 +2,8 @@ package com.emie.designpm.project.service;
 
 import com.emie.designpm.notification.service.NotificationWorkflowService;
 import com.emie.designpm.entity.SubTask;
-import com.emie.designpm.repository.NotificationRepository;
-import com.emie.designpm.repository.SubTaskRepository;
+import com.emie.designpm.notification.repository.NotificationRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;

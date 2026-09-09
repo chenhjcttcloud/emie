@@ -1,7 +1,7 @@
 package com.emie.designpm.file.service;
 
 import com.emie.designpm.entity.SystemConfig;
-import com.emie.designpm.repository.SystemConfigRepository;
+import com.emie.designpm.admin.repository.SystemConfigRepository;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.Mac;

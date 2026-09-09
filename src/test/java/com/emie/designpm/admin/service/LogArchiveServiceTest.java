@@ -1,7 +1,7 @@
 package com.emie.designpm.admin.service;
 
 import com.emie.designpm.entity.ActivityLog;
-import com.emie.designpm.repository.ActivityLogRepository;
+import com.emie.designpm.admin.repository.ActivityLogRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.test.util.ReflectionTestUtils;
