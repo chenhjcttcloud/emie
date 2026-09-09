@@ -26,9 +26,9 @@ class ClassSizeCeilingTest {
     /** file path (相对 src/main/java) -> 允许的最大行数（= 冻结时的实际行数）。 */
     private static final Map<String, Integer> FROZEN_CEILINGS = Map.of(
             "com/emie/designpm/feishu/service/FeishuBaseService.java", 1844,
-            "com/emie/designpm/project/service/DefaultSubTaskCommandService.java", 1695,
+            "com/emie/designpm/project/service/DefaultSubTaskCommandService.java", 1625,
             "com/emie/designpm/project/controller/ProjectController.java", 1377,
-            "com/emie/designpm/project/service/ProjectService.java", 1125,
+            "com/emie/designpm/project/service/ProjectService.java", 1055,
             "com/emie/designpm/admin/service/AdminService.java", 950,
             "com/emie/designpm/sync/service/SyncWorker.java", 675);
 

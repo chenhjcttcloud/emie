@@ -44,16 +44,6 @@ import org.springframework.data.domain.Pageable;
 @Service
 @Transactional
 public class DefaultProjectLifecycleCommandService implements ProjectLifecycleCommandService {
-    private void validateCustomPriceRange(String value) {
-        try {
-            double price = Double.parseDouble(value.trim());
-            if (!Double.isFinite(price) || price < 0 || price > 1000 || Math.round(price * 100) != price * 100) {
-                throw new IllegalArgumentException("参考零售价必须在0到1,000之间，最多两位小数");
-            }
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("参考零售价必须在0到1,000之间，最多两位小数");
-        }
-    }
     private static final Logger log = LoggerFactory.getLogger(DefaultProjectLifecycleCommandService.class);
     private static final Object PROJECT_CODE_LOCK = new Object();
 
