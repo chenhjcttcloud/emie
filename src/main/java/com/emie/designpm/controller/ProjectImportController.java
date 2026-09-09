@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.service.ProjectExcelImportService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,7 +23,7 @@ public class ProjectImportController {
 
     @PostMapping("/preview")
     public ResponseEntity<?> preview(@RequestParam("file") MultipartFile file, HttpServletRequest request) throws Exception {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).body(java.util.Map.of("error", "仅管理员可导入项目"));
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).body(java.util.Map.of("error", "仅管理员可导入项目"));
         try (var input = file.getInputStream()) {
             return ResponseEntity.ok(importService.preview(input));
         }
@@ -30,7 +31,7 @@ public class ProjectImportController {
 
     @PostMapping("/execute")
     public ResponseEntity<?> execute(@RequestParam("file") MultipartFile file, HttpServletRequest request) throws Exception {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).body(java.util.Map.of("error", "仅管理员可导入项目"));
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).body(java.util.Map.of("error", "仅管理员可导入项目"));
         AuthSession session = (AuthSession) request.getAttribute("authSession");
         ProjectExcelImportService.ImportResult result;
         try (var input = file.getInputStream()) {

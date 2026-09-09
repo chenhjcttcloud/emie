@@ -5,7 +5,6 @@ import com.emie.designpm.entity.*;
 import com.emie.designpm.repository.*;
 import com.emie.designpm.util.SecurityUtil;
 import com.emie.designpm.util.ProjectAccessPolicy;
-import com.emie.designpm.controller.AuthController;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;

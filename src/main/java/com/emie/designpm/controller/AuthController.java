@@ -1,6 +1,8 @@
 package com.emie.designpm.controller;
 
 import com.emie.designpm.auth.AuthSession;
+import com.emie.designpm.auth.AuthSessions;
+import com.emie.designpm.auth.PasswordHasher;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.entity.ActivityLog;
 import com.emie.designpm.repository.UserRepository;
@@ -13,31 +15,19 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletRequest;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
-    public static final String AUTH_COOKIE = "designpm_auth";
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
-
-    private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
 
     private final UserRepository userRepository;
     private final PermissionService permissionService;
     private final ActivityLogRepository activityLogRepository;
-    private static RedisSessionStore redisSessionStore;
-
-    // 简单内存 Token 管理（生产环境应使用 Redis/DB）
-    private static final Map<String, AuthSession> TOKENS = new ConcurrentHashMap<>();
 
     public AuthController(UserRepository userRepository, PermissionService permissionService, ActivityLogRepository activityLogRepository) {
         this(userRepository, permissionService, activityLogRepository, null);
@@ -49,7 +39,7 @@ public class AuthController {
         this.userRepository = userRepository;
         this.permissionService = permissionService;
         this.activityLogRepository = activityLogRepository;
-        AuthController.redisSessionStore = redisSessionStore;
+        AuthSessions.bindRedisSessionStore(redisSessionStore);
     }
 
     @PostMapping("/login")
@@ -87,21 +77,21 @@ public class AuthController {
         String storedPassword = user.getPassword();
         boolean bcrypt = storedPassword != null && storedPassword.startsWith("$2");
         boolean passwordMatches = bcrypt
-                ? PASSWORD_ENCODER.matches(password, storedPassword)
-                : sha256(password).equals(storedPassword);
+                ? PasswordHasher.matches(password, storedPassword)
+                : PasswordHasher.sha256(password).equals(storedPassword);
         if (!passwordMatches) {
             return ResponseEntity.status(401).body(Map.of("error", "账号或密码错误"));
         }
 
         // 兼容旧 SHA-256 账号，并在成功登录时升级为 BCrypt。
         if (!bcrypt) {
-            user.setPassword(hashPassword(password));
+            user.setPassword(PasswordHasher.hashPassword(password));
             userRepository.save(user);
         }
 
         // 生成 token
-        String token = generateToken();
-        putSession(token, new AuthSession(user.getUserId(), user.getRole(), user.getName()));
+        String token = AuthSessions.generateToken();
+        AuthSessions.put(token, new AuthSession(user.getUserId(), user.getRole(), user.getName()));
 
         // 记录登录日志
         String roleLabel = switch (user.getRole()) {
@@ -156,7 +146,7 @@ public class AuthController {
     public ResponseEntity<Map<String, String>> logout(@RequestHeader(value = "X-Auth-Token", required = false) String token,
                                                        HttpServletRequest request) {
         if (token == null || token.isBlank()) token = readCookie(request);
-        AuthSession session = getSession(token);
+        AuthSession session = AuthSessions.get(token);
         if (session != null) {
             // 在删除 token 之前记录日志（需要用户信息）
             String roleLabel = switch (session.role()) {
@@ -173,28 +163,27 @@ public class AuthController {
                     session.name(), session.role()));
             } catch (Exception ignored) {}
         }
-        TOKENS.remove(token);
-        removeSession(token);
+        AuthSessions.remove(token);
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, authCookie("", request, true).toString())
                 .body(Map.of("message", "已退出登录"));
     }
 
     private static ResponseCookie authCookie(String token, HttpServletRequest request, boolean clear) {
-        return ResponseCookie.from(AUTH_COOKIE, token == null ? "" : token)
+        return ResponseCookie.from(AuthSessions.AUTH_COOKIE, token == null ? "" : token)
                 .httpOnly(true).secure(request != null && request.isSecure()).sameSite("Lax")
                 .path("/").maxAge(clear ? java.time.Duration.ZERO : java.time.Duration.ofDays(36500)).build();
     }
 
     private static String readCookie(HttpServletRequest request) {
         if (request == null || request.getCookies() == null) return null;
-        return Arrays.stream(request.getCookies()).filter(c -> AUTH_COOKIE.equals(c.getName()))
+        return Arrays.stream(request.getCookies()).filter(c -> AuthSessions.AUTH_COOKIE.equals(c.getName()))
                 .map(jakarta.servlet.http.Cookie::getValue).findFirst().orElse(null);
     }
 
     @GetMapping("/me")
     public ResponseEntity<?> me(@RequestHeader("X-Auth-Token") String token) {
-        AuthSession session = validateToken(token);
+        AuthSession session = AuthSessions.validateToken(token);
         if (session == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未登录或会话已过期"));
         }
@@ -214,7 +203,7 @@ public class AuthController {
     public ResponseEntity<Map<String, Object>> impersonate(
             @RequestHeader("X-Auth-Token") String token,
             @RequestBody Map<String, String> body) {
-        AuthSession session = validateToken(token);
+        AuthSession session = AuthSessions.validateToken(token);
         if (session == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未登录或会话已过期"));
         }
@@ -259,7 +248,7 @@ public class AuthController {
         }
 
         // 替换当前会话为目标用户信息，保留原始登录用户信息
-        putSession(token, new AuthSession(
+        AuthSessions.put(token, new AuthSession(
             target.getUserId(), target.getRole(), target.getName(),
             session.originalUserId(), session.originalRole(), session.expiresAt()));
 
@@ -283,85 +272,10 @@ public class AuthController {
     /** 获取当前用户权限列表 */
     @GetMapping("/permissions")
     public ResponseEntity<Map<String, Object>> getPermissions(@RequestHeader("X-Auth-Token") String token) {
-        AuthSession session = validateToken(token);
+        AuthSession session = AuthSessions.validateToken(token);
         if (session == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未登录或会话已过期"));
         }
         return ResponseEntity.ok(permissionService.capabilities(session.role()));
-    }
-
-    // 校验 token 并返回 session（供过滤器使用）
-    public static AuthSession validateToken(String token) {
-        if (token == null) return null;
-        AuthSession session = getSession(token);
-        if (session == null) return null;
-        if (session.expiresAt() > 0 && System.currentTimeMillis() >= session.expiresAt()) {
-            TOKENS.remove(token, session);
-            return null;
-        }
-        return session;
-    }
-
-    /** Controller 层统一使用的管理员判断，避免仅依赖前端隐藏按钮。 */
-    public static boolean isAdmin(HttpServletRequest request) {
-        AuthSession session = request != null
-                ? (AuthSession) request.getAttribute("authSession") : null;
-        return session != null && ("admin".equals(session.role())
-                || Boolean.TRUE.equals(request.getAttribute("permissionGranted")));
-    }
-
-    // 清除用户的所有 token（切换账号时）
-    public static void clearUserTokens(String userId) {
-        TOKENS.values().removeIf(s -> s.userId().equals(userId));
-        if (redisSessionStore != null) redisSessionStore.removeUserTokens(userId);
-    }
-
-    // ==================== 工具方法 ====================
-
-    private static String generateToken() {
-        byte[] bytes = new byte[32];
-        new SecureRandom().nextBytes(bytes);
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) sb.append(String.format("%02x", b));
-        return sb.toString();
-    }
-
-    /** 供 Feishu SSO 使用：生成 token 并存入会话 */
-    public static String generateToken(String userId, String role, String name) {
-        String token = generateToken();
-        putSession(token, new AuthSession(userId, role, name));
-        return token;
-    }
-
-    private static AuthSession getSession(String token) {
-        AuthSession local = TOKENS.get(token);
-        if (redisSessionStore == null) return local;
-        AuthSession remote = redisSessionStore.get(token);
-        return remote != null ? remote : local;
-    }
-
-    private static void putSession(String token, AuthSession session) {
-        TOKENS.put(token, session);
-        if (redisSessionStore != null) redisSessionStore.put(token, session);
-    }
-
-    private static void removeSession(String token) {
-        if (redisSessionStore != null) redisSessionStore.remove(token);
-    }
-
-    public static String sha256(String input) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            for (byte b : hash) sb.append(String.format("%02x", b));
-            return sb.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public static String hashPassword(String input) {
-        return PASSWORD_ENCODER.encode(input);
     }
 }

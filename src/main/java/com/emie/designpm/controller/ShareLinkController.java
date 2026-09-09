@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.service.ShareLinkService;
 import com.emie.designpm.service.PermissionService;
@@ -36,7 +37,7 @@ public class ShareLinkController {
     public ResponseEntity<?> create(@RequestBody Map<String, Object> body,
                                     @RequestHeader("X-Auth-Token") String token) {
         try {
-            AuthSession session = AuthController.validateToken(token);
+            AuthSession session = AuthSessions.validateToken(token);
             if (session == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "未登录"));
             }
@@ -71,7 +72,7 @@ public class ShareLinkController {
     /** 获取我的分享列表 */
     @GetMapping("/list")
     public ResponseEntity<?> list(@RequestHeader("X-Auth-Token") String token) {
-        AuthSession session = AuthController.validateToken(token);
+        AuthSession session = AuthSessions.validateToken(token);
         if (session == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未登录"));
         }
@@ -83,11 +84,11 @@ public class ShareLinkController {
     @GetMapping("/admin/all")
     public ResponseEntity<?> adminList(@RequestHeader("X-Auth-Token") String token,
                                        HttpServletRequest request) {
-        AuthSession session = AuthController.validateToken(token);
+        AuthSession session = AuthSessions.validateToken(token);
         if (session == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未登录"));
         }
-        if (!AuthController.isAdmin(request)) {
+        if (!AuthSessions.isAdmin(request)) {
             return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
         }
         List<Map<String, Object>> shares = shareLinkService.getAllShares();
@@ -100,11 +101,11 @@ public class ShareLinkController {
                                          @RequestHeader("X-Auth-Token") String token,
                                          HttpServletRequest request) {
         try {
-            AuthSession session = AuthController.validateToken(token);
+            AuthSession session = AuthSessions.validateToken(token);
             if (session == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "未登录"));
             }
-            if (!AuthController.isAdmin(request)) {
+            if (!AuthSessions.isAdmin(request)) {
                 return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
             }
             shareLinkService.adminRevokeShare(id);
@@ -121,11 +122,11 @@ public class ShareLinkController {
                                          @RequestHeader("X-Auth-Token") String token,
                                          HttpServletRequest request) {
         try {
-            AuthSession session = AuthController.validateToken(token);
+            AuthSession session = AuthSessions.validateToken(token);
             if (session == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "未登录"));
             }
-            if (!AuthController.isAdmin(request)) {
+            if (!AuthSessions.isAdmin(request)) {
                 return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
             }
             Long expiresIn = body.get("expiresIn") != null
@@ -143,7 +144,7 @@ public class ShareLinkController {
     public ResponseEntity<?> revoke(@PathVariable Long id,
                                     @RequestHeader("X-Auth-Token") String token) {
         try {
-            AuthSession session = AuthController.validateToken(token);
+            AuthSession session = AuthSessions.validateToken(token);
             if (session == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "未登录"));
             }

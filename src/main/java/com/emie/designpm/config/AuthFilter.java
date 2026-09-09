@@ -1,7 +1,7 @@
 package com.emie.designpm.config;
 
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.controller.AuthController;
 import com.emie.designpm.service.PermissionService;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -104,7 +104,7 @@ public class AuthFilter implements Filter {
             if ((token == null || token.isBlank()) && path.startsWith("/api/files/")) {
                 token = req.getParameter("authToken");
             }
-            AuthSession session = AuthController.validateToken(token);
+            AuthSession session = AuthSessions.validateToken(token);
             if (token == null || session == null) {
                 res.setStatus(401);
                 res.setContentType("application/json;charset=UTF-8");
@@ -148,7 +148,7 @@ public class AuthFilter implements Filter {
     private String cookieToken(HttpServletRequest request) {
         if (request.getCookies() == null) return null;
         for (jakarta.servlet.http.Cookie cookie : request.getCookies()) {
-            if (AuthController.AUTH_COOKIE.equals(cookie.getName())) return cookie.getValue();
+            if (AuthSessions.AUTH_COOKIE.equals(cookie.getName())) return cookie.getValue();
         }
         return null;
     }

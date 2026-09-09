@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.PriceRange;
 import com.emie.designpm.repository.PriceRangeRepository;
 import com.emie.designpm.util.SecurityUtil;
@@ -25,13 +26,13 @@ public class PriceRangeController {
 
     @GetMapping("/all")
     public ResponseEntity<List<PriceRange>> listAll(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         return ResponseEntity.ok(repo.findAllByOrderBySortOrderAsc());
     }
 
     @PostMapping
     public ResponseEntity<PriceRange> create(@RequestBody Map<String, String> body, HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         String name = body.get("name");
         if (name == null || name.isBlank()) return ResponseEntity.badRequest().build();
         int sortOrder = 0;
@@ -43,7 +44,7 @@ public class PriceRangeController {
 
     @PutMapping("/{id}")
     public ResponseEntity<PriceRange> update(@PathVariable Long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         PriceRange item = repo.findById(id).orElse(null);
         if (item == null) return ResponseEntity.notFound().build();
         if (body.containsKey("name") && body.get("name") != null) item.setName(SecurityUtil.sanitizeText(body.get("name").trim(), 50));
@@ -56,7 +57,7 @@ public class PriceRangeController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id, HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).build();
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         if (!repo.existsById(id)) return ResponseEntity.notFound().build();
         repo.deleteById(id);
         return ResponseEntity.ok().build();

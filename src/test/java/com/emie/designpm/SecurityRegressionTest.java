@@ -1,6 +1,6 @@
 package com.emie.designpm;
 
-import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.auth.PasswordHasher;
 import com.emie.designpm.util.SecurityUtil;
 import org.junit.jupiter.api.Test;
 
@@ -10,16 +10,16 @@ class SecurityRegressionTest {
 
     @Test
     void newPasswordsUseBcryptAndCanBeVerified() {
-        String hash = AuthController.hashPassword("test-password");
+        String hash = PasswordHasher.hashPassword("test-password");
 
         assertTrue(hash.startsWith("$2"));
-        assertNotEquals(hash, AuthController.hashPassword("test-password"));
+        assertNotEquals(hash, PasswordHasher.hashPassword("test-password"));
     }
 
     @Test
     void legacyHashIsStableAcrossLocales() {
-        assertEquals(AuthController.sha256("测试密码"), AuthController.sha256("测试密码"));
-        assertNotEquals(AuthController.sha256("测试密码"), AuthController.sha256("测试密码2"));
+        assertEquals(PasswordHasher.sha256("测试密码"), PasswordHasher.sha256("测试密码"));
+        assertNotEquals(PasswordHasher.sha256("测试密码"), PasswordHasher.sha256("测试密码2"));
     }
 
     @Test

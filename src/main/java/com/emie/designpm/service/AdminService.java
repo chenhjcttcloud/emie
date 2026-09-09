@@ -1,6 +1,7 @@
 package com.emie.designpm.service;
 
-import com.emie.designpm.controller.AuthController;
+import com.emie.designpm.auth.PasswordHasher;
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.Role;
 import com.emie.designpm.entity.SystemConfig;
 import com.emie.designpm.entity.User;
@@ -494,7 +495,7 @@ public class AdminService {
         user.setTitle(title);
         if (wasPending) user.setStatus("active");
         User saved = userRepository.save(user);
-        AuthController.clearUserTokens(user.getUserId());
+        AuthSessions.clearUserTokens(user.getUserId());
         userService.refreshCache();
         return saved;
     }
@@ -507,9 +508,9 @@ public class AdminService {
         if (!SecurityUtil.isValidPassword(newPassword)) {
             throw new IllegalArgumentException("密码长度须为6-72位");
         }
-        user.setPassword(AuthController.hashPassword(newPassword));
+        user.setPassword(PasswordHasher.hashPassword(newPassword));
         userRepository.save(user);
-        AuthController.clearUserTokens(user.getUserId());
+        AuthSessions.clearUserTokens(user.getUserId());
     }
 
     /** 删除用户 */
@@ -523,7 +524,7 @@ public class AdminService {
         entityManager.createNativeQuery("DELETE FROM monthly_user_point_targets WHERE user_id = :userId")
                 .setParameter("userId", user.getUserId()).executeUpdate();
         userRepository.delete(user);
-        AuthController.clearUserTokens(user.getUserId());
+        AuthSessions.clearUserTokens(user.getUserId());
         userService.refreshCache();
     }
 
@@ -592,7 +593,7 @@ public class AdminService {
             String pwd = fields.get("password");
             if (pwd != null && !pwd.isBlank()) {
                 if (!SecurityUtil.isValidPassword(pwd)) throw new IllegalArgumentException("密码长度须为6-72位");
-                user.setPassword(AuthController.hashPassword(pwd));
+                user.setPassword(PasswordHasher.hashPassword(pwd));
             }
         }
 
@@ -626,7 +627,7 @@ public class AdminService {
         }
 
         userRepository.save(user);
-        if (roleChanged) AuthController.clearUserTokens(user.getUserId());
+        if (roleChanged) AuthSessions.clearUserTokens(user.getUserId());
         userService.refreshCache();
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -653,7 +654,7 @@ public class AdminService {
             user.setStatus("disabled");
         }
         User saved = userRepository.save(user);
-        AuthController.clearUserTokens(user.getUserId());
+        AuthSessions.clearUserTokens(user.getUserId());
         userService.refreshCache();
         return saved;
     }

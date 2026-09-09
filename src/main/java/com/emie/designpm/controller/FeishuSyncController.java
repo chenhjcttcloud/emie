@@ -1,5 +1,6 @@
 package com.emie.designpm.controller;
 
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.repository.ProjectRepository;
 import com.emie.designpm.repository.ActivityLogRepository;
 import com.emie.designpm.repository.ScoringRepository;
@@ -68,21 +69,21 @@ public class FeishuSyncController {
     /** 同步状态统计 */
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Object>> getStats(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return forbidden();
+        if (!AuthSessions.isAdmin(request)) return forbidden();
         return ResponseEntity.ok(syncQueueService.getStats());
     }
 
     /** 飞书 Base 配置 */
     @GetMapping("/config")
     public ResponseEntity<Map<String, String>> getConfig(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
+        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
         return ResponseEntity.ok(feishuBaseService.getConfig());
     }
 
     /** 管理员手动消费一轮同步队列；复用定时任务的并发锁和失败重试逻辑。 */
     @PostMapping("/process")
     public ResponseEntity<Map<String, Object>> processOnce(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return forbidden();
+        if (!AuthSessions.isAdmin(request)) return forbidden();
         if (syncWorker == null) return ResponseEntity.status(503).body(Map.of("message", "同步服务暂不可用"));
         syncWorker.processQueue();
         Map<String, Object> result = new LinkedHashMap<>(syncQueueService.getStats());
@@ -94,7 +95,7 @@ public class FeishuSyncController {
     @PostMapping("/queue/{queueId}/retry")
     public ResponseEntity<Map<String, Object>> retryFailed(@PathVariable Long queueId,
                                                             HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return forbidden();
+        if (!AuthSessions.isAdmin(request)) return forbidden();
         try {
             return ResponseEntity.ok(syncQueueService.retryFailed(queueId));
         } catch (IllegalArgumentException e) {
@@ -110,7 +111,7 @@ public class FeishuSyncController {
      */
     @PostMapping("/validate-backups")
     public ResponseEntity<Map<String, Object>> validateBackups(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return forbidden();
+        if (!AuthSessions.isAdmin(request)) return forbidden();
         try {
             Map<String, Object> result = feishuBaseService.validateBackupTables();
             return Boolean.TRUE.equals(result.get("valid"))
@@ -126,7 +127,7 @@ public class FeishuSyncController {
     /** 只读返回全部业务字段与飞书实际列类型的差异。 */
     @GetMapping("/schema-diagnostics")
     public ResponseEntity<Map<String, Object>> schemaDiagnostics(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return forbidden();
+        if (!AuthSessions.isAdmin(request)) return forbidden();
         try {
             return ResponseEntity.ok(feishuBaseService.diagnoseFieldSchema());
         } catch (Exception e) {
@@ -137,7 +138,7 @@ public class FeishuSyncController {
     /** 创建/续建独立 V2 Base，仅写 staging 配置，不切换当前同步。 */
     @GetMapping("/v2/status")
     public ResponseEntity<Map<String, Object>> v2Status(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return forbidden();
+        if (!AuthSessions.isAdmin(request)) return forbidden();
         return ResponseEntity.ok(feishuBaseService.getV2Status());
     }
 
@@ -145,7 +146,7 @@ public class FeishuSyncController {
     @PostMapping("/v2/prepare")
     public ResponseEntity<Map<String, Object>> prepareV2(@RequestBody(required = false) Map<String, Object> body,
                                                          HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return forbidden();
+        if (!AuthSessions.isAdmin(request)) return forbidden();
         try {
             String appToken = body == null || body.get("appToken") == null ? "" : String.valueOf(body.get("appToken")).trim();
             CompletableFuture.runAsync(() -> {
@@ -162,7 +163,7 @@ public class FeishuSyncController {
 
     @PostMapping("/v2/activate")
     public ResponseEntity<Map<String, Object>> activateV2(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return forbidden();
+        if (!AuthSessions.isAdmin(request)) return forbidden();
         boolean activated = false;
         try {
             Map<String, Object> activationResult = feishuBaseService.activateV2Base();
@@ -202,7 +203,7 @@ public class FeishuSyncController {
 
     @PostMapping("/v2/rollback")
     public ResponseEntity<Map<String, Object>> rollbackV2(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return forbidden();
+        if (!AuthSessions.isAdmin(request)) return forbidden();
         try {
             return ResponseEntity.ok(feishuBaseService.rollbackV2Base());
         } catch (IllegalStateException e) {
@@ -213,7 +214,7 @@ public class FeishuSyncController {
     /** 全量重刷（重新入队所有数据） */
     @PostMapping("/full-resync")
     public ResponseEntity<Map<String, Object>> fullResync(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return forbidden();
+        if (!AuthSessions.isAdmin(request)) return forbidden();
         return fullResyncInternal();
     }
 
@@ -279,7 +280,7 @@ public class FeishuSyncController {
     /** 初始化飞书 Base（机器人自动创建多维表格） */
     @PostMapping("/init")
     public ResponseEntity<Map<String, Object>> initBase(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return forbidden();
+        if (!AuthSessions.isAdmin(request)) return forbidden();
         try {
             Map<String, Object> result = feishuBaseService.initBase();
             return ResponseEntity.ok(result);
@@ -293,7 +294,7 @@ public class FeishuSyncController {
     /** 为当前主表和备份表补齐两级审核同步字段。 */
     @PostMapping("/ensure-review-fields")
     public ResponseEntity<Map<String, Object>> ensureReviewFields(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return forbidden();
+        if (!AuthSessions.isAdmin(request)) return forbidden();
         try {
             return ResponseEntity.ok(feishuBaseService.ensureReviewWorkflowFields());
         } catch (Exception e) {
@@ -305,7 +306,7 @@ public class FeishuSyncController {
     /** 为当前八张表补齐主表镜像与备份保留策略字段。 */
     @PostMapping("/ensure-mirror-fields")
     public ResponseEntity<Map<String, Object>> ensureMirrorFields(HttpServletRequest request) {
-        if (!AuthController.isAdmin(request)) return forbidden();
+        if (!AuthSessions.isAdmin(request)) return forbidden();
         try {
             return ResponseEntity.ok(feishuBaseService.ensureMirrorStrategyFields());
         } catch (Exception e) {
