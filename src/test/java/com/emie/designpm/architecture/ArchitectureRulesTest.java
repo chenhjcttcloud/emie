@@ -62,10 +62,13 @@ class ArchitectureRulesTest {
 
     @Test
     void spring_data_repositories_are_placed_consistently() {
+        // ".*.repository" = 恰好一层域名段：com.emie.designpm.<domain>.repository。
+        // 扁平的 com.emie.designpm.repository 不匹配 → 直接失败（不依赖 @Repository 注解，
+        // Spring Data 的接口本身不带注解也会被这条抓到）。background.repository 合法保留。
         classes()
                 .that().areAssignableTo("org.springframework.data.repository.Repository")
                 .and().areInterfaces()
-                .should().resideInAPackage(ROOT + "..repository")
+                .should().resideInAPackage(ROOT + ".*.repository")
                 .check(production);
     }
 
@@ -104,7 +107,15 @@ class ArchitectureRulesTest {
     // 3. controller 不得直连 repository —— 有 17 个历史违规，冻结，只禁新增
     // ---------------------------------------------------------------------
 
-    /** 现存直连 repository 的 controller。修一个删一个，清零后把规则收紧成硬禁止。 */
+    /**
+     * 现存直连 repository 的 controller。修一个删一个，清零后把规则收紧成硬禁止。
+     *
+     * 已知局限：这是<b>整类</b>豁免，不是"冻结既有的具体 (controller,repository) 边"。
+     * 清单里的 controller 再多连一个 repository 也不会被拦。可接受，因为：
+     * (a) 这 17 个都是 P3「controller→repo 解耦」的目标，会被整类移出；
+     * (b) 其中的 god class（ProjectController 等）体积已被 ClassSizeCeilingTest 冻结，加不动。
+     * 新 controller 直连 repository 仍然会失败——这条规则真正要守的是这个。
+     */
     private static final Set<String> CONTROLLERS_ALLOWED_TO_TOUCH_REPOSITORIES = Set.of(
             ROOT + ".admin.controller.UserController",
             ROOT + ".auth.controller.AuthController",
