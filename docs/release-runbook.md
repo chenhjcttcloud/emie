@@ -15,7 +15,7 @@
 
 ## 2. 当前发布基线
 
-- 代码托管：Gitee `https://gitee.com/Lucascloud/emie`
+- 代码托管：`<REPOSITORY_URL>`
 - 本地开发/生产构建分支：`master`
 - Gitee 发布分支：`master`
 - GitHub 发布分支：`main`

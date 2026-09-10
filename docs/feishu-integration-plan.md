@@ -271,7 +271,7 @@ Content-Type: application/json
     "avatar_big": "https://sf3-cn.feishucdn.com/xxx",
     "open_id": "ou_xxxxxxxxxxxxxx",
     "union_id": "on_xxxxxxxxxxxxxx",
-    "email": "zhangsan@emie.com",
+    "email": "user@example.com",
     "user_id": "xxxxx",
     "mobile": "13800138000",
     "tenant_key": "xxxxx"

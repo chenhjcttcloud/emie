@@ -17,10 +17,10 @@
 ```bash
 mkdir -p ~/Documents
 cd ~/Documents
-git clone https://gitee.com/Lucascloud/emie.git emie
+git clone <REPOSITORY_URL> emie
 cd emie
 git remote rename origin emie
-git remote add github git@github.com:chenhjcttcloud/emie.git
+git remote add github <MIRROR_REPOSITORY_URL>
 git fetch github
 ```
 

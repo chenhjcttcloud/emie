@@ -10,19 +10,20 @@
 4. 完成小而聚焦的代码或文档修改；
 5. 执行与改动范围匹配的检查；
 6. 更新 `CHANGELOG.md` 和 `docs/release-records.md`；
-7. 逐个暂存确认过的文件；
-8. 默认只保留在本地：未经用户明确授权，不提交、推送远程仓库或部署生产；只有获得当前事项的明确授权后，才执行相应发布动作。
+7. 执行 `./scripts/check-sensitive-info.sh`，确认没有服务器地址、个人姓名/账号、邮箱、真实路径、密钥或大文件；
+8. 逐个暂存确认过的文件，并再次检查暂存区；
+9. 默认只保留在本地：未经用户明确授权，不提交、推送远程仓库或部署生产；只有获得当前事项的明确授权后，才执行相应发布动作。
 
 ## 分支
 
-- 当前业务分支：`project_manager_system`
+- 当前业务分支：本地 `master`
 - Git 远端：`emie`
 
-远端默认分支不是当前业务发布分支。拉取和推送必须显式指定 `project_manager_system`。
+Gitee 发布分支为 `master`，GitHub 发布分支为 `main`。本地构建使用 `master`，推送时按远端分别映射。
 
 ```bash
 git fetch emie
-git rev-list --left-right --count HEAD...emie/project_manager_system
+git rev-list --left-right --count HEAD...emie/master
 ```
 
 禁止强制推送或改写共享分支历史。
@@ -36,6 +37,7 @@ git status --short --branch
 git diff --check
 git diff --stat
 git diff
+./scripts/check-sensitive-info.sh
 ```
 
 禁止提交：

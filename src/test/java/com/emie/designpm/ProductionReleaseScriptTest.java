@@ -68,6 +68,14 @@ class ProductionReleaseScriptTest {
                 "[[ \"$incoming_jar\" == \"$DEPLOY_DIR/incoming/app-$target_sha.jar\" ]]"));
     }
 
+    @Test
+    void backupDirectoryDefaultsNextToConfiguredDeployDirectory() throws Exception {
+        String script = Files.readString(remoteScript);
+
+        assertTrue(script.contains("BACKUP_ROOT=\"${BACKUP_ROOT:-${DEPLOY_DIR}-backups}\""));
+        assertFalse(script.contains("/path/to/backup-root"));
+    }
+
     private void assertBashSyntax(Path script) throws Exception {
         Process process = new ProcessBuilder("bash", "-n", script.toString())
                 .redirectErrorStream(true)

@@ -8,8 +8,8 @@
 
 ## 1. 迁移结论
 
-- 当前业务代码已位于远端业务分支，迁移代码时以 `project_manager_system` 和提交 `c1ed377f381feeec25fdb3fc666f93b17e0a9ed9` 为基线。
-- 迁移盘点前工作区干净，本地与 `emie/project_manager_system` 为 `0 ahead / 0 behind`。
+- 当前业务代码以本地 `master` 和提交 `c1ed377f381feeec25fdb3fc666f93b17e0a9ed9` 为基线；GitHub 对应分支为 `main`。
+- 迁移盘点前工作区干净，本地与 `emie/master` 为 `0 ahead / 0 behind`。
 - 本次新增和更新的交接文档尚未提交；若新设备只重新克隆远端仓库，这些本地文档不会自动出现，必须一并复制。
 - 暂停前的开发服务使用 Java 21、`dev` profile 和共享测试 MySQL，健康检查为 HTTP 200；`2026-07-23 10:10 +0800` 已按用户要求停止，本机 `8080` 当前无监听。
 - 代码以外还必须处理 `.env`、`.server.local.env`、`uploads/`、`data/` 和 `backups/`。其中前两项含敏感信息，只能通过加密介质或密码管理器迁移。
@@ -19,10 +19,10 @@
 
 | 项目 | 当前状态 |
 |---|---|
-| 仓库 | `https://gitee.com/Lucascloud/emie` |
-| 业务分支 | `project_manager_system` |
+| 仓库 | `<REPOSITORY_URL>` |
+| 业务分支 | 本地/Gitee `master`；GitHub `main` |
 | 本地提交 | `c1ed377f381feeec25fdb3fc666f93b17e0a9ed9` |
-| 远端同步 | `HEAD...emie/project_manager_system = 0 / 0` |
+| 远端同步 | `HEAD...emie/master = 0 / 0` |
 | Git 跟踪文件 | 225 个 |
 | 工作区大小 | 约 172 MB，其中 `target/` 约 97 MB，可重建 |
 | 本机系统 | macOS 26.5.2，Apple Silicon (`aarch64`) |
@@ -166,8 +166,8 @@ git rev-parse HEAD
 如果不需要保留 `.git/`，可先在新设备克隆精确业务分支：
 
 ```bash
-git clone --branch project_manager_system --single-branch \
-  https://gitee.com/Lucascloud/emie emie
+git clone --branch master --single-branch \
+  <REPOSITORY_URL> emie
 cd emie
 git remote rename origin emie
 git checkout c1ed377f381feeec25fdb3fc666f93b17e0a9ed9
@@ -224,7 +224,7 @@ chmod 600 .env
 cd /Users/<新用户名>/Documents/emie
 scripts/mvnw-java21.sh --version
 git fetch emie
-git rev-list --left-right --count HEAD...emie/project_manager_system
+git rev-list --left-right --count HEAD...emie/master
 git status --short --branch
 scripts/mvnw-java21.sh clean package
 for file in src/main/resources/static/js/*.js; do

@@ -95,7 +95,7 @@ CREATE TABLE file_records (
 
 | 配置键 | 说明 | 示例值 |
 |--------|------|--------|
-| `nas.host` | NAS IP 地址 | `192.168.1.100` |
+| `nas.host` | NAS IP 地址 | `<NAS_HOST>` |
 | `nas.user` | SSH 用户名 | `root` |
 | `nas.password` | SSH 密码 | `xxx` |
 | `nas.path` | NAS 存储路径 | `/volume1/emie-archive` |

@@ -74,7 +74,7 @@ public_curl_args=(--fail --silent --show-error)
 [[ "$SERVER_INSECURE_TLS" == "true" ]] && public_curl_args+=(--insecure)
 
 SERVER_SUDO_PASSWORD="${SERVER_SUDO_PASSWORD:-$SERVER_PASSWORD}"
-DEPLOY_DIR="${SERVER_DEPLOY_DIR:-/home/emie/emie-deploy}"
+DEPLOY_DIR="${SERVER_DEPLOY_DIR:-/path/to/deploy-dir}"
 [[ "$DEPLOY_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]] ||
   { echo "SERVER_DEPLOY_DIR 格式不安全。" >&2; exit 1; }
 REMOTE_HELPER="$DEPLOY_DIR/.release-tools/release-production-remote.sh"
