@@ -1180,7 +1180,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             Map<String, String> context = notifier.context(project, task, "产品企划", null);
             context.put("reviewRole", "admin".equals(secondRole) ? "管理员" : "销售");
             if ("admin".equals(secondRole)) {
-                safeNotifyRole("REVIEW_PENDING", "admin", "sub_task", task.getId(),
+                safeNotifyRoleAfterCommit("REVIEW_PENDING", "admin", "sub_task", task.getId(),
                         "system", context);
             } else if (project.getSalesId() != null && !project.getSalesId().isBlank()) {
                 notifier.safeNotify("REVIEW_PENDING", project.getSalesId(), "sub_task", task.getId(),
@@ -1189,12 +1189,12 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         }
     }
 
-    private void safeNotifyRole(String eventType, String role, String aggregateType, Long aggregateId,
-                                String actorUserId, Map<String, String> context) {
+    private void safeNotifyRoleAfterCommit(String eventType, String role, String aggregateType, Long aggregateId,
+                                           String actorUserId, Map<String, String> context) {
         try {
-            notificationWorkflowService.notifyRole(eventType, role, aggregateType, aggregateId, actorUserId, context);
+            notificationWorkflowService.notifyRoleAfterCommit(eventType, role, aggregateType, aggregateId, actorUserId, context);
         } catch (Exception e) {
-            log.error("角色通知创建失败但业务操作继续: eventType={}, role={}, aggregate={}#{}",
+            log.error("提交后角色通知注册失败但业务操作继续: eventType={}, role={}, aggregate={}#{}",
                     eventType, role, aggregateType, aggregateId, e);
         }
     }
