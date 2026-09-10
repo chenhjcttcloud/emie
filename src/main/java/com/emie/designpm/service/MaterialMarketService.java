@@ -45,7 +45,7 @@ public class MaterialMarketService {
   String ip=Objects.toString(b.get("ipName"),""); if(ips.findByName(ip).filter(x->Boolean.TRUE.equals(x.getActive())).isEmpty()) throw new IllegalArgumentException("IP必须选择系统启用配置");
   String files=validateFiles(Objects.toString(b.containsKey("filesJson")?b.get("filesJson"):b.get("materialFiles"),""),false,5,false,creatorId);
   String referenceImages=validateFiles(Objects.toString(b.getOrDefault("referenceImagesJson","[]"),"[]"),true,6,true,creatorId);
-  MaterialMarketItem m=new MaterialMarketItem();m.setTitle(title);m.setCategory(category);m.setCreatorId(creatorId);m.setCreatorName(u.getName());m.setIpName(ip);m.setIpSubOptionsJson(Objects.toString(b.getOrDefault("ipSubOptions","[]"),"[]"));m.setMaterialFilesJson(files);m.setReferenceImagesJson(referenceImages);m.setProductDescription(desc);m.setProposalPptJson(Objects.toString(b.containsKey("planFileJson")?b.get("planFileJson"):b.get("proposalPpt"),null));m=materials.save(m);fileArchive.bindFilesFromJson(files,"material_market",m.getId());fileArchive.bindFilesFromJson(referenceImages,"material_market",m.getId());return m;
+  MaterialMarketItem m=new MaterialMarketItem();m.setTitle(title);m.setCategory(category);m.setCreatorId(creatorId);m.setCreatorName(u.getName());m.setIpName(ip);m.setIpSubOptionsJson(Objects.toString(b.getOrDefault("ipSubOptions","[]"),"[]"));m.setMaterialFilesJson(files);m.setReferenceImagesJson(referenceImages);m.setProductDescription(desc);m.setAiAssisted(parseBool(b.get("aiAssisted")));m.setProposalPptJson(Objects.toString(b.containsKey("planFileJson")?b.get("planFileJson"):b.get("proposalPpt"),null));m=materials.save(m);fileArchive.bindFilesFromJson(files,"material_market",m.getId());fileArchive.bindFilesFromJson(referenceImages,"material_market",m.getId());return m;
  }
  public MaterialMarketItem update(Long id,Map<String,Object> b,String actorId){
   MaterialMarketItem m=materials.findById(id).orElseThrow(()->new NoSuchElementException("素材不存在"));
@@ -54,6 +54,7 @@ public class MaterialMarketService {
   if(b.containsKey("title")){String v=Objects.toString(b.get("title"),"").trim(); if(v.isBlank()) throw new IllegalArgumentException("标题不能为空"); m.setTitle(v);}
   if(b.containsKey("category")) m.setCategory(validCategory(b.get("category")));
   if(b.containsKey("description")||b.containsKey("productDescription")){String v=Objects.toString(b.containsKey("description")?b.get("description"):b.get("productDescription"),"").trim(); if(v.isBlank()) throw new IllegalArgumentException("产品说明不能为空"); m.setProductDescription(v);}
+  if(b.containsKey("aiAssisted")) m.setAiAssisted(parseBool(b.get("aiAssisted")));
   if(b.containsKey("ipName")){String v=Objects.toString(b.get("ipName"),""); if(ips.findByName(v).filter(x->Boolean.TRUE.equals(x.getActive())).isEmpty()) throw new IllegalArgumentException("IP必须选择系统启用配置"); m.setIpName(v);}
   if(b.containsKey("ipSubOptions")) m.setIpSubOptionsJson(Objects.toString(b.get("ipSubOptions"),"[]"));
   if(b.containsKey("filesJson")||b.containsKey("materialFiles")){String v=Objects.toString(b.containsKey("filesJson")?b.get("filesJson"):b.get("materialFiles"),""); m.setMaterialFilesJson(validateFilesForUpdate(v,false,5,false,actorId,id));}
@@ -62,6 +63,7 @@ public class MaterialMarketService {
   m=materials.save(m); fileArchive.bindFilesFromJson(m.getMaterialFilesJson(),"material_market",m.getId()); fileArchive.bindFilesFromJson(m.getReferenceImagesJson(),"material_market",m.getId()); return m;
  }
  private String validCategory(Object value){String category=Objects.toString(value,"").trim().toLowerCase(Locale.ROOT);if(!MATERIAL_CATEGORIES.contains(category)) throw new IllegalArgumentException("请选择ID、视觉或平面分类");return category;}
+ private boolean parseBool(Object value){String s=Objects.toString(value,"").trim();return "是".equals(s)||"true".equalsIgnoreCase(s)||"1".equals(s);}
  public MaterialMarketItem withdraw(Long id,String actorId){MaterialMarketItem m=materials.findById(id).orElseThrow(()->new NoSuchElementException("素材不存在")); ensureDesignerOwner(m,actorId); if(!"available".equals(m.getStatus())) throw new IllegalStateException("已采纳的素材不能下架"); m.setStatus("withdrawn"); return materials.save(m);}
  public void delete(Long id,String actorId){MaterialMarketItem m=materials.findById(id).orElseThrow(()->new NoSuchElementException("素材不存在")); ensureDesignerOwner(m,actorId); if(adoptions.existsByMaterialId(id)||m.getProjectId()!=null) throw new IllegalStateException("已有采纳项目的素材不能删除，请保留项目关联记录"); likes.deleteAllByMaterialId(id);adoptions.deleteAllByMaterialId(id);materials.delete(m);}
  private void ensureDesignerOwner(MaterialMarketItem m,String actorId){if(!Objects.equals(m.getCreatorId(),actorId)) throw new SecurityException("仅素材作者可以操作"); users.findByUserId(actorId).filter(u->"designer".equals(u.getRole())).orElseThrow(()->new SecurityException("仅设计师可以操作素材"));}

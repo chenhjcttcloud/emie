@@ -107,6 +107,32 @@ class MaterialMarketServiceTest {
     }
 
     @Test
+    void publishStoresAiAssistedFlagFromChineseValue() {
+        MaterialMarketItemRepository materials = mock(MaterialMarketItemRepository.class);
+        UserRepository users = mock(UserRepository.class);
+        FileRecordRepository records = mock(FileRecordRepository.class);
+        IpOptionRepository ips = mock(IpOptionRepository.class);
+        User designer = User.builder().userId("designer_01").name("设计师").role("designer").build();
+        FileRecord reference = FileRecord.builder().storedName("reference.png").originalName("参考.png")
+                .fileSize(24L).ownerUserId("designer_01").build();
+        when(users.findByUserId("designer_01")).thenReturn(Optional.of(designer));
+        when(ips.findByName("EMIE")).thenReturn(Optional.of(new IpOption("EMIE", 1)));
+        when(records.findByStoredName("reference.png")).thenReturn(Optional.of(reference));
+        when(materials.save(any(MaterialMarketItem.class))).thenAnswer(call -> call.getArgument(0));
+
+        MaterialMarketItem aiOn = service(materials, users, records, mock(FileArchiveService.class), ips).publish(Map.of(
+                "title", "灯", "description", "AI 参与了建模", "ipName", "EMIE", "category", "visual",
+                "aiAssisted", "是", "filesJson", "[]",
+                "referenceImagesJson", "[{\"storedName\":\"reference.png\"}]"), "designer_01");
+        assertEquals(Boolean.TRUE, aiOn.getAiAssisted());
+
+        MaterialMarketItem aiOff = service(materials, users, records, mock(FileArchiveService.class), ips).publish(Map.of(
+                "title", "灯", "description", "纯手绘", "ipName", "EMIE", "category", "visual",
+                "filesJson", "[]", "referenceImagesJson", "[{\"storedName\":\"reference.png\"}]"), "designer_01");
+        assertEquals(Boolean.FALSE, aiOff.getAiAssisted());
+    }
+
+    @Test
     void publishRejectsUnknownMaterialCategory() {
         MaterialMarketItemRepository materials = mock(MaterialMarketItemRepository.class);
         UserRepository users = mock(UserRepository.class);

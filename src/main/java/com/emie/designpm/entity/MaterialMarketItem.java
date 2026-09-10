@@ -21,6 +21,7 @@ public class MaterialMarketItem {
  @Column(columnDefinition="LONGTEXT",nullable=false) private String materialFilesJson;
  @Column(columnDefinition="LONGTEXT") private String referenceImagesJson;
  @Column(columnDefinition="TEXT",nullable=false) private String productDescription;
+ @Column(nullable=false) private Boolean aiAssisted=false;
  @Column(columnDefinition="TEXT") private String proposalPptJson;
  @Column(nullable=false,length=20) private String status="available";
  private Long projectId;
