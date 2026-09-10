@@ -45,16 +45,6 @@ import org.springframework.data.domain.Pageable;
 @Service
 @Transactional
 public class ProjectService {
-    private void validateCustomPriceRange(String value) {
-        try {
-            double price = Double.parseDouble(value.trim());
-            if (!Double.isFinite(price) || price < 0 || price > 1000 || Math.round(price * 100) != price * 100) {
-                throw new IllegalArgumentException("参考零售价必须在0到1,000之间，最多两位小数");
-            }
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("参考零售价必须在0到1,000之间，最多两位小数");
-        }
-    }
     private static final Logger log = LoggerFactory.getLogger(ProjectService.class);
     private static final Object PROJECT_CODE_LOCK = new Object();
 
@@ -82,6 +72,8 @@ public class ProjectService {
     private FileRecordRepository fileRecordRepository;
     private DesignRequirementScoringService designRequirementScoringService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ProjectNotifier notifier;
+    private final ScoringWeightConfig scoringWeights;
 
     public ProjectService(ProjectRepository projectRepository,
                           SubTaskRepository subTaskRepository,
@@ -106,6 +98,8 @@ public class ProjectService {
         this.fileArchiveService = fileArchiveService;
         this.projectAccessService = projectAccessService;
         this.notificationWorkflowService = notificationWorkflowService;
+        this.notifier = new ProjectNotifier(notificationWorkflowService);
+        this.scoringWeights = new ScoringWeightConfig(systemConfigRepository);
     }
 
     /** Optional setter keeps existing lightweight unit-test construction compatible. */
@@ -395,7 +389,7 @@ public class ProjectService {
         }
         String priceRangeStr = (String) body.get("priceRange");
         if (priceRangeStr != null && !priceRangeStr.isBlank()) {
-            validateCustomPriceRange(priceRangeStr);
+            CustomPriceRangeValidator.validate(priceRangeStr);
             p.setPriceRange(priceRangeStr.trim());
         }
         String ipName = SecurityUtil.sanitizeText((String) body.get("ipName"), 100);
@@ -421,8 +415,8 @@ public class ProjectService {
         fileArchiveService.bindFilesFromJson(attsJson, "project", saved.getId());
         // 批量历史导入不应向每位负责人逐条发送即时通知；导入本身仍保留操作日志与同步记录。
         if (!suppressNotifications) {
-            safeNotify("PROJECT_ASSIGNED", saved.getPlannerId(), "project", saved.getId(), currentUserId,
-                    notificationContext(saved, null, currentUser, ""));
+            notifier.safeNotify("PROJECT_ASSIGNED", saved.getPlannerId(), "project", saved.getId(), currentUserId,
+                    notifier.context(saved, null, currentUser, ""));
         }
         return saved;
     }
@@ -508,7 +502,7 @@ public class ProjectService {
         p.setTargetMarket(SecurityUtil.sanitizeText((String) body.getOrDefault("targetMarket", ""), 100));
         p.setComplianceItems(SecurityUtil.sanitizeText((String) body.getOrDefault("complianceItems", ""), 500));
         String priceRange = SecurityUtil.sanitizeText((String) body.getOrDefault("priceRange", ""), 100);
-        if (priceRange != null && !priceRange.isBlank()) validateCustomPriceRange(priceRange);
+        if (priceRange != null && !priceRange.isBlank()) CustomPriceRangeValidator.validate(priceRange);
         p.setPriceRange(priceRange);
 
         String ipName = SecurityUtil.sanitizeText((String) body.getOrDefault("ipName", ""), 100);
@@ -534,7 +528,7 @@ public class ProjectService {
 
         Map<String, Object> after = snapshotProject(p);
         p.getLogs().add(new ActivityLog("编辑项目信息：" + p.getProductName(), session.name(), session.role(), p,
-                "project", p.getId(), toJson(before), toJson(after), changedFields(before, after)));
+                "project", p.getId(), AuditJson.toJson(before), AuditJson.toJson(after), AuditJson.changedFields(before, after)));
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(referenceImagesJson, "project", saved.getId());
         fileArchiveService.bindFilesFromJson(attachmentsJson, "project", saved.getId());
@@ -589,20 +583,6 @@ public class ProjectService {
         return projectRepository.save(p);
     }
 
-    private Map<String, String> notificationContext(Project project, SubTask task, String actor, String reason) {
-        Map<String, String> context = new HashMap<>();
-        context.put("projectName", project.getProductName());
-        context.put("deadline", task != null ? task.getPlannedDate() : project.getDeadline());
-        context.put("actorName", actor == null || actor.isBlank() ? "系统" : actor);
-        context.put("projectLink", "/?projectId=" + project.getId());
-        if (task != null) {
-            context.put("taskName", task.getName());
-            context.put("taskLink", "/?projectId=" + project.getId() + "&taskId=" + task.getId());
-        }
-        if (reason != null && !reason.isBlank()) context.put("reason", reason);
-        return context;
-    }
-
     private String validateIpSubOptions(String submittedJson, IpOption ipOption) {
         List<String> configured;
         List<String> selected;
@@ -627,68 +607,18 @@ public class ProjectService {
         }
     }
 
-    private void safeNotify(String eventType, String recipientUserId, String aggregateType, Long aggregateId,
-                            String actorUserId, Map<String, String> context) {
-        try {
-            notificationWorkflowService.notifyUser(eventType, recipientUserId, aggregateType, aggregateId, actorUserId, context);
-        } catch (Exception e) {
-            log.error("通知创建失败但业务操作继续: eventType={}, aggregate={}#{}", eventType, aggregateType, aggregateId, e);
-        }
-    }
-
-    private void safeNotifyAfterCommit(String eventType, String recipientUserId, String aggregateType, Long aggregateId,
-                                       String actorUserId, Map<String, String> context) {
-        try {
-            notificationWorkflowService.notifyUserAfterCommit(
-                    eventType, recipientUserId, aggregateType, aggregateId, actorUserId, context);
-        } catch (Exception e) {
-            log.error("提交后通知注册失败但业务操作继续: eventType={}, aggregate={}#{}",
-                    eventType, aggregateType, aggregateId, e);
-        }
-    }
-
-    private String toJson(Object value) {
-        try { return objectMapper.writeValueAsString(value); } catch (Exception e) { return "{}"; }
-    }
-
-    private String changedFields(Map<String, Object> before, Map<String, Object> after) {
-        return toJson(before.keySet().stream().filter(k -> !Objects.equals(before.get(k), after.get(k))).toList());
-    }
-
     private String projectType(SubTask task) {
         return task.getProject() != null && task.getProject().getType() != null
                 ? task.getProject().getType() : "regular";
     }
 
     /** 从 SystemConfig 读取评分权重百分比，按项目类型+角色 */
-    private double getScoringPct(String projectType, String role) {
-        String key = "scoring." + projectType + "." + role;
-        return systemConfigRepository.findByConfigKey(key)
-            .map(c -> { try { return Double.parseDouble(c.getConfigValue()); } catch (Exception e) { return 25.0; } })
-            .orElse(25.0);
-    }
-
     /** 当前系统设置中的角色权重（小数形式），用于历史评分重新核算。 */
     public double currentScoringWeight(String projectType, String role) {
-        return getScoringPct(projectType, role) / 100.0;
-    }
-
-    private Map<String, Double> scoringWeightMap(String projectType) {
-        Map<String, Double> weights = new HashMap<>();
-        for (String role : List.of("planner", "sales", "designer", "admin")) {
-            weights.put(role, getScoringPct(projectType, role) / 100.0);
-        }
-        return weights;
+        return scoringWeights.pct(projectType, role) / 100.0;
     }
 
     /** 从 SystemConfig 读取评分权重，不存在则返回 1.0 */
-    private double getScoringWeight(String role) {
-        String key = "scoring.weight." + role;
-        return systemConfigRepository.findByConfigKey(key)
-            .map(c -> { try { return Double.parseDouble(c.getConfigValue()); } catch (Exception e) { return 1.0; } })
-            .orElse(1.0);
-    }
-
     // ==================== Role Status Board ====================
 
     /** 获取指定角色的状态看板（销售/企划/供应链/设计师） */
@@ -877,7 +807,7 @@ public class ProjectService {
     public Double computeProjectScore(Project project) {
         List<SubTask> tasks = project.getTasks();
         if (tasks == null || tasks.isEmpty()) return null;
-        Map<String, Double> weights = scoringWeightMap(project.getType());
+        Map<String, Double> weights = scoringWeights.weightMap(project.getType());
         Map<Long, List<ScoringRecord>> recordsByTask = scoringRepository.findBySubTaskIds(
                         tasks.stream().map(SubTask::getId).toList())
                 .stream().collect(Collectors.groupingBy(sr -> sr.getSubTask().getId()));
@@ -913,7 +843,7 @@ public class ProjectService {
         if (projects == null || projects.isEmpty()) return Collections.emptyMap();
         Map<String, Map<String, Double>> weightsByType = projects.stream()
                 .map(Project::getType).filter(Objects::nonNull).distinct()
-                .collect(Collectors.toMap(type -> type, this::scoringWeightMap));
+                .collect(Collectors.toMap(type -> type, scoringWeights::weightMap));
         List<Long> projectIds = projects.stream().map(Project::getId).collect(Collectors.toList());
         // 一次 SQL 查全部
         List<ScoringRecord> allRecords = scoringRepository.findByProjectIds(projectIds);
@@ -942,7 +872,7 @@ public class ProjectService {
                     Double normalizedScore = toHundredPointScore(sr);
                     if (normalizedScore != null) {
                         Map<String, Double> weights = weightsByType.get(task.getProject().getType());
-                        if (weights == null) weights = scoringWeightMap("regular");
+                        if (weights == null) weights = scoringWeights.weightMap("regular");
                         double weight = weights.getOrDefault(sr.getRole(), 0.25);
                         weightedSum += normalizedScore * weight;
                         totalWeight += weight;
@@ -1015,7 +945,7 @@ public class ProjectService {
                     m.put("score", sr.getScore());
                     m.put("aesthetics", sr.getAesthetics());
                     m.put("innovation", sr.getInnovation());
-                    m.put("weight", getScoringPct(p.getType(), sr.getRole()) / 100.0);
+                    m.put("weight", scoringWeights.pct(p.getType(), sr.getRole()) / 100.0);
                     return m;
                 }).collect(Collectors.toList()));
                 result.add(item);

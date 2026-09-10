@@ -46,16 +46,6 @@ import org.springframework.data.domain.Pageable;
 @Service
 @Transactional
 public class DefaultSubTaskCommandService implements SubTaskCommandService {
-    private void validateCustomPriceRange(String value) {
-        try {
-            double price = Double.parseDouble(value.trim());
-            if (!Double.isFinite(price) || price < 0 || price > 1000 || Math.round(price * 100) != price * 100) {
-                throw new IllegalArgumentException("参考零售价必须在0到1,000之间，最多两位小数");
-            }
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("参考零售价必须在0到1,000之间，最多两位小数");
-        }
-    }
     private static final Logger log = LoggerFactory.getLogger(DefaultSubTaskCommandService.class);
     private static final Object PROJECT_CODE_LOCK = new Object();
 
@@ -84,6 +74,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
     private DesignRequirementScoringService designRequirementScoringService;
     private SubTaskRejectionCycleRepository rejectionCycleRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ProjectNotifier notifier;
+    private final ScoringWeightConfig scoringWeights;
 
     public DefaultSubTaskCommandService(ProjectRepository projectRepository,
                           SubTaskRepository subTaskRepository,
@@ -108,6 +100,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         this.fileArchiveService = fileArchiveService;
         this.projectAccessService = projectAccessService;
         this.notificationWorkflowService = notificationWorkflowService;
+        this.notifier = new ProjectNotifier(notificationWorkflowService);
+        this.scoringWeights = new ScoringWeightConfig(systemConfigRepository);
     }
 
     /** Optional setter keeps existing lightweight unit-test construction compatible. */
@@ -274,8 +268,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
         // 统一按负责人 ID 通知，designerId 兼容设计、供应链、销售、产品推广等负责人类型。
         if (task.getDesignerId() != null && !task.getDesignerId().isBlank()) {
-            safeNotifyAfterCommit("TASK_ASSIGNED", task.getDesignerId(), "sub_task", task.getId(),
-                    (String) body.getOrDefault("currentUserId", ""), notificationContext(saved, task, currentUser, ""));
+            notifier.safeNotifyAfterCommit("TASK_ASSIGNED", task.getDesignerId(), "sub_task", task.getId(),
+                    (String) body.getOrDefault("currentUserId", ""), notifier.context(saved, task, currentUser, ""));
         }
         return saved;
     }
@@ -412,7 +406,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         String currentUser = (String) body.getOrDefault("currentUser", "");
         Map<String, Object> after = snapshotSubTask(task);
         p.getLogs().add(new ActivityLog("编辑子任务：" + task.getName(), currentUser, currentRole, p,
-                "sub_task", task.getId(), toJson(before), toJson(after), changedFields(before, after)));
+                "sub_task", task.getId(), AuditJson.toJson(before), AuditJson.toJson(after), AuditJson.changedFields(before, after)));
 
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
@@ -448,20 +442,6 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         return data;
     }
 
-    private Map<String, String> notificationContext(Project project, SubTask task, String actor, String reason) {
-        Map<String, String> context = new HashMap<>();
-        context.put("projectName", project.getProductName());
-        context.put("deadline", task != null ? task.getPlannedDate() : project.getDeadline());
-        context.put("actorName", actor == null || actor.isBlank() ? "系统" : actor);
-        context.put("projectLink", "/?projectId=" + project.getId());
-        if (task != null) {
-            context.put("taskName", task.getName());
-            context.put("taskLink", "/?projectId=" + project.getId() + "&taskId=" + task.getId());
-        }
-        if (reason != null && !reason.isBlank()) context.put("reason", reason);
-        return context;
-    }
-
     private String validateIpSubOptions(String submittedJson, IpOption ipOption) {
         List<String> configured;
         List<String> selected;
@@ -484,34 +464,6 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         } catch (Exception e) {
             throw new RuntimeException("二级IP选项保存失败");
         }
-    }
-
-    private void safeNotify(String eventType, String recipientUserId, String aggregateType, Long aggregateId,
-                            String actorUserId, Map<String, String> context) {
-        try {
-            notificationWorkflowService.notifyUser(eventType, recipientUserId, aggregateType, aggregateId, actorUserId, context);
-        } catch (Exception e) {
-            log.error("通知创建失败但业务操作继续: eventType={}, aggregate={}#{}", eventType, aggregateType, aggregateId, e);
-        }
-    }
-
-    private void safeNotifyAfterCommit(String eventType, String recipientUserId, String aggregateType, Long aggregateId,
-                                       String actorUserId, Map<String, String> context) {
-        try {
-            notificationWorkflowService.notifyUserAfterCommit(
-                    eventType, recipientUserId, aggregateType, aggregateId, actorUserId, context);
-        } catch (Exception e) {
-            log.error("提交后通知注册失败但业务操作继续: eventType={}, aggregate={}#{}",
-                    eventType, aggregateType, aggregateId, e);
-        }
-    }
-
-    private String toJson(Object value) {
-        try { return objectMapper.writeValueAsString(value); } catch (Exception e) { return "{}"; }
-    }
-
-    private String changedFields(Map<String, Object> before, Map<String, Object> after) {
-        return toJson(before.keySet().stream().filter(k -> !Objects.equals(before.get(k), after.get(k))).toList());
     }
 
     @Transactional
@@ -631,8 +583,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
 
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
-        safeNotifyAfterCommit("TASK_ASSIGNED", task.getDesignerId(), "sub_task", task.getId(),
-                (String) body.getOrDefault("currentUserId", ""), notificationContext(saved, task, currentUser, ""));
+        notifier.safeNotifyAfterCommit("TASK_ASSIGNED", task.getDesignerId(), "sub_task", task.getId(),
+                (String) body.getOrDefault("currentUserId", ""), notifier.context(saved, task, currentUser, ""));
         return saved;
     }
 
@@ -879,12 +831,12 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
-        safeNotifyAfterCommit("TASK_DELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
-                notificationContext(p, task, currentUser, ""));
+        notifier.safeNotifyAfterCommit("TASK_DELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
+                notifier.context(p, task, currentUser, ""));
         if ("channel_custom".equals(p.getType()) && p.getSalesId() != null && !p.getSalesId().isBlank()
                 && !p.getSalesId().equals(currentUserId)) {
-            safeNotifyAfterCommit("TASK_DELIVERED", p.getSalesId(), "sub_task", task.getId(), currentUserId,
-                    notificationContext(p, task, currentUser, "销售关联项目已收到设计交付成果"));
+            notifier.safeNotifyAfterCommit("TASK_DELIVERED", p.getSalesId(), "sub_task", task.getId(), currentUserId,
+                    notifier.context(p, task, currentUser, "销售关联项目已收到设计交付成果"));
         }
         return saved;
     }
@@ -905,8 +857,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         String user = (String) body.getOrDefault("currentUser", "");
         p.getLogs().add(new ActivityLog("子任务送审：" + task.getName(), user, role, p));
         Project saved = projectRepository.saveAndFlush(p);
-        safeNotifyAfterCommit("TASK_SUBMITTED_FOR_REVIEW", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
-                notificationContext(p, task, user, ""));
+        notifier.safeNotifyAfterCommit("TASK_SUBMITTED_FOR_REVIEW", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
+                notifier.context(p, task, user, ""));
         return saved;
     }
 
@@ -952,11 +904,11 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         Project saved = projectRepository.save(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
-        safeNotifyAfterCommit("TASK_REDELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
-                notificationContext(p, task, currentUser, previousReviewComments));
+        notifier.safeNotifyAfterCommit("TASK_REDELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
+                notifier.context(p, task, currentUser, previousReviewComments));
         if ("channel_custom".equals(p.getType()) && p.getSalesId() != null && !p.getSalesId().isBlank()) {
-            safeNotifyAfterCommit("TASK_REDELIVERED", p.getSalesId(), "sub_task", task.getId(), currentUserId,
-                    notificationContext(p, task, currentUser, previousReviewComments));
+            notifier.safeNotifyAfterCommit("TASK_REDELIVERED", p.getSalesId(), "sub_task", task.getId(), currentUserId,
+                    notifier.context(p, task, currentUser, previousReviewComments));
         }
         return saved;
     }
@@ -1015,12 +967,12 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
-        safeNotifyAfterCommit("TASK_REDELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
-                notificationContext(p, task, currentUser, changeSummary));
+        notifier.safeNotifyAfterCommit("TASK_REDELIVERED", p.getPlannerId(), "sub_task", task.getId(), currentUserId,
+                notifier.context(p, task, currentUser, changeSummary));
         if ("channel_custom".equals(p.getType()) && p.getSalesId() != null && !p.getSalesId().isBlank()
                 && !p.getSalesId().equals(currentUserId)) {
-            safeNotifyAfterCommit("TASK_REDELIVERED", p.getSalesId(), "sub_task", task.getId(), currentUserId,
-                    notificationContext(p, task, currentUser, "销售关联项目已收到重新交付成果"));
+            notifier.safeNotifyAfterCommit("TASK_REDELIVERED", p.getSalesId(), "sub_task", task.getId(), currentUserId,
+                    notifier.context(p, task, currentUser, "销售关联项目已收到重新交付成果"));
         }
         return saved;
     }
@@ -1131,9 +1083,9 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         // 检查是否所有评分已完成；最终验收通过时发放质量加分（与评分中心 submitScoring 共用同一发分路径）
         finalizeTaskApproval(task, p);
         Project saved = projectRepository.save(p);
-        Map<String, String> notifyContext = notificationContext(saved, task, currentUser, comments);
+        Map<String, String> notifyContext = notifier.context(saved, task, currentUser, comments);
         notifyContext.put("reviewRole", "planner".equals(currentRole) ? "产品企划" : ("admin".equals(currentRole) ? "管理员" : "销售"));
-        safeNotifyAfterCommit("REVIEW_APPROVED", task.getDesignerId(), "sub_task", task.getId(),
+        notifier.safeNotifyAfterCommit("REVIEW_APPROVED", task.getDesignerId(), "sub_task", task.getId(),
                 currentUserId, notifyContext);
         return saved;
     }
@@ -1156,7 +1108,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             record.setScore(null);
             record.setAesthetics(null);
             record.setInnovation(null);
-            record.setWeight(getScoringPct(projectType(task), role) / 100.0);
+            record.setWeight(scoringWeights.pct(projectType(task), role) / 100.0);
             record.setSubTask(task);
             scoringRepository.save(record);
         }
@@ -1172,7 +1124,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             self.setReviewerName(task.getDesignerName());
             self.setReviewedAt(task.getSelfScore() == null ? null : LocalDateTime.now());
             self.setScore(task.getSelfScore() == null ? null : task.getSelfScore().intValue());
-            self.setWeight(getScoringPct(projectType(task), "designer") / 100.0);
+            self.setWeight(scoringWeights.pct(projectType(task), "designer") / 100.0);
             self.setSubTask(task);
             scoringRepository.save(self);
         }
@@ -1203,7 +1155,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             sr.setInnovation(null);
         }
         // 读取对应项目类型的角色权重百分比，转为小数
-        sr.setWeight(getScoringPct(projectType(task), role) / 100.0);
+        sr.setWeight(scoringWeights.pct(projectType(task), role) / 100.0);
         sr.setSubTask(task);
         scoringRepository.save(sr);
         if ("planner".equals(role)) {
@@ -1220,29 +1172,29 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         secondReview.setScoreType(secondRole);
         secondReview.setReviewStage("second");
         secondReview.setReviewStatus("pending");
-        secondReview.setWeight(getScoringPct(projectType(task), secondRole) / 100.0);
+        secondReview.setWeight(scoringWeights.pct(projectType(task), secondRole) / 100.0);
         secondReview.setSubTask(task);
         scoringRepository.save(secondReview);
         if (newlyActivated && task.getProject() != null) {
             Project project = task.getProject();
-            Map<String, String> context = notificationContext(project, task, "产品企划", null);
+            Map<String, String> context = notifier.context(project, task, "产品企划", null);
             context.put("reviewRole", "admin".equals(secondRole) ? "管理员" : "销售");
             if ("admin".equals(secondRole)) {
-                safeNotifyRole("REVIEW_PENDING", "admin", "sub_task", task.getId(),
+                safeNotifyRoleAfterCommit("REVIEW_PENDING", "admin", "sub_task", task.getId(),
                         "system", context);
             } else if (project.getSalesId() != null && !project.getSalesId().isBlank()) {
-                safeNotify("REVIEW_PENDING", project.getSalesId(), "sub_task", task.getId(),
+                notifier.safeNotify("REVIEW_PENDING", project.getSalesId(), "sub_task", task.getId(),
                         "system", context);
             }
         }
     }
 
-    private void safeNotifyRole(String eventType, String role, String aggregateType, Long aggregateId,
-                                String actorUserId, Map<String, String> context) {
+    private void safeNotifyRoleAfterCommit(String eventType, String role, String aggregateType, Long aggregateId,
+                                           String actorUserId, Map<String, String> context) {
         try {
-            notificationWorkflowService.notifyRole(eventType, role, aggregateType, aggregateId, actorUserId, context);
+            notificationWorkflowService.notifyRoleAfterCommit(eventType, role, aggregateType, aggregateId, actorUserId, context);
         } catch (Exception e) {
-            log.error("角色通知创建失败但业务操作继续: eventType={}, role={}, aggregate={}#{}",
+            log.error("提交后角色通知注册失败但业务操作继续: eventType={}, role={}, aggregate={}#{}",
                     eventType, role, aggregateType, aggregateId, e);
         }
     }
@@ -1263,34 +1215,12 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
     }
 
     /** 从 SystemConfig 读取评分权重百分比，按项目类型+角色 */
-    private double getScoringPct(String projectType, String role) {
-        String key = "scoring." + projectType + "." + role;
-        return systemConfigRepository.findByConfigKey(key)
-            .map(c -> { try { return Double.parseDouble(c.getConfigValue()); } catch (Exception e) { return 25.0; } })
-            .orElse(25.0);
-    }
-
     /** 当前系统设置中的角色权重（小数形式），用于历史评分重新核算。 */
     public double currentScoringWeight(String projectType, String role) {
-        return getScoringPct(projectType, role) / 100.0;
-    }
-
-    private Map<String, Double> scoringWeightMap(String projectType) {
-        Map<String, Double> weights = new HashMap<>();
-        for (String role : List.of("planner", "sales", "designer", "admin")) {
-            weights.put(role, getScoringPct(projectType, role) / 100.0);
-        }
-        return weights;
+        return scoringWeights.pct(projectType, role) / 100.0;
     }
 
     /** 从 SystemConfig 读取评分权重，不存在则返回 1.0 */
-    private double getScoringWeight(String role) {
-        String key = "scoring.weight." + role;
-        return systemConfigRepository.findByConfigKey(key)
-            .map(c -> { try { return Double.parseDouble(c.getConfigValue()); } catch (Exception e) { return 1.0; } })
-            .orElse(1.0);
-    }
-
     /** 检查子任务是否所有评分已完成 */
     private void checkTaskCompletion(SubTask task, Project project) {
         boolean isChannel = "channel_custom".equals(project.getType());
@@ -1379,7 +1309,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         cycle.setPriorTaskStatus(task.getStatus());
         cycle.setPriorPlannedDate(task.getPlannedDate());
         cycle.setPriorReviewComments(task.getReviewComments());
-        cycle.setPriorReviewSnapshotJson(toJson(reviewSnapshot(priorReview)));
+        cycle.setPriorReviewSnapshotJson(AuditJson.toJson(reviewSnapshot(priorReview)));
         cycle.setReason(comments);
         cycle.setRequiredCompletionDate(requiredCompletionDate);
         cycle.setReferenceImagesJson(rejectionReferenceImagesJson);
@@ -1405,14 +1335,14 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         p.getLogs().add(new ActivityLog(
                 "子任务驳回：" + task.getName() + "（意见：" + comments + "）",
                 currentUser, currentRole, p, "sub_task", task.getId(),
-                toJson(submittedSnapshot),
-                toJson(rejectionSnapshot),
+                AuditJson.toJson(submittedSnapshot),
+                AuditJson.toJson(rejectionSnapshot),
                 "status,reviewComments,plannedDate,rejectionReferenceImagesJson,rejectionAttachmentsJson"));
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(rejectionReferenceImagesJson, "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(rejectionAttachmentsJson, "sub_task", task.getId());
-        safeNotifyAfterCommit("TASK_REJECTED", task.getDesignerId(), "sub_task", task.getId(), currentUserId,
-                notificationContext(p, task, currentUser, comments));
+        notifier.safeNotifyAfterCommit("TASK_REJECTED", task.getDesignerId(), "sub_task", task.getId(), currentUserId,
+                notifier.context(p, task, currentUser, comments));
         return saved;
     }
 
@@ -1456,8 +1386,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         p.getLogs().add(new ActivityLog(
                 "取消子任务驳回：" + task.getName() + "（恢复至：" + cycle.getPriorTaskStatus() + "）",
                 currentUser, currentRole, p, "sub_task", task.getId(),
-                toJson(Map.of("status", "rejected", "rejectionCycleId", cycle.getId())),
-                toJson(Map.of("status", cycle.getPriorTaskStatus(), "rejectionCycleId", cycle.getId())),
+                AuditJson.toJson(Map.of("status", "rejected", "rejectionCycleId", cycle.getId())),
+                AuditJson.toJson(Map.of("status", cycle.getPriorTaskStatus(), "rejectionCycleId", cycle.getId())),
                 "status,plannedDate,reviewComments,scoringRecord"));
         return projectRepository.saveAndFlush(p);
     }
@@ -1529,7 +1459,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         record.setScore(null);
         record.setAesthetics(null);
         record.setInnovation(null);
-        record.setWeight(getScoringPct(projectType(task), role) / 100.0);
+        record.setWeight(scoringWeights.pct(projectType(task), role) / 100.0);
         record.setSubTask(task);
         scoringRepository.save(record);
     }
@@ -1573,7 +1503,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                     ScoringRecord newSr = new ScoringRecord();
                     newSr.setRole(role);
                     newSr.setSubTask(task);
-                    newSr.setWeight(getScoringPct(task.getProject() != null ? task.getProject().getType() : "regular", role) / 100.0);
+                    newSr.setWeight(scoringWeights.pct(task.getProject() != null ? task.getProject().getType() : "regular", role) / 100.0);
                     return newSr;
                 });
         sr.setScore(score);

@@ -350,7 +350,7 @@ public class DesignRequirementController {
                                             "DESIGN_REQUIREMENT_REVIEW_PENDING", s.getReviewerId(),
                                             "design_requirement", d.getId(), session.userId(), context);
                                 } else if ("admin".equals(s.getRole())) {
-                                    notificationWorkflowService.notifyRole(
+                                    notificationWorkflowService.notifyRoleAfterCommit(
                                             "DESIGN_REQUIREMENT_REVIEW_PENDING", "admin",
                                             "design_requirement", d.getId(), session.userId(), context);
                                 }

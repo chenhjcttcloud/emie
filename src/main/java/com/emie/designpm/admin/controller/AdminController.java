@@ -5,6 +5,7 @@ import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.SystemConfig;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.admin.service.AdminService;
+import com.emie.designpm.admin.service.AdminWorkloadService;
 import com.emie.designpm.notification.service.NotificationBroadcastJobService;
 import com.emie.designpm.notification.service.NotificationTestService;
 import com.emie.designpm.notification.service.NotificationRetryOperations;
@@ -28,16 +29,19 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public class AdminController {
 
     private final AdminService adminService;
+    private final AdminWorkloadService adminWorkloadService;
     private final NotificationTestService notificationTestService;
     private final NotificationBroadcastJobService notificationBroadcastJobService;
     private final NotificationRetryOperations notificationRetryService;
     private final PermissionManagementService permissionManagementService;
 
-    public AdminController(AdminService adminService, NotificationTestService notificationTestService,
+    public AdminController(AdminService adminService, AdminWorkloadService adminWorkloadService,
+                           NotificationTestService notificationTestService,
                            NotificationBroadcastJobService notificationBroadcastJobService,
                            NotificationRetryOperations notificationRetryService,
                            PermissionManagementService permissionManagementService) {
         this.adminService = adminService;
+        this.adminWorkloadService = adminWorkloadService;
         this.notificationTestService = notificationTestService;
         this.notificationBroadcastJobService = notificationBroadcastJobService;
         this.notificationRetryService = notificationRetryService;
@@ -377,7 +381,7 @@ public class AdminController {
         AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
         if (!"admin".equals(session.role())) return ResponseEntity.status(403).build();
-        return ResponseEntity.ok(adminService.getWorkloadStats());
+        return ResponseEntity.ok(adminWorkloadService.getWorkloadStats());
     }
 
     @GetMapping("/workload/timeline")
@@ -393,7 +397,7 @@ public class AdminController {
             return ResponseEntity.badRequest().body(Map.of("error", "开始日期和结束日期必须同时填写"));
         }
         try {
-            return ResponseEntity.ok(adminService.getWorkloadTimeline(range, startDate, endDate));
+            return ResponseEntity.ok(adminWorkloadService.getWorkloadTimeline(range, startDate, endDate));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
