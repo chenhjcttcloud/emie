@@ -115,6 +115,9 @@ class ArchitectureRulesTest {
      * (a) 这 17 个都是 P3「controller→repo 解耦」的目标，会被整类移出；
      * (b) 其中的 god class（ProjectController 等）体积已被 ClassSizeCeilingTest 冻结，加不动。
      * 新 controller 直连 repository 仍然会失败——这条规则真正要守的是这个。
+     *
+     * 拆 god class 时若抽出需要 repository 的读取逻辑，放到 {@code <domain>.service}
+     * 做正经 service（如 ProjectViewSupport），不要放在 controller 包里再加进这张清单。
      */
     private static final Set<String> CONTROLLERS_ALLOWED_TO_TOUCH_REPOSITORIES = Set.of(
             ROOT + ".admin.controller.UserController",

@@ -7,8 +7,10 @@ import com.emie.designpm.project.repository.SubTaskRepository;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.admin.service.PermissionService;
 import com.emie.designpm.project.service.ProjectAccessService;
+import com.emie.designpm.project.service.ProjectViewSupport;
 import com.emie.designpm.project.service.ProjectService;
 import com.emie.designpm.project.service.ProjectWorkflowService;
+import com.emie.designpm.project.service.SubTaskCommandService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -93,7 +95,7 @@ class ProjectCreationPermissionTest {
         ProjectService projects = mock(ProjectService.class);
         PermissionService permissions = mock(PermissionService.class);
         when(permissions.has("planner", "subtask.edit")).thenReturn(false);
-        ProjectController controller = controller(projects, permissions);
+        ProjectTaskController controller = taskController(projects, permissions);
 
         var response = controller.updateTask(
                 12L, 30L, Map.of("name", "新版包装"), request("planner-1", "planner"));
@@ -107,6 +109,14 @@ class ProjectCreationPermissionTest {
         return new ProjectController(projects, mock(ScoringRepository.class),
                 mock(ActivityLogRepository.class), mock(SubTaskRepository.class),
                 mock(ProjectAccessService.class), mock(ProjectWorkflowService.class), permissions);
+    }
+
+    private ProjectTaskController taskController(ProjectService projects, PermissionService permissions) {
+        SubTaskCommandService commands = ProjectTaskController.unsupportedSubTaskCommands();
+        ProjectViewSupport view = new ProjectViewSupport(projects, mock(ScoringRepository.class),
+                mock(ActivityLogRepository.class), mock(SubTaskRepository.class),
+                mock(ProjectAccessService.class), mock(ProjectWorkflowService.class), commands);
+        return new ProjectTaskController(projects, commands, view, new ProjectRequestSupport(permissions));
     }
 
     private MockHttpServletRequest request(String userId, String role) {

@@ -7,6 +7,7 @@ import com.emie.designpm.admin.repository.ActivityLogRepository;
 import com.emie.designpm.scoring.repository.ScoringRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
 import com.emie.designpm.project.service.ProjectAccessService;
+import com.emie.designpm.project.service.ProjectViewSupport;
 import com.emie.designpm.project.service.ProjectService;
 import com.emie.designpm.project.service.ProjectWorkflowService;
 import com.emie.designpm.feishu.service.FeishuChatService;
@@ -53,7 +54,7 @@ class ProjectControllerSubTaskTest {
         when(tasks.findMySubTasks("designer-1")).thenReturn(List.of(task));
         when(scoring.findBySubTaskIds(List.of(21L))).thenReturn(List.of());
 
-        var response = controller(tasks, scoring).getMySubTasks(request("designer-1", "designer"));
+        var response = taskController(tasks, scoring).getMySubTasks(request("designer-1", "designer"));
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> body = (List<Map<String, Object>>) (List<?>) response.getBody();
@@ -69,7 +70,7 @@ class ProjectControllerSubTaskTest {
         when(tasks.findMySubTasks("designer-1")).thenReturn(List.of(task));
         when(scoring.findBySubTaskIds(List.of(22L))).thenReturn(List.of());
 
-        var response = controller(tasks, scoring).getMySubTasks(request("designer-1", "designer"));
+        var response = taskController(tasks, scoring).getMySubTasks(request("designer-1", "designer"));
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> body = (List<Map<String, Object>>) (List<?>) response.getBody();
@@ -139,6 +140,15 @@ class ProjectControllerSubTaskTest {
     private ProjectController controller(SubTaskRepository tasks, ScoringRepository scoring) {
         return new ProjectController(mock(ProjectService.class), scoring, mock(ActivityLogRepository.class),
                 tasks, mock(ProjectAccessService.class), mock(ProjectWorkflowService.class));
+    }
+
+    private ProjectTaskController taskController(SubTaskRepository tasks, ScoringRepository scoring) {
+        ProjectService projects = mock(ProjectService.class);
+        SubTaskCommandService commands = ProjectTaskController.unsupportedSubTaskCommands();
+        ProjectViewSupport view = new ProjectViewSupport(projects, scoring,
+                mock(ActivityLogRepository.class), tasks, mock(ProjectAccessService.class),
+                mock(ProjectWorkflowService.class), commands);
+        return new ProjectTaskController(projects, commands, view, new ProjectRequestSupport(null));
     }
 
     private MockHttpServletRequest request(String userId, String role) {
