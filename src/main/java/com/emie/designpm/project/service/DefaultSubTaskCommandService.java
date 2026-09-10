@@ -61,8 +61,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
     private final FileArchiveService fileArchiveService;
     private final ProjectAccessService projectAccessService;
     private final NotificationWorkflowService notificationWorkflowService;
-    private SubTaskAssignmentPolicy subTaskAssignmentPolicy;
-    private SubTaskInputPolicy subTaskInputPolicy;
+    private final SubTaskInputValidator inputValidator;
     private PointsService pointsService;
     private DesignerMarketEligibilityRepository marketEligibilityRepository;
     private TaskWithdrawalRepository taskWithdrawalRepository;
@@ -77,6 +76,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
     private final ProjectNotifier notifier;
     private final ScoringWeightConfig scoringWeights;
 
+    @Autowired
     public DefaultSubTaskCommandService(ProjectRepository projectRepository,
                           SubTaskRepository subTaskRepository,
                           ScoringRepository scoringRepository,
@@ -87,7 +87,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                           SystemConfigRepository systemConfigRepository,
                           SyncQueueService syncQueueService,
                           FileArchiveService fileArchiveService,
-                          ProjectAccessService projectAccessService, NotificationWorkflowService notificationWorkflowService) {
+                          ProjectAccessService projectAccessService, NotificationWorkflowService notificationWorkflowService,
+                          SubTaskInputValidator inputValidator) {
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
         this.scoringRepository = scoringRepository;
@@ -100,8 +101,27 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         this.fileArchiveService = fileArchiveService;
         this.projectAccessService = projectAccessService;
         this.notificationWorkflowService = notificationWorkflowService;
+        this.inputValidator = inputValidator;
         this.notifier = new ProjectNotifier(notificationWorkflowService);
         this.scoringWeights = new ScoringWeightConfig(systemConfigRepository);
+    }
+
+    /** Keeps existing lightweight unit-test construction compatible. */
+    public DefaultSubTaskCommandService(ProjectRepository projectRepository,
+                          SubTaskRepository subTaskRepository,
+                          ScoringRepository scoringRepository,
+                          SubTaskDeliveryVersionRepository deliveryVersionRepository,
+                          UserService userService,
+                          ProductCategoryRepository productCategoryRepository,
+                          IpOptionRepository ipOptionRepository,
+                          SystemConfigRepository systemConfigRepository,
+                          SyncQueueService syncQueueService,
+                          FileArchiveService fileArchiveService,
+                          ProjectAccessService projectAccessService, NotificationWorkflowService notificationWorkflowService) {
+        this(projectRepository, subTaskRepository, scoringRepository, deliveryVersionRepository, userService,
+                productCategoryRepository, ipOptionRepository, systemConfigRepository, syncQueueService,
+                fileArchiveService, projectAccessService, notificationWorkflowService,
+                new SubTaskInputValidator(userService, subTaskRepository, systemConfigRepository));
     }
 
     /** Optional setter keeps existing lightweight unit-test construction compatible. */
@@ -110,7 +130,10 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         this.pointsService = pointsService;
     }
     @Autowired(required = false)
-    void setMarketEligibilityRepository(DesignerMarketEligibilityRepository repository) { this.marketEligibilityRepository = repository; }
+    void setMarketEligibilityRepository(DesignerMarketEligibilityRepository repository) {
+        this.marketEligibilityRepository = repository;
+        this.inputValidator.setMarketEligibilityRepository(repository);
+    }
     @Autowired(required = false)
     void setTaskWithdrawalRepository(TaskWithdrawalRepository repository) { this.taskWithdrawalRepository = repository; }
     @Autowired(required = false)
@@ -127,40 +150,6 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
     void setDesignRequirementScoringService(DesignRequirementScoringService service) { this.designRequirementScoringService = service; }
     @Autowired
     void setRejectionCycleRepository(SubTaskRejectionCycleRepository repository) { this.rejectionCycleRepository = repository; }
-    @Autowired(required = false)
-    void setSubTaskAssignmentPolicy(SubTaskAssignmentPolicy policy) { this.subTaskAssignmentPolicy = policy; }
-    @Autowired(required = false)
-    void setSubTaskInputPolicy(SubTaskInputPolicy policy) { this.subTaskInputPolicy = policy; }
-
-    private String validateAndCleanFiles(String json, boolean isImage) {
-        if (json == null || json.isBlank()) return "[]";
-        // 整体JSON过大直接拒绝，防止OOM
-        if (json.length() > 700_000_000) return "[]"; // ~500MB原始文件总量
-
-        final int maxCount = isImage ? 9 : 5;
-
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-            List<Map<String, Object>> files = mapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {});
-            List<Map<String, Object>> cleaned = files.stream()
-                .filter(f -> {
-                    String name = (String) f.get("name");
-                    if (name == null) return false;
-                    return isImage ? SecurityUtil.isValidImageFile(name) : SecurityUtil.isValidAttachmentFile(name);
-                })
-                .filter(f -> {
-                    // 只保留有url引用的文件（已上传到服务端）
-                    String url = (String) f.get("url");
-                    return url != null && !url.isEmpty();
-                })
-                .limit(maxCount)
-                .collect(Collectors.toList());
-            return mapper.writeValueAsString(cleaned);
-        } catch (Exception e) {
-            return "[]";
-        }
-    }
-
     public Project addSubTask(Long projectId, Map<String, Object> body) {
         Project p = projectRepository.findById(projectId)
                 .orElseThrow(() -> new RuntimeException("项目不存在"));
@@ -209,9 +198,9 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (pointsService != null) {
             pointsService.bindRuleSnapshot(task, pointRuleCode, difficultyCode);
         }
-        task.setRequiredSkillTagsJson(subTaskInputPolicy == null ? validateSkillTags(body.get("requiredSkillTags")) : subTaskInputPolicy.skillTags(body.get("requiredSkillTags")));
-        task.setCollaboratorAllocationsJson(subTaskInputPolicy == null ? validateCollaboratorAllocations(body.get("collaboratorAllocations"), designerId) : subTaskInputPolicy.collaboratorAllocations(body.get("collaboratorAllocations"), designerId));
-        task.setMilestoneMonth(subTaskInputPolicy == null ? validateMilestoneMonth(body.get("milestoneMonth")) : subTaskInputPolicy.milestoneMonth(body.get("milestoneMonth")));
+        task.setRequiredSkillTagsJson(inputValidator.skillTags(body.get("requiredSkillTags")));
+        task.setCollaboratorAllocationsJson(inputValidator.collaboratorAllocations(body.get("collaboratorAllocations"), designerId));
+        task.setMilestoneMonth(inputValidator.milestoneMonth(body.get("milestoneMonth")));
         task.setAssignmentReason(SecurityUtil.sanitizeText((String) body.get("assignmentReason"), 500));
         // 设置负责人角色类型（designer / supplychain / planner / sales），默认 designer
         String assigneeRole = (String) body.get("assigneeRole");
@@ -231,11 +220,11 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             }
             task.setAllocationStatus("direct_assigned");
         }
-        validateSubTaskAssignee(designerId, task.getAssigneeRole());
+        inputValidator.validateSubTaskAssignee(designerId, task.getAssigneeRole());
         // 设计师不再按任务分类或能力标签限制；所有设计师均可承接设计师类子任务。
         task.setDetails(details);
-        task.setReferenceImagesJson(validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true));
-        task.setAttachmentsJson(validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
+        task.setReferenceImagesJson(inputValidator.validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true));
+        task.setAttachmentsJson(inputValidator.validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
         task.setProject(p);
 
         boolean firstSubTask = p.getTasks().isEmpty();
@@ -272,29 +261,6 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                     (String) body.getOrDefault("currentUserId", ""), notifier.context(saved, task, currentUser, ""));
         }
         return saved;
-    }
-
-    private void validateSubTaskAssignee(String userId, String assigneeRole) {
-        if (subTaskAssignmentPolicy != null) {
-            subTaskAssignmentPolicy.validate(userId, assigneeRole);
-            return;
-        }
-        String normalizedRole = normalizeAssigneeRole(assigneeRole);
-        if (!List.of("designer", "supplychain", "planner", "sales", "promotion").contains(normalizedRole)) {
-            throw new RuntimeException("不支持的子任务负责人类型");
-        }
-        if (userId == null || userId.isBlank()) return;
-        User assignee = userService.getUserByUserId(userId);
-        if (assignee == null || !normalizedRole.equals(normalizeAssigneeRole(assignee.getRole()))) {
-            throw new RuntimeException("子任务负责人和负责人类型不匹配");
-        }
-    }
-
-    private String normalizeAssigneeRole(String role) {
-        if (role == null) return "";
-        if ("promotion".equalsIgnoreCase(role) || "product_promotion".equalsIgnoreCase(role)
-                || "product-promotion".equalsIgnoreCase(role)) return "promotion";
-        return role;
     }
 
     public Project updateSubTask(Long projectId, Long taskId, Map<String, Object> body) {
@@ -383,14 +349,14 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             if (!"pending".equals(task.getStatus())) {
                 throw new RuntimeException("子任务开始执行后不能修改能力要求");
             }
-            task.setRequiredSkillTagsJson(subTaskInputPolicy == null ? validateSkillTags(body.get("requiredSkillTags")) : subTaskInputPolicy.skillTags(body.get("requiredSkillTags")));
+            task.setRequiredSkillTagsJson(inputValidator.skillTags(body.get("requiredSkillTags")));
         }
         if (body.containsKey("collaboratorAllocations") || body.containsKey("milestoneMonth")) {
             if (!"pending".equals(task.getStatus())) throw new RuntimeException("任务开始后不能修改合作比例或里程碑月份");
             if (body.containsKey("collaboratorAllocations")) {
-                task.setCollaboratorAllocationsJson(subTaskInputPolicy == null ? validateCollaboratorAllocations(body.get("collaboratorAllocations"), task.getDesignerId()) : subTaskInputPolicy.collaboratorAllocations(body.get("collaboratorAllocations"), task.getDesignerId()));
+                task.setCollaboratorAllocationsJson(inputValidator.collaboratorAllocations(body.get("collaboratorAllocations"), task.getDesignerId()));
             }
-            if (body.containsKey("milestoneMonth")) task.setMilestoneMonth(subTaskInputPolicy == null ? validateMilestoneMonth(body.get("milestoneMonth")) : subTaskInputPolicy.milestoneMonth(body.get("milestoneMonth")));
+            if (body.containsKey("milestoneMonth")) task.setMilestoneMonth(inputValidator.milestoneMonth(body.get("milestoneMonth")));
         }
         if (body.containsKey("assignmentReason")) task.setAssignmentReason(SecurityUtil.sanitizeText((String) body.get("assignmentReason"), 500));
         if ("market_open".equals(task.getAllocationStatus())
@@ -398,10 +364,10 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                 || (task.getDesignerId() != null && !task.getDesignerId().isBlank()))) {
             throw new RuntimeException("开放市场任务必须保持设计师类型且不能指定负责人");
         }
-        validateSubTaskAssignee(task.getDesignerId(), task.getAssigneeRole() == null ? "designer" : task.getAssigneeRole());
+        inputValidator.validateSubTaskAssignee(task.getDesignerId(), task.getAssigneeRole() == null ? "designer" : task.getAssigneeRole());
         if (body.containsKey("details")) task.setDetails(SecurityUtil.sanitizeText((String) body.get("details"), 2000));
-        if (body.containsKey("referenceImagesJson")) task.setReferenceImagesJson(validateAndCleanFiles((String) body.get("referenceImagesJson"), true));
-        if (body.containsKey("attachmentsJson")) task.setAttachmentsJson(validateAndCleanFiles((String) body.get("attachmentsJson"), false));
+        if (body.containsKey("referenceImagesJson")) task.setReferenceImagesJson(inputValidator.validateAndCleanFiles((String) body.get("referenceImagesJson"), true));
+        if (body.containsKey("attachmentsJson")) task.setAttachmentsJson(inputValidator.validateAndCleanFiles((String) body.get("attachmentsJson"), false));
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         Map<String, Object> after = snapshotSubTask(task);
@@ -440,30 +406,6 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         data.put("assigneeRole", task.getAssigneeRole());
         data.put("details", task.getDetails());
         return data;
-    }
-
-    private String validateIpSubOptions(String submittedJson, IpOption ipOption) {
-        List<String> configured;
-        List<String> selected;
-        try {
-            configured = objectMapper.readValue(Optional.ofNullable(ipOption.getSubOptionsJson()).orElse("[]"), new TypeReference<List<String>>() {});
-            selected = objectMapper.readValue(Optional.ofNullable(submittedJson).orElse("[]"), new TypeReference<List<String>>() {});
-        } catch (Exception e) {
-            throw new RuntimeException("二级IP选项格式无效");
-        }
-        if (configured.isEmpty()) return null;
-        if (selected.isEmpty()) throw new RuntimeException("请选择二级IP选项");
-        if ("single".equals(ipOption.getSubOptionSelectionMode()) && selected.size() != 1) {
-            throw new RuntimeException("该IP的二级选项仅允许单选");
-        }
-        if (selected.stream().anyMatch(value -> value == null || !configured.contains(value))) {
-            throw new RuntimeException("请选择有效的二级IP选项");
-        }
-        try {
-            return objectMapper.writeValueAsString(selected.stream().distinct().toList());
-        } catch (Exception e) {
-            throw new RuntimeException("二级IP选项保存失败");
-        }
     }
 
     @Transactional
@@ -544,7 +486,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             throw new RuntimeException("当前登录用户无效，无法接单");
         }
         if (task.getAssigneeRole() != null && !task.getAssigneeRole().isBlank()
-                && !normalizeAssigneeRole(task.getAssigneeRole()).equals(normalizeAssigneeRole(currentRole))) {
+                && !inputValidator.normalizeAssigneeRole(task.getAssigneeRole()).equals(inputValidator.normalizeAssigneeRole(currentRole))) {
             throw new RuntimeException("当前角色无法接此子任务");
         }
 
@@ -554,7 +496,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         }
 
         if (task.getDesignerId() == null || task.getDesignerId().isBlank()) {
-            validateMarketClaimConstraints(task, designerUserId);
+            inputValidator.validateMarketClaimConstraints(task, designerUserId);
         }
 
         // 如果子任务未指定设计师，自动绑定接单的设计师（防并发）
@@ -588,120 +530,12 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         return saved;
     }
 
-    private void validateMarketClaimConstraints(SubTask task, String designerUserId) {
-        if (!"market_open".equals(task.getAllocationStatus())) return;
-        if (marketEligibilityRepository != null) marketEligibilityRepository.findByUserId(designerUserId).ifPresent(eligibility -> {
-            if (eligibility.isSuspended()) throw new RuntimeException("开放接单资格已暂停至" + eligibility.getSuspendedUntil() + "，原因：" + Optional.ofNullable(eligibility.getReason()).orElse("违规处理"));
-        });
-        String code = Optional.ofNullable(task.getPointRuleCode()).orElse("").trim().toUpperCase();
-        if (code.startsWith("A") || code.startsWith("B")) {
-            long activeMainTasks = subTaskRepository.countActiveMainTasksByCategory(designerUserId, "A")
-                    + subTaskRepository.countActiveMainTasksByCategory(designerUserId, "B");
-            int maxMainTasks = positiveIntConfig("points.claim.max_main_tasks", 5);
-            if (activeMainTasks >= maxMainTasks) {
-                throw new RuntimeException("当前A/B类主任务已达上限（" + maxMainTasks + "个），请完成现有任务后再接单");
-            }
-        }
-
-        // 接单不再按能力标签或任务分类限制；历史标签字段保留，仅用于兼容旧数据展示。
-    }
-
-    private void validateDesignCategoryEligibility(SubTask task, String designerUserId) {
-        String configured = systemConfigRepository.findByConfigKey("points.user.skills." + designerUserId)
-                .map(SystemConfig::getConfigValue).orElse("[]");
-        validateDesignCategoryEligibility(task, designerUserId, parseSkillTags(configured));
-    }
-
-    private void validateDesignCategoryEligibility(SubTask task, String designerUserId, Set<String> actual) {
-        String ruleCode = Optional.ofNullable(task.getPointRuleCode()).orElse("").toUpperCase(Locale.ROOT);
-        if ("B1".equals(ruleCode) && !actual.contains("ID")) throw new RuntimeException("B1原创任务仅具备ID能力标签的设计师可接");
-        if (ruleCode.startsWith("B") && !"B1".equals(ruleCode) && actual.stream().noneMatch(tag -> Set.of("ID", "视觉").contains(tag))) {
-            throw new RuntimeException("产品设计类任务仅具备ID或视觉能力标签的设计师可接");
-        }
-    }
-
     private int positiveIntConfig(String key, int fallback) {
         return systemConfigRepository.findByConfigKey(key).map(SystemConfig::getConfigValue)
                 .map(String::trim).filter(value -> !value.isEmpty())
                 .map(value -> {
                     try { return Integer.parseInt(value); } catch (NumberFormatException ignored) { return fallback; }
                 }).filter(value -> value > 0).orElse(fallback);
-    }
-
-    private String validateSkillTags(Object raw) {
-        if (raw == null) return null;
-        Collection<?> values;
-        if (raw instanceof Collection<?> collection) {
-            values = collection;
-        } else if (raw instanceof String json && !json.isBlank()) {
-            try { values = objectMapper.readValue(json, new TypeReference<List<Object>>() {}); }
-            catch (Exception e) { throw new RuntimeException("能力标签格式无效"); }
-        } else if (raw instanceof String) {
-            return null;
-        } else {
-            throw new RuntimeException("能力标签格式无效");
-        }
-        List<String> normalized = values.stream()
-                .filter(Objects::nonNull)
-                .map(String::valueOf)
-                .map(String::trim)
-                .filter(value -> !value.isBlank())
-                .map(value -> SecurityUtil.sanitizeText(value, 40))
-                .filter(Objects::nonNull)
-                .distinct().limit(20).toList();
-        try { return normalized.isEmpty() ? null : objectMapper.writeValueAsString(normalized); }
-        catch (Exception e) { throw new RuntimeException("能力标签保存失败"); }
-    }
-
-    private Set<String> parseSkillTags(String json) {
-        if (json == null || json.isBlank()) return Collections.emptySet();
-        try {
-            return objectMapper.readValue(json, new TypeReference<List<String>>() {}).stream()
-                    .filter(Objects::nonNull).map(String::trim).filter(value -> !value.isBlank())
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
-        } catch (Exception e) {
-            log.warn("忽略格式错误的能力标签配置");
-            return Collections.emptySet();
-        }
-    }
-
-    private String validateMilestoneMonth(Object raw) {
-        if (raw == null || String.valueOf(raw).isBlank()) return null;
-        String month = String.valueOf(raw).trim();
-        try { java.time.YearMonth.parse(month); return month; }
-        catch (Exception e) { throw new RuntimeException("里程碑月份格式应为YYYY-MM"); }
-    }
-
-    private String validateCollaboratorAllocations(Object raw, String primaryUserId) {
-        if (raw == null || String.valueOf(raw).isBlank() || "[]".equals(String.valueOf(raw).trim())) return null;
-        List<Map<String, Object>> rows;
-        try {
-            rows = raw instanceof Collection<?> collection
-                    ? objectMapper.convertValue(collection, new TypeReference<List<Map<String, Object>>>() {})
-                    : objectMapper.readValue(String.valueOf(raw), new TypeReference<List<Map<String, Object>>>() {});
-        } catch (Exception e) { throw new RuntimeException("合作成员比例格式无效"); }
-        Set<String> users = new LinkedHashSet<>();
-        int total = 0;
-        List<Map<String, Object>> normalized = new ArrayList<>();
-        for (Map<String, Object> row : rows) {
-            String userId = SecurityUtil.sanitizeText(String.valueOf(row.getOrDefault("userId", "")), 100);
-            int ratio;
-            try { ratio = Integer.parseInt(String.valueOf(row.get("ratio"))); }
-            catch (Exception e) { throw new RuntimeException("合作比例必须是整数百分比"); }
-            if (userId == null || userId.isBlank() || userId.equals(primaryUserId) || !users.add(userId)) {
-                throw new RuntimeException("合作成员不能重复或与主负责人相同");
-            }
-            if (ratio <= 0 || ratio >= 100) throw new RuntimeException("单个合作比例必须在1%到99%之间");
-            User collaborator = userService.getUserByUserId(userId);
-            if (collaborator == null || !"designer".equals(normalizeAssigneeRole(collaborator.getRole()))) {
-                throw new RuntimeException("合作成员必须是有效设计师");
-            }
-            total += ratio;
-            normalized.add(Map.of("userId", userId, "name", collaborator.getName(), "ratio", ratio));
-        }
-        if (total >= 100) throw new RuntimeException("合作成员比例合计必须小于100%，剩余比例归主负责人");
-        try { return objectMapper.writeValueAsString(normalized); }
-        catch (Exception e) { throw new RuntimeException("合作比例保存失败"); }
     }
 
     @Transactional
@@ -812,8 +646,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         task.setStatus("delivered");
         task.setActualDate(null);
         task.setDeliverables(SecurityUtil.sanitizeText((String) body.get("deliverables"), 5000));
-        task.setReferenceImagesJson(validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true));
-        task.setAttachmentsJson(validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
+        task.setReferenceImagesJson(inputValidator.validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true));
+        task.setAttachmentsJson(inputValidator.validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
         // 设计师自评分（总分100分，整数）
         Integer selfScore = body.containsKey("selfScore") ? ((Number) body.get("selfScore")).intValue() : null;
         if (selfScore != null && (selfScore < 1 || selfScore > 100)) {
@@ -880,8 +714,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         task.setStatus("delivered");
         task.setActualDate(null);
         task.setDeliverables(SecurityUtil.sanitizeText((String) body.get("deliverables"), 5000));
-        task.setReferenceImagesJson(validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true));
-        task.setAttachmentsJson(validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
+        task.setReferenceImagesJson(inputValidator.validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true));
+        task.setAttachmentsJson(inputValidator.validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
         String previousReviewComments = task.getReviewComments();
         task.setReviewComments(null);
         // 设计师自评分（总分100分，整数）
@@ -948,9 +782,9 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         task.setStatus("delivered");
         task.setActualDate(null);
         task.setDeliverables(SecurityUtil.sanitizeText((String) body.get("deliverables"), 5000));
-        task.setReferenceImagesJson(validateAndCleanFiles(
+        task.setReferenceImagesJson(inputValidator.validateAndCleanFiles(
                 (String) body.getOrDefault("referenceImagesJson", "[]"), true));
-        task.setAttachmentsJson(validateAndCleanFiles(
+        task.setAttachmentsJson(inputValidator.validateAndCleanFiles(
                 (String) body.getOrDefault("attachmentsJson", "[]"), false));
         Integer selfScore = body.containsKey("selfScore") ? ((Number) body.get("selfScore")).intValue() : null;
         if (selfScore == null || selfScore < 1 || selfScore > 100) {
@@ -1280,9 +1114,9 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (requiredCompletionDate == null || !requiredCompletionDate.matches("\\d{4}-\\d{2}-\\d{2}")) {
             throw new RuntimeException("请选择有效的要求完成时间");
         }
-        String rejectionReferenceImagesJson = validateAndCleanFiles(
+        String rejectionReferenceImagesJson = inputValidator.validateAndCleanFiles(
                 (String) body.getOrDefault("rejectionReferenceImagesJson", "[]"), true);
-        String rejectionAttachmentsJson = validateAndCleanFiles(
+        String rejectionAttachmentsJson = inputValidator.validateAndCleanFiles(
                 (String) body.getOrDefault("rejectionAttachmentsJson", "[]"), false);
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
