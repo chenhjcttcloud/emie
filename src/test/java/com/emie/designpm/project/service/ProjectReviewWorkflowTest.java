@@ -73,9 +73,10 @@ class ProjectReviewWorkflowTest {
                 notifications
         );
         service.setRejectionCycleRepository(rejectionCycles);
-        queryService = new ProjectService(projects, subTasks, scoring, deliveryVersions, users,
-                mock(ProductCategoryRepository.class), mock(IpOptionRepository.class), configs,
-                mock(SyncQueueService.class), mock(FileArchiveService.class), access, notifications);
+        queryService = new ProjectService(projects, subTasks, deliveryVersions, users,
+                mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
+                mock(SyncQueueService.class), mock(FileArchiveService.class), access, notifications,
+                new ProjectScoringService(scoring, configs, access));
     }
 
     @Test

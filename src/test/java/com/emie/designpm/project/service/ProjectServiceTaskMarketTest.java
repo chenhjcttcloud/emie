@@ -263,10 +263,11 @@ class ProjectServiceTaskMarketTest {
         when(users.getUserName(anyString())).thenReturn("企划甲");
         when(users.getUserByUserId(anyString())).thenReturn(plannerUser());
         ProjectService service = new ProjectService(projects, mock(SubTaskRepository.class),
-                mock(ScoringRepository.class), mock(SubTaskDeliveryVersionRepository.class),
+                mock(SubTaskDeliveryVersionRepository.class),
                 users, mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
-                mock(SystemConfigRepository.class), mock(SyncQueueService.class), mock(FileArchiveService.class),
-                mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
+                mock(SyncQueueService.class), mock(FileArchiveService.class),
+                mock(ProjectAccessService.class), mock(NotificationWorkflowService.class),
+                mock(ProjectScoringService.class));
         when(projects.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(any(), any())).thenReturn(0L);
 
         LocalDateTime now = LocalDateTime.now();
@@ -294,10 +295,11 @@ class ProjectServiceTaskMarketTest {
         when(users.getUserName(anyString())).thenReturn("企划甲");
         when(users.getUserByUserId(anyString())).thenReturn(plannerUser());
         ProjectService service = new ProjectService(projects, mock(SubTaskRepository.class),
-                mock(ScoringRepository.class), mock(SubTaskDeliveryVersionRepository.class),
+                mock(SubTaskDeliveryVersionRepository.class),
                 users, mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
-                mock(SystemConfigRepository.class), mock(SyncQueueService.class), mock(FileArchiveService.class),
-                mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
+                mock(SyncQueueService.class), mock(FileArchiveService.class),
+                mock(ProjectAccessService.class), mock(NotificationWorkflowService.class),
+                mock(ProjectScoringService.class));
         when(projects.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(any(), any())).thenReturn(0L);
         // 预检查与保存之间的跨实例竞态：查重通过但保存时唯一索引冲突
         when(projects.existsByProjectCode(anyString())).thenReturn(false);

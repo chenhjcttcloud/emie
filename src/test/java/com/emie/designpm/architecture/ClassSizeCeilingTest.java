@@ -28,7 +28,7 @@ class ClassSizeCeilingTest {
             "com/emie/designpm/feishu/service/FeishuBaseService.java", 1844,
             "com/emie/designpm/project/service/DefaultSubTaskCommandService.java", 1459,
             "com/emie/designpm/project/controller/ProjectController.java", 741,
-            "com/emie/designpm/project/service/ProjectService.java", 1055,
+            "com/emie/designpm/project/service/ProjectService.java", 806,
             "com/emie/designpm/admin/service/AdminService.java", 950,
             "com/emie/designpm/sync/service/SyncWorker.java", 675);
 

@@ -1,14 +1,13 @@
 package com.emie.designpm;
 
-import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.project.repository.ProjectRepository;
 import com.emie.designpm.project.repository.SubTaskDeliveryVersionRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
 import com.emie.designpm.reference.repository.IpOptionRepository;
 import com.emie.designpm.reference.repository.ProductCategoryRepository;
-import com.emie.designpm.scoring.repository.ScoringRepository;
 import com.emie.designpm.admin.service.UserService;
 import com.emie.designpm.project.service.ProjectAccessService;
+import com.emie.designpm.project.service.ProjectScoringService;
 import com.emie.designpm.project.service.ProjectService;
 import com.emie.designpm.notification.service.NotificationWorkflowService;
 import com.emie.designpm.sync.service.SyncQueueService;
@@ -69,16 +68,15 @@ class ProjectIpConfigurationTest {
         return new ProjectService(
                 projects,
                 mock(SubTaskRepository.class),
-                mock(ScoringRepository.class),
                 mock(SubTaskDeliveryVersionRepository.class),
                 users,
                 mock(ProductCategoryRepository.class),
                 ipOptions,
-                mock(SystemConfigRepository.class),
                 mock(SyncQueueService.class),
                 mock(FileArchiveService.class),
                 mock(ProjectAccessService.class),
-                mock(NotificationWorkflowService.class)
+                mock(NotificationWorkflowService.class),
+                mock(ProjectScoringService.class)
         );
     }
 
