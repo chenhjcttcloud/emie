@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
@@ -25,6 +26,19 @@ public class GlobalExceptionHandler {
         String traceId = traceId();
         log.warn("请求参数不合法 traceId={} path={} detail={}", traceId, request.getRequestURI(), ex.getMessage());
         return response(HttpStatus.BAD_REQUEST, "请求参数不合法，请检查输入", null, traceId);
+    }
+
+    /**
+     * 请求体反序列化失败（JSON 格式错、字段类型对不上，例如把 sortOrder 传成非数字字符串）。
+     * 之前没有这条，会一路跌到下面 handleUnexpected 变成 500——客户端明明是自己传错东西，
+     * 却收到「系统处理失败」，还掩盖了真正的系统错误。
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleUnreadableBody(
+            HttpMessageNotReadableException ex, HttpServletRequest request) {
+        String traceId = traceId();
+        log.warn("请求体解析失败 traceId={} path={} detail={}", traceId, request.getRequestURI(), ex.getMessage());
+        return response(HttpStatus.BAD_REQUEST, "请求体格式不正确，请检查输入", null, traceId);
     }
 
     @ExceptionHandler(java.time.format.DateTimeParseException.class)

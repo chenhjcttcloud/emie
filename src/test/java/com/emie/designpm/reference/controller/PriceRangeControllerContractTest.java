@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.PriceRange;
+import com.emie.designpm.reference.dto.PriceRangeUpsertRequest;
 import com.emie.designpm.reference.repository.PriceRangeRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,6 +38,27 @@ class PriceRangeControllerContractTest {
         assertEquals(Map.of("id", 7L, "name", "100-500元", "sortOrder", 2, "active", true), serialized);
     }
 
+    /**
+     * 前端实际线上格式：create 传 {@code sortOrder} 是 JSON 数字（不是字符串），update 才把
+     * {@code active} 显式转成字符串再传。DTO 字段类型是 String，靠 Jackson 默认的标量转文本
+     * 把数字/布尔都转成字符串——这条测试跑真实 JSON 反序列化，不是直接 new 对象，专门盯住这个转换。
+     */
+    @Test
+    void requestDtoAcceptsTheActualWireFormatsTheFrontendSends() throws Exception {
+        PriceRangeUpsertRequest createBody =
+                json.readValue("{\"name\":\"100-500元\",\"sortOrder\":3}", PriceRangeUpsertRequest.class);
+        assertEquals("3", createBody.sortOrder());
+
+        PriceRangeUpsertRequest updateBody =
+                json.readValue("{\"sortOrder\":9,\"active\":\"false\"}", PriceRangeUpsertRequest.class);
+        assertEquals("9", updateBody.sortOrder());
+        assertEquals("false", updateBody.active());
+
+        PriceRangeUpsertRequest omittedFields = json.readValue("{\"name\":\"x\"}", PriceRangeUpsertRequest.class);
+        assertNull(omittedFields.sortOrder());
+        assertNull(omittedFields.active());
+    }
+
     @Test
     void listActiveReturnsRepositoryResultUnfiltered() {
         PriceRange active = new PriceRange("0-100元", 1);
@@ -56,19 +78,19 @@ class PriceRangeControllerContractTest {
 
     @Test
     void createRejectsNonAdminAndBlankName() {
-        var forbidden = controller.create(Map.of("name", "500-1000元"), request("planner"));
+        var forbidden = controller.create(new PriceRangeUpsertRequest("500-1000元", null, null), request("planner"));
         assertEquals(HttpStatus.FORBIDDEN, forbidden.getStatusCode());
         verify(repo, never()).save(any());
 
-        var blank = controller.create(Map.of("name", "  "), request("admin"));
+        var blank = controller.create(new PriceRangeUpsertRequest("  ", null, null), request("admin"));
         assertEquals(HttpStatus.BAD_REQUEST, blank.getStatusCode());
     }
 
     @Test
-    void createDefaultsSortOrderToZeroWhenUnparsable() {
+    void createDefaultsSortOrderToZeroWhenAbsentOrUnparsable() {
         when(repo.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = controller.create(Map.of("name", "1000元以上", "sortOrder", "abc"), request("admin"));
+        var response = controller.create(new PriceRangeUpsertRequest("1000元以上", "abc", null), request("admin"));
 
         assertEquals(0, response.getBody().getSortOrder());
     }
@@ -79,7 +101,9 @@ class PriceRangeControllerContractTest {
 
         assertEquals(
                 HttpStatus.NOT_FOUND,
-                controller.update(99L, Map.of("name", "x"), request("admin")).getStatusCode());
+                controller
+                        .update(99L, new PriceRangeUpsertRequest("x", null, null), request("admin"))
+                        .getStatusCode());
     }
 
     @Test
@@ -89,7 +113,7 @@ class PriceRangeControllerContractTest {
         when(repo.findById(1L)).thenReturn(Optional.of(existing));
         when(repo.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = controller.update(1L, Map.of("sortOrder", "9"), request("admin"));
+        var response = controller.update(1L, new PriceRangeUpsertRequest(null, "9", null), request("admin"));
 
         assertEquals("原区间", response.getBody().getName());
         assertEquals(9, response.getBody().getSortOrder());
