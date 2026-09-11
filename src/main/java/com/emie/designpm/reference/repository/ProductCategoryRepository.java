@@ -1,9 +1,8 @@
 package com.emie.designpm.reference.repository;
 
 import com.emie.designpm.entity.ProductCategory;
-import org.springframework.data.jpa.repository.JpaRepository;
-
 import java.util.List;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ProductCategoryRepository extends JpaRepository<ProductCategory, Long> {
 

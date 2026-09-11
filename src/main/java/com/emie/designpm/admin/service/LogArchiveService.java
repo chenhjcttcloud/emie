@@ -1,21 +1,19 @@
 package com.emie.designpm.admin.service;
 
-import com.emie.designpm.entity.ActivityLog;
 import com.emie.designpm.admin.repository.ActivityLogRepository;
+import com.emie.designpm.entity.ActivityLog;
 import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
-
 import java.io.*;
 import java.nio.file.*;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
 
 /**
  * 日志归档服务。
@@ -112,7 +110,9 @@ public class LogArchiveService {
                 json.append("\"id\":").append(l.getId()).append(",");
                 json.append("\"time\":\"").append(l.getTime().format(LOG_DTF)).append("\",");
                 json.append("\"action\":\"").append(escapeJson(l.getAction())).append("\",");
-                json.append("\"username\":\"").append(escapeJson(l.getUsername())).append("\",");
+                json.append("\"username\":\"")
+                        .append(escapeJson(l.getUsername()))
+                        .append("\",");
                 json.append("\"role\":\"").append(escapeJson(l.getRole())).append("\",");
                 json.append("\"projectRefId\":").append(l.getProjectRefId() != null ? l.getProjectRefId() : "null");
                 json.append("}");
@@ -138,7 +138,11 @@ public class LogArchiveService {
             return true;
         } catch (IOException e) {
             // 清理本次临时文件（尽力而为）；残留临时文件不影响下次重新归档
-            try { Files.deleteIfExists(tmpPath); } catch (IOException ignored) { /* ignore */ }
+            try {
+                Files.deleteIfExists(tmpPath);
+            } catch (IOException ignored) {
+                /* ignore */
+            }
             throw new RuntimeException("归档日志失败: " + e.getMessage(), e);
         }
     }
@@ -196,7 +200,8 @@ public class LogArchiveService {
     /**
      * 读取归档文件，筛选日期范围内的日志
      */
-    private List<Map<String, Object>> readArchiveFile(Path filePath, LocalDateTime start, LocalDateTime end) throws IOException {
+    private List<Map<String, Object>> readArchiveFile(Path filePath, LocalDateTime start, LocalDateTime end)
+            throws IOException {
         List<Map<String, Object>> result = new ArrayList<>();
         String json;
         try (GZIPInputStream gz = new GZIPInputStream(new FileInputStream(filePath.toFile()))) {
@@ -279,8 +284,11 @@ public class LogArchiveService {
                 m.put(key, val.substring(1, val.length() - 1));
             } else {
                 // 数字
-                try { m.put(key, Long.parseLong(val)); }
-                catch (NumberFormatException e) { m.put(key, val); }
+                try {
+                    m.put(key, Long.parseLong(val));
+                } catch (NumberFormatException e) {
+                    m.put(key, val);
+                }
             }
         }
         return m;

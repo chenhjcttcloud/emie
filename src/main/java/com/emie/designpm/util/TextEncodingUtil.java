@@ -22,8 +22,12 @@ public final class TextEncodingUtil {
     }
 
     private static boolean looksLikeMojibake(String value) {
-        return value.indexOf('Ã') >= 0 || value.indexOf('Â') >= 0 || value.indexOf('å') >= 0
-                || value.indexOf('æ') >= 0 || value.indexOf('è') >= 0 || value.indexOf('é') >= 0
+        return value.indexOf('Ã') >= 0
+                || value.indexOf('Â') >= 0
+                || value.indexOf('å') >= 0
+                || value.indexOf('æ') >= 0
+                || value.indexOf('è') >= 0
+                || value.indexOf('é') >= 0
                 || value.indexOf('†') >= 0;
     }
 }

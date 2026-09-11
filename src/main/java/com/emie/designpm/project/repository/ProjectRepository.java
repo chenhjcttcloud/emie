@@ -2,38 +2,41 @@ package com.emie.designpm.project.repository;
 
 import com.emie.designpm.entity.Project;
 import jakarta.persistence.LockModeType;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.jpa.repository.EntityGraph;
-
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.time.LocalDateTime;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ProjectRepository extends JpaRepository<Project, Long>, ProjectSearchRepository {
 
     interface IntegrityProjectProjection {
         Long getId();
+
         String getReferenceImagesJson();
+
         String getAttachmentsJson();
     }
 
     interface DashboardProjectProjection {
         Long getId();
+
         String getType();
+
         String getStatus();
     }
 
     @Query("SELECT p.id AS id, p.type AS type, p.status AS status FROM Project p WHERE p.id IN :ids")
     List<DashboardProjectProjection> findDashboardProjectsByIdIn(@Param("ids") List<Long> ids);
 
-    @Query("SELECT p.id AS id, p.referenceImagesJson AS referenceImagesJson, " +
-            "p.attachmentsJson AS attachmentsJson FROM Project p " +
-            "WHERE p.id > :afterId ORDER BY p.id ASC")
+    @Query("SELECT p.id AS id, p.referenceImagesJson AS referenceImagesJson, "
+            + "p.attachmentsJson AS attachmentsJson FROM Project p "
+            + "WHERE p.id > :afterId ORDER BY p.id ASC")
     List<IntegrityProjectProjection> findIntegrityProjectsAfter(@Param("afterId") Long afterId, Pageable pageable);
 
     /** 项目详情/权限校验需要任务在同一事务内可用，避免请求序列化阶段触发懒加载。 */
@@ -51,36 +54,49 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, Project
     Page<Project> findPageLight(@Param("type") String type, Pageable pageable);
 
     @EntityGraph(attributePaths = "productCategory")
-    @Query("SELECT p FROM Project p WHERE p.salesId IN :userIds AND (:type IS NULL OR p.type = :type) ORDER BY p.createdAt DESC")
-    Page<Project> findBySalesIdsPage(@Param("userIds") List<String> userIds, @Param("type") String type, Pageable pageable);
+    @Query(
+            "SELECT p FROM Project p WHERE p.salesId IN :userIds AND (:type IS NULL OR p.type = :type) ORDER BY p.createdAt DESC")
+    Page<Project> findBySalesIdsPage(
+            @Param("userIds") List<String> userIds, @Param("type") String type, Pageable pageable);
 
     @EntityGraph(attributePaths = "productCategory")
-    @Query("SELECT p FROM Project p WHERE (p.plannerId IN :userIds OR " +
-            "(p.type = 'channel_custom' AND p.status = 'pending_planner' AND (p.plannerId IS NULL OR p.plannerId = ''))) " +
-            "AND (:type IS NULL OR p.type = :type) ORDER BY p.createdAt DESC")
-    Page<Project> findByPlannerIdsPage(@Param("userIds") List<String> userIds, @Param("type") String type, Pageable pageable);
+    @Query("SELECT p FROM Project p WHERE (p.plannerId IN :userIds OR "
+            + "(p.type = 'channel_custom' AND p.status = 'pending_planner' AND (p.plannerId IS NULL OR p.plannerId = ''))) "
+            + "AND (:type IS NULL OR p.type = :type) ORDER BY p.createdAt DESC")
+    Page<Project> findByPlannerIdsPage(
+            @Param("userIds") List<String> userIds, @Param("type") String type, Pageable pageable);
 
     @EntityGraph(attributePaths = "productCategory")
-    @Query(value = "SELECT DISTINCT p FROM Project p JOIN p.tasks t WHERE " +
-            "((t.designerId IN :userIds) OR ((t.designerId IS NULL OR t.designerId = '') AND t.status = 'pending')) " +
-            "AND (t.assigneeRole = :role OR (:role = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) " +
-            "AND (:type IS NULL OR p.type = :type) ORDER BY p.createdAt DESC",
-            countQuery = "SELECT COUNT(DISTINCT p) FROM Project p JOIN p.tasks t WHERE " +
-                    "((t.designerId IN :userIds) OR ((t.designerId IS NULL OR t.designerId = '') AND t.status = 'pending')) " +
-                    "AND (t.assigneeRole = :role OR (:role = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) " +
-                    "AND (:type IS NULL OR p.type = :type)")
-    Page<Project> findByAssigneeIdsPage(@Param("userIds") List<String> userIds, @Param("role") String role,
-                                        @Param("type") String type, Pageable pageable);
+    @Query(
+            value = "SELECT DISTINCT p FROM Project p JOIN p.tasks t WHERE "
+                    + "((t.designerId IN :userIds) OR ((t.designerId IS NULL OR t.designerId = '') AND t.status = 'pending')) "
+                    + "AND (t.assigneeRole = :role OR (:role = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) "
+                    + "AND (:type IS NULL OR p.type = :type) ORDER BY p.createdAt DESC",
+            countQuery = "SELECT COUNT(DISTINCT p) FROM Project p JOIN p.tasks t WHERE "
+                    + "((t.designerId IN :userIds) OR ((t.designerId IS NULL OR t.designerId = '') AND t.status = 'pending')) "
+                    + "AND (t.assigneeRole = :role OR (:role = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) "
+                    + "AND (:type IS NULL OR p.type = :type)")
+    Page<Project> findByAssigneeIdsPage(
+            @Param("userIds") List<String> userIds,
+            @Param("role") String role,
+            @Param("type") String type,
+            Pageable pageable);
 
     @EntityGraph(attributePaths = "productCategory")
-    @Query(value = "SELECT DISTINCT p FROM Project p JOIN p.tasks t WHERE t.designerId IN :userIds AND t.status <> 'pending' " +
-            "AND (t.assigneeRole = :role OR (:role = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) " +
-            "AND (:type IS NULL OR p.type = :type) ORDER BY p.createdAt DESC",
-            countQuery = "SELECT COUNT(DISTINCT p) FROM Project p JOIN p.tasks t WHERE t.designerId IN :userIds AND t.status <> 'pending' " +
-                    "AND (t.assigneeRole = :role OR (:role = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) " +
-                    "AND (:type IS NULL OR p.type = :type)")
-    Page<Project> findParticipatingByAssigneeIdsPage(@Param("userIds") List<String> userIds, @Param("role") String role,
-                                                     @Param("type") String type, Pageable pageable);
+    @Query(
+            value =
+                    "SELECT DISTINCT p FROM Project p JOIN p.tasks t WHERE t.designerId IN :userIds AND t.status <> 'pending' "
+                            + "AND (t.assigneeRole = :role OR (:role = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) "
+                            + "AND (:type IS NULL OR p.type = :type) ORDER BY p.createdAt DESC",
+            countQuery =
+                    "SELECT COUNT(DISTINCT p) FROM Project p JOIN p.tasks t WHERE t.designerId IN :userIds AND t.status <> 'pending' "
+                            + "AND (t.assigneeRole = :role OR (:role = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) "
+                            + "AND (:type IS NULL OR p.type = :type)")
+    Page<Project> findParticipatingByAssigneeIdsPage(
+            @Param("userIds") List<String> userIds,
+            @Param("role") String role,
+            @Param("type") String type,
+            Pageable pageable);
 
     List<Project> findByTypeOrderByCreatedAtDesc(String type);
 
@@ -96,14 +112,15 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, Project
     List<Project> findBySalesId(String salesId);
 
     /** 企划：查看指派给自己的项目 + 未指定企划的渠道定制单 */
-    @Query("SELECT DISTINCT p FROM Project p LEFT JOIN FETCH p.tasks WHERE p.plannerId = ?1 OR (p.type = 'channel_custom' AND p.status = 'pending_planner' AND (p.plannerId IS NULL OR p.plannerId = '')) ORDER BY p.createdAt DESC")
+    @Query(
+            "SELECT DISTINCT p FROM Project p LEFT JOIN FETCH p.tasks WHERE p.plannerId = ?1 OR (p.type = 'channel_custom' AND p.status = 'pending_planner' AND (p.plannerId IS NULL OR p.plannerId = '')) ORDER BY p.createdAt DESC")
     List<Project> findByPlannerView(String plannerId);
 
     /** 执行角色视图：仅包含本角色待认领或已指派给当前用户的子任务项目。空角色按历史设计师任务兼容。 */
-    @Query("SELECT DISTINCT p FROM Project p LEFT JOIN FETCH p.tasks t WHERE " +
-            "((t.designerId = ?1) OR ((t.designerId IS NULL OR t.designerId = '') AND t.status = 'pending')) " +
-            "AND (t.assigneeRole = ?2 OR (?2 = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) " +
-            "ORDER BY p.createdAt DESC")
+    @Query("SELECT DISTINCT p FROM Project p LEFT JOIN FETCH p.tasks t WHERE "
+            + "((t.designerId = ?1) OR ((t.designerId IS NULL OR t.designerId = '') AND t.status = 'pending')) "
+            + "AND (t.assigneeRole = ?2 OR (?2 = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) "
+            + "ORDER BY p.createdAt DESC")
     List<Project> findByAssigneeView(String userId, String assigneeRole);
 
     /** 销售：查看自己发布的全部项目（无 JOIN FETCH，配合计数查询优化） */
@@ -111,7 +128,8 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, Project
     List<Project> findBySalesIdLight(String salesId);
 
     /** 企划视图：查看指派给自己的项目及待认领的渠道定制单（无 JOIN FETCH） */
-    @Query("SELECT p FROM Project p WHERE p.plannerId = ?1 OR (p.type = 'channel_custom' AND p.status = 'pending_planner' AND (p.plannerId IS NULL OR p.plannerId = '')) ORDER BY p.createdAt DESC")
+    @Query(
+            "SELECT p FROM Project p WHERE p.plannerId = ?1 OR (p.type = 'channel_custom' AND p.status = 'pending_planner' AND (p.plannerId IS NULL OR p.plannerId = '')) ORDER BY p.createdAt DESC")
     List<Project> findByPlannerViewLight(String plannerId);
 
     /** 状态看板批量读取销售项目，避免按用户逐个查询。 */
@@ -119,16 +137,16 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, Project
     List<Project> findBySalesIdsLight(@Param("userIds") List<String> userIds);
 
     /** 状态看板批量读取企划项目，并保留待认领的渠道定制单。 */
-    @Query("SELECT p FROM Project p WHERE p.plannerId IN :userIds OR " +
-            "(p.type = 'channel_custom' AND p.status = 'pending_planner' AND (p.plannerId IS NULL OR p.plannerId = '')) " +
-            "ORDER BY p.createdAt DESC")
+    @Query("SELECT p FROM Project p WHERE p.plannerId IN :userIds OR "
+            + "(p.type = 'channel_custom' AND p.status = 'pending_planner' AND (p.plannerId IS NULL OR p.plannerId = '')) "
+            + "ORDER BY p.createdAt DESC")
     List<Project> findByPlannerIdsLight(@Param("userIds") List<String> userIds);
 
     /** 执行角色视图（无 JOIN FETCH） */
-    @Query("SELECT DISTINCT p FROM Project p LEFT JOIN p.tasks t WHERE " +
-            "((t.designerId = ?1) OR ((t.designerId IS NULL OR t.designerId = '') AND t.status = 'pending')) " +
-            "AND (t.assigneeRole = ?2 OR (?2 = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) " +
-            "ORDER BY p.createdAt DESC")
+    @Query("SELECT DISTINCT p FROM Project p LEFT JOIN p.tasks t WHERE "
+            + "((t.designerId = ?1) OR ((t.designerId IS NULL OR t.designerId = '') AND t.status = 'pending')) "
+            + "AND (t.assigneeRole = ?2 OR (?2 = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) "
+            + "ORDER BY p.createdAt DESC")
     List<Project> findByAssigneeViewLight(String userId, String assigneeRole);
 
     /** 悲观锁：企划接单时锁定项目行 */
@@ -137,9 +155,9 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, Project
     Optional<Project> findByIdForUpdate(Long id);
 
     /** 执行角色参与的（已接单/进行中/已完成）项目 — 无 JOIN FETCH */
-    @Query("SELECT DISTINCT p FROM Project p LEFT JOIN p.tasks t WHERE t.designerId = ?1 AND t.status != 'pending' " +
-            "AND (t.assigneeRole = ?2 OR (?2 = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) " +
-            "ORDER BY p.createdAt DESC")
+    @Query("SELECT DISTINCT p FROM Project p LEFT JOIN p.tasks t WHERE t.designerId = ?1 AND t.status != 'pending' "
+            + "AND (t.assigneeRole = ?2 OR (?2 = 'designer' AND (t.assigneeRole IS NULL OR t.assigneeRole = ''))) "
+            + "ORDER BY p.createdAt DESC")
     List<Project> findParticipatingByAssigneeLight(String userId, String assigneeRole);
 
     /** 全部项目（管理员）— 无 JOIN FETCH */
@@ -161,12 +179,14 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, Project
     @Query("SELECT p.id FROM Project p WHERE p.id > :afterId ORDER BY p.id ASC")
     List<Long> findIdsAfter(@Param("afterId") Long afterId, Pageable pageable);
 
-    @Query("SELECT p.id FROM Project p WHERE p.updatedAt > :after AND p.updatedAt <= :until ORDER BY p.updatedAt ASC, p.id ASC")
-    List<Long> findIdsUpdatedBetween(@Param("after") LocalDateTime after, @Param("until") LocalDateTime until, Pageable pageable);
+    @Query(
+            "SELECT p.id FROM Project p WHERE p.updatedAt > :after AND p.updatedAt <= :until ORDER BY p.updatedAt ASC, p.id ASC")
+    List<Long> findIdsUpdatedBetween(
+            @Param("after") LocalDateTime after, @Param("until") LocalDateTime until, Pageable pageable);
 
-    @Query("SELECT COUNT(p) FROM Project p WHERE p.id IN :projectIds " +
-            "AND (p.referenceImagesJson LIKE CONCAT('%', :storedName, '%') " +
-            "OR p.attachmentsJson LIKE CONCAT('%', :storedName, '%'))")
-    long countFileReferencesByProjectIds(@Param("projectIds") List<Long> projectIds,
-                                         @Param("storedName") String storedName);
+    @Query("SELECT COUNT(p) FROM Project p WHERE p.id IN :projectIds "
+            + "AND (p.referenceImagesJson LIKE CONCAT('%', :storedName, '%') "
+            + "OR p.attachmentsJson LIKE CONCAT('%', :storedName, '%'))")
+    long countFileReferencesByProjectIds(
+            @Param("projectIds") List<Long> projectIds, @Param("storedName") String storedName);
 }

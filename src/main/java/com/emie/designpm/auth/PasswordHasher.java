@@ -1,10 +1,9 @@
 package com.emie.designpm.auth;
 
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 /**
  * 密码散列工具。原为 {@code AuthController} 的静态方法，与会话管理无关，
@@ -12,8 +11,7 @@ import java.security.NoSuchAlgorithmException;
  */
 public final class PasswordHasher {
 
-    private PasswordHasher() {
-    }
+    private PasswordHasher() {}
 
     private static final BCryptPasswordEncoder ENCODER = new BCryptPasswordEncoder();
 

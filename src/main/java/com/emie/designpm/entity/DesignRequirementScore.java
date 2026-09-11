@@ -1,19 +1,20 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
 @Entity
-@Table(name = "design_requirement_scores", indexes = {
-        @Index(name = "idx_dr_score_requirement", columnList = "requirement_id"),
-        @Index(name = "idx_dr_score_reviewer", columnList = "reviewerId,status"),
-        @Index(name = "idx_dr_score_role", columnList = "role,status")
-})
+@Table(
+        name = "design_requirement_scores",
+        indexes = {
+            @Index(name = "idx_dr_score_requirement", columnList = "requirement_id"),
+            @Index(name = "idx_dr_score_reviewer", columnList = "reviewerId,status"),
+            @Index(name = "idx_dr_score_role", columnList = "role,status")
+        })
 public class DesignRequirementScore {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -32,6 +33,7 @@ public class DesignRequirementScore {
 
     /** 精确到人的评分责任；管理员评分池为空，由任一管理员领取。 */
     private String reviewerId;
+
     private String reviewerName;
 
     /** waiting=等待前序，pending=待评分，completed=已评分。 */

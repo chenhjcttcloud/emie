@@ -1,15 +1,14 @@
 package com.emie.designpm.feishu.service;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.junit.jupiter.api.Test;
-
-import java.time.LocalDateTime;
 import java.lang.reflect.Method;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Set;
-
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
 
 class FeishuBaseServiceFieldCompatibilityTest {
 
@@ -27,8 +26,7 @@ class FeishuBaseServiceFieldCompatibilityTest {
     void incompatibleOptionalFieldUsesNonDestructiveFallbackName() {
         assertFalse(FeishuFieldSchema.compatible("交付成果", FeishuFieldSchema.TEXT, 17));
         assertFalse(FeishuFieldSchema.critical("交付成果"));
-        assertEquals("交付成果（系统文本）",
-                FeishuFieldSchema.fallbackName("交付成果", FeishuFieldSchema.TEXT));
+        assertEquals("交付成果（系统文本）", FeishuFieldSchema.fallbackName("交付成果", FeishuFieldSchema.TEXT));
     }
 
     @Test
@@ -78,7 +76,8 @@ class FeishuBaseServiceFieldCompatibilityTest {
     void missingLinkedRecordFailsBeforeCallingFeishu() {
         ObjectNode fields = json.createObjectNode();
 
-        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class,
                 () -> FeishuBaseService.putReferenceValue(fields, "所属项目", "42", null, 21));
 
         assertTrue(error.getMessage().contains("关联记录尚未同步"));
@@ -150,8 +149,8 @@ class FeishuBaseServiceFieldCompatibilityTest {
         fields.put("销售", "张三");
         String config = "{\"project\":{\"状态\":{\"target\":\"同一列\"},\"销售\":{\"target\":\"同一列\"}}}";
 
-        assertThrows(IllegalArgumentException.class,
-                () -> FeishuBaseService.applyFieldMappings(fields, "project", config));
+        assertThrows(
+                IllegalArgumentException.class, () -> FeishuBaseService.applyFieldMappings(fields, "project", config));
     }
 
     @Test
@@ -166,8 +165,7 @@ class FeishuBaseServiceFieldCompatibilityTest {
     void extraBusinessFieldsAreOnlyWrittenWhenTargetColumnsExist() {
         ObjectNode fields = json.createObjectNode();
 
-        FeishuBaseService.putExtraFields(fields, Map.of("产品名称", 1),
-                Map.of("产品名称", "耳机", "预算金额", "10000"));
+        FeishuBaseService.putExtraFields(fields, Map.of("产品名称", 1), Map.of("产品名称", "耳机", "预算金额", "10000"));
 
         assertEquals("耳机", fields.path("产品名称").asText());
         assertFalse(fields.has("预算金额"));
@@ -192,8 +190,7 @@ class FeishuBaseServiceFieldCompatibilityTest {
         backup.put("源数据删除时间", 1_700_000_000_000L);
 
         FeishuBaseService.putSyncMetadata(primary, false, false, null, false, Map.of());
-        FeishuBaseService.putSyncMetadata(backup, true, false, null, true,
-                Map.of("源数据删除时间", 5));
+        FeishuBaseService.putSyncMetadata(backup, true, false, null, true, Map.of("源数据删除时间", 5));
 
         assertEquals("系统", primary.path("同步来源").asText());
         assertFalse(primary.has("备份状态"));
@@ -208,12 +205,12 @@ class FeishuBaseServiceFieldCompatibilityTest {
         fields.put("项目ID", "42");
         LocalDateTime deletedAt = LocalDateTime.of(2026, 7, 15, 18, 0);
 
-        FeishuBaseService.putSyncMetadata(fields, true, true, deletedAt, true,
-                Map.of("源数据删除时间", 5));
+        FeishuBaseService.putSyncMetadata(fields, true, true, deletedAt, true, Map.of("源数据删除时间", 5));
 
         assertEquals("42", fields.path("项目ID").asText());
         assertEquals("源数据已删除", fields.path("备份状态").asText());
-        assertEquals(FeishuBaseService.toTimestamp(deletedAt), fields.path("源数据删除时间").asLong());
+        assertEquals(
+                FeishuBaseService.toTimestamp(deletedAt), fields.path("源数据删除时间").asLong());
     }
 
     @Test

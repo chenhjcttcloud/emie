@@ -1,24 +1,23 @@
 package com.emie.designpm.admin.service;
 
-import com.emie.designpm.entity.RuntimeAlert;
 import com.emie.designpm.admin.repository.RuntimeAlertRepository;
+import com.emie.designpm.entity.RuntimeAlert;
 import com.emie.designpm.sync.repository.SyncQueueRepository;
 import com.zaxxer.hikari.HikariDataSource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
-
-import javax.sql.DataSource;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import javax.sql.DataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
 
 /** 运行时压力告警。当前记录结构化日志，并按告警类型做冷却去重。 */
 @Service
@@ -33,11 +32,14 @@ public class RuntimeAlertService {
     private final Duration cooldown;
     private final Map<String, Instant> lastAlerts = new ConcurrentHashMap<>();
 
-    public RuntimeAlertService(SyncQueueRepository syncQueue, RuntimeAlertRepository alerts, DataSource dataSource,
-                               @Autowired(required = false) @Qualifier("backgroundDataSource") DataSource backgroundDataSource,
-                               @Value("${monitoring.jvm-used-percent:85}") int jvmPercent,
-                               @Value("${monitoring.sync-queue-pending:100}") int queueSize,
-                               @Value("${monitoring.alert-cooldown-minutes:10}") long cooldownMinutes) {
+    public RuntimeAlertService(
+            SyncQueueRepository syncQueue,
+            RuntimeAlertRepository alerts,
+            DataSource dataSource,
+            @Autowired(required = false) @Qualifier("backgroundDataSource") DataSource backgroundDataSource,
+            @Value("${monitoring.jvm-used-percent:85}") int jvmPercent,
+            @Value("${monitoring.sync-queue-pending:100}") int queueSize,
+            @Value("${monitoring.alert-cooldown-minutes:10}") long cooldownMinutes) {
         this.syncQueue = syncQueue;
         this.alerts = alerts;
         this.dataSource = dataSource;
@@ -52,23 +54,41 @@ public class RuntimeAlertService {
         Runtime rt = Runtime.getRuntime();
         long used = rt.totalMemory() - rt.freeMemory();
         int usedPercent = (int) (used * 100 / Math.max(1L, rt.maxMemory()));
-        if (usedPercent >= jvmPercent) warnOnce("jvm_memory", "运行时告警 type=jvm_memory usedPercent={} threshold={} usedMb={} maxMb={}",
-                usedPercent, jvmPercent, used / 1024 / 1024, rt.maxMemory() / 1024 / 1024);
+        if (usedPercent >= jvmPercent)
+            warnOnce(
+                    "jvm_memory",
+                    "运行时告警 type=jvm_memory usedPercent={} threshold={} usedMb={} maxMb={}",
+                    usedPercent,
+                    jvmPercent,
+                    used / 1024 / 1024,
+                    rt.maxMemory() / 1024 / 1024);
         else recover("jvm_memory");
 
         long pending = syncQueue.countByStatus("pending");
         long processing = syncQueue.countByStatus("processing");
         long failed = syncQueue.countByStatus("fail");
-        if (pending >= queueSize || failed > 0) warnOnce("feishu_sync_queue", "运行时告警 type=feishu_sync_queue pending={} processing={} failed={} threshold={}",
-                pending, processing, failed, queueSize);
+        if (pending >= queueSize || failed > 0)
+            warnOnce(
+                    "feishu_sync_queue",
+                    "运行时告警 type=feishu_sync_queue pending={} processing={} failed={} threshold={}",
+                    pending,
+                    processing,
+                    failed,
+                    queueSize);
         else recover("feishu_sync_queue");
 
         try {
             HikariDataSource hikari = dataSource.unwrap(HikariDataSource.class);
             int active = hikari.getHikariPoolMXBean().getActiveConnections();
             int total = hikari.getHikariPoolMXBean().getTotalConnections();
-            if (total > 0 && active * 100 / total >= 85) warnOnce("db_pool", "运行时告警 type=db_pool active={} total={} idle={} waiting={}",
-                    active, total, hikari.getHikariPoolMXBean().getIdleConnections(), hikari.getHikariPoolMXBean().getThreadsAwaitingConnection());
+            if (total > 0 && active * 100 / total >= 85)
+                warnOnce(
+                        "db_pool",
+                        "运行时告警 type=db_pool active={} total={} idle={} waiting={}",
+                        active,
+                        total,
+                        hikari.getHikariPoolMXBean().getIdleConnections(),
+                        hikari.getHikariPoolMXBean().getThreadsAwaitingConnection());
             else recover("db_pool");
             checkPool("db_pool_background", backgroundDataSource);
         } catch (SQLException | RuntimeException ignored) {
@@ -83,8 +103,13 @@ public class RuntimeAlertService {
             int active = hikari.getHikariPoolMXBean().getActiveConnections();
             int total = hikari.getHikariPoolMXBean().getTotalConnections();
             if (total > 0 && active * 100 / total >= 85) {
-                warnOnce(type, "运行时告警 type={} active={} total={} idle={} waiting={}",
-                        type, active, total, hikari.getHikariPoolMXBean().getIdleConnections(),
+                warnOnce(
+                        type,
+                        "运行时告警 type={} active={} total={} idle={} waiting={}",
+                        type,
+                        active,
+                        total,
+                        hikari.getHikariPoolMXBean().getIdleConnections(),
                         hikari.getHikariPoolMXBean().getThreadsAwaitingConnection());
             } else {
                 recover(type);
@@ -113,11 +138,13 @@ public class RuntimeAlertService {
     }
 
     private void recover(String type) {
-        alerts.findByAlertType(type).filter(alert -> "active".equals(alert.getStatus())).ifPresent(alert -> {
-            alert.setStatus("recovered");
-            alert.setRecoveredAt(LocalDateTime.now());
-            alerts.save(alert);
-            log.info("运行时告警恢复 type={}", type);
-        });
+        alerts.findByAlertType(type)
+                .filter(alert -> "active".equals(alert.getStatus()))
+                .ifPresent(alert -> {
+                    alert.setStatus("recovered");
+                    alert.setRecoveredAt(LocalDateTime.now());
+                    alerts.save(alert);
+                    log.info("运行时告警恢复 type={}", type);
+                });
     }
 }

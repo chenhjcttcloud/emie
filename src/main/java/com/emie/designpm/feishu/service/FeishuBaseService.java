@@ -1,17 +1,11 @@
 package com.emie.designpm.feishu.service;
 
-import com.emie.designpm.entity.SystemConfig;
 import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.entity.SystemConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -20,6 +14,11 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 飞书多维表格（Base）同步服务
@@ -32,8 +31,8 @@ public class FeishuBaseService {
 
     private static final Logger log = LoggerFactory.getLogger(FeishuBaseService.class);
     private static final String API = "https://open.feishu.cn/open-apis";
-    private static final HttpClient http = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10)).build();
+    private static final HttpClient http =
+            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private static final ObjectMapper json = new ObjectMapper();
 
     private final SystemConfigRepository configRepository;
@@ -45,8 +44,8 @@ public class FeishuBaseService {
 
     private record CachedFieldTypes(Map<String, Integer> types, long expiresAt) {}
 
-    private static final Map<String, String> IDENTITY_FIELDS = Map.of(
-            "project", "项目ID", "task", "子任务ID", "scoring", "评分ID", "log", "日志ID");
+    private static final Map<String, String> IDENTITY_FIELDS =
+            Map.of("project", "项目ID", "task", "子任务ID", "scoring", "评分ID", "log", "日志ID");
 
     @Autowired
     public FeishuBaseService(SystemConfigRepository configRepository, FeishuAttachmentService attachmentService) {
@@ -75,35 +74,54 @@ public class FeishuBaseService {
         String stagingStatus = getCfg("feishu.base.v2.staging.status");
         result.put("stagingStatus", stagingStatus);
         result.put("activatable", !isV2Active() && "prepared".equals(stagingStatus));
-        result.put("stagingConfigured", !getCfg("feishu.base.v2.staging.appToken").isBlank());
-        result.put("rollbackAvailable", !getCfg("feishu.base.v2.legacy.appToken").isBlank());
+        result.put(
+                "stagingConfigured", !getCfg("feishu.base.v2.staging.appToken").isBlank());
+        result.put(
+                "rollbackAvailable", !getCfg("feishu.base.v2.legacy.appToken").isBlank());
         List<Map<String, Object>> tables = new ArrayList<>();
         for (FeishuV2Schema.Table table : FeishuV2Schema.allTables().values()) {
-            tables.add(Map.of("key", table.key(), "name", table.name(),
-                    "configured", !getCfg(v2StagingTableConfigKey(table.key())).isBlank()));
+            tables.add(Map.of(
+                    "key",
+                    table.key(),
+                    "name",
+                    table.name(),
+                    "configured",
+                    !getCfg(v2StagingTableConfigKey(table.key())).isBlank()));
         }
         result.put("tables", tables);
         return result;
     }
 
     private String getCfg(String key) {
-        return configRepository.findByConfigKey(key)
-                .map(SystemConfig::getConfigValue).orElse("");
+        return configRepository
+                .findByConfigKey(key)
+                .map(SystemConfig::getConfigValue)
+                .orElse("");
     }
 
     private void setCfg(String key, String value) {
-        SystemConfig cfg = configRepository.findByConfigKey(key)
-                .orElse(SystemConfig.builder().configKey(key).configGroup("feishu").build());
+        SystemConfig cfg = configRepository
+                .findByConfigKey(key)
+                .orElse(SystemConfig.builder()
+                        .configKey(key)
+                        .configGroup("feishu")
+                        .build());
         cfg.setConfigValue(value);
         configRepository.save(cfg);
     }
 
     public Map<String, String> getConfig() {
         Map<String, String> m = new LinkedHashMap<>();
-        for (String k : List.of("feishu.base.appToken", "feishu.base.tableProjects",
-                "feishu.base.tableTasks", "feishu.base.tableScoring", "feishu.base.tableLogs",
-                "feishu.base.tableProjectsBackup", "feishu.base.tableTasksBackup",
-                "feishu.base.tableScoringBackup", "feishu.base.tableLogsBackup",
+        for (String k : List.of(
+                "feishu.base.appToken",
+                "feishu.base.tableProjects",
+                "feishu.base.tableTasks",
+                "feishu.base.tableScoring",
+                "feishu.base.tableLogs",
+                "feishu.base.tableProjectsBackup",
+                "feishu.base.tableTasksBackup",
+                "feishu.base.tableScoringBackup",
+                "feishu.base.tableLogsBackup",
                 "feishu.base.syncEnabled")) {
             m.put(k, getCfg(k));
         }
@@ -142,9 +160,12 @@ public class FeishuBaseService {
         String token = getToken();
         String orderField = getCfgOrDefault("feishu.sales.orderField", "订单号");
         RecordSnapshot found = listRecordSnapshots(token, appToken, tableId).stream()
-                .filter(r -> orderId.equals(fieldText(r.fields(), orderField))).findFirst().orElse(null);
+                .filter(r -> orderId.equals(fieldText(r.fields(), orderField)))
+                .findFirst()
+                .orElse(null);
         if (found == null) throw new IllegalArgumentException("未找到订单: " + orderId);
-        Set<String> allowed = Set.of(getCfgOrDefault("feishu.sales.dateField", "订单日期"),
+        Set<String> allowed = Set.of(
+                getCfgOrDefault("feishu.sales.dateField", "订单日期"),
                 getCfgOrDefault("feishu.sales.amountField", "销售额"),
                 getCfgOrDefault("feishu.sales.refundField", "退款金额"),
                 getCfgOrDefault("feishu.sales.statusField", "订单状态"));
@@ -226,14 +247,16 @@ public class FeishuBaseService {
         List<Map<String, Object>> tables = new java.util.ArrayList<>();
         int conflicts = 0;
         int fallbacks = 0;
-        for (Map.Entry<String, Map<String, Integer>> catalog : FeishuFieldSchema.catalog().entrySet()) {
+        for (Map.Entry<String, Map<String, Integer>> catalog :
+                FeishuFieldSchema.catalog().entrySet()) {
             String tableKey = catalog.getKey();
-            String configSuffix = switch (tableKey) {
-                case "project" -> "Projects";
-                case "task" -> "Tasks";
-                case "scoring" -> "Scoring";
-                default -> "Logs";
-            };
+            String configSuffix =
+                    switch (tableKey) {
+                        case "project" -> "Projects";
+                        case "task" -> "Tasks";
+                        case "scoring" -> "Scoring";
+                        default -> "Logs";
+                    };
             for (boolean backup : List.of(false, true)) {
                 String configKey = "feishu.base.table" + configSuffix + (backup ? "Backup" : "");
                 String tableId = getCfg(configKey);
@@ -247,7 +270,8 @@ public class FeishuBaseService {
                 }
                 for (Map.Entry<String, Integer> field : expectedFields.entrySet()) {
                     JsonNode mapping = mappingNode(tableKey, field.getKey(), mappings);
-                    if (mapping != null && !mapping.path("enabled").asBoolean(true)
+                    if (mapping != null
+                            && !mapping.path("enabled").asBoolean(true)
                             && !IDENTITY_FIELDS.get(tableKey).equals(field.getKey())) continue;
                     String target = configuredTargetName(tableKey, field.getKey(), mappings);
                     Integer actual = actualTypes.get(target);
@@ -262,7 +286,8 @@ public class FeishuBaseService {
                     issue.put("severity", critical ? "blocking" : "fallback");
                     if (!fallback.isBlank()) issue.put("fallback", fallback);
                     issues.add(issue);
-                    if (critical) conflicts++; else fallbacks++;
+                    if (critical) conflicts++;
+                    else fallbacks++;
                 }
                 Map<String, Object> table = new LinkedHashMap<>();
                 table.put("table", tableKey);
@@ -284,9 +309,9 @@ public class FeishuBaseService {
         Map<String, String> tables = new LinkedHashMap<>();
         String pageToken = null;
         do {
-            String url = String.format("%s/bitable/v1/apps/%s/tables?page_size=100%s",
-                    API, appToken,
-                    pageToken != null && !pageToken.isBlank() ? "&page_token=" + pageToken : "");
+            String url = String.format(
+                    "%s/bitable/v1/apps/%s/tables?page_size=100%s",
+                    API, appToken, pageToken != null && !pageToken.isBlank() ? "&page_token=" + pageToken : "");
             JsonNode root = json.readTree(bearerGet(url, token));
             checkResponse(root, "读取数据表列表");
             for (JsonNode table : root.path("data").path("items")) {
@@ -340,8 +365,8 @@ public class FeishuBaseService {
         body.put("msg_type", "interactive");
         body.put("content", cardContent);
 
-        JsonNode root = json.readTree(bearerPost(
-                API + "/im/v1/messages?receive_id_type=open_id", getToken(), body.toString()));
+        JsonNode root =
+                json.readTree(bearerPost(API + "/im/v1/messages?receive_id_type=open_id", getToken(), body.toString()));
         checkResponse(root, "发送飞书通知");
         String messageId = root.path("data").path("message_id").asText();
         if (messageId.isBlank()) {
@@ -359,8 +384,8 @@ public class FeishuBaseService {
         ObjectNode content = json.createObjectNode();
         content.put("text", textContent == null || textContent.isBlank() ? "系统通知" : textContent);
         body.put("content", content.toString());
-        JsonNode root = json.readTree(bearerPost(
-                API + "/im/v1/messages?receive_id_type=open_id", getToken(), body.toString()));
+        JsonNode root =
+                json.readTree(bearerPost(API + "/im/v1/messages?receive_id_type=open_id", getToken(), body.toString()));
         checkResponse(root, "发送飞书文本通知");
         String messageId = root.path("data").path("message_id").asText();
         if (messageId.isBlank()) throw new Exception("发送飞书文本通知失败：响应中缺少 message_id");
@@ -382,7 +407,7 @@ public class FeishuBaseService {
             appToken = createBase();
             setCfg("feishu.base.appToken", appToken);
             result.put("appToken", appToken);
-        log.info("飞书 Base 已创建");
+            log.info("飞书 Base 已创建");
         } else {
             result.put("appToken", appToken);
         }
@@ -433,7 +458,8 @@ public class FeishuBaseService {
         setCfg("feishu.base.v2.staging.status", "preparing");
         String token = getToken();
         String appToken = requestedAppToken == null || requestedAppToken.isBlank()
-                ? getCfg("feishu.base.v2.staging.appToken") : requestedAppToken;
+                ? getCfg("feishu.base.v2.staging.appToken")
+                : requestedAppToken;
         if (appToken.isBlank()) throw new IllegalArgumentException("请先填写已有飞书多维表格 Base Token");
         setCfg("feishu.base.v2.staging.appToken", appToken);
 
@@ -460,8 +486,7 @@ public class FeishuBaseService {
                 if (actual == null) {
                     String linkedKey = field.linkedTable();
                     if (linkedKey != null && table.key().endsWith("Backup")) linkedKey += "Backup";
-                    addV2Field(token, appToken, tableId, field,
-                            linkedKey == null ? null : tableIds.get(linkedKey));
+                    addV2Field(token, appToken, tableId, field, linkedKey == null ? null : tableIds.get(linkedKey));
                     existing.put(field.name(), field.type());
                     added++;
                 } else if (actual != field.type()) {
@@ -495,12 +520,11 @@ public class FeishuBaseService {
                 "logBackup", "feishu.base.tableLogsBackup");
         if (getCfg("feishu.base.v2.legacy.appToken").isBlank()) {
             setCfg("feishu.base.v2.legacy.appToken", getCfg("feishu.base.appToken"));
-            activeKeys.forEach((schemaKey, configKey) ->
-                    setCfg("feishu.base.v2.legacy.table." + schemaKey, getCfg(configKey)));
+            activeKeys.forEach(
+                    (schemaKey, configKey) -> setCfg("feishu.base.v2.legacy.table." + schemaKey, getCfg(configKey)));
         }
         setCfg("feishu.base.appToken", getCfg("feishu.base.v2.staging.appToken"));
-        activeKeys.forEach((schemaKey, configKey) ->
-                setCfg(configKey, getCfg(v2StagingTableConfigKey(schemaKey))));
+        activeKeys.forEach((schemaKey, configKey) -> setCfg(configKey, getCfg(v2StagingTableConfigKey(schemaKey))));
         setCfg("feishu.base.v2.active", "true");
         fieldTypesCache.clear();
         return Map.of("active", true, "appToken", getCfg("feishu.base.appToken"));
@@ -531,20 +555,33 @@ public class FeishuBaseService {
         String legacyAppToken = getCfg("feishu.base.v2.legacy.appToken");
         if (legacyAppToken.isBlank()) throw new IllegalStateException("没有可回滚的旧 Base 配置");
         Map<String, String> activeKeys = Map.of(
-                "project", "feishu.base.tableProjects", "task", "feishu.base.tableTasks",
-                "scoring", "feishu.base.tableScoring", "log", "feishu.base.tableLogs",
-                "projectBackup", "feishu.base.tableProjectsBackup", "taskBackup", "feishu.base.tableTasksBackup",
-                "scoringBackup", "feishu.base.tableScoringBackup", "logBackup", "feishu.base.tableLogsBackup");
+                "project",
+                "feishu.base.tableProjects",
+                "task",
+                "feishu.base.tableTasks",
+                "scoring",
+                "feishu.base.tableScoring",
+                "log",
+                "feishu.base.tableLogs",
+                "projectBackup",
+                "feishu.base.tableProjectsBackup",
+                "taskBackup",
+                "feishu.base.tableTasksBackup",
+                "scoringBackup",
+                "feishu.base.tableScoringBackup",
+                "logBackup",
+                "feishu.base.tableLogsBackup");
         setCfg("feishu.base.appToken", legacyAppToken);
-        activeKeys.forEach((schemaKey, configKey) ->
-                setCfg(configKey, getCfg("feishu.base.v2.legacy.table." + schemaKey)));
+        activeKeys.forEach(
+                (schemaKey, configKey) -> setCfg(configKey, getCfg("feishu.base.v2.legacy.table." + schemaKey)));
         setCfg("feishu.base.v2.active", "false");
         fieldTypesCache.clear();
         return Map.of("active", false, "rolledBack", true);
     }
 
-    private void addV2Field(String token, String appToken, String tableId,
-                            FeishuV2Schema.Field field, String linkedTableId) throws Exception {
+    private void addV2Field(
+            String token, String appToken, String tableId, FeishuV2Schema.Field field, String linkedTableId)
+            throws Exception {
         ObjectNode body = json.createObjectNode();
         body.put("field_name", field.name());
         body.put("type", field.type());
@@ -556,8 +593,7 @@ public class FeishuBaseService {
             // 飞书新增数字字段接口对 formatter 的接受值并不稳定；进度值仍按 0~1 数字写入，显示格式由 Base 中人工设置。
         }
         JsonNode root = json.readTree(bearerPost(
-                API + "/bitable/v1/apps/" + appToken + "/tables/" + tableId + "/fields",
-                token, body.toString()));
+                API + "/bitable/v1/apps/" + appToken + "/tables/" + tableId + "/fields", token, body.toString()));
         checkResponse(root, "新增 V2 字段 " + tableId + "/" + field.name());
         fieldTypesCache.remove(appToken + ":" + tableId);
     }
@@ -589,11 +625,17 @@ public class FeishuBaseService {
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("项目总表", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableProjects"), projectFields));
-        result.put("项目总表_backup", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableProjectsBackup"), projectFields));
+        result.put(
+                "项目总表_backup",
+                ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableProjectsBackup"), projectFields));
         result.put("子任务表", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableTasks"), taskFields));
-        result.put("子任务表_backup", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableTasksBackup"), taskFields));
+        result.put(
+                "子任务表_backup",
+                ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableTasksBackup"), taskFields));
         result.put("评分记录表", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableScoring"), scoringFields));
-        result.put("评分记录表_backup", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableScoringBackup"), scoringFields));
+        result.put(
+                "评分记录表_backup",
+                ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableScoringBackup"), scoringFields));
         return result;
     }
 
@@ -611,18 +653,26 @@ public class FeishuBaseService {
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("项目总表", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableProjects"), primaryFields));
-        result.put("项目总表_backup", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableProjectsBackup"), backupFields));
+        result.put(
+                "项目总表_backup",
+                ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableProjectsBackup"), backupFields));
         result.put("子任务表", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableTasks"), primaryFields));
-        result.put("子任务表_backup", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableTasksBackup"), backupFields));
+        result.put(
+                "子任务表_backup",
+                ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableTasksBackup"), backupFields));
         result.put("评分记录表", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableScoring"), primaryFields));
-        result.put("评分记录表_backup", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableScoringBackup"), backupFields));
+        result.put(
+                "评分记录表_backup",
+                ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableScoringBackup"), backupFields));
         result.put("操作日志表", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableLogs"), primaryFields));
-        result.put("操作日志表_backup", ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableLogsBackup"), backupFields));
+        result.put(
+                "操作日志表_backup",
+                ensureFieldsForTable(token, appToken, getCfg("feishu.base.tableLogsBackup"), backupFields));
         return result;
     }
 
-    private Map<String, Object> ensureFieldsForTable(String token, String appToken, String tableId,
-                                                     Map<String, Integer> requiredFields) throws Exception {
+    private Map<String, Object> ensureFieldsForTable(
+            String token, String appToken, String tableId, Map<String, Integer> requiredFields) throws Exception {
         if (tableId == null || tableId.isBlank()) {
             return Map.of("configured", false, "added", 0);
         }
@@ -663,7 +713,8 @@ public class FeishuBaseService {
         ObjectNode body = json.createObjectNode();
         ObjectNode table = json.createObjectNode();
         table.put("name", name);
-        ArrayNode fieldsArr = fields.isArray() ? (ArrayNode) fields : json.createArrayNode().add(fields);
+        ArrayNode fieldsArr =
+                fields.isArray() ? (ArrayNode) fields : json.createArrayNode().add(fields);
         table.set("fields", fieldsArr);
         body.set("table", table);
 
@@ -679,9 +730,9 @@ public class FeishuBaseService {
     /** 项目表字段定义 */
     private JsonNode createProjectFields() {
         ArrayNode fields = json.createArrayNode();
-        addTextFields(fields, "项目ID", "项目编号", "产品名称", "类型", "状态", "销售", "产品企划",
-                "产品类目", "产品类目备注", "参考价格", "需求说明", "项目描述", "目标市场", "合规项",
-                "IP名称", "创意作者", "来源", "项目流程", "子任务流程", "当前审核阶段", "同步来源");
+        addTextFields(
+                fields, "项目ID", "项目编号", "产品名称", "类型", "状态", "销售", "产品企划", "产品类目", "产品类目备注", "参考价格", "需求说明", "项目描述",
+                "目标市场", "合规项", "IP名称", "创意作者", "来源", "项目流程", "子任务流程", "当前审核阶段", "同步来源");
         addDateFields(fields, "截止日期", "创建时间");
         addNumberFields(fields, "子任务数", "完成进度", "审核进度");
         return fields;
@@ -690,9 +741,9 @@ public class FeishuBaseService {
     /** 子任务表字段定义 */
     private JsonNode createTaskFields() {
         ArrayNode fields = json.createArrayNode();
-        addTextFields(fields, "子任务ID", "任务名称", "所属阶段", "状态", "负责人类型", "负责人", "发布人",
-                "细节要求说明", "交付成果", "审核意见", "所属项目",
-                "一审角色", "一审状态", "一审审核人", "二审角色", "二审状态", "二审审核人", "同步来源");
+        addTextFields(
+                fields, "子任务ID", "任务名称", "所属阶段", "状态", "负责人类型", "负责人", "发布人", "细节要求说明", "交付成果", "审核意见", "所属项目", "一审角色",
+                "一审状态", "一审审核人", "二审角色", "二审状态", "二审审核人", "同步来源");
         addDateFields(fields, "计划日期", "实际完成日期", "创建时间");
         addNumberFields(fields, "自评分", "一审得分", "二审得分", "审核得分");
         return fields;
@@ -701,8 +752,7 @@ public class FeishuBaseService {
     /** 评分表字段定义 */
     private JsonNode createScoringFields() {
         ArrayNode fields = json.createArrayNode();
-        addTextFields(fields, "评分ID", "评分角色", "所属子任务", "项目ID", "项目类型",
-                "审核阶段", "审核状态", "审核人", "审核意见", "同步来源");
+        addTextFields(fields, "评分ID", "评分角色", "所属子任务", "项目ID", "项目类型", "审核阶段", "审核状态", "审核人", "审核意见", "同步来源");
         addNumberFields(fields, "评分", "权重");
         return fields;
     }
@@ -735,13 +785,13 @@ public class FeishuBaseService {
     }
 
     /** 添加字段到已有表 */
-    private void addField(String token, String appToken, String tableId, String fieldName, int fieldType) throws Exception {
+    private void addField(String token, String appToken, String tableId, String fieldName, int fieldType)
+            throws Exception {
         ObjectNode body = json.createObjectNode();
         body.put("field_name", fieldName);
         body.put("type", fieldType);
         JsonNode root = json.readTree(bearerPost(
-                API + "/bitable/v1/apps/" + appToken + "/tables/" + tableId + "/fields",
-                token, body.toString()));
+                API + "/bitable/v1/apps/" + appToken + "/tables/" + tableId + "/fields", token, body.toString()));
         checkResponse(root, "新增字段");
         fieldTypesCache.remove(appToken + ":" + tableId);
     }
@@ -756,8 +806,11 @@ public class FeishuBaseService {
         Map<String, Integer> types = new LinkedHashMap<>();
         String pageToken = null;
         do {
-            String url = String.format("%s/bitable/v1/apps/%s/tables/%s/fields?page_size=100%s",
-                    API, appToken, tableId,
+            String url = String.format(
+                    "%s/bitable/v1/apps/%s/tables/%s/fields?page_size=100%s",
+                    API,
+                    appToken,
+                    tableId,
                     pageToken != null && !pageToken.isBlank() ? "&page_token=" + pageToken : "");
             JsonNode root = json.readTree(bearerGet(url, token));
             checkResponse(root, "读取字段列表");
@@ -775,88 +828,195 @@ public class FeishuBaseService {
 
     // ==================== V2 固定契约同步 ====================
 
-    public record V2ProjectData(Long id, String code, String name, String type, String status, String sales,
-                                String planner, String category, String price, String imagesJson,
-                                String filesJson, int taskCount, LocalDateTime createdAt,
-                                String deadline, LocalDateTime updatedAt, List<Long> taskIds,
-                                String taskStage, double taskProgress, String projectStage,
-                                double projectProgress, String note) {}
+    public record V2ProjectData(
+            Long id,
+            String code,
+            String name,
+            String type,
+            String status,
+            String sales,
+            String planner,
+            String category,
+            String price,
+            String imagesJson,
+            String filesJson,
+            int taskCount,
+            LocalDateTime createdAt,
+            String deadline,
+            LocalDateTime updatedAt,
+            List<Long> taskIds,
+            String taskStage,
+            double taskProgress,
+            String projectStage,
+            double projectProgress,
+            String note) {}
 
-    public record V2TaskData(Long id, Long projectId, String name, String status,
-                             String referenceImagesJson, String referenceFilesJson, String owner,
-                             String details, LocalDateTime createdAt, String deadline,
-                             LocalDateTime updatedAt, String deliveryImagesJson,
-                             String deliveryFilesJson, Double selfScore, Integer salesScore,
-                             Integer plannerScore, Integer adminScore, Double weightedScore,
-                             List<Long> scoringIds, String stage, double progress, String note) {}
+    public record V2TaskData(
+            Long id,
+            Long projectId,
+            String name,
+            String status,
+            String referenceImagesJson,
+            String referenceFilesJson,
+            String owner,
+            String details,
+            LocalDateTime createdAt,
+            String deadline,
+            LocalDateTime updatedAt,
+            String deliveryImagesJson,
+            String deliveryFilesJson,
+            Double selfScore,
+            Integer salesScore,
+            Integer plannerScore,
+            Integer adminScore,
+            Double weightedScore,
+            List<Long> scoringIds,
+            String stage,
+            double progress,
+            String note) {}
 
-    public record V2ScoringData(Long id, String role, String reviewer, Long taskId,
-                                LocalDateTime reviewedAt, Double score, Double weight, Double weightedScore,
-                                String note) {}
+    public record V2ScoringData(
+            Long id,
+            String role,
+            String reviewer,
+            Long taskId,
+            LocalDateTime reviewedAt,
+            Double score,
+            Double weight,
+            Double weightedScore,
+            String note) {}
 
-    public record V2LogData(Long id, LocalDateTime time, String role, String user,
-                            String action, String note) {}
+    public record V2LogData(Long id, LocalDateTime time, String role, String user, String action, String note) {}
 
     public void syncV2Project(V2ProjectData data, boolean includeBackup) throws Exception {
         if (!isSyncEnabled()) return;
         ObjectNode fields = json.createObjectNode();
         fields.put("系统项目ID", data.id().toString());
-        fields.put("项目编号", text(data.code())); fields.put("项目名称", text(data.name())); fields.put("项目类型", projectTypeLabel(data.type()));
-        fields.put("状态", statusLabel(data.status())); fields.put("销售", text(data.sales()));
-        fields.put("产品企划", text(data.planner())); fields.put("产品类目", text(data.category()));
-        fields.put("参考零售价", text(data.price())); fields.put("子任务数", data.taskCount());
-        putDate(fields, "创建时间", data.createdAt()); putDate(fields, "计划完成时间", data.deadline());
-        putDate(fields, "最近更新时间", data.updatedAt()); fields.put("子任务阶段", text(data.taskStage()));
+        fields.put("项目编号", text(data.code()));
+        fields.put("项目名称", text(data.name()));
+        fields.put("项目类型", projectTypeLabel(data.type()));
+        fields.put("状态", statusLabel(data.status()));
+        fields.put("销售", text(data.sales()));
+        fields.put("产品企划", text(data.planner()));
+        fields.put("产品类目", text(data.category()));
+        fields.put("参考零售价", text(data.price()));
+        fields.put("子任务数", data.taskCount());
+        putDate(fields, "创建时间", data.createdAt());
+        putDate(fields, "计划完成时间", data.deadline());
+        putDate(fields, "最近更新时间", data.updatedAt());
+        fields.put("子任务阶段", text(data.taskStage()));
         fields.put("子任务进度", normalizePercentage(data.taskProgress()));
         fields.put("项目阶段", text(data.projectStage()));
-        fields.put("项目总进度", normalizePercentage(data.projectProgress())); fields.put("备注", text(data.note()));
-        writeV2("project", data.id(), fields, data.imagesJson(), "参考图片", data.filesJson(), "附件", data.taskIds(),
-                "关联子任务", "task", includeBackup);
+        fields.put("项目总进度", normalizePercentage(data.projectProgress()));
+        fields.put("备注", text(data.note()));
+        writeV2(
+                "project",
+                data.id(),
+                fields,
+                data.imagesJson(),
+                "参考图片",
+                data.filesJson(),
+                "附件",
+                data.taskIds(),
+                "关联子任务",
+                "task",
+                includeBackup);
     }
 
     public void syncV2Task(V2TaskData data, boolean includeBackup) throws Exception {
         if (!isSyncEnabled()) return;
         ObjectNode fields = json.createObjectNode();
-        fields.put("系统子任务ID", data.id().toString()); fields.put("子任务编号", data.id().toString());
-        fields.put("子任务名称", text(data.name())); fields.put("状态", taskStatusLabel(data.status()));
-        fields.put("子任务负责人", text(data.owner())); fields.put("细节要求说明", text(data.details()));
-        putDate(fields, "创建子任务时间", data.createdAt()); putDate(fields, "计划完成时间", data.deadline());
-        putDate(fields, "最后更新时间", data.updatedAt()); putNumber(fields, "设计师自评分", data.selfScore());
-        putNumber(fields, "销售评分", data.salesScore()); putNumber(fields, "产品企划评分", data.plannerScore());
-        putNumber(fields, "管理员评分", data.adminScore()); putNumber(fields, "加权综合", data.weightedScore());
-        fields.put("子任务阶段", text(data.stage())); fields.put("子任务进度", normalizePercentage(data.progress()));
+        fields.put("系统子任务ID", data.id().toString());
+        fields.put("子任务编号", data.id().toString());
+        fields.put("子任务名称", text(data.name()));
+        fields.put("状态", taskStatusLabel(data.status()));
+        fields.put("子任务负责人", text(data.owner()));
+        fields.put("细节要求说明", text(data.details()));
+        putDate(fields, "创建子任务时间", data.createdAt());
+        putDate(fields, "计划完成时间", data.deadline());
+        putDate(fields, "最后更新时间", data.updatedAt());
+        putNumber(fields, "设计师自评分", data.selfScore());
+        putNumber(fields, "销售评分", data.salesScore());
+        putNumber(fields, "产品企划评分", data.plannerScore());
+        putNumber(fields, "管理员评分", data.adminScore());
+        putNumber(fields, "加权综合", data.weightedScore());
+        fields.put("子任务阶段", text(data.stage()));
+        fields.put("子任务进度", normalizePercentage(data.progress()));
         fields.put("备注", text(data.note()));
-        writeV2("task", data.id(), fields, data.referenceImagesJson(), "参考图片", data.referenceFilesJson(),
-                "参考附件", nullableId(data.projectId()), "关联项目", "project", includeBackup,
-                data.deliveryImagesJson(), "交付图片", data.deliveryFilesJson(), "交付附件",
-                data.scoringIds(), "关联评分", "scoring");
+        writeV2(
+                "task",
+                data.id(),
+                fields,
+                data.referenceImagesJson(),
+                "参考图片",
+                data.referenceFilesJson(),
+                "参考附件",
+                nullableId(data.projectId()),
+                "关联项目",
+                "project",
+                includeBackup,
+                data.deliveryImagesJson(),
+                "交付图片",
+                data.deliveryFilesJson(),
+                "交付附件",
+                data.scoringIds(),
+                "关联评分",
+                "scoring");
     }
 
     public void syncV2Scoring(V2ScoringData data, boolean includeBackup) throws Exception {
         if (!isSyncEnabled()) return;
         ObjectNode fields = json.createObjectNode();
-        fields.put("系统评分ID", data.id().toString()); fields.put("评分编号", data.id().toString());
-        fields.put("评分角色", roleLabel(data.role())); fields.put("评分人", text(data.reviewer()));
-        putDate(fields, "评分时间", data.reviewedAt()); putNumber(fields, "评分", data.score()); putNumber(fields, "权重", data.weight());
-        putNumber(fields, "加权得分", data.weightedScore()); fields.put("备注", text(data.note()));
-        writeV2("scoring", data.id(), fields, null, null, null, null, nullableId(data.taskId()),
-                "所属子任务", "task", includeBackup);
+        fields.put("系统评分ID", data.id().toString());
+        fields.put("评分编号", data.id().toString());
+        fields.put("评分角色", roleLabel(data.role()));
+        fields.put("评分人", text(data.reviewer()));
+        putDate(fields, "评分时间", data.reviewedAt());
+        putNumber(fields, "评分", data.score());
+        putNumber(fields, "权重", data.weight());
+        putNumber(fields, "加权得分", data.weightedScore());
+        fields.put("备注", text(data.note()));
+        writeV2(
+                "scoring",
+                data.id(),
+                fields,
+                null,
+                null,
+                null,
+                null,
+                nullableId(data.taskId()),
+                "所属子任务",
+                "task",
+                includeBackup);
     }
 
     public void syncV2Log(V2LogData data, boolean includeBackup) throws Exception {
         if (!isSyncEnabled()) return;
         ObjectNode fields = json.createObjectNode();
-        fields.put("系统日志ID", data.id().toString()); fields.put("日志编号", data.id().toString());
-        putDate(fields, "时间", data.time()); fields.put("角色", roleLabel(data.role()));
-        fields.put("操作人", text(data.user())); fields.put("行为记录", text(data.action()));
+        fields.put("系统日志ID", data.id().toString());
+        fields.put("日志编号", data.id().toString());
+        putDate(fields, "时间", data.time());
+        fields.put("角色", roleLabel(data.role()));
+        fields.put("操作人", text(data.user()));
+        fields.put("行为记录", text(data.action()));
         fields.put("备注", text(data.note()));
         writeV2("log", data.id(), fields, null, null, null, null, List.of(), null, null, includeBackup);
     }
 
-    private void writeV2(String key, Long id, ObjectNode fields,
-                         String imagesJson, String imageField, String filesJson, String fileField,
-                         List<Long> links, String linkField, String linkTarget, boolean includeBackup,
-                         Object... extras) throws Exception {
+    private void writeV2(
+            String key,
+            Long id,
+            ObjectNode fields,
+            String imagesJson,
+            String imageField,
+            String filesJson,
+            String fileField,
+            List<Long> links,
+            String linkField,
+            String linkTarget,
+            boolean includeBackup,
+            Object... extras)
+            throws Exception {
         String appToken = getCfg("feishu.base.appToken");
         String token = getToken();
         addAttachments(fields, imageField, imagesJson, appToken, token);
@@ -867,7 +1027,8 @@ public class FeishuBaseService {
             if (extras[i] instanceof String raw && extras[i + 1] instanceof String field) {
                 addAttachments(fields, field, raw, appToken, token);
             } else if (extras[i] instanceof List<?> rawLinks && extras[i + 1] instanceof String field) {
-                @SuppressWarnings("unchecked") List<Long> ids = (List<Long>) rawLinks;
+                @SuppressWarnings("unchecked")
+                List<Long> ids = (List<Long>) rawLinks;
                 addLinks(fields, field, ids, "scoring", false, token, appToken);
             }
         }
@@ -878,7 +1039,8 @@ public class FeishuBaseService {
             if (linkField != null) addLinks(backupFields, linkField, links, linkTarget, true, token, appToken);
             for (int i = 0; i + 1 < extras.length; i += 2) {
                 if (extras[i] instanceof List<?> rawLinks && extras[i + 1] instanceof String field) {
-                    @SuppressWarnings("unchecked") List<Long> ids = (List<Long>) rawLinks;
+                    @SuppressWarnings("unchecked")
+                    List<Long> ids = (List<Long>) rawLinks;
                     addLinks(backupFields, field, ids, "scoring", true, token, appToken);
                 }
             }
@@ -886,9 +1048,10 @@ public class FeishuBaseService {
         }
     }
 
-    private void upsertV2(String key, Long id, ObjectNode fields, boolean backup,
-                          String token, String appToken) throws Exception {
-        FeishuV2Schema.Table schema = backup ? FeishuV2Schema.backupTables().get(key + "Backup")
+    private void upsertV2(String key, Long id, ObjectNode fields, boolean backup, String token, String appToken)
+            throws Exception {
+        FeishuV2Schema.Table schema = backup
+                ? FeishuV2Schema.backupTables().get(key + "Backup")
                 : FeishuV2Schema.primaryTables().get(key);
         String tableId = getCfg("feishu.base.table" + tableSuffix(key) + (backup ? "Backup" : ""));
         if (tableId.isBlank()) throw new Exception("飞书 V2 " + schema.name() + "未配置");
@@ -902,8 +1065,9 @@ public class FeishuBaseService {
      * V2 字段升级与数据写入解耦：发布新增字段后，首次同步会自动补齐缺列，
      * 避免管理员尚未手工执行结构检查时整批记录因 FieldNameNotFound 失败。
      */
-    private synchronized void ensureV2WriteSchema(FeishuV2Schema.Table schema, String tableId,
-                                                  String appToken, String token, boolean backup) throws Exception {
+    private synchronized void ensureV2WriteSchema(
+            FeishuV2Schema.Table schema, String tableId, String appToken, String token, boolean backup)
+            throws Exception {
         Map<String, Integer> existing = new LinkedHashMap<>(getFieldTypes(token, appToken, tableId));
         for (FeishuV2Schema.Field field : schema.fields()) {
             Integer actual = existing.get(field.name());
@@ -915,15 +1079,17 @@ public class FeishuBaseService {
             if (linkedKey != null && backup) linkedKey += "Backup";
             String linkedTableId = linkedKey == null ? null : getCfg(v2StagingTableConfigKey(linkedKey));
             if (linkedTableId == null || linkedTableId.isBlank()) {
-                linkedTableId = linkedKey == null ? null : getCfg("feishu.base.table" + tableSuffix(field.linkedTable())
-                        + (backup ? "Backup" : ""));
+                linkedTableId = linkedKey == null
+                        ? null
+                        : getCfg("feishu.base.table" + tableSuffix(field.linkedTable()) + (backup ? "Backup" : ""));
             }
             addV2Field(token, appToken, tableId, field, linkedTableId);
             existing.put(field.name(), field.type());
         }
     }
 
-    private void addAttachments(ObjectNode fields, String field, String raw, String appToken, String token) throws Exception {
+    private void addAttachments(ObjectNode fields, String field, String raw, String appToken, String token)
+            throws Exception {
         if (field == null) return;
         ArrayNode values = fields.putArray(field);
         if (raw == null || raw.isBlank() || attachmentService == null) return;
@@ -936,24 +1102,40 @@ public class FeishuBaseService {
         if (attachmentService == null || !(fields.has("系统项目ID") || fields.has("系统子任务ID"))) return;
         List<FeishuAttachmentService.OversizedFile> all = new ArrayList<>();
         for (String raw : rawValues) all.addAll(attachmentService.oversizedJsonFiles(raw));
-        fields.put("超大附件名称", all.stream().map(FeishuAttachmentService.OversizedFile::name)
-                .collect(java.util.stream.Collectors.joining("\n")));
-        fields.put("超大附件大小", all.stream().map(f -> humanFileSize(f.size()))
-                .collect(java.util.stream.Collectors.joining("\n")));
-        fields.put("超大附件链接", all.stream().map(FeishuAttachmentService.OversizedFile::url)
-                .filter(s -> s != null && !s.isBlank()).collect(java.util.stream.Collectors.joining("\n")));
+        fields.put(
+                "超大附件名称",
+                all.stream()
+                        .map(FeishuAttachmentService.OversizedFile::name)
+                        .collect(java.util.stream.Collectors.joining("\n")));
+        fields.put(
+                "超大附件大小",
+                all.stream().map(f -> humanFileSize(f.size())).collect(java.util.stream.Collectors.joining("\n")));
+        fields.put(
+                "超大附件链接",
+                all.stream()
+                        .map(FeishuAttachmentService.OversizedFile::url)
+                        .filter(s -> s != null && !s.isBlank())
+                        .collect(java.util.stream.Collectors.joining("\n")));
     }
 
     private static String humanFileSize(long size) {
         return String.format(java.util.Locale.ROOT, "%.1f MB", size / 1024d / 1024d);
     }
 
-    private void addLinks(ObjectNode fields, String field, List<Long> ids, String target, boolean backup,
-                          String token, String appToken) throws Exception {
+    private void addLinks(
+            ObjectNode fields,
+            String field,
+            List<Long> ids,
+            String target,
+            boolean backup,
+            String token,
+            String appToken)
+            throws Exception {
         if (field == null || ids == null) return;
         ArrayNode values = fields.putArray(field);
         String tableId = getCfg("feishu.base.table" + tableSuffix(target) + (backup ? "Backup" : ""));
-        FeishuV2Schema.Table schema = backup ? FeishuV2Schema.backupTables().get(target + "Backup")
+        FeishuV2Schema.Table schema = backup
+                ? FeishuV2Schema.backupTables().get(target + "Backup")
                 : FeishuV2Schema.primaryTables().get(target);
         for (Long id : ids) {
             if (id == null) continue;
@@ -963,60 +1145,133 @@ public class FeishuBaseService {
     }
 
     private static String tableSuffix(String key) {
-        return switch (key) { case "project" -> "Projects"; case "task" -> "Tasks";
-            case "scoring" -> "Scoring"; default -> "Logs"; };
+        return switch (key) {
+            case "project" -> "Projects";
+            case "task" -> "Tasks";
+            case "scoring" -> "Scoring";
+            default -> "Logs";
+        };
     }
-    private static String text(String value) { return value == null ? "" : value; }
-    private static List<Long> nullableId(Long value) { return value == null ? List.of() : List.of(value); }
-    private static double normalizePercentage(double value) { return value > 1 ? value / 100d : Math.max(0, value); }
+
+    private static String text(String value) {
+        return value == null ? "" : value;
+    }
+
+    private static List<Long> nullableId(Long value) {
+        return value == null ? List.of() : List.of(value);
+    }
+
+    private static double normalizePercentage(double value) {
+        return value > 1 ? value / 100d : Math.max(0, value);
+    }
+
     private static void putNumber(ObjectNode fields, String name, Number value) {
-        if (value == null) fields.putNull(name); else fields.put(name, value.doubleValue());
+        if (value == null) fields.putNull(name);
+        else fields.put(name, value.doubleValue());
     }
+
     private static void putDate(ObjectNode fields, String name, LocalDateTime value) {
-        if (value != null) fields.put(name, toTimestamp(value)); else fields.putNull(name);
+        if (value != null) fields.put(name, toTimestamp(value));
+        else fields.putNull(name);
     }
+
     private static void putDate(ObjectNode fields, String name, String value) {
-        if (value != null && !value.isBlank()) fields.put(name, dateToTimestamp(value)); else fields.putNull(name);
+        if (value != null && !value.isBlank()) fields.put(name, dateToTimestamp(value));
+        else fields.putNull(name);
     }
+
     private static void putV2Metadata(ObjectNode fields, boolean backup, boolean deleted, LocalDateTime deletedAt) {
-        if (backup) { fields.put("备份状态", deleted ? "源数据已删除" : "有效");
+        if (backup) {
+            fields.put("备份状态", deleted ? "源数据已删除" : "有效");
             fields.put("最后变更时间", toTimestamp(LocalDateTime.now()));
-            if (deletedAt != null) fields.put("源数据删除时间", toTimestamp(deletedAt)); }
+            if (deletedAt != null) fields.put("源数据删除时间", toTimestamp(deletedAt));
+        }
     }
 
     // ==================== 同步项目 ====================
 
-    public void syncProject(Long projectId, String type, String status,
-                            String salesName, String plannerName,
-                            String deadline, String productCategory,
-                            String priceRange, int taskCount, int progress,
-                            String projectFlow, String currentReviewStage, int reviewProgress,
-                            Map<String, String> extraFields, LocalDateTime createdAt) throws Exception {
+    public void syncProject(
+            Long projectId,
+            String type,
+            String status,
+            String salesName,
+            String plannerName,
+            String deadline,
+            String productCategory,
+            String priceRange,
+            int taskCount,
+            int progress,
+            String projectFlow,
+            String currentReviewStage,
+            int reviewProgress,
+            Map<String, String> extraFields,
+            LocalDateTime createdAt)
+            throws Exception {
         if (!isSyncEnabled()) return;
 
-        syncProjectToTable(projectId, type, status, salesName, plannerName, deadline,
-                productCategory, priceRange, taskCount, progress,
-                projectFlow, currentReviewStage, reviewProgress, extraFields, createdAt,
-                getCfg("feishu.base.tableProjects"), false);
+        syncProjectToTable(
+                projectId,
+                type,
+                status,
+                salesName,
+                plannerName,
+                deadline,
+                productCategory,
+                priceRange,
+                taskCount,
+                progress,
+                projectFlow,
+                currentReviewStage,
+                reviewProgress,
+                extraFields,
+                createdAt,
+                getCfg("feishu.base.tableProjects"),
+                false);
         String backup = getCfg("feishu.base.tableProjectsBackup");
         if (!backup.isBlank()) {
-            syncProjectToTable(projectId, type, status, salesName, plannerName, deadline,
-                    productCategory, priceRange, taskCount, progress,
-                    projectFlow, currentReviewStage, reviewProgress, extraFields, createdAt, backup, true);
+            syncProjectToTable(
+                    projectId,
+                    type,
+                    status,
+                    salesName,
+                    plannerName,
+                    deadline,
+                    productCategory,
+                    priceRange,
+                    taskCount,
+                    progress,
+                    projectFlow,
+                    currentReviewStage,
+                    reviewProgress,
+                    extraFields,
+                    createdAt,
+                    backup,
+                    true);
         }
     }
 
-    private void syncProjectToTable(Long projectId, String type, String status,
-                                    String salesName, String plannerName,
-                                    String deadline, String productCategory,
-                                    String priceRange, int taskCount, int progress,
-                                    String projectFlow, String currentReviewStage, int reviewProgress,
-                                    Map<String, String> extraFields, LocalDateTime createdAt,
-                                    String tableId, boolean backupTable) throws Exception {
+    private void syncProjectToTable(
+            Long projectId,
+            String type,
+            String status,
+            String salesName,
+            String plannerName,
+            String deadline,
+            String productCategory,
+            String priceRange,
+            int taskCount,
+            int progress,
+            String projectFlow,
+            String currentReviewStage,
+            int reviewProgress,
+            Map<String, String> extraFields,
+            LocalDateTime createdAt,
+            String tableId,
+            boolean backupTable)
+            throws Exception {
 
         String appToken = getCfg("feishu.base.appToken");
-        if (appToken.isBlank() || tableId.isBlank())
-            throw new Exception("飞书项目表未配置，无法同步");
+        if (appToken.isBlank() || tableId.isBlank()) throw new Exception("飞书项目表未配置，无法同步");
 
         String token = getToken();
         String existed = findRecordId(token, appToken, tableId, "项目ID", String.valueOf(projectId));
@@ -1076,8 +1331,7 @@ public class FeishuBaseService {
             String secondReviewerName,
             Double finalReviewScore,
             LocalDateTime createdAt,
-            Map<String, String> extraFields
-    ) {}
+            Map<String, String> extraFields) {}
 
     public void syncSubTask(SubTaskSyncData data) throws Exception {
         if (!isSyncEnabled()) return;
@@ -1092,8 +1346,7 @@ public class FeishuBaseService {
     private void syncSubTaskToTable(SubTaskSyncData data, String tableId, boolean backupTable) throws Exception {
 
         String appToken = getCfg("feishu.base.appToken");
-        if (appToken.isBlank() || tableId.isBlank())
-            throw new Exception("飞书子任务表未配置，无法同步");
+        if (appToken.isBlank() || tableId.isBlank()) throw new Exception("飞书子任务表未配置，无法同步");
 
         String token = getToken();
         String existed = findRecordId(token, appToken, tableId, "子任务ID", String.valueOf(data.taskId()));
@@ -1105,20 +1358,36 @@ public class FeishuBaseService {
         fields.put("状态", taskStatusLabel(data.status()));
         fields.put("负责人", data.designerName() != null ? data.designerName() : "");
         if (data.plannedDate() != null && !data.plannedDate().isBlank()) {
-            putDateValue(fields, "计划日期", dateToTimestamp(data.plannedDate()), mappedFieldType("task", "计划日期", fieldTypes));
+            putDateValue(
+                    fields, "计划日期", dateToTimestamp(data.plannedDate()), mappedFieldType("task", "计划日期", fieldTypes));
         }
         if (data.actualDate() != null && !data.actualDate().isBlank()) {
             String rawMappings = getCfg("feishu.base.fieldMappings");
-            String actualField = mappingNode("task", "实际完成日期", rawMappings) != null
-                    ? "实际完成日期" : actualCompletionField(fieldTypes);
-            putDateValue(fields, actualField, dateToTimestamp(data.actualDate()),
+            String actualField =
+                    mappingNode("task", "实际完成日期", rawMappings) != null ? "实际完成日期" : actualCompletionField(fieldTypes);
+            putDateValue(
+                    fields,
+                    actualField,
+                    dateToTimestamp(data.actualDate()),
                     mappedFieldType("task", actualField, fieldTypes));
         }
         if (data.selfScore() != null) fields.put("自评分", data.selfScore().intValue());
-        putReviewSummary(fields, "一审", data.firstReviewRole(), data.firstReviewStatus(),
-                data.firstReviewScore(), data.firstReviewerName(), existed != null);
-        putReviewSummary(fields, "二审", data.secondReviewRole(), data.secondReviewStatus(),
-                data.secondReviewScore(), data.secondReviewerName(), existed != null);
+        putReviewSummary(
+                fields,
+                "一审",
+                data.firstReviewRole(),
+                data.firstReviewStatus(),
+                data.firstReviewScore(),
+                data.firstReviewerName(),
+                existed != null);
+        putReviewSummary(
+                fields,
+                "二审",
+                data.secondReviewRole(),
+                data.secondReviewStatus(),
+                data.secondReviewScore(),
+                data.secondReviewerName(),
+                existed != null);
         if (data.finalReviewScore() != null) {
             fields.put("审核得分", data.finalReviewScore());
         } else if (existed != null) {
@@ -1134,8 +1403,8 @@ public class FeishuBaseService {
             Integer fieldType = mappedFieldType("task", "所属项目", fieldTypes);
             String linkedRecordId = null;
             if (isLinkField(fieldType)) {
-                linkedRecordId = findRecordId(token, appToken, getCfg("feishu.base.tableProjects"),
-                        "项目ID", String.valueOf(data.projectId()));
+                linkedRecordId = findRecordId(
+                        token, appToken, getCfg("feishu.base.tableProjects"), "项目ID", String.valueOf(data.projectId()));
             }
             putReferenceValue(fields, "所属项目", String.valueOf(data.projectId()), linkedRecordId, fieldType);
         }
@@ -1149,8 +1418,14 @@ public class FeishuBaseService {
         }
     }
 
-    private void putReviewSummary(ObjectNode fields, String prefix, String role, String status,
-                                  Integer score, String reviewerName, boolean existed) {
+    private void putReviewSummary(
+            ObjectNode fields,
+            String prefix,
+            String role,
+            String status,
+            Integer score,
+            String reviewerName,
+            boolean existed) {
         fields.put(prefix + "角色", roleLabel(role));
         fields.put(prefix + "状态", reviewStatusLabel(status));
         fields.put(prefix + "审核人", reviewerName != null ? reviewerName : "");
@@ -1175,8 +1450,7 @@ public class FeishuBaseService {
             String reviewStatus,
             String reviewerName,
             String comment,
-            LocalDateTime reviewedAt
-    ) {}
+            LocalDateTime reviewedAt) {}
 
     public void syncScoring(ScoringSyncData data) throws Exception {
         if (!isSyncEnabled()) return;
@@ -1191,8 +1465,7 @@ public class FeishuBaseService {
     private void syncScoringToTable(ScoringSyncData data, String tableId, boolean backupTable) throws Exception {
 
         String appToken = getCfg("feishu.base.appToken");
-        if (appToken.isBlank() || tableId.isBlank())
-            throw new Exception("飞书评分表未配置，无法同步");
+        if (appToken.isBlank() || tableId.isBlank()) throw new Exception("飞书评分表未配置，无法同步");
 
         String token = getToken();
         String existed = findRecordId(token, appToken, tableId, "评分ID", String.valueOf(data.recordId()));
@@ -1206,7 +1479,7 @@ public class FeishuBaseService {
         } else if (existed != null) {
             fields.putNull("评分");
         }
-        fields.put("权重", data.weight() != null ? (int)(data.weight() * 100) : 0);
+        fields.put("权重", data.weight() != null ? (int) (data.weight() * 100) : 0);
         fields.put("项目ID", data.projectId() != null ? String.valueOf(data.projectId()) : "");
         fields.put("项目类型", projectTypeLabel(data.projectType()));
         fields.put("审核阶段", reviewStageLabel(data.reviewStage()));
@@ -1218,8 +1491,8 @@ public class FeishuBaseService {
             Integer fieldType = mappedFieldType("scoring", "所属子任务", fieldTypes);
             String linkedRecordId = null;
             if (isLinkField(fieldType)) {
-                linkedRecordId = findRecordId(token, appToken, getCfg("feishu.base.tableTasks"),
-                        "子任务ID", String.valueOf(data.subTaskId()));
+                linkedRecordId = findRecordId(
+                        token, appToken, getCfg("feishu.base.tableTasks"), "子任务ID", String.valueOf(data.subTaskId()));
             }
             putReferenceValue(fields, "所属子任务", data.subTaskId().toString(), linkedRecordId, fieldType);
         }
@@ -1233,8 +1506,9 @@ public class FeishuBaseService {
         }
     }
 
-    public void syncActivityLog(Long logId, String action, String username, String role,
-                                Long projectId, LocalDateTime time) throws Exception {
+    public void syncActivityLog(
+            Long logId, String action, String username, String role, Long projectId, LocalDateTime time)
+            throws Exception {
         if (!isSyncEnabled()) return;
         String primary = getCfg("feishu.base.tableLogs");
         String backup = getCfg("feishu.base.tableLogsBackup");
@@ -1248,9 +1522,16 @@ public class FeishuBaseService {
         }
     }
 
-    private void syncActivityLogToTable(Long logId, String action, String username, String role,
-                                        Long projectId, LocalDateTime time, String tableId,
-                                        boolean backupTable) throws Exception {
+    private void syncActivityLogToTable(
+            Long logId,
+            String action,
+            String username,
+            String role,
+            Long projectId,
+            LocalDateTime time,
+            String tableId,
+            boolean backupTable)
+            throws Exception {
         String appToken = getCfg("feishu.base.appToken");
         String token = getToken();
         String existed = findRecordId(token, appToken, tableId, "日志ID", String.valueOf(logId));
@@ -1270,9 +1551,13 @@ public class FeishuBaseService {
         else createRecord(token, appToken, tableId, fields.toString());
     }
 
-    static void putSyncMetadata(ObjectNode fields, boolean backupTable, boolean sourceDeleted,
-                                LocalDateTime deletedAt, boolean existed,
-                                Map<String, Integer> fieldTypes) {
+    static void putSyncMetadata(
+            ObjectNode fields,
+            boolean backupTable,
+            boolean sourceDeleted,
+            LocalDateTime deletedAt,
+            boolean existed,
+            Map<String, Integer> fieldTypes) {
         fields.put("同步来源", "系统");
         if (!backupTable) return;
         fields.put("备份状态", sourceDeleted ? "源数据已删除" : "有效");
@@ -1287,36 +1572,41 @@ public class FeishuBaseService {
 
     public void deleteProjectRecord(Long projectId) throws Exception {
         if (isV2Active()) {
-            deleteMirroredRecord("feishu.base.tableProjects", "feishu.base.tableProjectsBackup",
-                    "系统项目ID", String.valueOf(projectId));
+            deleteMirroredRecord(
+                    "feishu.base.tableProjects",
+                    "feishu.base.tableProjectsBackup",
+                    "系统项目ID",
+                    String.valueOf(projectId));
             return;
         }
-        deleteMirroredRecord("feishu.base.tableProjects", "feishu.base.tableProjectsBackup",
-                "项目ID", String.valueOf(projectId));
+        deleteMirroredRecord(
+                "feishu.base.tableProjects", "feishu.base.tableProjectsBackup", "项目ID", String.valueOf(projectId));
     }
 
     public void deleteSubTaskRecord(Long taskId) throws Exception {
         if (isV2Active()) {
-            deleteMirroredRecord("feishu.base.tableTasks", "feishu.base.tableTasksBackup",
-                    "系统子任务ID", String.valueOf(taskId));
+            deleteMirroredRecord(
+                    "feishu.base.tableTasks", "feishu.base.tableTasksBackup", "系统子任务ID", String.valueOf(taskId));
             return;
         }
-        deleteMirroredRecord("feishu.base.tableTasks", "feishu.base.tableTasksBackup",
-                "子任务ID", String.valueOf(taskId));
+        deleteMirroredRecord("feishu.base.tableTasks", "feishu.base.tableTasksBackup", "子任务ID", String.valueOf(taskId));
     }
 
     public void deleteScoringRecord(Long scoringRecordId) throws Exception {
         if (isV2Active()) {
-            deleteMirroredRecord("feishu.base.tableScoring", "feishu.base.tableScoringBackup",
-                    "系统评分ID", String.valueOf(scoringRecordId));
+            deleteMirroredRecord(
+                    "feishu.base.tableScoring",
+                    "feishu.base.tableScoringBackup",
+                    "系统评分ID",
+                    String.valueOf(scoringRecordId));
             return;
         }
-        deleteMirroredRecord("feishu.base.tableScoring", "feishu.base.tableScoringBackup",
-                "评分ID", String.valueOf(scoringRecordId));
+        deleteMirroredRecord(
+                "feishu.base.tableScoring", "feishu.base.tableScoringBackup", "评分ID", String.valueOf(scoringRecordId));
     }
 
-    private void deleteMirroredRecord(String primaryConfigKey, String backupConfigKey,
-                                      String idField, String businessId) throws Exception {
+    private void deleteMirroredRecord(
+            String primaryConfigKey, String backupConfigKey, String idField, String businessId) throws Exception {
         if (!isSyncEnabled()) return;
         String appToken = getCfg("feishu.base.appToken");
         String primaryTable = getCfg(primaryConfigKey);
@@ -1324,8 +1614,8 @@ public class FeishuBaseService {
         if (appToken.isBlank() || primaryTable.isBlank()) return;
         String token = getToken();
         String primaryRecordId = findRecordId(token, appToken, primaryTable, idField, businessId);
-        String backupRecordId = backupTable.isBlank() ? null
-                : findRecordId(token, appToken, backupTable, idField, businessId);
+        String backupRecordId =
+                backupTable.isBlank() ? null : findRecordId(token, appToken, backupTable, idField, businessId);
 
         if (backupRecordId != null) {
             markBackupDeleted(token, appToken, backupTable, backupRecordId, LocalDateTime.now());
@@ -1353,28 +1643,58 @@ public class FeishuBaseService {
         boolean v2 = isV2Active();
 
         Map<String, MirrorReconcileResult> result = new LinkedHashMap<>();
-        result.put("scoring_record", reconcileEntityMirror(token, appToken,
-                getCfg("feishu.base.tableScoring"), getCfg("feishu.base.tableScoringBackup"),
-                v2 ? "系统评分ID" : "评分ID", toStringIds(scoringIds)));
-        result.put("sub_task", reconcileEntityMirror(token, appToken,
-                getCfg("feishu.base.tableTasks"), getCfg("feishu.base.tableTasksBackup"),
-                v2 ? "系统子任务ID" : "子任务ID", toStringIds(taskIds)));
-        result.put("project", reconcileEntityMirror(token, appToken,
-                getCfg("feishu.base.tableProjects"), getCfg("feishu.base.tableProjectsBackup"),
-                v2 ? "系统项目ID" : "项目ID", toStringIds(projectIds)));
-        result.put("activity_log", reconcileEntityMirror(token, appToken,
-                getCfg("feishu.base.tableLogs"), getCfg("feishu.base.tableLogsBackup"),
-                v2 ? "系统日志ID" : "日志ID", toStringIds(logIds)));
+        result.put(
+                "scoring_record",
+                reconcileEntityMirror(
+                        token,
+                        appToken,
+                        getCfg("feishu.base.tableScoring"),
+                        getCfg("feishu.base.tableScoringBackup"),
+                        v2 ? "系统评分ID" : "评分ID",
+                        toStringIds(scoringIds)));
+        result.put(
+                "sub_task",
+                reconcileEntityMirror(
+                        token,
+                        appToken,
+                        getCfg("feishu.base.tableTasks"),
+                        getCfg("feishu.base.tableTasksBackup"),
+                        v2 ? "系统子任务ID" : "子任务ID",
+                        toStringIds(taskIds)));
+        result.put(
+                "project",
+                reconcileEntityMirror(
+                        token,
+                        appToken,
+                        getCfg("feishu.base.tableProjects"),
+                        getCfg("feishu.base.tableProjectsBackup"),
+                        v2 ? "系统项目ID" : "项目ID",
+                        toStringIds(projectIds)));
+        result.put(
+                "activity_log",
+                reconcileEntityMirror(
+                        token,
+                        appToken,
+                        getCfg("feishu.base.tableLogs"),
+                        getCfg("feishu.base.tableLogsBackup"),
+                        v2 ? "系统日志ID" : "日志ID",
+                        toStringIds(logIds)));
         return result;
     }
 
-    private MirrorReconcileResult reconcileEntityMirror(String token, String appToken,
-                                                         String primaryTable, String backupTable,
-                                                         String idField, Set<String> currentIds) throws Exception {
+    private MirrorReconcileResult reconcileEntityMirror(
+            String token,
+            String appToken,
+            String primaryTable,
+            String backupTable,
+            String idField,
+            Set<String> currentIds)
+            throws Exception {
         if (primaryTable == null || primaryTable.isBlank()) return new MirrorReconcileResult(0, 0, 0);
         List<RecordSnapshot> primaryRecords = listRecordSnapshots(token, appToken, primaryTable);
         List<RecordSnapshot> backupRecords = backupTable == null || backupTable.isBlank()
-                ? List.of() : listRecordSnapshots(token, appToken, backupTable);
+                ? List.of()
+                : listRecordSnapshots(token, appToken, backupTable);
         Map<String, RecordSnapshot> backupByBusinessId = new HashMap<>();
         for (RecordSnapshot record : backupRecords) {
             String id = fieldText(record.fields(), idField);
@@ -1404,8 +1724,7 @@ public class FeishuBaseService {
                 skippedWithoutBackup++;
                 continue;
             }
-            if (markedBackupIds.add(id)
-                    && !"源数据已删除".equals(fieldText(backup.fields(), "备份状态"))) {
+            if (markedBackupIds.add(id) && !"源数据已删除".equals(fieldText(backup.fields(), "备份状态"))) {
                 markBackupDeleted(token, appToken, backupTable, backup.recordId(), deletedAt);
                 backupMarked++;
             }
@@ -1415,8 +1734,9 @@ public class FeishuBaseService {
         return new MirrorReconcileResult(primaryDeleted, backupMarked, skippedWithoutBackup);
     }
 
-    private void markBackupDeleted(String token, String appToken, String backupTable,
-                                   String recordId, LocalDateTime deletedAt) throws Exception {
+    private void markBackupDeleted(
+            String token, String appToken, String backupTable, String recordId, LocalDateTime deletedAt)
+            throws Exception {
         Map<String, Integer> fieldTypes = getFieldTypes(token, appToken, backupTable);
         ObjectNode fields = json.createObjectNode();
         putSyncMetadata(fields, true, true, deletedAt, true, fieldTypes);
@@ -1427,8 +1747,11 @@ public class FeishuBaseService {
         List<RecordSnapshot> records = new ArrayList<>();
         String pageToken = null;
         do {
-            String url = String.format("%s/bitable/v1/apps/%s/tables/%s/records?page_size=500%s",
-                    API, appToken, tableId,
+            String url = String.format(
+                    "%s/bitable/v1/apps/%s/tables/%s/records?page_size=500%s",
+                    API,
+                    appToken,
+                    tableId,
                     pageToken != null && !pageToken.isBlank() ? "&page_token=" + pageToken : "");
             JsonNode root = json.readTree(bearerGet(url, token));
             checkResponse(root, "读取记录列表");
@@ -1464,12 +1787,15 @@ public class FeishuBaseService {
 
     // ==================== 通用 API 调用 ====================
 
-    private String findRecordId(String token, String appToken, String tableId,
-                                String fieldKey, String fieldValue) throws Exception {
+    private String findRecordId(String token, String appToken, String tableId, String fieldKey, String fieldValue)
+            throws Exception {
         String pageToken = null;
         do {
-            String url = String.format("%s/bitable/v1/apps/%s/tables/%s/records?page_size=500%s",
-                    API, appToken, tableId,
+            String url = String.format(
+                    "%s/bitable/v1/apps/%s/tables/%s/records?page_size=500%s",
+                    API,
+                    appToken,
+                    tableId,
                     pageToken != null && !pageToken.isBlank() ? "&page_token=" + pageToken : "");
             String resp = bearerGet(url, token);
             JsonNode root = json.readTree(resp);
@@ -1479,7 +1805,8 @@ public class FeishuBaseService {
             if (items.isArray()) {
                 for (JsonNode item : items) {
                     JsonNode fields = item.path("fields");
-                    if (fields.has(fieldKey) && fieldValue.equals(fields.get(fieldKey).asText())) {
+                    if (fields.has(fieldKey)
+                            && fieldValue.equals(fields.get(fieldKey).asText())) {
                         return item.get("record_id").asText();
                     }
                 }
@@ -1498,19 +1825,16 @@ public class FeishuBaseService {
         checkResponse(resp, "创建记录");
     }
 
-    private void updateRecord(String token, String appToken, String tableId,
-                              String recordId, String fieldsJson) throws Exception {
-        String url = String.format("%s/bitable/v1/apps/%s/tables/%s/records/%s",
-                API, appToken, tableId, recordId);
+    private void updateRecord(String token, String appToken, String tableId, String recordId, String fieldsJson)
+            throws Exception {
+        String url = String.format("%s/bitable/v1/apps/%s/tables/%s/records/%s", API, appToken, tableId, recordId);
         String body = "{\"fields\": " + fieldsJson + "}";
         String resp = bearerPut(url, token, body);
         checkResponse(resp, "更新记录");
     }
 
-    private void deleteRecord(String token, String appToken, String tableId,
-                              String recordId) throws Exception {
-        String url = String.format("%s/bitable/v1/apps/%s/tables/%s/records/%s",
-                API, appToken, tableId, recordId);
+    private void deleteRecord(String token, String appToken, String tableId, String recordId) throws Exception {
+        String url = String.format("%s/bitable/v1/apps/%s/tables/%s/records/%s", API, appToken, tableId, recordId);
         String resp = bearerDelete(url, token);
         checkResponse(resp, "删除记录");
     }
@@ -1522,7 +1846,11 @@ public class FeishuBaseService {
     private void checkResponse(JsonNode root, String action) throws Exception {
         int code = root.path("code").asInt();
         if (code != 0) {
-            log.warn("飞书 API {} 失败: code={} msg={}", action, code, root.path("msg").asText());
+            log.warn(
+                    "飞书 API {} 失败: code={} msg={}",
+                    action,
+                    code,
+                    root.path("msg").asText());
             throw new Exception("飞书 API " + action + " 失败: " + root.path("msg").asText());
         }
     }
@@ -1571,7 +1899,8 @@ public class FeishuBaseService {
             String code = root.path("code").asText();
             String message = root.path("msg").asText();
             if (!code.isBlank() || !message.isBlank()) return "code=" + code + " msg=" + message;
-        } catch (Exception ignored) { }
+        } catch (Exception ignored) {
+        }
         return "响应正文不可解析";
     }
 
@@ -1644,8 +1973,7 @@ public class FeishuBaseService {
         return fieldTypes.get(actualCompletionField(fieldTypes));
     }
 
-    static void putExtraFields(ObjectNode fields, Map<String, Integer> fieldTypes,
-                               Map<String, String> values) {
+    static void putExtraFields(ObjectNode fields, Map<String, Integer> fieldTypes, Map<String, String> values) {
         if (values == null) return;
         values.forEach((name, value) -> {
             if (fieldTypes.containsKey(name) && value != null && !value.isBlank()) fields.put(name, value);
@@ -1693,15 +2021,16 @@ public class FeishuBaseService {
         }
         int expected = expectedFieldType(sourceName);
         // 非关键历史列冲突先按系统值类型构造载荷，prepareConfiguredFields 随后改写到兼容列。
-        if (actual != null && !compatibleFieldType(sourceName, expected, actual)
+        if (actual != null
+                && !compatibleFieldType(sourceName, expected, actual)
                 && !FeishuFieldSchema.critical(sourceName)) {
             return expected;
         }
         return actual != null ? actual : expected;
     }
 
-    private void putConfiguredExtraFields(ObjectNode fields, String tableKey,
-                                          Map<String, Integer> fieldTypes, Map<String, String> values) {
+    private void putConfiguredExtraFields(
+            ObjectNode fields, String tableKey, Map<String, Integer> fieldTypes, Map<String, String> values) {
         if (values == null) return;
         String rawConfig = getCfg("feishu.base.fieldMappings");
         values.forEach((name, value) -> {
@@ -1713,9 +2042,14 @@ public class FeishuBaseService {
         });
     }
 
-    private ObjectNode prepareConfiguredFields(String token, String appToken, String tableId,
-                                                String tableKey, ObjectNode sourceFields,
-                                                Map<String, Integer> fieldTypes) throws Exception {
+    private ObjectNode prepareConfiguredFields(
+            String token,
+            String appToken,
+            String tableId,
+            String tableKey,
+            ObjectNode sourceFields,
+            Map<String, Integer> fieldTypes)
+            throws Exception {
         ObjectNode configured = applyFieldMappings(sourceFields, tableKey, getCfg("feishu.base.fieldMappings"));
         ObjectNode compatible = json.createObjectNode();
         Iterator<Map.Entry<String, JsonNode>> entries = configured.fields();
@@ -1740,8 +2074,13 @@ public class FeishuBaseService {
                     throw new IllegalArgumentException("飞书兼容字段类型不匹配: " + fallback + "，请检查字段配置");
                 }
                 compatible.set(fallback, entry.getValue());
-                log.warn("飞书字段使用兼容列: table={} source={} target={} actualType={} fallback={}",
-                        tableKey, source, target, actual, fallback);
+                log.warn(
+                        "飞书字段使用兼容列: table={} source={} target={} actualType={} fallback={}",
+                        tableKey,
+                        source,
+                        target,
+                        actual,
+                        fallback);
             } else {
                 compatible.set(target, entry.getValue());
             }
@@ -1772,20 +2111,23 @@ public class FeishuBaseService {
 
     private static String configuredSourceName(String tableKey, String target, String rawConfig) {
         try {
-            JsonNode table = json.readTree(rawConfig == null || rawConfig.isBlank() ? "{}" : rawConfig).path(tableKey);
+            JsonNode table = json.readTree(rawConfig == null || rawConfig.isBlank() ? "{}" : rawConfig)
+                    .path(tableKey);
             Iterator<Map.Entry<String, JsonNode>> entries = table.fields();
             while (entries.hasNext()) {
                 Map.Entry<String, JsonNode> entry = entries.next();
                 if (configuredTargetName(tableKey, entry.getKey(), rawConfig).equals(target)) return entry.getKey();
             }
-        } catch (Exception ignored) { }
+        } catch (Exception ignored) {
+        }
         return target;
     }
 
     private static JsonNode mappingNode(String tableKey, String source, String rawConfig) {
         try {
             JsonNode node = json.readTree(rawConfig == null || rawConfig.isBlank() ? "{}" : rawConfig)
-                    .path(tableKey).path(source);
+                    .path(tableKey)
+                    .path(source);
             return node.isObject() ? node : null;
         } catch (Exception e) {
             throw new IllegalArgumentException("飞书字段配置不是有效 JSON", e);
@@ -1800,8 +2142,8 @@ public class FeishuBaseService {
         return FeishuFieldSchema.compatible(source, expected, actual);
     }
 
-    static void putReferenceValue(ObjectNode fields, String fieldName, String businessId,
-                                  String linkedRecordId, Integer fieldType) {
+    static void putReferenceValue(
+            ObjectNode fields, String fieldName, String businessId, String linkedRecordId, Integer fieldType) {
         if (isLinkField(fieldType)) {
             if (linkedRecordId == null || linkedRecordId.isBlank()) {
                 throw new IllegalArgumentException("关联记录尚未同步: " + fieldName);
@@ -1835,8 +2177,9 @@ public class FeishuBaseService {
         try {
             String d = dateStr.contains(" ") ? dateStr.split(" ")[0] : dateStr;
             return java.time.LocalDate.parse(d)
-                .atStartOfDay(java.time.ZoneId.of("Asia/Shanghai"))
-                .toInstant().toEpochMilli();
+                    .atStartOfDay(java.time.ZoneId.of("Asia/Shanghai"))
+                    .toInstant()
+                    .toEpochMilli();
         } catch (Exception e) {
             return java.time.Instant.now().toEpochMilli();
         }

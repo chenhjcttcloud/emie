@@ -1,15 +1,12 @@
 package com.emie.designpm.auth;
 
-import com.emie.designpm.auth.AuthSession;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
-
-import java.time.Duration;
-import org.springframework.data.redis.core.ScanOptions;
-import java.util.Map;
 
 /** Redis-backed session storage with a safe in-memory fallback. */
 @Component
@@ -31,8 +28,8 @@ public class RedisSessionStore {
             if (session.expiresAt() <= 0 || session.expiresAt() >= Long.MAX_VALUE / 2) {
                 redis.opsForValue().set(key(token), objectMapper.writeValueAsString(session));
             } else if (ttlMillis > 0) {
-                redis.opsForValue().set(key(token), objectMapper.writeValueAsString(session),
-                        Duration.ofMillis(ttlMillis));
+                redis.opsForValue()
+                        .set(key(token), objectMapper.writeValueAsString(session), Duration.ofMillis(ttlMillis));
             }
         } catch (Exception e) {
             log.warn("Redis 会话写入失败，将使用本地会话缓存 reason={}", e.getClass().getSimpleName());
@@ -63,7 +60,8 @@ public class RedisSessionStore {
     public void removeUserTokens(String userId) {
         if (userId == null || userId.isBlank()) return;
         try {
-            var keys = redis.scan(ScanOptions.scanOptions().match(PREFIX + "*").count(256).build());
+            var keys = redis.scan(
+                    ScanOptions.scanOptions().match(PREFIX + "*").count(256).build());
             try (keys) {
                 while (keys.hasNext()) {
                     String key = keys.next();

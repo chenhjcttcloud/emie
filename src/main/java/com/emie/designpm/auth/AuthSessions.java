@@ -1,7 +1,6 @@
 package com.emie.designpm.auth;
 
 import jakarta.servlet.http.HttpServletRequest;
-
 import java.security.SecureRandom;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,8 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class AuthSessions {
 
-    private AuthSessions() {
-    }
+    private AuthSessions() {}
 
     public static final String AUTH_COOKIE = "designpm_auth";
 
@@ -74,10 +72,9 @@ public final class AuthSessions {
 
     /** 统一的管理员判断，避免仅依赖前端隐藏按钮。 */
     public static boolean isAdmin(HttpServletRequest request) {
-        AuthSession session = request != null
-                ? (AuthSession) request.getAttribute("authSession") : null;
-        return session != null && ("admin".equals(session.role())
-                || Boolean.TRUE.equals(request.getAttribute("permissionGranted")));
+        AuthSession session = request != null ? (AuthSession) request.getAttribute("authSession") : null;
+        return session != null
+                && ("admin".equals(session.role()) || Boolean.TRUE.equals(request.getAttribute("permissionGranted")));
     }
 
     /** 清除用户的所有 token（切换账号 / 改角色时）。 */

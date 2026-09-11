@@ -1,19 +1,16 @@
 package com.emie.designpm.feishu.controller;
 
-import com.emie.designpm.auth.PasswordHasher;
+import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.admin.repository.UserRepository;
 import com.emie.designpm.auth.AuthSessions;
+import com.emie.designpm.auth.PasswordHasher;
+import com.emie.designpm.entity.SystemConfig;
+import com.emie.designpm.entity.User;
+import com.emie.designpm.util.SecurityUtil;
 import com.lark.oapi.Client;
 import com.lark.oapi.core.request.RequestOptions;
 import com.lark.oapi.service.authen.v1.model.*;
-import com.emie.designpm.entity.SystemConfig;
-import com.emie.designpm.entity.User;
-import com.emie.designpm.admin.repository.SystemConfigRepository;
-import com.emie.designpm.admin.repository.UserRepository;
-import com.emie.designpm.util.SecurityUtil;
-import org.springframework.http.*;
-import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
-
 import java.net.URI;
 import java.util.Map;
 import java.util.UUID;
@@ -21,6 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.*;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth/feishu")
@@ -32,8 +31,7 @@ public class FeishuAuthController {
     private final SystemConfigRepository configRepository;
     private final UserRepository userRepository;
 
-    public FeishuAuthController(SystemConfigRepository configRepository,
-                                UserRepository userRepository) {
+    public FeishuAuthController(SystemConfigRepository configRepository, UserRepository userRepository) {
         this.configRepository = configRepository;
         this.userRepository = userRepository;
     }
@@ -41,10 +39,14 @@ public class FeishuAuthController {
     /** 获取飞书 App ID（供前端跳转用） */
     @GetMapping("/config")
     public ResponseEntity<Map<String, String>> getFeishuConfig(HttpServletRequest request) {
-        String appId = configRepository.findByConfigKey("feishu.ssoAppId")
-                .map(SystemConfig::getConfigValue).orElse("");
-        String enabled = configRepository.findByConfigKey("feishu.enabled")
-                .map(SystemConfig::getConfigValue).orElse("false");
+        String appId = configRepository
+                .findByConfigKey("feishu.ssoAppId")
+                .map(SystemConfig::getConfigValue)
+                .orElse("");
+        String enabled = configRepository
+                .findByConfigKey("feishu.enabled")
+                .map(SystemConfig::getConfigValue)
+                .orElse("false");
         String state = UUID.randomUUID().toString();
         request.getSession(true).setAttribute("feishu_oauth_state", state);
         return ResponseEntity.ok(Map.of("appId", appId, "enabled", enabled, "state", state));
@@ -52,9 +54,8 @@ public class FeishuAuthController {
 
     /** 飞书 OAuth 登录回调（使用官方 SDK） */
     @GetMapping("/callback")
-    public ResponseEntity<?> callback(@RequestParam("code") String code,
-                                      @RequestParam("state") String state,
-                                      HttpServletRequest request) {
+    public ResponseEntity<?> callback(
+            @RequestParam("code") String code, @RequestParam("state") String state, HttpServletRequest request) {
         try {
             var session = request.getSession(false);
             Object savedState = session != null ? session.getAttribute("feishu_oauth_state") : null;
@@ -76,8 +77,8 @@ public class FeishuAuthController {
             String ticket = UUID.randomUUID().toString();
             long now = System.currentTimeMillis();
             PENDING_LOGINS.entrySet().removeIf(entry -> entry.getValue().expiresAt < now);
-            PENDING_LOGINS.put(ticket, new PendingLogin(token, user.getUserId(), user.getName(), user.getRole(),
-                    now + 60_000));
+            PENDING_LOGINS.put(
+                    ticket, new PendingLogin(token, user.getUserId(), user.getName(), user.getRole(), now + 60_000));
 
             String redirectUrl = "/?sso_ticket=" + ticket;
 
@@ -126,8 +127,7 @@ public class FeishuAuthController {
                     "userId", user.getUserId(),
                     "userName", user.getName(),
                     "role", user.getRole(),
-                    "status", user.getStatus() != null ? user.getStatus() : "active"
-            );
+                    "status", user.getStatus() != null ? user.getStatus() : "active");
 
             return ResponseEntity.ok(Map.of("token", token, "user", userData));
 
@@ -139,10 +139,14 @@ public class FeishuAuthController {
 
     /** 提取公共方法：用飞书 code 换取用户身份并登录/注册 */
     private User processFeishuCode(String code) throws Exception {
-        String appId = configRepository.findByConfigKey("feishu.ssoAppId")
-                .map(SystemConfig::getConfigValue).orElse("");
-        String appSecret = configRepository.findByConfigKey("feishu.ssoAppSecret")
-                .map(SystemConfig::getConfigValue).orElse("");
+        String appId = configRepository
+                .findByConfigKey("feishu.ssoAppId")
+                .map(SystemConfig::getConfigValue)
+                .orElse("");
+        String appSecret = configRepository
+                .findByConfigKey("feishu.ssoAppSecret")
+                .map(SystemConfig::getConfigValue)
+                .orElse("");
 
         if (appId.isEmpty() || appSecret.isEmpty()) return null;
 
@@ -165,8 +169,11 @@ public class FeishuAuthController {
         String userAccessToken = tokenResp.getData().getAccessToken();
 
         // 获取用户信息
-        GetUserInfoResp userInfoResp = client.authen().userInfo().get(
-                RequestOptions.newBuilder().userAccessToken(userAccessToken).build());
+        GetUserInfoResp userInfoResp = client.authen()
+                .userInfo()
+                .get(RequestOptions.newBuilder()
+                        .userAccessToken(userAccessToken)
+                        .build());
         if (!userInfoResp.success()) return null;
 
         return resolveFeishuUser(userInfoResp.getData());
@@ -177,7 +184,9 @@ public class FeishuAuthController {
      * 不自动授予任何业务角色；管理员分配角色后才会获得业务访问权限。
      */
     User resolveFeishuUser(GetUserInfoRespBody userInfo) {
-        if (userInfo == null || userInfo.getOpenId() == null || userInfo.getOpenId().isBlank()) {
+        if (userInfo == null
+                || userInfo.getOpenId() == null
+                || userInfo.getOpenId().isBlank()) {
             return null;
         }
 

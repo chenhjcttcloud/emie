@@ -1,17 +1,16 @@
 package com.emie.designpm.project.service;
 
-import com.emie.designpm.notification.service.NotificationWorkflowService;
 import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.notification.repository.NotificationRepository;
+import com.emie.designpm.notification.service.NotificationWorkflowService;
 import com.emie.designpm.project.repository.SubTaskRepository;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;
-
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
 
 /** 对超过30分钟仍未接单的子任务发送一次提醒，避免重复轰炸。 */
 @Service
@@ -23,9 +22,8 @@ public class SubTaskAcceptanceReminderService {
     /** 本次应用启动时间作为提醒基线，避免首次上线把历史待接单任务集中轰炸。 */
     private LocalDateTime reminderBaseline;
 
-    public SubTaskAcceptanceReminderService(SubTaskRepository subTasks,
-                                            NotificationRepository notifications,
-                                            NotificationWorkflowService workflow) {
+    public SubTaskAcceptanceReminderService(
+            SubTaskRepository subTasks, NotificationRepository notifications, NotificationWorkflowService workflow) {
         this.subTasks = subTasks;
         this.notifications = notifications;
         this.workflow = workflow;

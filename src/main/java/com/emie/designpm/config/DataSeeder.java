@@ -1,9 +1,9 @@
 package com.emie.designpm.config;
 
+import com.emie.designpm.compliance.repository.ComplianceItemRepository;
 import com.emie.designpm.entity.ComplianceItem;
 import com.emie.designpm.entity.PriceRange;
 import com.emie.designpm.entity.ProductCategory;
-import com.emie.designpm.compliance.repository.ComplianceItemRepository;
 import com.emie.designpm.reference.repository.PriceRangeRepository;
 import com.emie.designpm.reference.repository.ProductCategoryRepository;
 import org.springframework.boot.CommandLineRunner;

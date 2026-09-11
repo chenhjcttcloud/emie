@@ -1,26 +1,25 @@
 package com.emie.designpm.sync.service;
 
-import com.emie.designpm.sync.repository.SyncQueueRepository;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.*;
+
 import com.emie.designpm.admin.repository.ActivityLogRepository;
 import com.emie.designpm.admin.repository.SystemConfigRepository;
-import com.emie.designpm.project.repository.ProjectRepository;
-import com.emie.designpm.project.repository.SubTaskDeliveryVersionRepository;
-import com.emie.designpm.project.repository.SubTaskRepository;
-import com.emie.designpm.scoring.repository.ScoringRepository;
-import com.emie.designpm.feishu.service.FeishuBaseService;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.ScoringRecord;
 import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.entity.SubTaskDeliveryVersion;
 import com.emie.designpm.entity.SyncQueue;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-
+import com.emie.designpm.feishu.service.FeishuBaseService;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.project.repository.SubTaskDeliveryVersionRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
+import com.emie.designpm.scoring.repository.ScoringRepository;
+import com.emie.designpm.sync.repository.SyncQueueRepository;
 import java.util.List;
 import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class SyncWorkerReviewSummaryTest {
 
@@ -36,8 +35,7 @@ class SyncWorkerReviewSummaryTest {
 
     @Test
     void projectAndSubTaskFlowSummariesExposeCurrentProgress() {
-        assertEquals("打样送审（审核中）",
-                SyncWorker.projectFlowLabel("in_progress", "sample_review", "under_review"));
+        assertEquals("打样送审（审核中）", SyncWorker.projectFlowLabel("in_progress", "sample_review", "under_review"));
         assertEquals("已完成", SyncWorker.projectFlowLabel("completed", "bulk", "completed"));
 
         SubTask completed = taskWithStatus("completed");
@@ -45,7 +43,8 @@ class SyncWorkerReviewSummaryTest {
         SubTask active = taskWithStatus("accepted");
         SubTask pending = taskWithStatus("pending");
 
-        assertEquals("已完成 1/4｜送审中 1｜进行中 1｜待认领 1",
+        assertEquals(
+                "已完成 1/4｜送审中 1｜进行中 1｜待认领 1",
                 SyncWorker.taskProgressSummary(List.of(completed, reviewing, active, pending)));
     }
 
@@ -66,8 +65,10 @@ class SyncWorkerReviewSummaryTest {
                 .status("pending")
                 .retryCount(0)
                 .build();
-        when(queueRepository.findTop20ByStatusAndNextRetryAtIsNullOrStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
-                eq("pending"), eq("pending"), any())).thenReturn(List.of(item));
+        when(queueRepository
+                        .findTop20ByStatusAndNextRetryAtIsNullOrStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
+                                eq("pending"), eq("pending"), any()))
+                .thenReturn(List.of(item));
 
         Project project = new Project();
         project.setId(1L);
@@ -88,9 +89,16 @@ class SyncWorkerReviewSummaryTest {
         when(scoringRepository.findBySubTaskId(11L)).thenReturn(List.of(first, second));
 
         SyncWorker worker = new SyncWorker(
-                queueRepository, projectRepository, taskRepository, scoringRepository,
-                logRepository, feishu, mock(SyncQueueService.class), mock(SystemConfigRepository.class),
-                versions, null);
+                queueRepository,
+                projectRepository,
+                taskRepository,
+                scoringRepository,
+                logRepository,
+                feishu,
+                mock(SyncQueueService.class),
+                mock(SystemConfigRepository.class),
+                versions,
+                null);
         worker.processQueue();
 
         ArgumentCaptor<FeishuBaseService.SubTaskSyncData> captor =

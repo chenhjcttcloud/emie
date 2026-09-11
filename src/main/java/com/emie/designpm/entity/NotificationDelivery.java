@@ -1,12 +1,11 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
 
 /** 站内、飞书等渠道的独立投递状态。 */
 @Data
@@ -14,12 +13,17 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "notification_deliveries", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_notification_delivery_channel", columnNames = {"notificationId", "channel"})
-}, indexes = {
-        @Index(name = "idx_notification_delivery_status_time", columnList = "status,nextRetryAt"),
-        @Index(name = "idx_notification_delivery_notification", columnList = "notificationId")
-})
+@Table(
+        name = "notification_deliveries",
+        uniqueConstraints = {
+            @UniqueConstraint(
+                    name = "uk_notification_delivery_channel",
+                    columnNames = {"notificationId", "channel"})
+        },
+        indexes = {
+            @Index(name = "idx_notification_delivery_status_time", columnList = "status,nextRetryAt"),
+            @Index(name = "idx_notification_delivery_notification", columnList = "notificationId")
+        })
 public class NotificationDelivery {
 
     @Id
@@ -41,6 +45,7 @@ public class NotificationDelivery {
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
+
     private LocalDateTime firstAttemptAt;
     private LocalDateTime lastAttemptAt;
     private LocalDateTime failedAt;

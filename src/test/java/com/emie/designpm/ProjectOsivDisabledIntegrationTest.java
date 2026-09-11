@@ -1,64 +1,81 @@
 package com.emie.designpm;
 
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.emie.designpm.admin.repository.ActivityLogRepository;
+import com.emie.designpm.admin.service.PermissionService;
 import com.emie.designpm.auth.AuthSessions;
+import com.emie.designpm.auth.RedisSessionStore;
 import com.emie.designpm.entity.ActivityLog;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.SubTask;
-import com.emie.designpm.admin.repository.ActivityLogRepository;
+import com.emie.designpm.notification.service.NotificationRetryService;
 import com.emie.designpm.project.repository.ProjectRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
-import com.emie.designpm.auth.RedisSessionStore;
-import com.emie.designpm.notification.service.NotificationRetryService;
-import com.emie.designpm.admin.service.PermissionService;
 import com.emie.designpm.sync.service.SyncQueueService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.when;
 
 /**
  * Request-level regression coverage for the DTO boundaries that previously relied on OSIV.
  * Test data is committed before MockMvc runs so the test's own persistence context cannot
  * accidentally keep lazy associations usable during controller serialization.
  */
-@SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:h2:mem:osiv-regression;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
-        "spring.datasource.driver-class-name=org.h2.Driver",
-        "spring.datasource.username=sa",
-        "spring.datasource.password=",
-        "spring.jpa.hibernate.ddl-auto=create-drop",
-        "spring.jpa.open-in-view=false",
-        "spring.flyway.enabled=false",
-        "spring.task.scheduling.enabled=false",
-        "app.feishu.sync-worker-enabled=false"
-})
+@SpringBootTest(
+        properties = {
+            "spring.datasource.url=jdbc:h2:mem:osiv-regression;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
+            "spring.datasource.driver-class-name=org.h2.Driver",
+            "spring.datasource.username=sa",
+            "spring.datasource.password=",
+            "spring.jpa.hibernate.ddl-auto=create-drop",
+            "spring.jpa.open-in-view=false",
+            "spring.flyway.enabled=false",
+            "spring.task.scheduling.enabled=false",
+            "app.feishu.sync-worker-enabled=false"
+        })
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class ProjectOsivDisabledIntegrationTest {
 
-    @Autowired MockMvc mvc;
-    @Autowired ProjectRepository projects;
-    @Autowired SubTaskRepository subTasks;
-    @Autowired ActivityLogRepository activityLogs;
-    @Autowired PlatformTransactionManager transactionManager;
+    @Autowired
+    MockMvc mvc;
 
-    @MockitoBean RedisSessionStore redisSessionStore;
-    @MockitoBean SyncQueueService syncQueueService;
-    @MockitoBean NotificationRetryService notificationRetryService;
-    @MockitoBean PermissionService permissionService;
+    @Autowired
+    ProjectRepository projects;
+
+    @Autowired
+    SubTaskRepository subTasks;
+
+    @Autowired
+    ActivityLogRepository activityLogs;
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
+
+    @MockitoBean
+    RedisSessionStore redisSessionStore;
+
+    @MockitoBean
+    SyncQueueService syncQueueService;
+
+    @MockitoBean
+    NotificationRetryService notificationRetryService;
+
+    @MockitoBean
+    PermissionService permissionService;
 
     private Long projectId;
     private Long taskId;

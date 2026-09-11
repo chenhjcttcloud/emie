@@ -6,6 +6,10 @@ import com.emie.designpm.project.service.ProjectService;
 import com.emie.designpm.project.service.ProjectViewSupport;
 import com.emie.designpm.project.service.SubTaskCommandService;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -17,11 +21,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
 @RestController
 @RequestMapping("/api/projects")
 public class ProjectTaskController {
@@ -32,10 +31,11 @@ public class ProjectTaskController {
     private final ProjectRequestSupport req;
 
     @Autowired
-    public ProjectTaskController(ProjectService projectService,
-                                 SubTaskCommandService subTaskCommandService,
-                                 ProjectViewSupport view,
-                                 ProjectRequestSupport req) {
+    public ProjectTaskController(
+            ProjectService projectService,
+            SubTaskCommandService subTaskCommandService,
+            ProjectViewSupport view,
+            ProjectRequestSupport req) {
         this.projectService = projectService;
         this.subTaskCommandService = subTaskCommandService;
         this.view = view;
@@ -43,9 +43,7 @@ public class ProjectTaskController {
     }
 
     /** 保留给轻量 Controller 单元测试；生产运行始终使用完整依赖构造器。 */
-    ProjectTaskController(ProjectService projectService,
-                          ProjectViewSupport view,
-                          ProjectRequestSupport req) {
+    ProjectTaskController(ProjectService projectService, ProjectViewSupport view, ProjectRequestSupport req) {
         this(projectService, unsupportedSubTaskCommands(), view, req);
     }
 
@@ -55,24 +53,77 @@ public class ProjectTaskController {
                 return new UnsupportedOperationException("轻量测试未注入子任务命令服务");
             }
 
-            public Project addSubTask(Long id, Map<String, Object> body) { throw unsupported(); }
-            public Project updateSubTask(Long id, Long taskId, Map<String, Object> body) { throw unsupported(); }
-            public Project taskAccept(Long id, Long taskId, Map<String, Object> body) { throw unsupported(); }
-            public Project withdrawMarketTask(Long id, Long taskId, Map<String, Object> body) { throw unsupported(); }
-            public Project withdrawAcceptedTask(Long id, Long taskId, Map<String, Object> body) { throw unsupported(); }
-            public Project cancelAcceptedTask(Long id, Long taskId, Map<String, Object> body) { throw unsupported(); }
-            public Project deleteSubTask(Long id, Long taskId) { throw unsupported(); }
-            public Project taskDeliver(Long id, Long taskId, Map<String, Object> body) { throw unsupported(); }
-            public Project taskSubmitReview(Long id, Long taskId, Map<String, Object> body) { throw unsupported(); }
-            public Project taskRedeliver(Long id, Long taskId, Map<String, Object> body) { throw unsupported(); }
-            public Project taskConfirmRevision(Long id, Long taskId, Map<String, Object> body) { throw unsupported(); }
-            public Project taskCorrectDelivery(Long id, Long taskId, Map<String, Object> body) { throw unsupported(); }
-            public Project taskApprove(Long id, Long taskId, Map<String, Object> body) { throw unsupported(); }
-            public Project taskReject(Long id, Long taskId, Map<String, Object> body) { throw unsupported(); }
-            public Project taskCancelReject(Long id, Long taskId, Long cycleId, Map<String, Object> body) { throw unsupported(); }
-            public Project submitScoring(Long id, Long taskId, Map<String, Object> body) { throw unsupported(); }
-            public List<Map<String, Object>> getDeliveryVersions(Long taskId) { return List.of(); }
-            public double currentScoringWeight(String type, String role) { throw unsupported(); }
+            public Project addSubTask(Long id, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project updateSubTask(Long id, Long taskId, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project taskAccept(Long id, Long taskId, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project withdrawMarketTask(Long id, Long taskId, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project withdrawAcceptedTask(Long id, Long taskId, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project cancelAcceptedTask(Long id, Long taskId, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project deleteSubTask(Long id, Long taskId) {
+                throw unsupported();
+            }
+
+            public Project taskDeliver(Long id, Long taskId, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project taskSubmitReview(Long id, Long taskId, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project taskRedeliver(Long id, Long taskId, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project taskConfirmRevision(Long id, Long taskId, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project taskCorrectDelivery(Long id, Long taskId, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project taskApprove(Long id, Long taskId, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project taskReject(Long id, Long taskId, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project taskCancelReject(Long id, Long taskId, Long cycleId, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project submitScoring(Long id, Long taskId, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public List<Map<String, Object>> getDeliveryVersions(Long taskId) {
+                return List.of();
+            }
+
+            public double currentScoringWeight(String type, String role) {
+                throw unsupported();
+            }
         };
     }
 
@@ -102,8 +153,8 @@ public class ProjectTaskController {
         try {
             ResponseEntity<?> denied = req.denyUnless(request, "subtask.edit");
             if (denied != null) return denied;
-            Project project = subTaskCommandService.updateSubTask(
-                    projectId, taskId, req.withSessionContext(body, request));
+            Project project =
+                    subTaskCommandService.updateSubTask(projectId, taskId, req.withSessionContext(body, request));
             return ResponseEntity.ok(view.toDetail(project));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -120,11 +171,12 @@ public class ProjectTaskController {
         try {
             ResponseEntity<?> denied = req.denyUnless(request, "subtask.accept");
             if (denied != null) return denied;
-            Project project = subTaskCommandService.taskAccept(
-                    projectId, taskId, req.withSessionContext(body, request));
+            Project project =
+                    subTaskCommandService.taskAccept(projectId, taskId, req.withSessionContext(body, request));
             return ResponseEntity.ok(view.toDetail(project));
         } catch (RuntimeException e) {
-            if (e.getMessage() != null && (e.getMessage().contains("已被接单") || e.getMessage().contains("已处理"))) {
+            if (e.getMessage() != null
+                    && (e.getMessage().contains("已被接单") || e.getMessage().contains("已处理"))) {
                 return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
             }
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -133,8 +185,8 @@ public class ProjectTaskController {
 
     /** 企划在无人接单时将任务撤出接单市场。 */
     @PostMapping("/{projectId}/tasks/{taskId}/withdraw-market")
-    public ResponseEntity<?> withdrawMarketTask(@PathVariable Long projectId, @PathVariable Long taskId,
-                                                 HttpServletRequest request) {
+    public ResponseEntity<?> withdrawMarketTask(
+            @PathVariable Long projectId, @PathVariable Long taskId, HttpServletRequest request) {
         try {
             ResponseEntity<?> denied = req.denyUnless(request, "subtask.edit");
             if (denied != null) return denied;
@@ -147,9 +199,11 @@ public class ProjectTaskController {
 
     /** 设计师退单（接单后一小时内免罚，超时按比例扣分）。 */
     @PostMapping("/{projectId}/tasks/{taskId}/withdraw")
-    public ResponseEntity<?> withdrawAcceptedTask(@PathVariable Long projectId, @PathVariable Long taskId,
-                                                   @RequestBody Map<String, Object> body,
-                                                   HttpServletRequest request) {
+    public ResponseEntity<?> withdrawAcceptedTask(
+            @PathVariable Long projectId,
+            @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
         try {
             ResponseEntity<?> denied = req.denyUnless(request, "subtask.accept");
             if (denied != null) return denied;
@@ -162,8 +216,8 @@ public class ProjectTaskController {
 
     /** 企划取消设计师已接单但尚未交付的子任务。 */
     @PostMapping("/{projectId}/tasks/{taskId}/cancel-accept")
-    public ResponseEntity<?> cancelAcceptedTask(@PathVariable Long projectId, @PathVariable Long taskId,
-                                                 HttpServletRequest request) {
+    public ResponseEntity<?> cancelAcceptedTask(
+            @PathVariable Long projectId, @PathVariable Long taskId, HttpServletRequest request) {
         try {
             ResponseEntity<?> denied = req.denyUnless(request, "subtask.edit");
             if (denied != null) return denied;
@@ -176,107 +230,138 @@ public class ProjectTaskController {
 
     /** 设计师交付 */
     @PostMapping("/{projectId}/tasks/{taskId}/deliver")
-    public ResponseEntity<?> taskDeliver(@PathVariable Long projectId, @PathVariable Long taskId,
-                                          @RequestBody Map<String, Object> body,
-                                          HttpServletRequest request) {
-        return command(request, "subtask.deliver",
-                () -> subTaskCommandService.taskDeliver(
-                        projectId, taskId, req.withSessionContext(body, request)));
+    public ResponseEntity<?> taskDeliver(
+            @PathVariable Long projectId,
+            @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        return command(
+                request,
+                "subtask.deliver",
+                () -> subTaskCommandService.taskDeliver(projectId, taskId, req.withSessionContext(body, request)));
     }
 
     /** 设计师/供应链提交已交付成果进入企划送审。 */
     @PostMapping("/{projectId}/tasks/{taskId}/submit-review")
-    public ResponseEntity<?> taskSubmitReview(@PathVariable Long projectId, @PathVariable Long taskId,
-                                               @RequestBody Map<String, Object> body,
-                                               HttpServletRequest request) {
-        return command(request, "subtask.review.first.submit",
-                () -> subTaskCommandService.taskSubmitReview(
-                        projectId, taskId, req.withSessionContext(body, request)));
+    public ResponseEntity<?> taskSubmitReview(
+            @PathVariable Long projectId,
+            @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        return command(
+                request,
+                "subtask.review.first.submit",
+                () -> subTaskCommandService.taskSubmitReview(projectId, taskId, req.withSessionContext(body, request)));
     }
 
     /** 设计师重新交付 */
     @PostMapping("/{projectId}/tasks/{taskId}/redeliver")
-    public ResponseEntity<?> taskRedeliver(@PathVariable Long projectId, @PathVariable Long taskId,
-                                            @RequestBody Map<String, Object> body,
-                                            HttpServletRequest request) {
-        return command(request, "subtask.redeliver",
-                () -> subTaskCommandService.taskRedeliver(
-                        projectId, taskId, req.withSessionContext(body, request)));
+    public ResponseEntity<?> taskRedeliver(
+            @PathVariable Long projectId,
+            @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        return command(
+                request,
+                "subtask.redeliver",
+                () -> subTaskCommandService.taskRedeliver(projectId, taskId, req.withSessionContext(body, request)));
     }
 
     /** 被驳回负责人确认开始修改。 */
     @PostMapping("/{projectId}/tasks/{taskId}/confirm-revision")
-    public ResponseEntity<?> taskConfirmRevision(@PathVariable Long projectId, @PathVariable Long taskId,
-                                                  @RequestBody Map<String, Object> body,
-                                                  HttpServletRequest request) {
-        return command(request, "subtask.redeliver",
+    public ResponseEntity<?> taskConfirmRevision(
+            @PathVariable Long projectId,
+            @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        return command(
+                request,
+                "subtask.redeliver",
                 () -> subTaskCommandService.taskConfirmRevision(
                         projectId, taskId, req.withSessionContext(body, request)));
     }
 
     /** 审核完成前，负责人主动修正漏交或错交文件；生成新版本并使旧审核失效。 */
     @PostMapping("/{projectId}/tasks/{taskId}/correct-delivery")
-    public ResponseEntity<?> taskCorrectDelivery(@PathVariable Long projectId, @PathVariable Long taskId,
-                                                  @RequestBody Map<String, Object> body,
-                                                  HttpServletRequest request) {
-        return command(request, "subtask.redeliver",
+    public ResponseEntity<?> taskCorrectDelivery(
+            @PathVariable Long projectId,
+            @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        return command(
+                request,
+                "subtask.redeliver",
                 () -> subTaskCommandService.taskCorrectDelivery(
                         projectId, taskId, req.withSessionContext(body, request)));
     }
 
     /** 验收通过 */
     @PostMapping("/{projectId}/tasks/{taskId}/approve")
-    public ResponseEntity<?> taskApprove(@PathVariable Long projectId, @PathVariable Long taskId,
-                                          @RequestBody Map<String, Object> body,
-                                          HttpServletRequest request) {
-        return reviewCommand(request, true,
-                () -> subTaskCommandService.taskApprove(
-                        projectId, taskId, req.withSessionContext(body, request)));
+    public ResponseEntity<?> taskApprove(
+            @PathVariable Long projectId,
+            @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        return reviewCommand(
+                request,
+                true,
+                () -> subTaskCommandService.taskApprove(projectId, taskId, req.withSessionContext(body, request)));
     }
 
     /** 驳回 */
     @PostMapping("/{projectId}/tasks/{taskId}/reject")
-    public ResponseEntity<?> taskReject(@PathVariable Long projectId, @PathVariable Long taskId,
-                                         @RequestBody Map<String, Object> body,
-                                         HttpServletRequest request) {
-        return reviewCommand(request, false,
-                () -> subTaskCommandService.taskReject(
-                        projectId, taskId, req.withSessionContext(body, request)));
+    public ResponseEntity<?> taskReject(
+            @PathVariable Long projectId,
+            @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        return reviewCommand(
+                request,
+                false,
+                () -> subTaskCommandService.taskReject(projectId, taskId, req.withSessionContext(body, request)));
     }
 
     /** 取消当前最新一次误驳回，并精确恢复驳回前状态。 */
     @PostMapping("/{projectId}/tasks/{taskId}/rejections/{cycleId}/cancel")
-    public ResponseEntity<?> taskCancelReject(@PathVariable Long projectId, @PathVariable Long taskId,
-                                               @PathVariable Long cycleId,
-                                               @RequestBody Map<String, Object> body,
-                                               HttpServletRequest request) {
-        return reviewCommand(request, false,
+    public ResponseEntity<?> taskCancelReject(
+            @PathVariable Long projectId,
+            @PathVariable Long taskId,
+            @PathVariable Long cycleId,
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        return reviewCommand(
+                request,
+                false,
                 () -> subTaskCommandService.taskCancelReject(
                         projectId, taskId, cycleId, req.withSessionContext(body, request)));
     }
 
     /** 提交评分 */
     @PostMapping("/{projectId}/tasks/{taskId}/score")
-    public ResponseEntity<?> submitScore(@PathVariable Long projectId, @PathVariable Long taskId,
-                                          @RequestBody Map<String, Object> body,
-                                          HttpServletRequest request) {
-        return command(request, "scoring.submit",
-                () -> subTaskCommandService.submitScoring(
-                        projectId, taskId, req.withSessionContext(body, request)));
+    public ResponseEntity<?> submitScore(
+            @PathVariable Long projectId,
+            @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        return command(
+                request,
+                "scoring.submit",
+                () -> subTaskCommandService.submitScoring(projectId, taskId, req.withSessionContext(body, request)));
     }
 
     /** 删除子任务 */
     @DeleteMapping("/{projectId}/tasks/{taskId}")
-    public ResponseEntity<?> deleteTask(@PathVariable Long projectId, @PathVariable Long taskId,
-                                         HttpServletRequest request) {
+    public ResponseEntity<?> deleteTask(
+            @PathVariable Long projectId, @PathVariable Long taskId, HttpServletRequest request) {
         try {
             ResponseEntity<?> denied = req.denyUnless(request, "subtask.delete");
             if (denied != null) return denied;
             AuthSession session = req.getSession(request);
-            Project project = projectService.getProjectById(projectId)
-                    .orElseThrow(() -> new RuntimeException("项目不存在"));
-            if (session == null || !("admin".equals(session.role()) ||
-                    ("planner".equals(session.role()) && Objects.equals(session.userId(), project.getPlannerId())))) {
+            Project project = projectService.getProjectById(projectId).orElseThrow(() -> new RuntimeException("项目不存在"));
+            if (session == null
+                    || !("admin".equals(session.role())
+                            || ("planner".equals(session.role())
+                                    && Objects.equals(session.userId(), project.getPlannerId())))) {
                 return ResponseEntity.status(403).body(Map.of("error", "仅项目企划或管理员可删除子任务"));
             }
             return ResponseEntity.ok(view.toDetail(subTaskCommandService.deleteSubTask(projectId, taskId)));
@@ -285,8 +370,8 @@ public class ProjectTaskController {
         }
     }
 
-    private ResponseEntity<?> command(HttpServletRequest request, String permission,
-                                      java.util.function.Supplier<Project> action) {
+    private ResponseEntity<?> command(
+            HttpServletRequest request, String permission, java.util.function.Supplier<Project> action) {
         try {
             ResponseEntity<?> denied = req.denyUnless(request, permission);
             if (denied != null) return denied;
@@ -296,8 +381,8 @@ public class ProjectTaskController {
         }
     }
 
-    private ResponseEntity<?> reviewCommand(HttpServletRequest request, boolean approve,
-                                            java.util.function.Supplier<Project> action) {
+    private ResponseEntity<?> reviewCommand(
+            HttpServletRequest request, boolean approve, java.util.function.Supplier<Project> action) {
         try {
             return command(request, reviewPermission(req.getSession(request), approve), action);
         } catch (RuntimeException e) {

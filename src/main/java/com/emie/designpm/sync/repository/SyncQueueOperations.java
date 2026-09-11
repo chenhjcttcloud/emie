@@ -13,12 +13,22 @@ public interface SyncQueueOperations {
      */
     List<SyncQueue> findTop20ByStatusAndNextRetryAtIsNullOrStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
             String newItemStatus, String retryStatus, java.time.LocalDateTime now);
-    List<SyncQueue> findByEntityTypeAndEntityIdAndStatusIn(String entityType, Long entityId, Collection<String> statuses);
-    Optional<SyncQueue> findFirstByEntityTypeAndEntityIdAndStatusOrderByCreatedAtDesc(String entityType, Long entityId, String status);
+
+    List<SyncQueue> findByEntityTypeAndEntityIdAndStatusIn(
+            String entityType, Long entityId, Collection<String> statuses);
+
+    Optional<SyncQueue> findFirstByEntityTypeAndEntityIdAndStatusOrderByCreatedAtDesc(
+            String entityType, Long entityId, String status);
+
     long countByStatus(String status);
+
     long countByStatusAndRetryCountGreaterThanEqual(String status, int retryCount);
+
     Optional<SyncQueue> findTopByStatusOrderByUpdatedAtDesc(String status);
+
     Optional<SyncQueue> findTopByStatusOrderByCreatedAtDesc(String status);
+
     List<SyncQueue> findByStatusAndUpdatedAtBefore(String status, java.time.LocalDateTime cutoff);
+
     <S extends SyncQueue> S saveQueue(S entity);
 }

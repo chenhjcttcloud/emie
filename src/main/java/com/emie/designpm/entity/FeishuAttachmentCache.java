@@ -1,15 +1,18 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
-
 import java.time.LocalDateTime;
+import lombok.Data;
 
 /** 系统文件到指定飞书 Base 附件 token 的持久化映射，避免全量对账重复上传。 */
 @Data
 @Entity
-@Table(name = "feishu_attachment_cache", uniqueConstraints =
-        @UniqueConstraint(name = "uk_feishu_attachment_base_file", columnNames = {"app_token", "stored_name"}))
+@Table(
+        name = "feishu_attachment_cache",
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_feishu_attachment_base_file",
+                        columnNames = {"app_token", "stored_name"}))
 public class FeishuAttachmentCache {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

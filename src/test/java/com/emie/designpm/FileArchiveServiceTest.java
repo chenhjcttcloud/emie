@@ -1,24 +1,23 @@
 package com.emie.designpm;
 
-import com.emie.designpm.entity.FileRecord;
-import com.emie.designpm.file.repository.FileRecordRepository;
-import com.emie.designpm.admin.repository.SystemConfigRepository;
-import com.emie.designpm.file.service.FileArchiveService;
-import com.emie.designpm.file.service.FileThumbnailService;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.springframework.test.util.ReflectionTestUtils;
-
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
+import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.entity.FileRecord;
+import com.emie.designpm.file.repository.FileRecordRepository;
+import com.emie.designpm.file.service.FileArchiveService;
+import com.emie.designpm.file.service.FileThumbnailService;
+import java.awt.image.BufferedImage;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Optional;
+import javax.imageio.ImageIO;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class FileArchiveServiceTest {
 
@@ -62,8 +61,8 @@ class FileArchiveServiceTest {
                 .build();
         when(records.findByStoredName(storedName)).thenReturn(Optional.of(archived));
 
-        Path thumbnail = new FileThumbnailService(archiveService)
-                .getOrCreate(storedName, uploadDir.resolve("thumbnail-cache"));
+        Path thumbnail =
+                new FileThumbnailService(archiveService).getOrCreate(storedName, uploadDir.resolve("thumbnail-cache"));
 
         assertTrue(Files.exists(thumbnail));
         BufferedImage thumbnailImage = ImageIO.read(thumbnail.toFile());
@@ -87,10 +86,15 @@ class FileArchiveServiceTest {
         Files.createDirectories(cache);
         Path thumbnail = cache.resolve(storedName + ".png");
         Files.writeString(thumbnail, "cached thumbnail");
-        Files.setLastModifiedTime(thumbnail, java.nio.file.attribute.FileTime.fromMillis(
-                Files.getLastModifiedTime(source).toMillis() + 5000));
-        when(records.findByStoredName(storedName)).thenReturn(Optional.of(FileRecord.builder()
-                .storedName(storedName).storageTier("local").build()));
+        Files.setLastModifiedTime(
+                thumbnail,
+                java.nio.file.attribute.FileTime.fromMillis(
+                        Files.getLastModifiedTime(source).toMillis() + 5000));
+        when(records.findByStoredName(storedName))
+                .thenReturn(Optional.of(FileRecord.builder()
+                        .storedName(storedName)
+                        .storageTier("local")
+                        .build()));
 
         assertEquals(thumbnail, new FileThumbnailService(archiveService).getOrCreate(storedName, cache));
         assertEquals("cached thumbnail", Files.readString(thumbnail));

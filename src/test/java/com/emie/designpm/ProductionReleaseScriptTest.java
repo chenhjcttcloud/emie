@@ -1,13 +1,12 @@
 package com.emie.designpm;
 
-import org.junit.jupiter.api.Test;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import org.junit.jupiter.api.Test;
 
 class ProductionReleaseScriptTest {
 
@@ -64,8 +63,7 @@ class ProductionReleaseScriptTest {
     void remoteScriptOnlyAcceptsTheTargetSpecificIncomingJar() throws Exception {
         String script = Files.readString(remoteScript);
 
-        assertTrue(script.contains(
-                "[[ \"$incoming_jar\" == \"$DEPLOY_DIR/incoming/app-$target_sha.jar\" ]]"));
+        assertTrue(script.contains("[[ \"$incoming_jar\" == \"$DEPLOY_DIR/incoming/app-$target_sha.jar\" ]]"));
     }
 
     @Test

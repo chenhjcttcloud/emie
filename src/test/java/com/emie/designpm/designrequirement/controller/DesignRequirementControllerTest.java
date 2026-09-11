@@ -1,28 +1,27 @@
 package com.emie.designpm.designrequirement.controller;
 
-import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.entity.DesignRequirement;
-import com.emie.designpm.entity.User;
-import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
-import com.emie.designpm.designrequirement.repository.DesignRequirementScoreRepository;
-import com.emie.designpm.designrequirement.service.DesignRequirementScoringService;
-import com.emie.designpm.admin.service.UserService;
-import com.emie.designpm.admin.service.PermissionService;
-import com.emie.designpm.notification.service.NotificationWorkflowService;
-import org.junit.jupiter.api.Test;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.http.HttpStatus;
-import org.springframework.mock.web.MockHttpServletRequest;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.*;
+
+import com.emie.designpm.admin.service.PermissionService;
+import com.emie.designpm.admin.service.UserService;
+import com.emie.designpm.auth.AuthSession;
+import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
+import com.emie.designpm.designrequirement.repository.DesignRequirementScoreRepository;
+import com.emie.designpm.designrequirement.service.DesignRequirementScoringService;
+import com.emie.designpm.entity.DesignRequirement;
+import com.emie.designpm.entity.User;
+import com.emie.designpm.notification.service.NotificationWorkflowService;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.http.HttpStatus;
+import org.springframework.mock.web.MockHttpServletRequest;
 
 class DesignRequirementControllerTest {
 
@@ -32,24 +31,48 @@ class DesignRequirementControllerTest {
         DesignRequirementScoreRepository scoreRepository = mock(DesignRequirementScoreRepository.class);
         DesignRequirementScoringService scoringService = mock(DesignRequirementScoringService.class);
         UserService userService = mock(UserService.class);
-        when(userService.getUserByUserId("designer-1")).thenReturn(User.builder()
-                .userId("designer-1").name("真实设计师").role("designer").status("active").build());
-        when(userService.getUserByUserId("planner-1")).thenReturn(User.builder()
-                .userId("planner-1").name("真实企划").role("planner").status("active").build());
+        when(userService.getUserByUserId("designer-1"))
+                .thenReturn(User.builder()
+                        .userId("designer-1")
+                        .name("真实设计师")
+                        .role("designer")
+                        .status("active")
+                        .build());
+        when(userService.getUserByUserId("planner-1"))
+                .thenReturn(User.builder()
+                        .userId("planner-1")
+                        .name("真实企划")
+                        .role("planner")
+                        .status("active")
+                        .build());
         when(repository.save(any())).thenAnswer(invocation -> {
             DesignRequirement saved = invocation.getArgument(0);
             saved.setId(42L);
             return saved;
         });
-        DesignRequirementController controller = new DesignRequirementController(
-                repository, scoreRepository, scoringService, userService);
+        DesignRequirementController controller =
+                new DesignRequirementController(repository, scoreRepository, scoringService, userService);
         MockHttpServletRequest request = authenticated("sales-1", "sales", "销售一");
 
-        var response = controller.create(Map.of(
-                "productName", "新产品", "deadline", "2026-08-01",
-                "productRequirements", "完成包装设计", "ownerId", "forged-user",
-                "designerId", "designer-1", "designerName", "伪造设计师",
-                "plannerId", "planner-1", "plannerName", "伪造企划"), request);
+        var response = controller.create(
+                Map.of(
+                        "productName",
+                        "新产品",
+                        "deadline",
+                        "2026-08-01",
+                        "productRequirements",
+                        "完成包装设计",
+                        "ownerId",
+                        "forged-user",
+                        "designerId",
+                        "designer-1",
+                        "designerName",
+                        "伪造设计师",
+                        "plannerId",
+                        "planner-1",
+                        "plannerName",
+                        "伪造企划"),
+                request);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         DesignRequirement saved = captureSaved(repository);
@@ -66,12 +89,28 @@ class DesignRequirementControllerTest {
         DesignRequirementRepository repository = mock(DesignRequirementRepository.class);
         DesignRequirementController controller = new DesignRequirementController(repository);
 
-        assertEquals(HttpStatus.FORBIDDEN, controller.create(Map.of(
-                "productName", "产品", "deadline", "2026-08-01", "productRequirements", "要求",
-                "designerId", "designer-1", "plannerId", "planner-1"),
-                authenticated("designer-1", "designer", "设计师")).getStatusCode());
-        assertEquals(HttpStatus.BAD_REQUEST, controller.create(Map.of("productName", "产品"),
-                authenticated("sales-1", "sales", "销售一")).getStatusCode());
+        assertEquals(
+                HttpStatus.FORBIDDEN,
+                controller
+                        .create(
+                                Map.of(
+                                        "productName",
+                                        "产品",
+                                        "deadline",
+                                        "2026-08-01",
+                                        "productRequirements",
+                                        "要求",
+                                        "designerId",
+                                        "designer-1",
+                                        "plannerId",
+                                        "planner-1"),
+                                authenticated("designer-1", "designer", "设计师"))
+                        .getStatusCode());
+        assertEquals(
+                HttpStatus.BAD_REQUEST,
+                controller
+                        .create(Map.of("productName", "产品"), authenticated("sales-1", "sales", "销售一"))
+                        .getStatusCode());
         verifyNoInteractions(repository);
     }
 
@@ -81,24 +120,36 @@ class DesignRequirementControllerTest {
         PermissionService permissions = mock(PermissionService.class);
         when(permissions.has("sales", "design_requirement.create")).thenReturn(false);
         DesignRequirementController controller = new DesignRequirementController(
-                repository, mock(DesignRequirementScoreRepository.class),
-                mock(DesignRequirementScoringService.class), mock(UserService.class), permissions);
+                repository,
+                mock(DesignRequirementScoreRepository.class),
+                mock(DesignRequirementScoringService.class),
+                mock(UserService.class),
+                permissions);
 
-        var response = controller.create(Map.of(
-                "productName", "产品", "deadline", "2026-08-01", "productRequirements", "要求",
-                "designerId", "designer-1", "plannerId", "planner-1"),
+        var response = controller.create(
+                Map.of(
+                        "productName",
+                        "产品",
+                        "deadline",
+                        "2026-08-01",
+                        "productRequirements",
+                        "要求",
+                        "designerId",
+                        "designer-1",
+                        "plannerId",
+                        "planner-1"),
                 authenticated("sales-1", "sales", "销售一"));
 
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        assertEquals("design_requirement.create",
-                ((Map<?, ?>) response.getBody()).get("permission"));
+        assertEquals("design_requirement.create", ((Map<?, ?>) response.getBody()).get("permission"));
         verifyNoInteractions(repository);
     }
 
     @Test
     void pageScopesNonAdminButAllowsAdminToSeeAll() {
         DesignRequirementRepository repository = mock(DesignRequirementRepository.class);
-        when(repository.findPage(isNull(), isNull(), nullable(String.class), any())).thenReturn(new PageImpl<>(List.of()));
+        when(repository.findPage(isNull(), isNull(), nullable(String.class), any()))
+                .thenReturn(new PageImpl<>(List.of()));
         DesignRequirementController controller = new DesignRequirementController(repository);
 
         controller.page(null, null, 0, 15, authenticated("sales-1", "sales", "销售一"));
@@ -121,10 +172,16 @@ class DesignRequirementControllerTest {
         when(repository.findById(9L)).thenReturn(Optional.of(requirement));
         DesignRequirementController controller = new DesignRequirementController(repository);
 
-        assertEquals(HttpStatus.OK,
-                controller.detail(9L, authenticated("promotion-1", "promotion", "推广一")).getStatusCode());
-        assertEquals(HttpStatus.FORBIDDEN,
-                controller.detail(9L, authenticated("designer-1", "designer", "设计师")).getStatusCode());
+        assertEquals(
+                HttpStatus.OK,
+                controller
+                        .detail(9L, authenticated("promotion-1", "promotion", "推广一"))
+                        .getStatusCode());
+        assertEquals(
+                HttpStatus.FORBIDDEN,
+                controller
+                        .detail(9L, authenticated("designer-1", "designer", "设计师"))
+                        .getStatusCode());
     }
 
     @Test
@@ -133,11 +190,14 @@ class DesignRequirementControllerTest {
         PermissionService permissions = mock(PermissionService.class);
         when(permissions.has("designer", "design_requirement.deliver")).thenReturn(false);
         DesignRequirementController controller = new DesignRequirementController(
-                repository, mock(DesignRequirementScoreRepository.class),
-                mock(DesignRequirementScoringService.class), mock(UserService.class), permissions);
+                repository,
+                mock(DesignRequirementScoreRepository.class),
+                mock(DesignRequirementScoringService.class),
+                mock(UserService.class),
+                permissions);
 
-        var response = controller.deliver(9L, Map.of("deliveryContent", "成果"),
-                authenticated("designer-1", "designer", "设计师"));
+        var response =
+                controller.deliver(9L, Map.of("deliveryContent", "成果"), authenticated("designer-1", "designer", "设计师"));
 
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         assertEquals("design_requirement.deliver", ((Map<?, ?>) response.getBody()).get("permission"));
@@ -152,32 +212,64 @@ class DesignRequirementControllerTest {
         PermissionService permissions = mock(PermissionService.class);
         NotificationWorkflowService notifications = mock(NotificationWorkflowService.class);
         when(permissions.has("sales", "design_requirement.create")).thenReturn(true);
-        when(userService.getUserByUserId("designer-1")).thenReturn(User.builder()
-                .userId("designer-1").name("设计师").role("designer").status("active").build());
-        when(userService.getUserByUserId("planner-1")).thenReturn(User.builder()
-                .userId("planner-1").name("产品企划").role("planner").status("active").build());
+        when(userService.getUserByUserId("designer-1"))
+                .thenReturn(User.builder()
+                        .userId("designer-1")
+                        .name("设计师")
+                        .role("designer")
+                        .status("active")
+                        .build());
+        when(userService.getUserByUserId("planner-1"))
+                .thenReturn(User.builder()
+                        .userId("planner-1")
+                        .name("产品企划")
+                        .role("planner")
+                        .status("active")
+                        .build());
         when(repository.save(any())).thenAnswer(invocation -> {
             DesignRequirement saved = invocation.getArgument(0);
             saved.setId(66L);
             return saved;
         });
         DesignRequirementController controller = new DesignRequirementController(
-                repository, mock(DesignRequirementScoreRepository.class), scoringService,
-                userService, permissions, notifications);
+                repository,
+                mock(DesignRequirementScoreRepository.class),
+                scoringService,
+                userService,
+                permissions,
+                notifications);
 
-        var response = controller.create(Map.of(
-                "productName", "送审新品", "deadline", "2026-08-10",
-                "productRequirements", "完成设计送审",
-                "designerId", "designer-1", "plannerId", "planner-1"),
+        var response = controller.create(
+                Map.of(
+                        "productName",
+                        "送审新品",
+                        "deadline",
+                        "2026-08-10",
+                        "productRequirements",
+                        "完成设计送审",
+                        "designerId",
+                        "designer-1",
+                        "plannerId",
+                        "planner-1"),
                 authenticated("sales-1", "sales", "销售一"));
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        verify(notifications).notifyUserAfterCommit(
-                eq("DESIGN_REQUIREMENT_ASSIGNED"), eq("planner-1"),
-                eq("design_requirement"), eq(66L), eq("sales-1"), anyMap());
-        verify(notifications).notifyUserAfterCommit(
-                eq("DESIGN_REQUIREMENT_DESIGNER_ASSIGNED"), eq("designer-1"),
-                eq("design_requirement"), eq(66L), eq("sales-1"), anyMap());
+        verify(notifications)
+                .notifyUserAfterCommit(
+                        eq("DESIGN_REQUIREMENT_ASSIGNED"),
+                        eq("planner-1"),
+                        eq("design_requirement"),
+                        eq(66L),
+                        eq("sales-1"),
+                        anyMap());
+        verify(notifications)
+                .notifyUserAfterCommit(
+                        eq("DESIGN_REQUIREMENT_DESIGNER_ASSIGNED"),
+                        eq("designer-1"),
+                        eq("design_requirement"),
+                        eq(66L),
+                        eq("sales-1"),
+                        anyMap());
     }
 
     @Test

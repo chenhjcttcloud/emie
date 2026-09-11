@@ -1,14 +1,11 @@
 package com.emie.designpm.feishu.service;
 
-import com.emie.designpm.file.service.FileArchiveService;
-import com.emie.designpm.file.service.PermanentFileLinkService;
 import com.emie.designpm.entity.FeishuAttachmentCache;
 import com.emie.designpm.feishu.repository.FeishuAttachmentCacheRepository;
+import com.emie.designpm.file.service.FileArchiveService;
+import com.emie.designpm.file.service.PermanentFileLinkService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.stereotype.Service;
-import org.springframework.beans.factory.annotation.Autowired;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -22,13 +19,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 /** 将系统文件真实上传为飞书多维表格附件，并持久化 file_token。 */
 @Service
 public class FeishuAttachmentService {
     static final long UPLOAD_ALL_LIMIT = 20L * 1024 * 1024;
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build();
+    private static final HttpClient HTTP =
+            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build();
 
     private final FileArchiveService files;
     private final FeishuAttachmentCacheRepository cache;
@@ -36,8 +36,8 @@ public class FeishuAttachmentService {
     private final ConcurrentHashMap<String, Object> uploadLocks = new ConcurrentHashMap<>();
 
     @Autowired
-    public FeishuAttachmentService(FileArchiveService files, FeishuAttachmentCacheRepository cache,
-                                   PermanentFileLinkService permanentLinks) {
+    public FeishuAttachmentService(
+            FileArchiveService files, FeishuAttachmentCacheRepository cache, PermanentFileLinkService permanentLinks) {
         this.files = files;
         this.cache = cache;
         this.permanentLinks = permanentLinks;
@@ -54,7 +54,8 @@ public class FeishuAttachmentService {
         if (!root.isArray()) return tokens;
         for (JsonNode item : root) {
             String storedName = item.path("storedName").asText("");
-            if (storedName.isBlank()) storedName = storedNameFromUrl(item.path("url").asText(""));
+            if (storedName.isBlank())
+                storedName = storedNameFromUrl(item.path("url").asText(""));
             if (storedName.isBlank()) continue;
             String originalName = item.path("name").asText(storedName);
             if (Files.size(files.resolveFile(storedName)) <= UPLOAD_ALL_LIMIT)
@@ -70,19 +71,22 @@ public class FeishuAttachmentService {
         if (!root.isArray()) return result;
         for (JsonNode item : root) {
             String storedName = item.path("storedName").asText("");
-            if (storedName.isBlank()) storedName = storedNameFromUrl(item.path("url").asText(""));
+            if (storedName.isBlank())
+                storedName = storedNameFromUrl(item.path("url").asText(""));
             if (storedName.isBlank()) continue;
-            Path path = files.resolveFile(storedName); long size = Files.size(path);
-            if (size > UPLOAD_ALL_LIMIT) result.add(new OversizedFile(
-                    item.path("name").asText(storedName), size, permanentLinks.create(storedName)));
+            Path path = files.resolveFile(storedName);
+            long size = Files.size(path);
+            if (size > UPLOAD_ALL_LIMIT)
+                result.add(new OversizedFile(
+                        item.path("name").asText(storedName), size, permanentLinks.create(storedName)));
         }
         return result;
     }
 
     public record OversizedFile(String name, long size, String url) {}
 
-    public String resolveOrUpload(String appToken, String tenantToken,
-                                  String storedName, String originalName) throws Exception {
+    public String resolveOrUpload(String appToken, String tenantToken, String storedName, String originalName)
+            throws Exception {
         String key = appToken + "\n" + storedName;
         Object lock = uploadLocks.computeIfAbsent(key, ignored -> new Object());
         try {
@@ -94,12 +98,13 @@ public class FeishuAttachmentService {
         }
     }
 
-    private String resolveOrUploadLocked(String appToken, String tenantToken,
-                                         String storedName, String originalName) throws Exception {
+    private String resolveOrUploadLocked(String appToken, String tenantToken, String storedName, String originalName)
+            throws Exception {
         Path path = files.resolveFile(storedName);
         long size = Files.size(path);
         long modified = Files.getLastModifiedTime(path).toMillis();
-        FeishuAttachmentCache existing = cache.findByAppTokenAndStoredName(appToken, storedName).orElse(null);
+        FeishuAttachmentCache existing =
+                cache.findByAppTokenAndStoredName(appToken, storedName).orElse(null);
         if (existing != null && existing.getFileSize() == size && existing.getModifiedMillis() == modified) {
             return existing.getFileToken();
         }
@@ -118,8 +123,7 @@ public class FeishuAttachmentService {
         return token;
     }
 
-    private String upload(Path path, String fileName, long size,
-                          String appToken, String tenantToken) throws Exception {
+    private String upload(Path path, String fileName, long size, String appToken, String tenantToken) throws Exception {
         String boundary = "----emie-" + UUID.randomUUID();
         byte[] file = Files.readAllBytes(path);
         java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
@@ -128,7 +132,7 @@ public class FeishuAttachmentService {
         writePart(out, boundary, "parent_node", appToken);
         writePart(out, boundary, "size", Long.toString(size));
         out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\""
-                + fileName.replace("\"", "_") + "\"\r\nContent-Type: application/octet-stream\r\n\r\n")
+                        + fileName.replace("\"", "_") + "\"\r\nContent-Type: application/octet-stream\r\n\r\n")
                 .getBytes(StandardCharsets.UTF_8));
         out.write(file);
         out.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
@@ -138,7 +142,8 @@ public class FeishuAttachmentService {
                 .timeout(Duration.ofSeconds(90))
                 .header("Authorization", "Bearer " + tenantToken)
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                .POST(HttpRequest.BodyPublishers.ofByteArray(out.toByteArray())).build();
+                .POST(HttpRequest.BodyPublishers.ofByteArray(out.toByteArray()))
+                .build();
         HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
         JsonNode root = JSON.readTree(response.body());
         if (response.statusCode() / 100 != 2 || root.path("code").asInt(-1) != 0) {
@@ -149,10 +154,11 @@ public class FeishuAttachmentService {
         return fileToken;
     }
 
-    private static void writePart(java.io.ByteArrayOutputStream out, String boundary,
-                                  String name, String value) throws java.io.IOException {
-        out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name
-                + "\"\r\n\r\n" + value + "\r\n").getBytes(StandardCharsets.UTF_8));
+    private static void writePart(java.io.ByteArrayOutputStream out, String boundary, String name, String value)
+            throws java.io.IOException {
+        out.write(
+                ("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name + "\"\r\n\r\n" + value + "\r\n")
+                        .getBytes(StandardCharsets.UTF_8));
     }
 
     private static String storedNameFromUrl(String url) {
@@ -164,7 +170,9 @@ public class FeishuAttachmentService {
     }
 
     private static String safeName(String name) {
-        String cleaned = name == null ? "attachment" : name.replaceAll("[\\r\\n\\\\/]", "_").trim();
+        String cleaned = name == null
+                ? "attachment"
+                : name.replaceAll("[\\r\\n\\\\/]", "_").trim();
         return cleaned.isBlank() ? "attachment" : cleaned;
     }
 }

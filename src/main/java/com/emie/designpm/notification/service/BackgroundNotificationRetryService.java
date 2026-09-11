@@ -18,9 +18,12 @@ public class BackgroundNotificationRetryService {
     private final NotificationAuditLogRepository audits;
     private final NotificationEventRepository events;
 
-    public BackgroundNotificationRetryService(NotificationDeliveryRepository deliveries,
-            NotificationRepository notifications, UserRepository users,
-            NotificationAuditLogRepository audits, NotificationEventRepository events) {
+    public BackgroundNotificationRetryService(
+            NotificationDeliveryRepository deliveries,
+            NotificationRepository notifications,
+            UserRepository users,
+            NotificationAuditLogRepository audits,
+            NotificationEventRepository events) {
         this.deliveries = deliveries;
         this.notifications = notifications;
         this.users = users;

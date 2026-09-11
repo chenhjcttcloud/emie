@@ -1,10 +1,12 @@
 package com.emie.designpm.admin.service;
 
-import com.emie.designpm.entity.PermissionAuditLog;
-import com.emie.designpm.entity.PermissionDefinition;
-import com.emie.designpm.entity.PermissionVersion;
-import com.emie.designpm.entity.Role;
-import com.emie.designpm.entity.RolePermission;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.emie.designpm.admin.repository.PermissionAuditLogRepository;
 import com.emie.designpm.admin.repository.PermissionDefinitionRepository;
 import com.emie.designpm.admin.repository.PermissionVersionRepository;
@@ -12,20 +14,17 @@ import com.emie.designpm.admin.repository.RolePermissionRepository;
 import com.emie.designpm.admin.repository.RolePermissionScopeRepository;
 import com.emie.designpm.admin.repository.RoleRepository;
 import com.emie.designpm.admin.repository.UserRepository;
+import com.emie.designpm.entity.PermissionAuditLog;
+import com.emie.designpm.entity.PermissionDefinition;
+import com.emie.designpm.entity.PermissionVersion;
+import com.emie.designpm.entity.Role;
+import com.emie.designpm.entity.RolePermission;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class PermissionManagementServiceTest {
 
@@ -44,29 +43,37 @@ class PermissionManagementServiceTest {
         PermissionDefinition admin = definition(2L, "page.admin.view");
         when(definitions.findByEnabledTrueOrderByModuleAscCodeAsc()).thenReturn(List.of(dashboard, admin));
 
-        Role role = Role.builder().id(5L).name("custom").displayName("旧名称")
-                .description("").permissions("").isSystem(false).build();
+        Role role = Role.builder()
+                .id(5L)
+                .name("custom")
+                .displayName("旧名称")
+                .description("")
+                .permissions("")
+                .isSystem(false)
+                .build();
         when(roles.findById(5L)).thenReturn(Optional.of(role));
         when(roles.save(any(Role.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(assignments.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(scopes.findByRoleId(5L)).thenReturn(List.of());
-        when(resolver.capabilities("custom")).thenReturn(Map.of(
-                "permissions", List.of("page.dashboard.view", "page.admin.view")));
+        when(resolver.capabilities("custom"))
+                .thenReturn(Map.of("permissions", List.of("page.dashboard.view", "page.admin.view")));
 
         PermissionVersion version = new PermissionVersion();
         version.setSubjectType("role");
         version.setSubjectKey("custom");
         version.setVersion(1L);
-        when(versions.findForUpdateBySubjectTypeAndSubjectKey("role", "custom"))
-                .thenReturn(Optional.of(version));
-        when(versions.findBySubjectTypeAndSubjectKey("role", "custom"))
-                .thenAnswer(invocation -> Optional.of(version));
+        when(versions.findForUpdateBySubjectTypeAndSubjectKey("role", "custom")).thenReturn(Optional.of(version));
+        when(versions.findBySubjectTypeAndSubjectKey("role", "custom")).thenAnswer(invocation -> Optional.of(version));
         when(versions.save(any(PermissionVersion.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         PermissionManagementService service = new PermissionManagementService(
                 definitions, roles, assignments, scopes, versions, audits, users, resolver, new ObjectMapper());
 
-        service.updateRole(5L, "新名称", "说明", List.of("page.dashboard.view"),
+        service.updateRole(
+                5L,
+                "新名称",
+                "说明",
+                List.of("page.dashboard.view"),
                 new PermissionManagementService.Actor("admin-1", "管理员", "调整测试角色", "127.0.0.1"));
 
         @SuppressWarnings("unchecked")

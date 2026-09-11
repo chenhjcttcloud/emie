@@ -1,9 +1,26 @@
 package com.emie.designpm.project.service;
 
-import com.emie.designpm.notification.repository.NotificationRepository;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
+
 import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.admin.service.UserService;
+import com.emie.designpm.entity.DesignerMarketEligibility;
+import com.emie.designpm.entity.PointAppeal;
+import com.emie.designpm.entity.PointLedger;
+import com.emie.designpm.entity.Project;
+import com.emie.designpm.entity.SubTask;
+import com.emie.designpm.entity.SystemConfig;
+import com.emie.designpm.entity.TaskWithdrawal;
+import com.emie.designpm.entity.User;
 import com.emie.designpm.file.repository.FileRecordRepository;
+import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.materialmarket.repository.DesignerMarketEligibilityRepository;
+import com.emie.designpm.notification.repository.NotificationRepository;
+import com.emie.designpm.notification.service.NotificationWorkflowService;
 import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
 import com.emie.designpm.points.repository.PointAppealRepository;
 import com.emie.designpm.points.repository.PointLedgerRepository;
@@ -14,34 +31,16 @@ import com.emie.designpm.project.repository.TaskWithdrawalRepository;
 import com.emie.designpm.reference.repository.IpOptionRepository;
 import com.emie.designpm.reference.repository.ProductCategoryRepository;
 import com.emie.designpm.scoring.repository.ScoringRepository;
-import com.emie.designpm.admin.service.UserService;
-import com.emie.designpm.notification.service.NotificationWorkflowService;
 import com.emie.designpm.sync.service.SyncQueueService;
-import com.emie.designpm.file.service.FileArchiveService;
-import com.emie.designpm.entity.DesignerMarketEligibility;
-import com.emie.designpm.entity.Project;
-import com.emie.designpm.entity.PointAppeal;
-import com.emie.designpm.entity.PointLedger;
-import com.emie.designpm.entity.SubTask;
-import com.emie.designpm.entity.SystemConfig;
-import com.emie.designpm.entity.TaskWithdrawal;
-import com.emie.designpm.entity.User;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.mockito.InOrder;
-import org.springframework.dao.DataIntegrityViolationException;
-
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
+import org.springframework.dao.DataIntegrityViolationException;
 
 class ProjectServiceTaskMarketTest {
 
@@ -49,9 +48,18 @@ class ProjectServiceTaskMarketTest {
     void openMarketTaskIsClaimedByCurrentDesigner() {
         Fixture fixture = fixture("market_open");
 
-        fixture.service.taskAccept(1L, 2L, Map.of(
-                "currentRole", "designer", "currentUser", "张设计",
-                "currentUserId", "designer-1", "designerUserId", "designer-1"));
+        fixture.service.taskAccept(
+                1L,
+                2L,
+                Map.of(
+                        "currentRole",
+                        "designer",
+                        "currentUser",
+                        "张设计",
+                        "currentUserId",
+                        "designer-1",
+                        "designerUserId",
+                        "designer-1"));
 
         assertEquals("designer-1", fixture.task.getDesignerId());
         assertEquals("张设计", fixture.task.getDesignerName());
@@ -63,9 +71,20 @@ class ProjectServiceTaskMarketTest {
     void withdrawnTaskCannotBeClaimed() {
         Fixture fixture = fixture("withdrawn");
 
-        RuntimeException error = assertThrows(RuntimeException.class, () -> fixture.service.taskAccept(1L, 2L, Map.of(
-                "currentRole", "designer", "currentUser", "张设计",
-                "currentUserId", "designer-1", "designerUserId", "designer-1")));
+        RuntimeException error = assertThrows(
+                RuntimeException.class,
+                () -> fixture.service.taskAccept(
+                        1L,
+                        2L,
+                        Map.of(
+                                "currentRole",
+                                "designer",
+                                "currentUser",
+                                "张设计",
+                                "currentUserId",
+                                "designer-1",
+                                "designerUserId",
+                                "designer-1")));
 
         assertEquals("该子任务未开放接单", error.getMessage());
     }
@@ -80,9 +99,20 @@ class ProjectServiceTaskMarketTest {
         limit.setConfigValue("3");
         when(fixture.configs.findByConfigKey("points.claim.max_main_tasks")).thenReturn(Optional.of(limit));
 
-        RuntimeException error = assertThrows(RuntimeException.class, () -> fixture.service.taskAccept(1L, 2L, Map.of(
-                "currentRole", "designer", "currentUser", "张设计",
-                "currentUserId", "designer-1", "designerUserId", "designer-1")));
+        RuntimeException error = assertThrows(
+                RuntimeException.class,
+                () -> fixture.service.taskAccept(
+                        1L,
+                        2L,
+                        Map.of(
+                                "currentRole",
+                                "designer",
+                                "currentUser",
+                                "张设计",
+                                "currentUserId",
+                                "designer-1",
+                                "designerUserId",
+                                "designer-1")));
 
         assertEquals("当前A/B类主任务已达上限（3个），请完成现有任务后再接单", error.getMessage());
         assertEquals(null, fixture.task.getDesignerId());
@@ -96,9 +126,18 @@ class ProjectServiceTaskMarketTest {
         skills.setConfigValue("[\"包装\"]");
         when(fixture.configs.findByConfigKey("points.user.skills.designer-1")).thenReturn(Optional.of(skills));
 
-        fixture.service.taskAccept(1L, 2L, Map.of(
-                "currentRole", "designer", "currentUser", "张设计",
-                "currentUserId", "designer-1", "designerUserId", "designer-1"));
+        fixture.service.taskAccept(
+                1L,
+                2L,
+                Map.of(
+                        "currentRole",
+                        "designer",
+                        "currentUser",
+                        "张设计",
+                        "currentUserId",
+                        "designer-1",
+                        "designerUserId",
+                        "designer-1"));
         assertEquals("designer-1", fixture.task.getDesignerId());
     }
 
@@ -109,10 +148,17 @@ class ProjectServiceTaskMarketTest {
         TaskWithdrawalRepository withdrawals = mock(TaskWithdrawalRepository.class);
         DesignerMarketEligibilityRepository eligibilityRepo = mock(DesignerMarketEligibilityRepository.class);
         PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
-        Project project = new Project(); project.setId(1L); project.setStatus("in_progress");
-        SubTask task = new SubTask(); task.setId(2L); task.setName("包装采购"); task.setStatus("accepted");
-        task.setDesignerId("supply-1"); task.setAssigneeRole("supplychain");
-        task.setBasePointSnapshot(20); task.setDifficultyMultiplierSnapshot(1.5);
+        Project project = new Project();
+        project.setId(1L);
+        project.setStatus("in_progress");
+        SubTask task = new SubTask();
+        task.setId(2L);
+        task.setName("包装采购");
+        task.setStatus("accepted");
+        task.setDesignerId("supply-1");
+        task.setAssigneeRole("supplychain");
+        task.setBasePointSnapshot(20);
+        task.setDifficultyMultiplierSnapshot(1.5);
         task.setClaimedAt(LocalDateTime.now().minusHours(3));
         task.setProject(project);
         project.getTasks().add(task);
@@ -120,10 +166,19 @@ class ProjectServiceTaskMarketTest {
         when(tasks.findByIdForUpdate(2L)).thenReturn(Optional.of(task));
         when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(projects, tasks, mock(ScoringRepository.class),
-                mock(SubTaskDeliveryVersionRepository.class), mock(UserService.class), mock(ProductCategoryRepository.class),
-                mock(IpOptionRepository.class), mock(SystemConfigRepository.class), mock(SyncQueueService.class),
-                mock(FileArchiveService.class), mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
+        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(
+                projects,
+                tasks,
+                mock(ScoringRepository.class),
+                mock(SubTaskDeliveryVersionRepository.class),
+                mock(UserService.class),
+                mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class),
+                mock(SystemConfigRepository.class),
+                mock(SyncQueueService.class),
+                mock(FileArchiveService.class),
+                mock(ProjectAccessService.class),
+                mock(NotificationWorkflowService.class));
         service.setTaskWithdrawalRepository(withdrawals);
         service.setMarketEligibilityRepository(eligibilityRepo);
         service.setPointAdjustmentLedgerRepository(adjustments);
@@ -147,10 +202,17 @@ class ProjectServiceTaskMarketTest {
         TaskWithdrawalRepository withdrawals = mock(TaskWithdrawalRepository.class);
         DesignerMarketEligibilityRepository eligibilityRepo = mock(DesignerMarketEligibilityRepository.class);
         PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
-        Project project = new Project(); project.setId(1L); project.setStatus("in_progress");
-        SubTask task = new SubTask(); task.setId(2L); task.setName("包装设计"); task.setStatus("accepted");
-        task.setDesignerId("designer-1"); task.setAssigneeRole("designer");
-        task.setBasePointSnapshot(20); task.setDifficultyMultiplierSnapshot(1.5);
+        Project project = new Project();
+        project.setId(1L);
+        project.setStatus("in_progress");
+        SubTask task = new SubTask();
+        task.setId(2L);
+        task.setName("包装设计");
+        task.setStatus("accepted");
+        task.setDesignerId("designer-1");
+        task.setAssigneeRole("designer");
+        task.setBasePointSnapshot(20);
+        task.setDifficultyMultiplierSnapshot(1.5);
         task.setClaimedAt(LocalDateTime.now().minusHours(3));
         task.setProject(project);
         project.getTasks().add(task);
@@ -158,18 +220,26 @@ class ProjectServiceTaskMarketTest {
         when(tasks.findByIdForUpdate(2L)).thenReturn(Optional.of(task));
         when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(projects, tasks, mock(ScoringRepository.class),
-                mock(SubTaskDeliveryVersionRepository.class), mock(UserService.class), mock(ProductCategoryRepository.class),
-                mock(IpOptionRepository.class), mock(SystemConfigRepository.class), mock(SyncQueueService.class),
-                mock(FileArchiveService.class), mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
+        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(
+                projects,
+                tasks,
+                mock(ScoringRepository.class),
+                mock(SubTaskDeliveryVersionRepository.class),
+                mock(UserService.class),
+                mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class),
+                mock(SystemConfigRepository.class),
+                mock(SyncQueueService.class),
+                mock(FileArchiveService.class),
+                mock(ProjectAccessService.class),
+                mock(NotificationWorkflowService.class));
         service.setTaskWithdrawalRepository(withdrawals);
         service.setMarketEligibilityRepository(eligibilityRepo);
         service.setPointAdjustmentLedgerRepository(adjustments);
 
         service.withdrawAcceptedTask(1L, 2L, Map.of("currentUserId", "designer-1", "currentUser", "张设计"));
 
-        verify(withdrawals).save(argThat(w -> w.getPenaltyPoints() == 3
-                && "接单超1小时退单，按累计次数比例扣分".equals(w.getReason())));
+        verify(withdrawals).save(argThat(w -> w.getPenaltyPoints() == 3 && "接单超1小时退单，按累计次数比例扣分".equals(w.getReason())));
         verify(adjustments).save(argThat(a -> a.getPoints() == -3));
         ArgumentCaptor<DesignerMarketEligibility> captor = ArgumentCaptor.forClass(DesignerMarketEligibility.class);
         verify(eligibilityRepo).save(captor.capture());
@@ -186,23 +256,39 @@ class ProjectServiceTaskMarketTest {
         project.setId(1L);
         project.setStatus("in_progress");
         SubTask task = new SubTask();
-        task.setId(2L); task.setName("包装设计"); task.setStatus("pending");
-        task.setAssigneeRole("designer"); task.setAllocationStatus(allocationStatus); task.setProject(project);
+        task.setId(2L);
+        task.setName("包装设计");
+        task.setStatus("pending");
+        task.setAssigneeRole("designer");
+        task.setAllocationStatus(allocationStatus);
+        task.setProject(project);
         project.getTasks().add(task);
         when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(tasks.findByIdForUpdate(2L)).thenReturn(Optional.of(task));
         when(projects.saveAndFlush(project)).thenReturn(project);
         when(users.getUserName("designer-1")).thenReturn("张设计");
         SystemConfigRepository configs = mock(SystemConfigRepository.class);
-        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(projects, tasks, mock(ScoringRepository.class),
-                mock(SubTaskDeliveryVersionRepository.class), users, mock(ProductCategoryRepository.class),
-                mock(IpOptionRepository.class), configs, mock(SyncQueueService.class),
-                files, mock(ProjectAccessService.class), notifications);
+        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(
+                projects,
+                tasks,
+                mock(ScoringRepository.class),
+                mock(SubTaskDeliveryVersionRepository.class),
+                users,
+                mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class),
+                configs,
+                mock(SyncQueueService.class),
+                files,
+                mock(ProjectAccessService.class),
+                notifications);
         return new Fixture(service, task, tasks, configs);
     }
 
-    private record Fixture(DefaultSubTaskCommandService service, SubTask task, SubTaskRepository tasks,
-                           SystemConfigRepository configs) {}
+    private record Fixture(
+            DefaultSubTaskCommandService service,
+            SubTask task,
+            SubTaskRepository tasks,
+            SystemConfigRepository configs) {}
 
     @Test
     void deleteProjectCleansOrphanRelatedDataBeforeRemovingProject() {
@@ -219,20 +305,36 @@ class ProjectServiceTaskMarketTest {
 
         Project project = new Project();
         project.setId(1L);
-        SubTask t1 = new SubTask(); t1.setId(10L); t1.setProject(project);
-        SubTask t2 = new SubTask(); t2.setId(11L); t2.setProject(project);
+        SubTask t1 = new SubTask();
+        t1.setId(10L);
+        t1.setProject(project);
+        SubTask t2 = new SubTask();
+        t2.setId(11L);
+        t2.setProject(project);
         when(tasks.findByProjectIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(t1, t2));
-        TaskWithdrawal w = new TaskWithdrawal(); w.setId(100L);
+        TaskWithdrawal w = new TaskWithdrawal();
+        w.setId(100L);
         when(withdrawals.findBySubTaskIdIn(List.of(10L, 11L))).thenReturn(List.of(w));
-        PointLedger l1 = new PointLedger(); l1.setId(200L);
+        PointLedger l1 = new PointLedger();
+        l1.setId(200L);
         when(ledgers.findBySubTaskIdIn(List.of(10L, 11L))).thenReturn(List.of(l1));
-        PointAppeal a1 = new PointAppeal(); a1.setId(300L);
+        PointAppeal a1 = new PointAppeal();
+        a1.setId(300L);
         when(appeals.findByPointLedgerIdIn(List.of(200L))).thenReturn(List.of(a1));
 
-        DefaultProjectLifecycleCommandService service = new DefaultProjectLifecycleCommandService(projects, tasks, scoring, versions,
-                mock(UserService.class), mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
-                mock(SystemConfigRepository.class), mock(SyncQueueService.class), mock(FileArchiveService.class),
-                mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
+        DefaultProjectLifecycleCommandService service = new DefaultProjectLifecycleCommandService(
+                projects,
+                tasks,
+                scoring,
+                versions,
+                mock(UserService.class),
+                mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class),
+                mock(SystemConfigRepository.class),
+                mock(SyncQueueService.class),
+                mock(FileArchiveService.class),
+                mock(ProjectAccessService.class),
+                mock(NotificationWorkflowService.class));
         service.setTaskWithdrawalRepository(withdrawals);
         service.setPointLedgerRepository(ledgers);
         service.setPointAppealRepository(appeals);
@@ -242,7 +344,8 @@ class ProjectServiceTaskMarketTest {
 
         service.deleteProject(1L);
 
-        InOrder order = inOrder(adjustments, withdrawals, appeals, ledgers, versions, scoring, notifications, files, projects);
+        InOrder order =
+                inOrder(adjustments, withdrawals, appeals, ledgers, versions, scoring, notifications, files, projects);
         order.verify(adjustments).deleteProjectRelated(List.of(300L), List.of(100L));
         order.verify(withdrawals).deleteBySubTaskIds(List.of(10L, 11L));
         order.verify(appeals).deleteByPointLedgerIds(List.of(200L));
@@ -262,13 +365,20 @@ class ProjectServiceTaskMarketTest {
         UserService users = mock(UserService.class);
         when(users.getUserName(anyString())).thenReturn("企划甲");
         when(users.getUserByUserId(anyString())).thenReturn(plannerUser());
-        ProjectService service = new ProjectService(projects, mock(SubTaskRepository.class),
+        ProjectService service = new ProjectService(
+                projects,
+                mock(SubTaskRepository.class),
                 mock(SubTaskDeliveryVersionRepository.class),
-                users, mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
-                mock(SyncQueueService.class), mock(FileArchiveService.class),
-                mock(ProjectAccessService.class), mock(NotificationWorkflowService.class),
+                users,
+                mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class),
+                mock(SyncQueueService.class),
+                mock(FileArchiveService.class),
+                mock(ProjectAccessService.class),
+                mock(NotificationWorkflowService.class),
                 mock(ProjectScoringService.class));
-        when(projects.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(any(), any())).thenReturn(0L);
+        when(projects.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(any(), any()))
+                .thenReturn(0L);
 
         LocalDateTime now = LocalDateTime.now();
         String taken = String.format("EMIE%04d%02d%04d", now.getYear(), now.getMonthValue(), 1);
@@ -294,20 +404,27 @@ class ProjectServiceTaskMarketTest {
         UserService users = mock(UserService.class);
         when(users.getUserName(anyString())).thenReturn("企划甲");
         when(users.getUserByUserId(anyString())).thenReturn(plannerUser());
-        ProjectService service = new ProjectService(projects, mock(SubTaskRepository.class),
+        ProjectService service = new ProjectService(
+                projects,
+                mock(SubTaskRepository.class),
                 mock(SubTaskDeliveryVersionRepository.class),
-                users, mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
-                mock(SyncQueueService.class), mock(FileArchiveService.class),
-                mock(ProjectAccessService.class), mock(NotificationWorkflowService.class),
+                users,
+                mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class),
+                mock(SyncQueueService.class),
+                mock(FileArchiveService.class),
+                mock(ProjectAccessService.class),
+                mock(NotificationWorkflowService.class),
                 mock(ProjectScoringService.class));
-        when(projects.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(any(), any())).thenReturn(0L);
+        when(projects.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(any(), any()))
+                .thenReturn(0L);
         // 预检查与保存之间的跨实例竞态：查重通过但保存时唯一索引冲突
         when(projects.existsByProjectCode(anyString())).thenReturn(false);
         when(projects.saveAndFlush(any(Project.class)))
                 .thenThrow(new DataIntegrityViolationException("uk_projects_project_code"));
 
-        RuntimeException error = assertThrows(RuntimeException.class,
-                () -> service.createProject(regularProjectBody()));
+        RuntimeException error =
+                assertThrows(RuntimeException.class, () -> service.createProject(regularProjectBody()));
 
         assertEquals("项目编号生成冲突，请稍后重试", error.getMessage());
     }
@@ -320,19 +437,35 @@ class ProjectServiceTaskMarketTest {
         SubTaskDeliveryVersionRepository versions = mock(SubTaskDeliveryVersionRepository.class);
         TaskWithdrawalRepository withdrawals = mock(TaskWithdrawalRepository.class);
         PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
-        Project project = new Project(); project.setId(1L); project.setStatus("pending_planner");
-        SubTask task = new SubTask(); task.setId(2L); task.setName("包装设计"); task.setStatus("pending"); task.setProject(project);
+        Project project = new Project();
+        project.setId(1L);
+        project.setStatus("pending_planner");
+        SubTask task = new SubTask();
+        task.setId(2L);
+        task.setName("包装设计");
+        task.setStatus("pending");
+        task.setProject(project);
         when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(tasks.findByIdForUpdate(2L)).thenReturn(Optional.of(task));
-        TaskWithdrawal withdrawal = new TaskWithdrawal(); withdrawal.setId(7L);
+        TaskWithdrawal withdrawal = new TaskWithdrawal();
+        withdrawal.setId(7L);
         when(withdrawals.findBySubTaskIdIn(List.of(2L))).thenReturn(List.of(withdrawal));
         when(scoring.findBySubTaskId(2L)).thenReturn(List.of());
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(projects, tasks, scoring, versions,
-                mock(UserService.class), mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
-                mock(SystemConfigRepository.class), mock(SyncQueueService.class), mock(FileArchiveService.class),
-                mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
+        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(
+                projects,
+                tasks,
+                scoring,
+                versions,
+                mock(UserService.class),
+                mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class),
+                mock(SystemConfigRepository.class),
+                mock(SyncQueueService.class),
+                mock(FileArchiveService.class),
+                mock(ProjectAccessService.class),
+                mock(NotificationWorkflowService.class));
         service.setTaskWithdrawalRepository(withdrawals);
         service.setPointAdjustmentLedgerRepository(adjustments);
 
@@ -354,17 +487,31 @@ class ProjectServiceTaskMarketTest {
         SubTaskRepository tasks = mock(SubTaskRepository.class);
         ScoringRepository scoring = mock(ScoringRepository.class);
         SubTaskDeliveryVersionRepository versions = mock(SubTaskDeliveryVersionRepository.class);
-        Project project = new Project(); project.setId(1L); project.setStatus("in_progress");
+        Project project = new Project();
+        project.setId(1L);
+        project.setStatus("in_progress");
         // 抢单并发：快照校验通过后、锁内重载时任务已被设计师认领（pending -> accepted）
-        SubTask task = new SubTask(); task.setId(2L); task.setName("包装设计");
-        task.setStatus("accepted"); task.setProject(project);
+        SubTask task = new SubTask();
+        task.setId(2L);
+        task.setName("包装设计");
+        task.setStatus("accepted");
+        task.setProject(project);
         when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(tasks.findByIdForUpdate(2L)).thenReturn(Optional.of(task));
 
-        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(projects, tasks, scoring, versions,
-                mock(UserService.class), mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
-                mock(SystemConfigRepository.class), mock(SyncQueueService.class), mock(FileArchiveService.class),
-                mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
+        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(
+                projects,
+                tasks,
+                scoring,
+                versions,
+                mock(UserService.class),
+                mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class),
+                mock(SystemConfigRepository.class),
+                mock(SyncQueueService.class),
+                mock(FileArchiveService.class),
+                mock(ProjectAccessService.class),
+                mock(NotificationWorkflowService.class));
 
         RuntimeException error = assertThrows(RuntimeException.class, () -> service.deleteSubTask(1L, 2L));
 
@@ -382,19 +529,33 @@ class ProjectServiceTaskMarketTest {
         SubTaskRepository tasks = mock(SubTaskRepository.class);
         ScoringRepository scoring = mock(ScoringRepository.class);
         SubTaskDeliveryVersionRepository versions = mock(SubTaskDeliveryVersionRepository.class);
-        Project project = new Project(); project.setId(1L); project.setStatus("in_progress");
+        Project project = new Project();
+        project.setId(1L);
+        project.setStatus("in_progress");
         // 与锁内重校验对照：项目已进入工作流程但任务仍为 pending，删除依然允许
-        SubTask task = new SubTask(); task.setId(2L); task.setName("包装设计");
-        task.setStatus("pending"); task.setProject(project);
+        SubTask task = new SubTask();
+        task.setId(2L);
+        task.setName("包装设计");
+        task.setStatus("pending");
+        task.setProject(project);
         when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(tasks.findByIdForUpdate(2L)).thenReturn(Optional.of(task));
         when(scoring.findBySubTaskId(2L)).thenReturn(List.of());
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(projects, tasks, scoring, versions,
-                mock(UserService.class), mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
-                mock(SystemConfigRepository.class), mock(SyncQueueService.class), mock(FileArchiveService.class),
-                mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
+        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(
+                projects,
+                tasks,
+                scoring,
+                versions,
+                mock(UserService.class),
+                mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class),
+                mock(SystemConfigRepository.class),
+                mock(SyncQueueService.class),
+                mock(FileArchiveService.class),
+                mock(ProjectAccessService.class),
+                mock(NotificationWorkflowService.class));
 
         service.deleteSubTask(1L, 2L);
 
@@ -411,19 +572,33 @@ class ProjectServiceTaskMarketTest {
         SubTaskDeliveryVersionRepository versions = mock(SubTaskDeliveryVersionRepository.class);
         TaskWithdrawalRepository withdrawals = mock(TaskWithdrawalRepository.class);
         PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
-        Project project = new Project(); project.setId(1L); project.setStatus("pending_planner");
-        SubTask task = new SubTask(); task.setId(2L); task.setName("包装设计");
-        task.setStatus("pending"); task.setProject(project);
+        Project project = new Project();
+        project.setId(1L);
+        project.setStatus("pending_planner");
+        SubTask task = new SubTask();
+        task.setId(2L);
+        task.setName("包装设计");
+        task.setStatus("pending");
+        task.setProject(project);
         when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(tasks.findByIdForUpdate(2L)).thenReturn(Optional.of(task));
         when(withdrawals.findBySubTaskIdIn(List.of(2L))).thenReturn(List.of());
         when(scoring.findBySubTaskId(2L)).thenReturn(List.of());
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(projects, tasks, scoring, versions,
-                mock(UserService.class), mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
-                mock(SystemConfigRepository.class), mock(SyncQueueService.class), mock(FileArchiveService.class),
-                mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
+        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(
+                projects,
+                tasks,
+                scoring,
+                versions,
+                mock(UserService.class),
+                mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class),
+                mock(SystemConfigRepository.class),
+                mock(SyncQueueService.class),
+                mock(FileArchiveService.class),
+                mock(ProjectAccessService.class),
+                mock(NotificationWorkflowService.class));
         service.setTaskWithdrawalRepository(withdrawals);
         service.setPointAdjustmentLedgerRepository(adjustments);
 
@@ -445,19 +620,33 @@ class ProjectServiceTaskMarketTest {
         SubTaskRepository tasks = mock(SubTaskRepository.class);
         ScoringRepository scoring = mock(ScoringRepository.class);
         SubTaskDeliveryVersionRepository versions = mock(SubTaskDeliveryVersionRepository.class);
-        Project project = new Project(); project.setId(1L); project.setStatus("pending_planner");
-        SubTask task = new SubTask(); task.setId(2L); task.setName("包装设计");
-        task.setStatus("pending"); task.setProject(project);
+        Project project = new Project();
+        project.setId(1L);
+        project.setStatus("pending_planner");
+        SubTask task = new SubTask();
+        task.setId(2L);
+        task.setName("包装设计");
+        task.setStatus("pending");
+        task.setProject(project);
         when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(tasks.findByIdForUpdate(2L)).thenReturn(Optional.of(task));
         when(scoring.findBySubTaskId(2L)).thenReturn(List.of());
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         // 未注入退单/调账仓库：空集合守卫兜底，不 NPE 且其余清理照常执行
-        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(projects, tasks, scoring, versions,
-                mock(UserService.class), mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
-                mock(SystemConfigRepository.class), mock(SyncQueueService.class), mock(FileArchiveService.class),
-                mock(ProjectAccessService.class), mock(NotificationWorkflowService.class));
+        DefaultSubTaskCommandService service = new DefaultSubTaskCommandService(
+                projects,
+                tasks,
+                scoring,
+                versions,
+                mock(UserService.class),
+                mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class),
+                mock(SystemConfigRepository.class),
+                mock(SyncQueueService.class),
+                mock(FileArchiveService.class),
+                mock(ProjectAccessService.class),
+                mock(NotificationWorkflowService.class));
 
         service.deleteSubTask(1L, 2L);
 

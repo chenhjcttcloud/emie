@@ -1,8 +1,8 @@
 package com.emie.designpm.config;
 
 import org.springframework.beans.factory.config.BeanDefinition;
-import org.springframework.beans.factory.support.BeanNameGenerator;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.beans.factory.support.BeanNameGenerator;
 
 /** Prevents background repositories from colliding with same-named primary repositories. */
 public class BackgroundRepositoryBeanNameGenerator implements BeanNameGenerator {

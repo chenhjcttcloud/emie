@@ -6,14 +6,13 @@ import com.emie.designpm.reference.repository.IpOptionRepository;
 import com.emie.designpm.util.SecurityUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/ip-options")
@@ -55,16 +54,18 @@ public class IpOptionController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(@PathVariable Long id,
-                                    @RequestBody Map<String, String> body,
-                                    HttpServletRequest request) {
+    public ResponseEntity<?> update(
+            @PathVariable Long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
         if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         IpOption item = repository.findById(id).orElse(null);
         if (item == null) return ResponseEntity.notFound().build();
         if (body.containsKey("name")) {
             String name = normalizeName(body.get("name"));
             if (name == null) return ResponseEntity.badRequest().body(Map.of("error", "请输入IP名称"));
-            if (repository.findByName(name).filter(existing -> !existing.getId().equals(id)).isPresent()) {
+            if (repository
+                    .findByName(name)
+                    .filter(existing -> !existing.getId().equals(id))
+                    .isPresent()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "IP名称已存在"));
             }
             item.setName(name);

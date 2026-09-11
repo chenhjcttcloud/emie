@@ -1,30 +1,29 @@
 package com.emie.designpm;
 
-import com.emie.designpm.project.repository.ProjectRepository;
-import com.emie.designpm.project.repository.SubTaskDeliveryVersionRepository;
-import com.emie.designpm.project.repository.SubTaskRepository;
-import com.emie.designpm.reference.repository.IpOptionRepository;
-import com.emie.designpm.reference.repository.ProductCategoryRepository;
-import com.emie.designpm.admin.service.UserService;
-import com.emie.designpm.project.service.ProjectAccessService;
-import com.emie.designpm.project.service.ProjectScoringService;
-import com.emie.designpm.project.service.ProjectService;
-import com.emie.designpm.notification.service.NotificationWorkflowService;
-import com.emie.designpm.sync.service.SyncQueueService;
-import com.emie.designpm.file.service.FileArchiveService;
-import com.emie.designpm.entity.IpOption;
-import com.emie.designpm.entity.Project;
-import com.emie.designpm.entity.User;
-import org.junit.jupiter.api.Test;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+
+import com.emie.designpm.admin.service.UserService;
+import com.emie.designpm.entity.IpOption;
+import com.emie.designpm.entity.Project;
+import com.emie.designpm.entity.User;
+import com.emie.designpm.file.service.FileArchiveService;
+import com.emie.designpm.notification.service.NotificationWorkflowService;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.project.repository.SubTaskDeliveryVersionRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
+import com.emie.designpm.project.service.ProjectAccessService;
+import com.emie.designpm.project.service.ProjectScoringService;
+import com.emie.designpm.project.service.ProjectService;
+import com.emie.designpm.reference.repository.IpOptionRepository;
+import com.emie.designpm.reference.repository.ProductCategoryRepository;
+import com.emie.designpm.sync.service.SyncQueueService;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
 
 class ProjectIpConfigurationTest {
 
@@ -50,8 +49,8 @@ class ProjectIpConfigurationTest {
         when(ipOptions.findByName("无效IP")).thenReturn(Optional.empty());
         ProjectService service = createService(mock(ProjectRepository.class), ipOptions);
 
-        RuntimeException error = assertThrows(RuntimeException.class,
-                () -> service.createProject(validProjectBody("无效IP")));
+        RuntimeException error =
+                assertThrows(RuntimeException.class, () -> service.createProject(validProjectBody("无效IP")));
 
         assertEquals("请选择有效的IP", error.getMessage());
     }
@@ -76,8 +75,7 @@ class ProjectIpConfigurationTest {
                 mock(FileArchiveService.class),
                 mock(ProjectAccessService.class),
                 mock(NotificationWorkflowService.class),
-                mock(ProjectScoringService.class)
-        );
+                mock(ProjectScoringService.class));
     }
 
     private Map<String, Object> validProjectBody(String ipName) {

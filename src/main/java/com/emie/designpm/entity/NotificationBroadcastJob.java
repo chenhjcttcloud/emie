@@ -4,11 +4,10 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.time.LocalDateTime;
 
 /** 可跨进程查询的全员通知广播任务。 */
 @Getter
@@ -42,8 +41,7 @@ public class NotificationBroadcastJob {
     @Column(nullable = false, length = 36)
     private String ownerInstanceId;
 
-    public NotificationBroadcastJob(String id, String operatorUserId, String ownerInstanceId,
-                                    LocalDateTime createdAt) {
+    public NotificationBroadcastJob(String id, String operatorUserId, String ownerInstanceId, LocalDateTime createdAt) {
         this.id = id;
         this.operatorUserId = operatorUserId;
         this.status = "running";

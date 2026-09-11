@@ -3,10 +3,9 @@ package com.emie.designpm.config;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import org.springframework.core.Ordered;
 import org.springframework.stereotype.Component;
-
-import java.io.IOException;
 
 /**
  * 为静态资源（CSS/JS/图片）设置长期浏览器缓存头，
@@ -28,7 +27,7 @@ public class StaticResourceCacheFilter implements Filter, Ordered {
             res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
             res.setHeader("Pragma", "no-cache");
             res.setHeader("Expires", "0");
-        // 静态资源带版本号参数（如 ?v=84）时设置长期缓存
+            // 静态资源带版本号参数（如 ?v=84）时设置长期缓存
         } else if (path.startsWith("/css/") || path.startsWith("/js/") || path.startsWith("/img/")) {
             String query = req.getQueryString();
             if (query != null && query.contains("v=")) {

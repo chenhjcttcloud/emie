@@ -1,7 +1,7 @@
 package com.emie.designpm.project.controller;
 
-import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.auth.AuthSession;
+import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.project.service.ProjectExcelImportService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -22,16 +22,20 @@ public class ProjectImportController {
     }
 
     @PostMapping("/preview")
-    public ResponseEntity<?> preview(@RequestParam("file") MultipartFile file, HttpServletRequest request) throws Exception {
-        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).body(java.util.Map.of("error", "仅管理员可导入项目"));
+    public ResponseEntity<?> preview(@RequestParam("file") MultipartFile file, HttpServletRequest request)
+            throws Exception {
+        if (!AuthSessions.isAdmin(request))
+            return ResponseEntity.status(403).body(java.util.Map.of("error", "仅管理员可导入项目"));
         try (var input = file.getInputStream()) {
             return ResponseEntity.ok(importService.preview(input));
         }
     }
 
     @PostMapping("/execute")
-    public ResponseEntity<?> execute(@RequestParam("file") MultipartFile file, HttpServletRequest request) throws Exception {
-        if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).body(java.util.Map.of("error", "仅管理员可导入项目"));
+    public ResponseEntity<?> execute(@RequestParam("file") MultipartFile file, HttpServletRequest request)
+            throws Exception {
+        if (!AuthSessions.isAdmin(request))
+            return ResponseEntity.status(403).body(java.util.Map.of("error", "仅管理员可导入项目"));
         AuthSession session = (AuthSession) request.getAttribute("authSession");
         ProjectExcelImportService.ImportResult result;
         try (var input = file.getInputStream()) {

@@ -1,6 +1,20 @@
 package com.emie.designpm.project.service;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
+
 import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.admin.service.UserService;
+import com.emie.designpm.entity.Project;
+import com.emie.designpm.entity.ScoringRecord;
+import com.emie.designpm.entity.SubTask;
+import com.emie.designpm.entity.SubTaskDeliveryVersion;
+import com.emie.designpm.entity.SubTaskRejectionCycle;
+import com.emie.designpm.file.service.FileArchiveService;
+import com.emie.designpm.notification.service.NotificationWorkflowService;
+import com.emie.designpm.points.service.PointsService;
 import com.emie.designpm.project.repository.ProjectRepository;
 import com.emie.designpm.project.repository.SubTaskDeliveryVersionRepository;
 import com.emie.designpm.project.repository.SubTaskRejectionCycleRepository;
@@ -8,29 +22,14 @@ import com.emie.designpm.project.repository.SubTaskRepository;
 import com.emie.designpm.reference.repository.IpOptionRepository;
 import com.emie.designpm.reference.repository.ProductCategoryRepository;
 import com.emie.designpm.scoring.repository.ScoringRepository;
-import com.emie.designpm.admin.service.UserService;
-import com.emie.designpm.notification.service.NotificationWorkflowService;
-import com.emie.designpm.points.service.PointsService;
 import com.emie.designpm.sync.service.SyncQueueService;
-import com.emie.designpm.file.service.FileArchiveService;
-import com.emie.designpm.entity.Project;
-import com.emie.designpm.entity.ScoringRecord;
-import com.emie.designpm.entity.SubTask;
-import com.emie.designpm.entity.SubTaskDeliveryVersion;
-import com.emie.designpm.entity.SubTaskRejectionCycle;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
 
 class ProjectReviewWorkflowTest {
 
@@ -70,12 +69,19 @@ class ProjectReviewWorkflowTest {
                 mock(SyncQueueService.class),
                 mock(FileArchiveService.class),
                 access,
-                notifications
-        );
+                notifications);
         service.setRejectionCycleRepository(rejectionCycles);
-        queryService = new ProjectService(projects, subTasks, deliveryVersions, users,
-                mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
-                mock(SyncQueueService.class), mock(FileArchiveService.class), access, notifications,
+        queryService = new ProjectService(
+                projects,
+                subTasks,
+                deliveryVersions,
+                users,
+                mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class),
+                mock(SyncQueueService.class),
+                mock(FileArchiveService.class),
+                access,
+                notifications,
                 new ProjectScoringService(scoring, configs, access));
     }
 
@@ -84,8 +90,13 @@ class ProjectReviewWorkflowTest {
         Project project = projectWithTask("regular", "completed");
         project.getTasks().clear();
         when(projects.findById(1L)).thenReturn(Optional.of(project));
-        when(users.getUserByUserId("designer-2")).thenReturn(com.emie.designpm.entity.User.builder()
-                .userId("designer-2").name("设计师乙").role("designer").status("active").build());
+        when(users.getUserByUserId("designer-2"))
+                .thenReturn(com.emie.designpm.entity.User.builder()
+                        .userId("designer-2")
+                        .name("设计师乙")
+                        .role("designer")
+                        .status("active")
+                        .build());
         when(users.getUserName("designer-2")).thenReturn("设计师乙");
         when(subTasks.saveAndFlush(any(SubTask.class))).thenAnswer(invocation -> {
             SubTask saved = invocation.getArgument(0);
@@ -96,17 +107,19 @@ class ProjectReviewWorkflowTest {
             return invocation.getArgument(0);
         });
 
-        service.addSubTask(1L, Map.ofEntries(
-                Map.entry("name", "包装延展"), Map.entry("plannedDate", "2026-08-10"),
-                Map.entry("designerId", "designer-2"), Map.entry("assigneeRole", "designer"),
-                Map.entry("pointRuleCode", "A1"), Map.entry("difficultyCode", "STANDARD"),
-                Map.entry("workflowStage", "design"), Map.entry("currentRole", "planner"),
-                Map.entry("currentUserId", "planner-1"), Map.entry("currentUser", "企划甲"),
-                Map.entry("referenceImagesJson", "[]"), Map.entry("attachmentsJson", "[]")));
+        service.addSubTask(
+                1L,
+                Map.ofEntries(
+                        Map.entry("name", "包装延展"), Map.entry("plannedDate", "2026-08-10"),
+                        Map.entry("designerId", "designer-2"), Map.entry("assigneeRole", "designer"),
+                        Map.entry("pointRuleCode", "A1"), Map.entry("difficultyCode", "STANDARD"),
+                        Map.entry("workflowStage", "design"), Map.entry("currentRole", "planner"),
+                        Map.entry("currentUserId", "planner-1"), Map.entry("currentUser", "企划甲"),
+                        Map.entry("referenceImagesJson", "[]"), Map.entry("attachmentsJson", "[]")));
 
-        verify(notifications).notifyUserAfterCommit(
-                eq("TASK_ASSIGNED"), eq("designer-2"), eq("sub_task"), eq(22L),
-                eq("planner-1"), anyMap());
+        verify(notifications)
+                .notifyUserAfterCommit(
+                        eq("TASK_ASSIGNED"), eq("designer-2"), eq("sub_task"), eq(22L), eq("planner-1"), anyMap());
         verify(subTasks).saveAndFlush(any(SubTask.class));
     }
 
@@ -115,8 +128,13 @@ class ProjectReviewWorkflowTest {
         Project project = projectWithTask("regular", "completed");
         project.getTasks().clear();
         when(projects.findById(1L)).thenReturn(Optional.of(project));
-        when(users.getUserByUserId("designer-2")).thenReturn(com.emie.designpm.entity.User.builder()
-                .userId("designer-2").name("设计师乙").role("designer").status("active").build());
+        when(users.getUserByUserId("designer-2"))
+                .thenReturn(com.emie.designpm.entity.User.builder()
+                        .userId("designer-2")
+                        .name("设计师乙")
+                        .role("designer")
+                        .status("active")
+                        .build());
         when(users.getUserName("designer-2")).thenReturn("设计师乙");
         when(subTasks.saveAndFlush(any(SubTask.class))).thenAnswer(invocation -> {
             SubTask saved = invocation.getArgument(0);
@@ -125,20 +143,26 @@ class ProjectReviewWorkflowTest {
         });
         when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertThrows(IllegalArgumentException.class, () -> service.addSubTask(1L, Map.ofEntries(
-                Map.entry("name", "不计积分任务"), Map.entry("plannedDate", "2026-08-10"),
-                Map.entry("designerId", "designer-2"), Map.entry("assigneeRole", "designer"),
-                Map.entry("pointRuleCode", ""), Map.entry("difficultyCode", "STANDARD"),
-                Map.entry("workflowStage", "design"), Map.entry("currentRole", "planner"),
-                Map.entry("currentUserId", "planner-1"), Map.entry("currentUser", "企划甲"),
-                Map.entry("referenceImagesJson", "[]"), Map.entry("attachmentsJson", "[]"))));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.addSubTask(
+                        1L,
+                        Map.ofEntries(
+                                Map.entry("name", "不计积分任务"), Map.entry("plannedDate", "2026-08-10"),
+                                Map.entry("designerId", "designer-2"), Map.entry("assigneeRole", "designer"),
+                                Map.entry("pointRuleCode", ""), Map.entry("difficultyCode", "STANDARD"),
+                                Map.entry("workflowStage", "design"), Map.entry("currentRole", "planner"),
+                                Map.entry("currentUserId", "planner-1"), Map.entry("currentUser", "企划甲"),
+                                Map.entry("referenceImagesJson", "[]"), Map.entry("attachmentsJson", "[]"))));
         verify(subTasks, never()).saveAndFlush(any(SubTask.class));
     }
 
     @Test
     void batchesDeliveryVersionsForMultipleTasks() {
-        SubTask first = new SubTask(); first.setId(11L);
-        SubTask second = new SubTask(); second.setId(12L);
+        SubTask first = new SubTask();
+        first.setId(11L);
+        SubTask second = new SubTask();
+        second.setId(12L);
         SubTaskDeliveryVersion newer = deliveryVersion(first, 2);
         SubTaskDeliveryVersion older = deliveryVersion(first, 1);
         SubTaskDeliveryVersion other = deliveryVersion(second, 1);
@@ -147,7 +171,9 @@ class ProjectReviewWorkflowTest {
 
         Map<Long, List<Map<String, Object>>> result = service.getDeliveryVersionsByTaskIds(List.of(11L, 12L));
 
-        assertEquals(List.of(2, 1), result.get(11L).stream().map(item -> item.get("versionNo")).toList());
+        assertEquals(
+                List.of(2, 1),
+                result.get(11L).stream().map(item -> item.get("versionNo")).toList());
         assertEquals(1, result.get(12L).size());
         verify(deliveryVersions).findBySubTaskIdInOrderBySubTaskIdAscVersionNoDesc(List.of(11L, 12L));
     }
@@ -156,20 +182,41 @@ class ProjectReviewWorkflowTest {
     void updatePendingSubTaskCanClearPointRuleSnapshot() {
         Project project = projectWithTask("regular", "pending");
         SubTask task = project.getTasks().get(0);
-        task.setPointRuleCode("A1"); task.setDifficultyCode("COMPLEX");
-        task.setBasePointSnapshot(20); task.setDifficultyMultiplierSnapshot(1.5);
-        task.setQualityBonusThresholdSnapshot(90); task.setQualityBonusRatioSnapshot(.3);
-        task.setQualityTopThresholdSnapshot(97); task.setQualityTopRatioSnapshot(.6);
-        task.setMaxTotalMultiplierSnapshot(3d); task.setCountInPerformanceSnapshot(true);
+        task.setPointRuleCode("A1");
+        task.setDifficultyCode("COMPLEX");
+        task.setBasePointSnapshot(20);
+        task.setDifficultyMultiplierSnapshot(1.5);
+        task.setQualityBonusThresholdSnapshot(90);
+        task.setQualityBonusRatioSnapshot(.3);
+        task.setQualityTopThresholdSnapshot(97);
+        task.setQualityTopRatioSnapshot(.6);
+        task.setMaxTotalMultiplierSnapshot(3d);
+        task.setCountInPerformanceSnapshot(true);
         PointsService points = mock(PointsService.class);
         service.setPointsService(points);
-        when(users.getUserByUserId("designer-1")).thenReturn(com.emie.designpm.entity.User.builder()
-                .userId("designer-1").name("设计师甲").role("designer").status("active").build());
+        when(users.getUserByUserId("designer-1"))
+                .thenReturn(com.emie.designpm.entity.User.builder()
+                        .userId("designer-1")
+                        .name("设计师甲")
+                        .role("designer")
+                        .status("active")
+                        .build());
         when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        service.updateSubTask(1L, 11L, Map.of(
-                "currentRole", "admin", "currentUserId", "admin-1", "currentUser", "管理员甲",
-                "pointRuleCode", "", "difficultyCode", "STANDARD"));
+        service.updateSubTask(
+                1L,
+                11L,
+                Map.of(
+                        "currentRole",
+                        "admin",
+                        "currentUserId",
+                        "admin-1",
+                        "currentUser",
+                        "管理员甲",
+                        "pointRuleCode",
+                        "",
+                        "difficultyCode",
+                        "STANDARD"));
 
         assertNull(task.getPointRuleCode());
         assertEquals("STANDARD", task.getDifficultyCode());
@@ -182,24 +229,39 @@ class ProjectReviewWorkflowTest {
     @Test
     void updateSubTaskNormalizesNullBlankAndAliasAssigneeRoleToDesigner() {
         Project project = projectWithTask("regular", "pending");
-        when(users.getUserByUserId("designer-1")).thenReturn(com.emie.designpm.entity.User.builder()
-                .userId("designer-1").name("设计师甲").role("designer").status("active").build());
+        when(users.getUserByUserId("designer-1"))
+                .thenReturn(com.emie.designpm.entity.User.builder()
+                        .userId("designer-1")
+                        .name("设计师甲")
+                        .role("designer")
+                        .status("active")
+                        .build());
         when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        Map<String, Object> nullRole = new java.util.HashMap<>(Map.of(
-                "currentRole", "admin", "currentUserId", "admin-1", "currentUser", "管理员甲"));
+        Map<String, Object> nullRole = new java.util.HashMap<>(
+                Map.of("currentRole", "admin", "currentUserId", "admin-1", "currentUser", "管理员甲"));
         nullRole.put("assigneeRole", null);
         service.updateSubTask(1L, 11L, nullRole);
         assertEquals("designer", project.getTasks().get(0).getAssigneeRole());
 
-        service.updateSubTask(1L, 11L, Map.of(
-                "currentRole", "admin", "currentUserId", "admin-1", "currentUser", "管理员甲",
-                "assigneeRole", ""));
+        service.updateSubTask(
+                1L,
+                11L,
+                Map.of("currentRole", "admin", "currentUserId", "admin-1", "currentUser", "管理员甲", "assigneeRole", ""));
         assertEquals("designer", project.getTasks().get(0).getAssigneeRole());
 
-        service.updateSubTask(1L, 11L, Map.of(
-                "currentRole", "admin", "currentUserId", "admin-1", "currentUser", "管理员甲",
-                "assigneeRole", "设计师"));
+        service.updateSubTask(
+                1L,
+                11L,
+                Map.of(
+                        "currentRole",
+                        "admin",
+                        "currentUserId",
+                        "admin-1",
+                        "currentUser",
+                        "管理员甲",
+                        "assigneeRole",
+                        "设计师"));
         assertEquals("designer", project.getTasks().get(0).getAssigneeRole());
     }
 
@@ -296,13 +358,15 @@ class ProjectReviewWorkflowTest {
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(scoring.findBySubTaskIdAndRole(11L, "planner")).thenReturn(Optional.of(firstReview));
 
-        service.taskApprove(1L, 11L, Map.of(
-                "currentRole", "planner",
-                "currentUserId", "planner-1",
-                "currentUser", "企划甲",
-                "comments", "一审通过",
-                "score", 82
-        ));
+        service.taskApprove(
+                1L,
+                11L,
+                Map.of(
+                        "currentRole", "planner",
+                        "currentUserId", "planner-1",
+                        "currentUser", "企划甲",
+                        "comments", "一审通过",
+                        "score", 82));
 
         assertReview(firstReview, "planner", "first", "approved", 82);
         assertEquals("planner-1", firstReview.getReviewerId());
@@ -314,7 +378,8 @@ class ProjectReviewWorkflowTest {
         verify(scoring, times(2)).save(captor.capture());
         ScoringRecord secondReview = captor.getAllValues().stream()
                 .filter(record -> "sales".equals(record.getRole()))
-                .findFirst().orElseThrow();
+                .findFirst()
+                .orElseThrow();
         assertReview(secondReview, "sales", "second", "pending", null);
     }
 
@@ -329,15 +394,28 @@ class ProjectReviewWorkflowTest {
         when(scoring.findBySubTaskIdAndRole(11L, "planner")).thenReturn(Optional.of(firstReview));
         when(scoring.findBySubTaskIdAndRole(11L, "admin")).thenReturn(Optional.of(secondReview));
 
-        service.taskApprove(1L, 11L, Map.of(
-                "currentRole", "planner", "currentUserId", "planner-1", "currentUser", "企划甲",
-                "comments", "一审通过", "score", 82));
+        service.taskApprove(
+                1L,
+                11L,
+                Map.of(
+                        "currentRole",
+                        "planner",
+                        "currentUserId",
+                        "planner-1",
+                        "currentUser",
+                        "企划甲",
+                        "comments",
+                        "一审通过",
+                        "score",
+                        82));
 
         assertEquals("planner_approved", project.getTasks().get(0).getStatus());
         assertReview(secondReview, "admin", "second", "pending", null);
-        verify(notifications).notifyRoleAfterCommit(
-                eq("REVIEW_PENDING"), eq("admin"), eq("sub_task"), eq(11L), eq("system"), anyMap());
-        verify(notifications, never()).notifyRole(anyString(), anyString(), anyString(), anyLong(), anyString(), anyMap());
+        verify(notifications)
+                .notifyRoleAfterCommit(
+                        eq("REVIEW_PENDING"), eq("admin"), eq("sub_task"), eq(11L), eq("system"), anyMap());
+        verify(notifications, never())
+                .notifyRole(anyString(), anyString(), anyString(), anyLong(), anyString(), anyMap());
     }
 
     @Test
@@ -348,13 +426,15 @@ class ProjectReviewWorkflowTest {
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(scoring.findBySubTaskIdAndRole(11L, "sales")).thenReturn(Optional.of(secondReview));
 
-        service.taskReject(1L, 11L, Map.of(
-                "currentRole", "sales",
-                "currentUserId", "sales-1",
-                "currentUser", "销售甲",
-                "comments", "二审需修改",
-                "requiredCompletionDate", "2026-08-15"
-        ));
+        service.taskReject(
+                1L,
+                11L,
+                Map.of(
+                        "currentRole", "sales",
+                        "currentUserId", "sales-1",
+                        "currentUser", "销售甲",
+                        "comments", "二审需修改",
+                        "requiredCompletionDate", "2026-08-15"));
 
         assertReview(secondReview, "sales", "second", "rejected", null);
         assertEquals("sales-1", secondReview.getReviewerId());
@@ -391,9 +471,20 @@ class ProjectReviewWorkflowTest {
             return cycle;
         });
 
-        service.taskReject(1L, 11L, Map.of(
-                "currentRole", "sales", "currentUserId", "sales-1", "currentUser", "销售甲",
-                "comments", "错误驳回", "requiredCompletionDate", "2026-08-15"));
+        service.taskReject(
+                1L,
+                11L,
+                Map.of(
+                        "currentRole",
+                        "sales",
+                        "currentUserId",
+                        "sales-1",
+                        "currentUser",
+                        "销售甲",
+                        "comments",
+                        "错误驳回",
+                        "requiredCompletionDate",
+                        "2026-08-15"));
 
         ArgumentCaptor<SubTaskRejectionCycle> captor = ArgumentCaptor.forClass(SubTaskRejectionCycle.class);
         verify(rejectionCycles, atLeastOnce()).save(captor.capture());
@@ -402,8 +493,8 @@ class ProjectReviewWorkflowTest {
         when(rejectionCycles.findFirstBySubTaskIdAndStatusOrderBySequenceNoDesc(11L, "ACTIVE"))
                 .thenReturn(Optional.of(cycle));
 
-        service.taskCancelReject(1L, 11L, 201L, Map.of(
-                "currentRole", "sales", "currentUserId", "sales-1", "currentUser", "销售甲"));
+        service.taskCancelReject(
+                1L, 11L, 201L, Map.of("currentRole", "sales", "currentUserId", "sales-1", "currentUser", "销售甲"));
 
         assertEquals("planner_approved", task.getStatus());
         assertEquals("2026-08-01", task.getPlannedDate());
@@ -422,13 +513,22 @@ class ProjectReviewWorkflowTest {
     void cancelRejectionIsRejectedAfterAssigneeStartsRevision() {
         Project project = projectWithTask("regular", "rejected");
         SubTaskRejectionCycle cycle = new SubTaskRejectionCycle();
-        cycle.setId(202L); cycle.setSubTask(project.getTasks().get(0)); cycle.setSequenceNo(1);
-        cycle.setStatus("ACTIVE"); cycle.setRejectionRole("planner"); cycle.setPriorTaskStatus("delivered");
+        cycle.setId(202L);
+        cycle.setSubTask(project.getTasks().get(0));
+        cycle.setSequenceNo(1);
+        cycle.setStatus("ACTIVE");
+        cycle.setRejectionRole("planner");
+        cycle.setPriorTaskStatus("delivered");
         when(rejectionCycles.findById(202L)).thenReturn(Optional.of(cycle));
 
         project.getTasks().get(0).setStatus("accepted");
-        RuntimeException error = assertThrows(RuntimeException.class, () -> service.taskCancelReject(
-                1L, 11L, 202L, Map.of("currentRole", "planner", "currentUserId", "planner-1", "currentUser", "企划甲")));
+        RuntimeException error = assertThrows(
+                RuntimeException.class,
+                () -> service.taskCancelReject(
+                        1L,
+                        11L,
+                        202L,
+                        Map.of("currentRole", "planner", "currentUserId", "planner-1", "currentUser", "企划甲")));
 
         assertTrue(error.getMessage().contains("已开始修改"));
         verify(rejectionCycles, never()).save(any());
@@ -443,13 +543,15 @@ class ProjectReviewWorkflowTest {
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(scoring.findBySubTaskIdAndRole(11L, "admin")).thenReturn(Optional.of(secondReview));
 
-        service.taskApprove(1L, 11L, Map.of(
-                "currentRole", "admin",
-                "currentUserId", "admin-1",
-                "currentUser", "管理员甲",
-                "comments", "二审通过",
-                "score", 91
-        ));
+        service.taskApprove(
+                1L,
+                11L,
+                Map.of(
+                        "currentRole", "admin",
+                        "currentUserId", "admin-1",
+                        "currentUser", "管理员甲",
+                        "comments", "二审通过",
+                        "score", 91));
 
         assertReview(secondReview, "admin", "second", "approved", 91);
         assertEquals("管理员甲", secondReview.getReviewerName());
@@ -477,8 +579,8 @@ class ProjectReviewWorkflowTest {
         when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(subTasks.findByIdForUpdate(11L)).thenReturn(Optional.of(foreignTask));
 
-        RuntimeException error = assertThrows(RuntimeException.class,
-                () -> service.taskDeliver(1L, 11L, deliveryBody()));
+        RuntimeException error =
+                assertThrows(RuntimeException.class, () -> service.taskDeliver(1L, 11L, deliveryBody()));
 
         assertEquals("子任务不属于当前项目", error.getMessage());
         InOrder lockOrder = inOrder(projects, subTasks);
@@ -522,13 +624,15 @@ class ProjectReviewWorkflowTest {
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(scoring.findBySubTaskIdAndRole(11L, "admin")).thenReturn(Optional.of(secondReview));
 
-        service.submitScoring(1L, 11L, Map.of(
-                "role", "admin",
-                "currentRole", "admin",
-                "currentUserId", "admin-1",
-                "currentUser", "管理员甲",
-                "score", 91
-        ));
+        service.submitScoring(
+                1L,
+                11L,
+                Map.of(
+                        "role", "admin",
+                        "currentRole", "admin",
+                        "currentUserId", "admin-1",
+                        "currentUser", "管理员甲",
+                        "score", 91));
 
         // 与任务详情入口一致：最终验收通过必须发放质量加分
         assertEquals("completed", project.getTasks().get(0).getStatus());
@@ -544,13 +648,15 @@ class ProjectReviewWorkflowTest {
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(scoring.findBySubTaskIdAndRole(11L, "sales")).thenReturn(Optional.of(secondReview));
 
-        service.submitScoring(1L, 11L, Map.of(
-                "role", "sales",
-                "currentRole", "sales",
-                "currentUserId", "sales-1",
-                "currentUser", "销售甲",
-                "score", 88
-        ));
+        service.submitScoring(
+                1L,
+                11L,
+                Map.of(
+                        "role", "sales",
+                        "currentRole", "sales",
+                        "currentUserId", "sales-1",
+                        "currentUser", "销售甲",
+                        "score", 88));
 
         assertEquals("completed", project.getTasks().get(0).getStatus());
         verify(points).awardQualityCompletion(project.getTasks().get(0));
@@ -566,13 +672,15 @@ class ProjectReviewWorkflowTest {
         when(scoring.findBySubTaskIdAndRole(11L, "planner")).thenReturn(Optional.of(firstReview));
         when(scoring.findBySubTaskIdAndRole(11L, "admin")).thenReturn(Optional.empty());
 
-        service.submitScoring(1L, 11L, Map.of(
-                "role", "planner",
-                "currentRole", "planner",
-                "currentUserId", "planner-1",
-                "currentUser", "企划甲",
-                "score", 82
-        ));
+        service.submitScoring(
+                1L,
+                11L,
+                Map.of(
+                        "role", "planner",
+                        "currentRole", "planner",
+                        "currentUserId", "planner-1",
+                        "currentUser", "企划甲",
+                        "score", 82));
 
         // 一审通过只是中间态，未到最终验收，不得发放质量加分
         assertEquals("planner_approved", project.getTasks().get(0).getStatus());
@@ -588,13 +696,15 @@ class ProjectReviewWorkflowTest {
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(scoring.findBySubTaskIdAndRole(11L, "admin")).thenReturn(Optional.of(secondReview));
 
-        service.taskApprove(1L, 11L, Map.of(
-                "currentRole", "admin",
-                "currentUserId", "admin-1",
-                "currentUser", "管理员甲",
-                "comments", "二审通过",
-                "score", 91
-        ));
+        service.taskApprove(
+                1L,
+                11L,
+                Map.of(
+                        "currentRole", "admin",
+                        "currentUserId", "admin-1",
+                        "currentUser", "管理员甲",
+                        "comments", "二审通过",
+                        "score", 91));
 
         assertEquals("completed", project.getTasks().get(0).getStatus());
         verify(points).awardQualityCompletion(project.getTasks().get(0));
@@ -633,13 +743,14 @@ class ProjectReviewWorkflowTest {
                 "deliverables", "已交付",
                 "referenceImagesJson", "[]",
                 "attachmentsJson", "[]",
-                "selfScore", 88
-        );
+                "selfScore", 88);
     }
 
     private SubTaskDeliveryVersion deliveryVersion(SubTask task, int versionNo) {
         SubTaskDeliveryVersion version = new SubTaskDeliveryVersion();
-        version.setSubTask(task); version.setVersionNo(versionNo); version.setSubmissionType("initial");
+        version.setSubTask(task);
+        version.setVersionNo(versionNo);
+        version.setSubmissionType("initial");
         version.setSubmittedAt(java.time.LocalDateTime.of(2026, 9, 1, 9, 0));
         return version;
     }
@@ -662,8 +773,7 @@ class ProjectReviewWorkflowTest {
         return captor.getAllValues();
     }
 
-    private void assertReview(ScoringRecord record, String role, String stage,
-                              String status, Integer score) {
+    private void assertReview(ScoringRecord record, String role, String stage, String status, Integer score) {
         assertEquals(role, record.getRole());
         assertEquals(stage, record.getReviewStage());
         assertEquals(status, record.getReviewStatus());

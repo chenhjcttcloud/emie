@@ -22,13 +22,18 @@ public class ScoringSyncListener implements ApplicationContextAware {
         syncQueueService = ctx.getBean(SyncQueueService.class);
     }
 
-    @PostPersist public void onCreated(ScoringRecord r) {
+    @PostPersist
+    public void onCreated(ScoringRecord r) {
         enqueueReviewChange(r, "update", "评分创建已入队");
     }
-    @PostUpdate public void onUpdated(ScoringRecord r) {
+
+    @PostUpdate
+    public void onUpdated(ScoringRecord r) {
         enqueueReviewChange(r, "update", "评分更新已入队");
     }
-    @PostRemove public void onDeleted(ScoringRecord r) {
+
+    @PostRemove
+    public void onDeleted(ScoringRecord r) {
         enqueueReviewChange(r, "delete", "评分删除已入队");
     }
 

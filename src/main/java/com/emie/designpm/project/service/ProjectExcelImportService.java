@@ -1,5 +1,6 @@
 package com.emie.designpm.project.service;
 
+import com.emie.designpm.admin.repository.UserRepository;
 import com.emie.designpm.entity.IpOption;
 import com.emie.designpm.entity.PriceRange;
 import com.emie.designpm.entity.ProductCategory;
@@ -7,9 +8,13 @@ import com.emie.designpm.entity.User;
 import com.emie.designpm.reference.repository.IpOptionRepository;
 import com.emie.designpm.reference.repository.PriceRangeRepository;
 import com.emie.designpm.reference.repository.ProductCategoryRepository;
-import com.emie.designpm.admin.repository.UserRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.InputStream;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.*;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.DateUtil;
@@ -19,12 +24,6 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.io.InputStream;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.util.*;
 
 /**
  * 项目 Excel 导入：先完整预校验，再统一创建，避免半份文件导入成功。
@@ -44,11 +43,12 @@ public class ProjectExcelImportService {
     private final ProjectService projectService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public ProjectExcelImportService(UserRepository userRepository,
-                                     ProductCategoryRepository productCategoryRepository,
-                                     PriceRangeRepository priceRangeRepository,
-                                     IpOptionRepository ipOptionRepository,
-                                     ProjectService projectService) {
+    public ProjectExcelImportService(
+            UserRepository userRepository,
+            ProductCategoryRepository productCategoryRepository,
+            PriceRangeRepository priceRangeRepository,
+            IpOptionRepository ipOptionRepository,
+            ProjectService projectService) {
         this.userRepository = userRepository;
         this.productCategoryRepository = productCategoryRepository;
         this.priceRangeRepository = priceRangeRepository;
@@ -119,7 +119,8 @@ public class ProjectExcelImportService {
     private void readSheet(Sheet sheet, String type, List<ImportRow> rows, List<String> errors, ImportOptions options) {
         if (sheet == null) return;
         Map<String, Integer> headers = headers(sheet.getRow(HEADER_ROW));
-        List<String> required = new ArrayList<>(List.of("产品名称", "产品企划姓名", "产品类目", "IP", "参考零售价", "目标市场", "要求完成时间", "产品要求"));
+        List<String> required =
+                new ArrayList<>(List.of("产品名称", "产品企划姓名", "产品类目", "IP", "参考零售价", "目标市场", "要求完成时间", "产品要求"));
         if ("channel_custom".equals(type)) required.add("需求方（销售）姓名");
         for (String header : required) {
             if (!headers.containsKey(header)) errors.add(sheet.getSheetName() + "缺少表头：" + header);
@@ -145,7 +146,8 @@ public class ProjectExcelImportService {
             String categoryNote = value(excelRow, headers, "其他类目说明");
             String ipName = options.ipName().isBlank() ? value(excelRow, headers, "IP") : options.ipName();
             List<String> ipSubOptions = options.ipSubOptions().isEmpty()
-                    ? split(value(excelRow, headers, "二级IP选项")) : options.ipSubOptions();
+                    ? split(value(excelRow, headers, "二级IP选项"))
+                    : options.ipSubOptions();
             String priceRange = resolvePriceRange(value(excelRow, headers, "参考零售价"));
             List<String> targetMarket = split(value(excelRow, headers, "目标市场"));
             List<String> complianceItems = split(value(excelRow, headers, "合规处罚"));
@@ -163,24 +165,40 @@ public class ProjectExcelImportService {
             validateRequired(sheet, line, errors, "产品要求", requirements);
 
             String plannerId = validateUser(sheet, line, errors, plannerName, "planner", "产品企划");
-            String salesId = "channel_custom".equals(type)
-                    ? validateUser(sheet, line, errors, salesName, "sales", "销售") : null;
+            String salesId =
+                    "channel_custom".equals(type) ? validateUser(sheet, line, errors, salesName, "sales", "销售") : null;
             validateCategory(sheet, line, errors, category);
             validatePriceRange(sheet, line, errors, priceRange);
             validateIp(sheet, line, errors, ipName, ipSubOptions, options.ensureIpOption());
             validateMarkets(sheet, line, errors, targetMarket);
             validateDeadline(sheet, line, errors, deadline);
 
-            rows.add(new ImportRow(type, sheet.getSheetName(), line, productName, plannerId, salesId,
-                    category, categoryNote, ipName, ipSubOptions, priceRange, targetMarket, complianceItems,
-                    deadline, requirements, description));
+            rows.add(new ImportRow(
+                    type,
+                    sheet.getSheetName(),
+                    line,
+                    productName,
+                    plannerId,
+                    salesId,
+                    category,
+                    categoryNote,
+                    ipName,
+                    ipSubOptions,
+                    priceRange,
+                    targetMarket,
+                    complianceItems,
+                    deadline,
+                    requirements,
+                    description));
         }
     }
 
     private String validateUser(Sheet sheet, int line, List<String> errors, String name, String role, String label) {
         if (name.isBlank()) return "";
         List<User> users = userRepository.findByName(name);
-        List<User> matching = users.stream().filter(user -> role.equals(user.getRole()) && !"disabled".equals(user.getStatus())).toList();
+        List<User> matching = users.stream()
+                .filter(user -> role.equals(user.getRole()) && !"disabled".equals(user.getStatus()))
+                .toList();
         if (matching.size() != 1) {
             errors.add(location(sheet, line) + label + "“" + name + "”未匹配到唯一有效账号");
             return "";
@@ -189,23 +207,36 @@ public class ProjectExcelImportService {
     }
 
     private void validateCategory(Sheet sheet, int line, List<String> errors, String name) {
-        if (!name.isBlank() && productCategoryRepository.findByName(name).filter(ProductCategory::getActive).isEmpty()) {
+        if (!name.isBlank()
+                && productCategoryRepository
+                        .findByName(name)
+                        .filter(ProductCategory::getActive)
+                        .isEmpty()) {
             errors.add(location(sheet, line) + "产品类目“" + name + "”不存在或已停用");
         }
     }
 
     private void validatePriceRange(Sheet sheet, int line, List<String> errors, String name) {
-        if (!name.isBlank() && priceRangeRepository.findByName(name).filter(PriceRange::getActive).isEmpty()) {
+        if (!name.isBlank()
+                && priceRangeRepository
+                        .findByName(name)
+                        .filter(PriceRange::getActive)
+                        .isEmpty()) {
             errors.add(location(sheet, line) + "参考零售价“" + name + "”不存在或已停用");
         }
     }
 
-    private void validateIp(Sheet sheet, int line, List<String> errors, String name, List<String> subOptions, boolean allowCreate) {
+    private void validateIp(
+            Sheet sheet, int line, List<String> errors, String name, List<String> subOptions, boolean allowCreate) {
         Optional<IpOption> ip = ipOptionRepository.findByName(name).filter(IpOption::getActive);
         if (!name.isBlank() && ip.isEmpty() && !allowCreate) {
             errors.add(location(sheet, line) + "IP“" + name + "”不存在或已停用");
-        } else if (ip.isPresent() && ip.get().getSubOptionsJson() != null && !ip.get().getSubOptionsJson().isBlank() && subOptions.isEmpty()) {
-            errors.add(location(sheet, line) + "IP“" + name + "”需要填写“二级IP选项”；当前可选项：" + ip.get().getSubOptionsJson());
+        } else if (ip.isPresent()
+                && ip.get().getSubOptionsJson() != null
+                && !ip.get().getSubOptionsJson().isBlank()
+                && subOptions.isEmpty()) {
+            errors.add(location(sheet, line) + "IP“" + name + "”需要填写“二级IP选项”；当前可选项："
+                    + ip.get().getSubOptionsJson());
         }
     }
 
@@ -226,15 +257,24 @@ public class ProjectExcelImportService {
 
     /** 兼容历史 Excel 的数值零售价，自动映射到当前已启用的价格区间。 */
     private String resolvePriceRange(String source) {
-        if (source == null || source.isBlank() || priceRangeRepository.findByName(source).filter(PriceRange::getActive).isPresent()) return source;
+        if (source == null
+                || source.isBlank()
+                || priceRangeRepository
+                        .findByName(source)
+                        .filter(PriceRange::getActive)
+                        .isPresent()) return source;
         try {
             double price = Double.parseDouble(source.replace("元", "").trim());
             return priceRangeRepository.findByActiveTrueOrderBySortOrderAsc().stream()
                     .filter(range -> range.getName().matches("\\d+元以下"))
                     .filter(range -> price <= Double.parseDouble(range.getName().replace("元以下", "")))
-                    .map(PriceRange::getName).findFirst()
+                    .map(PriceRange::getName)
+                    .findFirst()
                     .orElseGet(() -> priceRangeRepository.findByActiveTrueOrderBySortOrderAsc().stream()
-                            .map(PriceRange::getName).filter(name -> name.matches("\\d+元以上")).findFirst().orElse(source));
+                            .map(PriceRange::getName)
+                            .filter(name -> name.matches("\\d+元以上"))
+                            .findFirst()
+                            .orElse(source));
         } catch (NumberFormatException ignored) {
             return source;
         }
@@ -242,20 +282,28 @@ public class ProjectExcelImportService {
 
     private void ensureIpOption(ImportOptions options) {
         IpOption ip = ipOptionRepository.findByName(options.ipName()).orElseGet(() -> {
-            int nextOrder = ipOptionRepository.findTopByOrderBySortOrderDesc()
-                    .map(i -> i.getSortOrder() == null ? 1 : i.getSortOrder() + 1).orElse(1);
+            int nextOrder = ipOptionRepository
+                    .findTopByOrderBySortOrderDesc()
+                    .map(i -> i.getSortOrder() == null ? 1 : i.getSortOrder() + 1)
+                    .orElse(1);
             IpOption created = new IpOption(options.ipName(), nextOrder);
             created.setActive(true);
             return created;
         });
         List<String> current = new ArrayList<>();
         if (ip.getSubOptionsJson() != null && !ip.getSubOptionsJson().isBlank()) {
-            try { current.addAll(objectMapper.readValue(ip.getSubOptionsJson(), new TypeReference<List<String>>() {})); }
-            catch (Exception ignored) { /* 配置将在本次统一修复为有效 JSON */ }
+            try {
+                current.addAll(objectMapper.readValue(ip.getSubOptionsJson(), new TypeReference<List<String>>() {}));
+            } catch (Exception ignored) {
+                /* 配置将在本次统一修复为有效 JSON */
+            }
         }
         for (String option : options.ipSubOptions()) if (!current.contains(option)) current.add(option);
-        try { ip.setSubOptionsJson(objectMapper.writeValueAsString(current)); }
-        catch (Exception e) { throw new IllegalStateException("二级 IP 配置保存失败", e); }
+        try {
+            ip.setSubOptionsJson(objectMapper.writeValueAsString(current));
+        } catch (Exception e) {
+            throw new IllegalStateException("二级 IP 配置保存失败", e);
+        }
         ip.setSubOptionSelectionMode("multiple");
         ipOptionRepository.save(ip);
     }
@@ -286,41 +334,76 @@ public class ProjectExcelImportService {
     private String dateValue(Row row, Integer index) {
         if (index == null || row == null || row.getCell(index) == null) return "";
         Cell cell = row.getCell(index);
-        if (DateUtil.isCellDateFormatted(cell)) return cell.getLocalDateTimeCellValue().toLocalDate().toString();
+        if (DateUtil.isCellDateFormatted(cell))
+            return cell.getLocalDateTimeCellValue().toLocalDate().toString();
         return FORMATTER.formatCellValue(cell).trim();
     }
 
     private List<String> split(String value) {
         if (value == null || value.isBlank()) return List.of();
-        return Arrays.stream(value.split("、")).map(String::trim).filter(part -> !part.isBlank()).distinct().toList();
+        return Arrays.stream(value.split("、"))
+                .map(String::trim)
+                .filter(part -> !part.isBlank())
+                .distinct()
+                .toList();
     }
 
     private void validateRequired(Sheet sheet, int line, List<String> errors, String field, String value) {
         if (value == null || value.isBlank()) errors.add(location(sheet, line) + field + "不能为空");
     }
 
-    private String location(Sheet sheet, int line) { return "【" + sheet.getSheetName() + "第" + line + "行】"; }
+    private String location(Sheet sheet, int line) {
+        return "【" + sheet.getSheetName() + "第" + line + "行】";
+    }
+
     private String toJsonArray(List<String> values) {
         if (values.isEmpty()) return "";
-        try { return objectMapper.writeValueAsString(values); }
-        catch (Exception e) { throw new IllegalStateException("导入字段 JSON 序列化失败", e); }
+        try {
+            return objectMapper.writeValueAsString(values);
+        } catch (Exception e) {
+            throw new IllegalStateException("导入字段 JSON 序列化失败", e);
+        }
     }
-    private String safeMessage(Exception e) { return e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(); }
 
-    public record ImportRow(String type, String sheetName, int rowNumber, String productName, String plannerId,
-                            String salesId, String productCategory, String productCategoryNote, String ipName,
-                            List<String> ipSubOptions, String priceRange, List<String> targetMarket, List<String> complianceItems,
-                            String deadline, String productRequirements, String description) { }
+    private String safeMessage(Exception e) {
+        return e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+    }
+
+    public record ImportRow(
+            String type,
+            String sheetName,
+            int rowNumber,
+            String productName,
+            String plannerId,
+            String salesId,
+            String productCategory,
+            String productCategoryNote,
+            String ipName,
+            List<String> ipSubOptions,
+            String priceRange,
+            List<String> targetMarket,
+            List<String> complianceItems,
+            String deadline,
+            String productRequirements,
+            String description) {}
 
     public record ImportResult(List<ImportRow> rows, List<String> errors, int importedCount) {
-        ImportResult withImportedCount(int count) { return new ImportResult(rows, errors, count); }
+        ImportResult withImportedCount(int count) {
+            return new ImportResult(rows, errors, count);
+        }
     }
 
     public record ImportOptions(String ipName, List<String> ipSubOptions, boolean ensureIpOption) {
         public ImportOptions {
             ipName = ipName == null ? "" : ipName.trim();
-            ipSubOptions = ipSubOptions == null ? List.of() : ipSubOptions.stream().filter(Objects::nonNull)
-                    .map(String::trim).filter(value -> !value.isBlank()).distinct().toList();
+            ipSubOptions = ipSubOptions == null
+                    ? List.of()
+                    : ipSubOptions.stream()
+                            .filter(Objects::nonNull)
+                            .map(String::trim)
+                            .filter(value -> !value.isBlank())
+                            .distinct()
+                            .toList();
         }
     }
 }

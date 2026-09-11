@@ -1,6 +1,15 @@
 package com.emie.designpm.notification.service;
 
-import com.emie.designpm.feishu.service.FeishuBaseService;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+
 import com.emie.designpm.background.repository.NotificationAuditLogRepository;
 import com.emie.designpm.background.repository.NotificationDeliveryRepository;
 import com.emie.designpm.background.repository.NotificationEventRepository;
@@ -10,22 +19,12 @@ import com.emie.designpm.entity.Notification;
 import com.emie.designpm.entity.NotificationAuditLog;
 import com.emie.designpm.entity.NotificationDelivery;
 import com.emie.designpm.entity.User;
+import com.emie.designpm.feishu.service.FeishuBaseService;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
 
 /**
  * NotificationRetryService 的 CAS 认领：claimForRetry 按受影响行数判定处理权，
@@ -39,7 +38,8 @@ class NotificationRetryServiceTest {
         Dependencies deps = new Dependencies();
         NotificationDelivery delivery = delivery(1L, "failed");
         when(deps.deliveries.findTop50ByStatusInAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(
-                eq(List.of("failed", "pending")), any())).thenReturn(List.of(delivery));
+                        eq(List.of("failed", "pending")), any()))
+                .thenReturn(List.of(delivery));
         // CAS 认领失败：其它调度轮次/实例已认领，本调用未获得处理权
         when(deps.deliveries.claimForRetry(eq(1L), any())).thenReturn(0);
 
@@ -64,7 +64,8 @@ class NotificationRetryServiceTest {
         user.setName("张三");
         user.setFeishuOpenId("ou_abc");
         when(deps.deliveries.findTop50ByStatusInAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(
-                eq(List.of("failed", "pending")), any())).thenReturn(List.of(delivery));
+                        eq(List.of("failed", "pending")), any()))
+                .thenReturn(List.of(delivery));
         when(deps.deliveries.claimForRetry(eq(1L), any())).thenReturn(1);
         when(deps.notifications.findByIdIn(List.of(10L))).thenReturn(List.of(notification));
         when(deps.users.findByUserIdIn(List.of("u-1"))).thenReturn(List.of(user));
@@ -90,7 +91,8 @@ class NotificationRetryServiceTest {
         Dependencies deps = new Dependencies();
         NotificationDelivery delivery = delivery(1L, "failed");
         when(deps.deliveries.findTop50ByStatusInAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(
-                eq(List.of("failed", "pending")), any())).thenReturn(List.of(delivery));
+                        eq(List.of("failed", "pending")), any()))
+                .thenReturn(List.of(delivery));
         when(deps.deliveries.claimForRetry(eq(1L), any())).thenReturn(1);
         // 认领成功但通知本体已不存在：写回 dead_letter 而非静默丢失
         when(deps.notifications.findByIdIn(List.of(10L))).thenReturn(List.of());
@@ -108,22 +110,23 @@ class NotificationRetryServiceTest {
     void stuckProcessingClaimsAreRecoveredBeforeFetchingDue() {
         Dependencies deps = new Dependencies();
         when(deps.deliveries.findTop50ByStatusInAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(
-                eq(List.of("failed", "pending")), any())).thenReturn(List.of());
+                        eq(List.of("failed", "pending")), any()))
+                .thenReturn(List.of());
 
         deps.service.retryDueDeliveries();
 
         InOrder order = inOrder(deps.deliveries);
         order.verify(deps.deliveries).recoverStuckClaims(any(), any());
-        order.verify(deps.deliveries).findTop50ByStatusInAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(
-                any(), any());
+        order.verify(deps.deliveries).findTop50ByStatusInAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(any(), any());
         verify(deps.deliveries, never()).claimForRetry(any(), any());
 
         ArgumentCaptor<LocalDateTime> cutoff = ArgumentCaptor.forClass(LocalDateTime.class);
         verify(deps.deliveries).recoverStuckClaims(cutoff.capture(), any(LocalDateTime.class));
         // 恢复阈值应为「现在 - 10 分钟」，允许断言执行瞬间的微小偏差
         LocalDateTime expected = LocalDateTime.now().minusMinutes(10);
-        assertTrue(cutoff.getValue().isAfter(expected.minusSeconds(5))
-                && cutoff.getValue().isBefore(expected.plusSeconds(5)),
+        assertTrue(
+                cutoff.getValue().isAfter(expected.minusSeconds(5))
+                        && cutoff.getValue().isBefore(expected.plusSeconds(5)),
                 "cutoff 应为 10 分钟前，实际: " + cutoff.getValue());
     }
 
@@ -158,7 +161,7 @@ class NotificationRetryServiceTest {
         private final FeishuBaseService feishu = mock(FeishuBaseService.class);
         private final NotificationEventRepository events = mock(NotificationEventRepository.class);
         private final NotificationRecipientRouter router = mock(NotificationRecipientRouter.class);
-        private final NotificationRetryService service = new NotificationRetryService(
-                deliveries, notifications, users, audits, feishu, events, router);
+        private final NotificationRetryService service =
+                new NotificationRetryService(deliveries, notifications, users, audits, feishu, events, router);
     }
 }

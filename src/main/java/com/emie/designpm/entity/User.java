@@ -1,22 +1,24 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.time.LocalDateTime;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "users", indexes = {
-    @Index(name = "idx_user_role", columnList = "role"),
-    @Index(name = "idx_user_department", columnList = "departmentId"),
-    @Index(name = "idx_user_status", columnList = "status")
-})
+@Table(
+        name = "users",
+        indexes = {
+            @Index(name = "idx_user_role", columnList = "role"),
+            @Index(name = "idx_user_department", columnList = "departmentId"),
+            @Index(name = "idx_user_status", columnList = "status")
+        })
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

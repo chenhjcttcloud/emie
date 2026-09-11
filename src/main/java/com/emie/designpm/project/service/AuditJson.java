@@ -1,7 +1,6 @@
 package com.emie.designpm.project.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.util.Map;
 import java.util.Objects;
 
@@ -13,8 +12,7 @@ final class AuditJson {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private AuditJson() {
-    }
+    private AuditJson() {}
 
     static String toJson(Object value) {
         try {

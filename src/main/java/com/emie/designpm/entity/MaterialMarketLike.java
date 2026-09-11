@@ -1,14 +1,17 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
-
 import java.time.LocalDateTime;
+import lombok.Data;
 
 @Data
 @Entity
-@Table(name = "material_market_likes",
-        uniqueConstraints = @UniqueConstraint(name = "uk_material_market_like", columnNames = {"material_id", "user_id"}),
+@Table(
+        name = "material_market_likes",
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_material_market_like",
+                        columnNames = {"material_id", "user_id"}),
         indexes = @Index(name = "idx_material_market_like_user", columnList = "user_id"))
 public class MaterialMarketLike {
     @Id

@@ -15,10 +15,16 @@ public record ProjectListQuery(
         Pageable pageable,
         String ownerRole,
         String ownerId) {
-    public ProjectListQuery(String type, String status, String category, String market,
-                            String keyword, String deadlineStart, String deadlineEnd,
-                            boolean participating, Pageable pageable) {
-        this(type, status, category, market, keyword, deadlineStart, deadlineEnd,
-                participating, pageable, null, null);
+    public ProjectListQuery(
+            String type,
+            String status,
+            String category,
+            String market,
+            String keyword,
+            String deadlineStart,
+            String deadlineEnd,
+            boolean participating,
+            Pageable pageable) {
+        this(type, status, category, market, keyword, deadlineStart, deadlineEnd, participating, pageable, null, null);
     }
 }

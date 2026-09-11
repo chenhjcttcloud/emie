@@ -1,8 +1,8 @@
 package com.emie.designpm.config;
 
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 @Configuration
@@ -20,8 +20,7 @@ public class SchedulingConfig {
         scheduler.setRemoveOnCancelPolicy(true);
         scheduler.setWaitForTasksToCompleteOnShutdown(false);
         scheduler.setErrorHandler(error ->
-                org.slf4j.LoggerFactory.getLogger(SchedulingConfig.class)
-                        .error("后台定时任务执行失败", error));
+                org.slf4j.LoggerFactory.getLogger(SchedulingConfig.class).error("后台定时任务执行失败", error));
         return scheduler;
     }
 }

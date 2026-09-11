@@ -22,13 +22,18 @@ public class ProjectSyncListener implements ApplicationContextAware {
         syncQueueService = ctx.getBean(SyncQueueService.class);
     }
 
-    @PostPersist public void onCreated(Project p) {
+    @PostPersist
+    public void onCreated(Project p) {
         enqueueAfterCommit("project", p.getId(), "update", "项目创建已入队");
     }
-    @PostUpdate public void onUpdated(Project p) {
+
+    @PostUpdate
+    public void onUpdated(Project p) {
         enqueueAfterCommit("project", p.getId(), "update", "项目更新已入队");
     }
-    @PostRemove public void onDeleted(Project p) {
+
+    @PostRemove
+    public void onDeleted(Project p) {
         enqueueAfterCommit("project", p.getId(), "delete", "项目删除已入队");
     }
 

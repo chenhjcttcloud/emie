@@ -1,16 +1,19 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
 @Entity
-@Table(name = "sub_task_delivery_versions",
-        uniqueConstraints = @UniqueConstraint(name = "uk_sub_task_delivery_version", columnNames = {"sub_task_id", "version_no"}),
+@Table(
+        name = "sub_task_delivery_versions",
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_sub_task_delivery_version",
+                        columnNames = {"sub_task_id", "version_no"}),
         indexes = @Index(name = "idx_delivery_version_task_time", columnList = "sub_task_id,submitted_at"))
 public class SubTaskDeliveryVersion {
     @Id

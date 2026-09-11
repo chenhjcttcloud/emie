@@ -1,22 +1,21 @@
 package com.emie.designpm.admin.service;
 
-import com.emie.designpm.entity.Role;
-import com.emie.designpm.admin.repository.RoleRepository;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import com.emie.designpm.admin.repository.PermissionVersionRepository;
 import com.emie.designpm.admin.repository.RolePermissionRepository;
 import com.emie.designpm.admin.repository.RolePermissionScopeRepository;
-import org.junit.jupiter.api.Test;
-
+import com.emie.designpm.admin.repository.RoleRepository;
+import com.emie.designpm.entity.Role;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import org.junit.jupiter.api.Test;
 
 class PermissionServiceTest {
 
@@ -25,23 +24,31 @@ class PermissionServiceTest {
         RoleRepository roles = mock(RoleRepository.class);
         RolePermissionRepository assignments = emptyAssignments();
         PermissionVersionRepository versions = emptyVersions();
-        when(roles.findByNameIgnoreCase(org.mockito.ArgumentMatchers.anyString())).thenReturn(Optional.empty());
+        when(roles.findByNameIgnoreCase(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(Optional.empty());
         PermissionService service = new PermissionService(roles, assignments, versions);
 
-        assertPermissions(service.capabilities("sales"),
-                "page.dashboard.view", "project.channel.create", "project.channel.edit",
+        assertPermissions(
+                service.capabilities("sales"),
+                "page.dashboard.view",
+                "project.channel.create",
+                "project.channel.edit",
                 "design_requirement.create");
-        assertPermissions(service.capabilities("planner"),
-                "project.regular.create", "project.channel.edit", "project.regular.edit",
-                "subtask.create", "design_requirement.create", "page.subtasks.department.view");
+        assertPermissions(
+                service.capabilities("planner"),
+                "project.regular.create",
+                "project.channel.edit",
+                "project.regular.edit",
+                "subtask.create",
+                "design_requirement.create",
+                "page.subtasks.department.view");
         assertPermissions(service.capabilities("Promotion"), "design_requirement.create");
 
-        assertFalse(permissions(service.capabilities("admin")).contains("project.channel.create"),
-                "管理员兼容模板不应新增项目创建入口");
-        assertFalse(permissions(service.capabilities("designer")).contains("design_requirement.create"),
+        assertFalse(permissions(service.capabilities("admin")).contains("project.channel.create"), "管理员兼容模板不应新增项目创建入口");
+        assertFalse(
+                permissions(service.capabilities("designer")).contains("design_requirement.create"),
                 "设计师兼容模板不应新增需求创建入口");
-        assertTrue(permissions(service.capabilities("pending")).isEmpty(),
-                "待授权角色不应获得任何能力");
+        assertTrue(permissions(service.capabilities("pending")).isEmpty(), "待授权角色不应获得任何能力");
     }
 
     @Test
@@ -83,12 +90,11 @@ class PermissionServiceTest {
         when(assignments.findAllowedPermissionCodes("sales")).thenReturn(List.of("custom.allowed"));
         when(assignments.findDeniedPermissionCodes("sales")).thenReturn(List.of("project.channel.create"));
 
-        List<String> permissions = permissions(
-                new PermissionService(roles, assignments, versions).capabilities("sales"));
+        List<String> permissions =
+                permissions(new PermissionService(roles, assignments, versions).capabilities("sales"));
 
         assertTrue(permissions.contains("custom.allowed"));
-        assertFalse(permissions.contains("project.channel.create"),
-                "规范化权限表中的明确禁止应覆盖兼容角色模板");
+        assertFalse(permissions.contains("project.channel.create"), "规范化权限表中的明确禁止应覆盖兼容角色模板");
     }
 
     @Test
@@ -98,11 +104,10 @@ class PermissionServiceTest {
         PermissionVersionRepository versions = emptyVersions();
         when(roles.findByNameIgnoreCase("admin")).thenReturn(Optional.empty());
         when(assignments.findAllowedPermissionCodes("admin")).thenReturn(List.of());
-        when(assignments.findDeniedPermissionCodes("admin")).thenReturn(List.of(
-                "admin.identity.switch", "file.upload", "file.download", "file.preview"));
+        when(assignments.findDeniedPermissionCodes("admin"))
+                .thenReturn(List.of("admin.identity.switch", "file.upload", "file.download", "file.preview"));
 
-        List<String> permissions = permissions(
-                new PermissionService(roles, assignments, versions).capabilities("管理员"));
+        List<String> permissions = permissions(new PermissionService(roles, assignments, versions).capabilities("管理员"));
 
         assertTrue(permissions.contains("admin.identity.switch"));
         assertTrue(permissions.contains("file.upload"));
@@ -119,8 +124,8 @@ class PermissionServiceTest {
         when(assignments.findAllowedPermissionCodes("planner")).thenReturn(List.of());
         when(assignments.findDeniedPermissionCodes("planner")).thenReturn(List.of("subtask.create"));
 
-        List<String> permissions = permissions(
-                new PermissionService(roles, assignments, versions).capabilities("planner"));
+        List<String> permissions =
+                permissions(new PermissionService(roles, assignments, versions).capabilities("planner"));
 
         assertTrue(permissions.contains("subtask.create"));
     }
@@ -153,16 +158,18 @@ class PermissionServiceTest {
 
     private RolePermissionRepository emptyAssignments() {
         RolePermissionRepository assignments = mock(RolePermissionRepository.class);
-        when(assignments.findAllowedPermissionCodes(org.mockito.ArgumentMatchers.anyString())).thenReturn(List.of());
-        when(assignments.findDeniedPermissionCodes(org.mockito.ArgumentMatchers.anyString())).thenReturn(List.of());
+        when(assignments.findAllowedPermissionCodes(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(List.of());
+        when(assignments.findDeniedPermissionCodes(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(List.of());
         return assignments;
     }
 
     private PermissionVersionRepository emptyVersions() {
         PermissionVersionRepository versions = mock(PermissionVersionRepository.class);
         when(versions.findBySubjectTypeAndSubjectKey(
-                org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.anyString())).thenReturn(Optional.empty());
+                        org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(Optional.empty());
         return versions;
     }
 

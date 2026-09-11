@@ -1,30 +1,34 @@
 package com.emie.designpm.scoring.repository;
 
 import com.emie.designpm.entity.ScoringRecord;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
-
-import java.util.List;
-import java.util.Optional;
-import java.time.LocalDateTime;
 
 public interface ScoringRepository extends JpaRepository<ScoringRecord, Long> {
 
     interface DashboardScoringProjection {
         Long getTaskId();
+
         String getRole();
+
         String getReviewStatus();
+
         Integer getScore();
+
         Double getAesthetics();
+
         Double getInnovation();
     }
 
-    @Query("SELECT s.subTask.id AS taskId, s.role AS role, s.reviewStatus AS reviewStatus, " +
-            "s.score AS score, s.aesthetics AS aesthetics, s.innovation AS innovation " +
-            "FROM ScoringRecord s WHERE s.subTask.id IN :taskIds")
+    @Query("SELECT s.subTask.id AS taskId, s.role AS role, s.reviewStatus AS reviewStatus, "
+            + "s.score AS score, s.aesthetics AS aesthetics, s.innovation AS innovation "
+            + "FROM ScoringRecord s WHERE s.subTask.id IN :taskIds")
     List<DashboardScoringProjection> findDashboardScoringByTaskIds(@Param("taskIds") List<Long> taskIds);
 
     /** 后台同步需要跨越评分、子任务、项目关系，显式一次性加载。 */
@@ -34,8 +38,10 @@ public interface ScoringRepository extends JpaRepository<ScoringRecord, Long> {
     @Query("SELECT s.id FROM ScoringRecord s WHERE s.id > :afterId ORDER BY s.id ASC")
     List<Long> findIdsAfter(@Param("afterId") Long afterId, Pageable pageable);
 
-    @Query("SELECT s.id FROM ScoringRecord s WHERE s.updatedAt > :after AND s.updatedAt <= :until ORDER BY s.updatedAt ASC, s.id ASC")
-    List<Long> findIdsUpdatedBetween(@Param("after") LocalDateTime after, @Param("until") LocalDateTime until, Pageable pageable);
+    @Query(
+            "SELECT s.id FROM ScoringRecord s WHERE s.updatedAt > :after AND s.updatedAt <= :until ORDER BY s.updatedAt ASC, s.id ASC")
+    List<Long> findIdsUpdatedBetween(
+            @Param("after") LocalDateTime after, @Param("until") LocalDateTime until, Pageable pageable);
 
     List<ScoringRecord> findBySubTaskId(Long subTaskId);
 
@@ -58,35 +64,35 @@ public interface ScoringRepository extends JpaRepository<ScoringRecord, Long> {
     @Query("SELECT COUNT(s) FROM ScoringRecord s WHERE s.role = ?1 AND s.reviewStatus = 'pending'")
     long countPendingByRole(String role);
 
-    @Query("SELECT COUNT(s) FROM ScoringRecord s JOIN s.subTask t JOIN t.project p " +
-           "WHERE p.type = 'channel_custom' AND s.role IN ('sales', 'planner') " +
-           "AND s.reviewStatus = 'pending'")
+    @Query("SELECT COUNT(s) FROM ScoringRecord s JOIN s.subTask t JOIN t.project p "
+            + "WHERE p.type = 'channel_custom' AND s.role IN ('sales', 'planner') "
+            + "AND s.reviewStatus = 'pending'")
     long countPendingChannelScore();
 
     @Query("SELECT COUNT(s) FROM ScoringRecord s WHERE s.reviewStatus = 'pending'")
     long countAllPendingScores();
 
     /* legacy pending-score count queries removed; ProjectService now counts canonical aggregate items */
-    @Query("SELECT COUNT(s) FROM ScoringRecord s JOIN s.subTask t JOIN t.project p " +
-           "WHERE s.role = :role AND (s.reviewStatus = 'pending' OR " +
-           "(s.reviewStatus IS NULL AND s.score IS NULL AND (s.aesthetics IS NULL OR s.innovation IS NULL))) " +
-           "AND ((:role = 'planner' AND t.status = 'delivered') " +
-           "OR (:role = 'admin' AND p.type <> 'channel_custom' AND t.status = 'planner_approved') " +
-           "OR (:role = 'sales' AND p.type = 'channel_custom' AND t.status = 'planner_approved'))")
+    @Query("SELECT COUNT(s) FROM ScoringRecord s JOIN s.subTask t JOIN t.project p "
+            + "WHERE s.role = :role AND (s.reviewStatus = 'pending' OR "
+            + "(s.reviewStatus IS NULL AND s.score IS NULL AND (s.aesthetics IS NULL OR s.innovation IS NULL))) "
+            + "AND ((:role = 'planner' AND t.status = 'delivered') "
+            + "OR (:role = 'admin' AND p.type <> 'channel_custom' AND t.status = 'planner_approved') "
+            + "OR (:role = 'sales' AND p.type = 'channel_custom' AND t.status = 'planner_approved'))")
     long countPendingForRole(@Param("role") String role);
 
-    @Query("SELECT COUNT(s) FROM ScoringRecord s JOIN s.subTask t JOIN t.project p " +
-           "WHERE s.role = :role AND (s.reviewStatus = 'pending' OR " +
-           "(s.reviewStatus IS NULL AND s.score IS NULL AND (s.aesthetics IS NULL OR s.innovation IS NULL))) " +
-           "AND p.type = 'channel_custom' AND t.status = 'planner_approved' " +
-           "AND p.salesId IN :userIds")
+    @Query("SELECT COUNT(s) FROM ScoringRecord s JOIN s.subTask t JOIN t.project p "
+            + "WHERE s.role = :role AND (s.reviewStatus = 'pending' OR "
+            + "(s.reviewStatus IS NULL AND s.score IS NULL AND (s.aesthetics IS NULL OR s.innovation IS NULL))) "
+            + "AND p.type = 'channel_custom' AND t.status = 'planner_approved' "
+            + "AND p.salesId IN :userIds")
     long countPendingForSales(@Param("role") String role, @Param("userIds") List<String> userIds);
 
-    @Query("SELECT COUNT(s) FROM ScoringRecord s JOIN s.subTask t JOIN t.project p " +
-           "WHERE s.role = :role AND (s.reviewStatus = 'pending' OR " +
-           "(s.reviewStatus IS NULL AND s.score IS NULL AND (s.aesthetics IS NULL OR s.innovation IS NULL))) " +
-           "AND t.status = 'delivered' " +
-           "AND (p.plannerId IN :userIds OR (p.type = 'channel_custom' AND p.status = 'pending_planner' " +
-           "AND (p.plannerId IS NULL OR p.plannerId = '')))")
+    @Query("SELECT COUNT(s) FROM ScoringRecord s JOIN s.subTask t JOIN t.project p "
+            + "WHERE s.role = :role AND (s.reviewStatus = 'pending' OR "
+            + "(s.reviewStatus IS NULL AND s.score IS NULL AND (s.aesthetics IS NULL OR s.innovation IS NULL))) "
+            + "AND t.status = 'delivered' "
+            + "AND (p.plannerId IN :userIds OR (p.type = 'channel_custom' AND p.status = 'pending_planner' "
+            + "AND (p.plannerId IS NULL OR p.plannerId = '')))")
     long countPendingForPlanners(@Param("role") String role, @Param("userIds") List<String> userIds);
 }

@@ -1,19 +1,18 @@
 package com.emie.designpm.admin.service;
 
-import com.emie.designpm.entity.Role;
 import com.emie.designpm.admin.repository.PermissionVersionRepository;
-import com.emie.designpm.admin.repository.RoleRepository;
 import com.emie.designpm.admin.repository.RolePermissionRepository;
 import com.emie.designpm.admin.repository.RolePermissionScopeRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
+import com.emie.designpm.admin.repository.RoleRepository;
+import com.emie.designpm.entity.Role;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 /**
  * 统一权限解析入口。
@@ -30,10 +29,11 @@ public class PermissionService {
     private final RolePermissionScopeRepository rolePermissionScopeRepository;
 
     @Autowired
-    public PermissionService(RoleRepository roleRepository,
-                             RolePermissionRepository rolePermissionRepository,
-                             PermissionVersionRepository permissionVersionRepository,
-                             RolePermissionScopeRepository rolePermissionScopeRepository) {
+    public PermissionService(
+            RoleRepository roleRepository,
+            RolePermissionRepository rolePermissionRepository,
+            PermissionVersionRepository permissionVersionRepository,
+            RolePermissionScopeRepository rolePermissionScopeRepository) {
         this.roleRepository = roleRepository;
         this.rolePermissionRepository = rolePermissionRepository;
         this.permissionVersionRepository = permissionVersionRepository;
@@ -41,9 +41,10 @@ public class PermissionService {
     }
 
     /** 保留给不关心数据范围的轻量单元测试。 */
-    public PermissionService(RoleRepository roleRepository,
-                             RolePermissionRepository rolePermissionRepository,
-                             PermissionVersionRepository permissionVersionRepository) {
+    public PermissionService(
+            RoleRepository roleRepository,
+            RolePermissionRepository rolePermissionRepository,
+            PermissionVersionRepository permissionVersionRepository) {
         this(roleRepository, rolePermissionRepository, permissionVersionRepository, null);
     }
 
@@ -52,8 +53,7 @@ public class PermissionService {
         Role role = resolveRole(roleName);
         String assignmentRoleName = role != null ? role.getName() : roleName;
 
-        LinkedHashSet<String> permissions = new LinkedHashSet<>(
-                PermissionCatalog.compatibilityPermissions(roleName));
+        LinkedHashSet<String> permissions = new LinkedHashSet<>(PermissionCatalog.compatibilityPermissions(roleName));
         permissions.addAll(rolePermissionRepository.findAllowedPermissionCodes(assignmentRoleName));
         if (role != null) {
             permissions.addAll(PermissionCatalog.translateConfiguredPermissions(role.getPermissions()));
@@ -93,10 +93,13 @@ public class PermissionService {
     }
 
     private List<String> resolveScopes(String normalizedRole, String assignmentRoleName, String permission) {
-        List<String> configured = rolePermissionScopeRepository == null ? List.of()
+        List<String> configured = rolePermissionScopeRepository == null
+                ? List.of()
                 : rolePermissionScopeRepository.findScopeTypes(assignmentRoleName, permission);
         if (!configured.isEmpty()) return configured;
-        return PermissionCatalog.compatibilityScopes(normalizedRole, permission).stream().sorted().toList();
+        return PermissionCatalog.compatibilityScopes(normalizedRole, permission).stream()
+                .sorted()
+                .toList();
     }
 
     private long permissionVersion(String roleName, Role role) {
@@ -110,10 +113,9 @@ public class PermissionService {
     }
 
     private Role resolveRole(String normalizedRole) {
-        return roleRepository.findByNameIgnoreCase(normalizedRole)
-                .orElseGet(() -> roleRepository.findAll().stream()
-                        .filter(role -> PermissionCatalog.normalizeRole(role.getName()).equals(normalizedRole))
-                        .findFirst()
-                        .orElse(null));
+        return roleRepository.findByNameIgnoreCase(normalizedRole).orElseGet(() -> roleRepository.findAll().stream()
+                .filter(role -> PermissionCatalog.normalizeRole(role.getName()).equals(normalizedRole))
+                .findFirst()
+                .orElse(null));
     }
 }

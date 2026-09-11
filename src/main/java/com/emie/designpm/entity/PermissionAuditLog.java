@@ -1,20 +1,21 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.time.LocalDateTime;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "permission_audit_logs", indexes = {
-        @Index(name = "idx_permission_audit_target_time", columnList = "target_type,target_key,created_at"),
-        @Index(name = "idx_permission_audit_actor_time", columnList = "actor_user_id,created_at")
-})
+@Table(
+        name = "permission_audit_logs",
+        indexes = {
+            @Index(name = "idx_permission_audit_target_time", columnList = "target_type,target_key,created_at"),
+            @Index(name = "idx_permission_audit_actor_time", columnList = "actor_user_id,created_at")
+        })
 public class PermissionAuditLog {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

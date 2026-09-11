@@ -1,7 +1,6 @@
 package com.emie.designpm.project.service;
 
 import com.emie.designpm.admin.repository.SystemConfigRepository;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +21,8 @@ final class ScoringWeightConfig {
     /** 按 项目类型+角色 读权重百分比（key: scoring.&lt;type&gt;.&lt;role&gt;），缺省 25.0。 */
     double pct(String projectType, String role) {
         String key = "scoring." + projectType + "." + role;
-        return systemConfigRepository.findByConfigKey(key)
+        return systemConfigRepository
+                .findByConfigKey(key)
                 .map(c -> {
                     try {
                         return Double.parseDouble(c.getConfigValue());

@@ -1,13 +1,11 @@
 package com.emie.designpm.system.controller;
 
-import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.admin.repository.ActivityLogRepository;
 import com.emie.designpm.admin.service.LogArchiveService;
+import com.emie.designpm.auth.AuthSessions;
+import com.emie.designpm.dto.PageResponse;
 import com.emie.designpm.sync.repository.SyncQueueRepository;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -15,7 +13,8 @@ import java.time.YearMonth;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import com.emie.designpm.dto.PageResponse;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/system")
@@ -26,10 +25,11 @@ public class SystemController {
     private final SyncQueueRepository syncQueueRepository;
     private final com.emie.designpm.admin.service.DataIntegrityService dataIntegrityService;
 
-    public SystemController(ActivityLogRepository activityLogRepository,
-                            LogArchiveService logArchiveService,
-                            SyncQueueRepository syncQueueRepository,
-                            com.emie.designpm.admin.service.DataIntegrityService dataIntegrityService) {
+    public SystemController(
+            ActivityLogRepository activityLogRepository,
+            LogArchiveService logArchiveService,
+            SyncQueueRepository syncQueueRepository,
+            com.emie.designpm.admin.service.DataIntegrityService dataIntegrityService) {
         this.activityLogRepository = activityLogRepository;
         this.logArchiveService = logArchiveService;
         this.syncQueueRepository = syncQueueRepository;
@@ -97,8 +97,8 @@ public class SystemController {
 
     /** 手动触发归档指定月份（管理员用） */
     @PostMapping("/archive")
-    public ResponseEntity<Map<String, Object>> triggerArchive(@RequestBody Map<String, String> body,
-                                                               HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> triggerArchive(
+            @RequestBody Map<String, String> body, HttpServletRequest request) {
         if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         String yearMonth = body.get("yearMonth");
         if (yearMonth == null || yearMonth.isBlank()) {

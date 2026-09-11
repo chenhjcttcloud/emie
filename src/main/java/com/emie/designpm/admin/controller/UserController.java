@@ -1,16 +1,15 @@
 package com.emie.designpm.admin.controller;
 
+import com.emie.designpm.admin.repository.RoleRepository;
+import com.emie.designpm.admin.service.UserService;
 import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.reference.repository.DepartmentRepository;
-import com.emie.designpm.admin.repository.RoleRepository;
-import com.emie.designpm.admin.service.UserService;
 import com.emie.designpm.util.TextEncodingUtil;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.*;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.*;
 
 @RestController
 @RequestMapping("/api/users")
@@ -20,9 +19,8 @@ public class UserController {
     private final DepartmentRepository departmentRepository;
     private final RoleRepository roleRepository;
 
-    public UserController(UserService userService,
-                          DepartmentRepository departmentRepository,
-                          RoleRepository roleRepository) {
+    public UserController(
+            UserService userService, DepartmentRepository departmentRepository, RoleRepository roleRepository) {
         this.userService = userService;
         this.departmentRepository = departmentRepository;
         this.roleRepository = roleRepository;
@@ -64,7 +62,8 @@ public class UserController {
 
     private String normalizeRole(String role) {
         if (role == null) return null;
-        if ("promotion".equalsIgnoreCase(role) || "product_promotion".equalsIgnoreCase(role)
+        if ("promotion".equalsIgnoreCase(role)
+                || "product_promotion".equalsIgnoreCase(role)
                 || "product-promotion".equalsIgnoreCase(role)) return "promotion";
         return role;
     }
@@ -98,8 +97,8 @@ public class UserController {
 
     /** 更新用户部门/职级/主管信息 */
     @PutMapping("/org/{userId}")
-    public ResponseEntity<?> updateOrgInfo(@PathVariable String userId, @RequestBody Map<String, Object> body,
-                                           HttpServletRequest request) {
+    public ResponseEntity<?> updateOrgInfo(
+            @PathVariable String userId, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
         User u = userService.getUserByUserId(userId);
         if (u == null) return ResponseEntity.notFound().build();

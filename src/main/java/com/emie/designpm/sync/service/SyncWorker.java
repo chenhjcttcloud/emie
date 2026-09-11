@@ -2,28 +2,27 @@ package com.emie.designpm.sync.service;
 
 import com.emie.designpm.admin.repository.ActivityLogRepository;
 import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.entity.*;
+import com.emie.designpm.feishu.service.FeishuBaseService;
 import com.emie.designpm.project.repository.ProjectRepository;
 import com.emie.designpm.project.repository.SubTaskDeliveryVersionRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
 import com.emie.designpm.scoring.repository.ScoringRepository;
 import com.emie.designpm.sync.repository.SyncQueueOperations;
-import com.emie.designpm.feishu.service.FeishuBaseService;
-import com.emie.designpm.entity.*;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-
-import java.time.LocalDateTime;
-import java.util.*;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 飞书同步工作线程
@@ -51,16 +50,17 @@ public class SyncWorker {
     private final TransactionTemplate itemTransaction;
 
     @Autowired
-    public SyncWorker(@Qualifier("backgroundSyncQueueRepository") SyncQueueOperations syncQueueRepository,
-                      ProjectRepository projectRepository,
-                      SubTaskRepository subTaskRepository,
-                      ScoringRepository scoringRepository,
-                      ActivityLogRepository activityLogRepository,
-                      FeishuBaseService feishuBaseService,
-                      SyncQueueService syncQueueService,
-                      SystemConfigRepository systemConfigRepository,
-                      SubTaskDeliveryVersionRepository deliveryVersionRepository,
-                      PlatformTransactionManager transactionManager) {
+    public SyncWorker(
+            @Qualifier("backgroundSyncQueueRepository") SyncQueueOperations syncQueueRepository,
+            ProjectRepository projectRepository,
+            SubTaskRepository subTaskRepository,
+            ScoringRepository scoringRepository,
+            ActivityLogRepository activityLogRepository,
+            FeishuBaseService feishuBaseService,
+            SyncQueueService syncQueueService,
+            SystemConfigRepository systemConfigRepository,
+            SubTaskDeliveryVersionRepository deliveryVersionRepository,
+            PlatformTransactionManager transactionManager) {
         this.syncQueueRepository = syncQueueRepository;
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
@@ -74,28 +74,47 @@ public class SyncWorker {
     }
 
     /** 保留单元测试和旧调用方的构造签名；生产由 Spring 注入配置仓库。 */
-    public SyncWorker(SyncQueueOperations syncQueueRepository,
-                      ProjectRepository projectRepository,
-                      SubTaskRepository subTaskRepository,
-                      ScoringRepository scoringRepository,
-                      ActivityLogRepository activityLogRepository,
-                      FeishuBaseService feishuBaseService,
-                      SyncQueueService syncQueueService) {
-        this(syncQueueRepository, projectRepository, subTaskRepository, scoringRepository,
-                activityLogRepository, feishuBaseService, syncQueueService, null, null, null);
+    public SyncWorker(
+            SyncQueueOperations syncQueueRepository,
+            ProjectRepository projectRepository,
+            SubTaskRepository subTaskRepository,
+            ScoringRepository scoringRepository,
+            ActivityLogRepository activityLogRepository,
+            FeishuBaseService feishuBaseService,
+            SyncQueueService syncQueueService) {
+        this(
+                syncQueueRepository,
+                projectRepository,
+                subTaskRepository,
+                scoringRepository,
+                activityLogRepository,
+                feishuBaseService,
+                syncQueueService,
+                null,
+                null,
+                null);
     }
 
-    SyncWorker(SyncQueueOperations syncQueueRepository,
-               ProjectRepository projectRepository,
-               SubTaskRepository subTaskRepository,
-               ScoringRepository scoringRepository,
-               ActivityLogRepository activityLogRepository,
-               FeishuBaseService feishuBaseService,
-               SyncQueueService syncQueueService,
-               SystemConfigRepository systemConfigRepository,
-               PlatformTransactionManager transactionManager) {
-        this(syncQueueRepository, projectRepository, subTaskRepository, scoringRepository,
-                activityLogRepository, feishuBaseService, syncQueueService, systemConfigRepository, null,
+    SyncWorker(
+            SyncQueueOperations syncQueueRepository,
+            ProjectRepository projectRepository,
+            SubTaskRepository subTaskRepository,
+            ScoringRepository scoringRepository,
+            ActivityLogRepository activityLogRepository,
+            FeishuBaseService feishuBaseService,
+            SyncQueueService syncQueueService,
+            SystemConfigRepository systemConfigRepository,
+            PlatformTransactionManager transactionManager) {
+        this(
+                syncQueueRepository,
+                projectRepository,
+                subTaskRepository,
+                scoringRepository,
+                activityLogRepository,
+                feishuBaseService,
+                syncQueueService,
+                systemConfigRepository,
+                null,
                 transactionManager);
     }
 
@@ -115,9 +134,10 @@ public class SyncWorker {
 
     private void processQueueLocked() {
         recoverStuckItems();
-        List<SyncQueue> items = syncQueueRepository
-                .findTop20ByStatusAndNextRetryAtIsNullOrStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
-                        "pending", "pending", LocalDateTime.now());
+        List<SyncQueue> items =
+                syncQueueRepository
+                        .findTop20ByStatusAndNextRetryAtIsNullOrStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
+                                "pending", "pending", LocalDateTime.now());
         if (items.isEmpty()) return;
 
         log.info("飞书同步队列: {} 条待处理", items.size());
@@ -179,14 +199,24 @@ public class SyncWorker {
 
         } catch (Exception e) {
             item.setRetryCount(item.getRetryCount() + 1);
-            item.setErrorMsg(e.getMessage() != null ? e.getMessage().substring(0, Math.min(500, e.getMessage().length())) : "未知错误");
+            item.setErrorMsg(
+                    e.getMessage() != null
+                            ? e.getMessage()
+                                    .substring(0, Math.min(500, e.getMessage().length()))
+                            : "未知错误");
             if (item.getRetryCount() >= 3) {
                 item.setStatus("fail");
                 log.warn("同步失败(已重试3次): {} {} - {}", item.getEntityType(), item.getEntityId(), e.getMessage());
             } else {
                 item.setStatus("pending");
-                item.setNextRetryAt(LocalDateTime.now().plusSeconds(Math.min(900, 30L << Math.min(item.getRetryCount(), 4))));
-                log.warn("同步失败(将重试 {}/3): {} {} - {}", item.getRetryCount(), item.getEntityType(), item.getEntityId(), e.getMessage());
+                item.setNextRetryAt(
+                        LocalDateTime.now().plusSeconds(Math.min(900, 30L << Math.min(item.getRetryCount(), 4))));
+                log.warn(
+                        "同步失败(将重试 {}/3): {} {} - {}",
+                        item.getRetryCount(),
+                        item.getEntityType(),
+                        item.getEntityId(),
+                        e.getMessage());
             }
         } finally {
             syncQueueRepository.saveQueue(item);
@@ -212,8 +242,7 @@ public class SyncWorker {
      */
     @Scheduled(
             fixedDelayString = "${app.feishu.reconcile-delay-ms:3600000}",
-            initialDelayString = "${app.feishu.reconcile-initial-delay-ms:300000}"
-    )
+            initialDelayString = "${app.feishu.reconcile-initial-delay-ms:300000}")
     public void reconcileCurrentData() {
         if (!syncLock.tryLock()) {
             log.debug("飞书全量对账跳过：已有同步轮次正在执行");
@@ -227,8 +256,7 @@ public class SyncWorker {
     }
 
     private void reconcileCurrentDataLocked() {
-        if (syncQueueRepository.countByStatus("pending") > 0
-                || syncQueueRepository.countByStatus("processing") > 0) {
+        if (syncQueueRepository.countByStatus("pending") > 0 || syncQueueRepository.countByStatus("processing") > 0) {
             log.debug("飞书全量对账跳过：同步队列仍有待处理任务");
             return;
         }
@@ -242,7 +270,8 @@ public class SyncWorker {
                     new HashSet<>(projectIds), new HashSet<>(taskIds),
                     new HashSet<>(scoringIds), new HashSet<>(logIds));
             int skipped = mirrorResult.values().stream()
-                    .mapToInt(FeishuBaseService.MirrorReconcileResult::skippedWithoutBackup).sum();
+                    .mapToInt(FeishuBaseService.MirrorReconcileResult::skippedWithoutBackup)
+                    .sum();
             if (skipped > 0) {
                 log.warn("飞书主表镜像对账跳过 {} 条缺少系统备份的孤儿记录", skipped);
             }
@@ -258,8 +287,14 @@ public class SyncWorker {
         syncQueueService.enqueueAllForReconciliation("scoring_record", scoringIds);
         syncQueueService.enqueueAllForReconciliation("activity_log", logIds);
         if (systemConfigRepository != null) {
-            SystemConfig cursor = systemConfigRepository.findByConfigKey("feishu.sync.cursor")
-                    .orElseGet(() -> SystemConfig.builder().configKey("feishu.sync.cursor").configGroup("system").valueType("text").description("飞书增量同步游标").build());
+            SystemConfig cursor = systemConfigRepository
+                    .findByConfigKey("feishu.sync.cursor")
+                    .orElseGet(() -> SystemConfig.builder()
+                            .configKey("feishu.sync.cursor")
+                            .configGroup("system")
+                            .valueType("text")
+                            .description("飞书增量同步游标")
+                            .build());
             cursor.setConfigValue(until.toString());
             systemConfigRepository.save(cursor);
         }
@@ -302,61 +337,92 @@ public class SyncWorker {
     }
 
     private LocalDateTime parseCursor(String value) {
-        try { return LocalDateTime.parse(value); }
-        catch (Exception ignored) {
+        try {
+            return LocalDateTime.parse(value);
+        } catch (Exception ignored) {
             log.warn("飞书同步游标无效，使用安全回溯时间: value={}", value);
             return SAFE_SYNC_CURSOR_FALLBACK;
         }
     }
 
     private void syncProject(Long projectId, boolean includeBackup) throws Exception {
-        Project p = projectRepository.findByIdWithTasks(projectId)
+        Project p = projectRepository
+                .findByIdWithTasks(projectId)
                 .or(() -> projectRepository.findById(projectId))
                 .orElseThrow(() -> new Exception("项目不存在: " + projectId));
 
         int taskCount = p.getTasks() != null ? p.getTasks().size() : 0;
-        int doneCount = p.getTasks() != null ?
-                (int) p.getTasks().stream()
-                        .filter(t -> List.of("approved", "completed", "sales_approved", "admin_approved").contains(t.getStatus()))
-                        .count() : 0;
+        int doneCount = p.getTasks() != null
+                ? (int) p.getTasks().stream()
+                        .filter(t -> List.of("approved", "completed", "sales_approved", "admin_approved")
+                                .contains(t.getStatus()))
+                        .count()
+                : 0;
         int progress = taskCount > 0 ? (doneCount * 100 / taskCount) : 0;
 
         List<ScoringRecord> reviewRecords = scoringRepository.findByProjectIds(List.of(projectId));
         int expectedReviewCount = taskCount * 2;
-        int approvedReviewCount = (int) reviewRecords.stream()
-                .filter(this::isApprovedReview)
-                .count();
-        int reviewProgress = expectedReviewCount > 0
-                ? approvedReviewCount * 100 / expectedReviewCount : 0;
+        int approvedReviewCount =
+                (int) reviewRecords.stream().filter(this::isApprovedReview).count();
+        int reviewProgress = expectedReviewCount > 0 ? approvedReviewCount * 100 / expectedReviewCount : 0;
         String projectFlow = projectFlowLabel(p.getStatus(), p.getWorkflowStage(), p.getWorkflowStatus());
         String currentReviewStage = currentReviewStage(p, reviewRecords);
 
-        String categoryName = p.getProductCategory() != null ? p.getProductCategory().getName() : null;
+        String categoryName =
+                p.getProductCategory() != null ? p.getProductCategory().getName() : null;
 
         if (feishuBaseService.isV2Active()) {
-            List<Long> taskIds = p.getTasks() == null ? List.of() : p.getTasks().stream().map(SubTask::getId).toList();
-            feishuBaseService.syncV2Project(new FeishuBaseService.V2ProjectData(
-                    p.getId(), p.getProjectCode(), p.getProductName(), p.getType(), p.getStatus(), p.getSalesName(),
-                    p.getPlannerName(), categoryName, p.getPriceRange(), p.getReferenceImagesJson(),
-                    p.getAttachmentsJson(), taskCount, p.getCreatedAt(), p.getDeadline(), p.getUpdatedAt(),
-                    taskIds, taskProgressSummary(p.getTasks()), progress, projectFlowLabel(p.getStatus(),
-                    p.getWorkflowStage(), p.getWorkflowStatus()), progress, p.getDescription()), includeBackup);
+            List<Long> taskIds = p.getTasks() == null
+                    ? List.of()
+                    : p.getTasks().stream().map(SubTask::getId).toList();
+            feishuBaseService.syncV2Project(
+                    new FeishuBaseService.V2ProjectData(
+                            p.getId(),
+                            p.getProjectCode(),
+                            p.getProductName(),
+                            p.getType(),
+                            p.getStatus(),
+                            p.getSalesName(),
+                            p.getPlannerName(),
+                            categoryName,
+                            p.getPriceRange(),
+                            p.getReferenceImagesJson(),
+                            p.getAttachmentsJson(),
+                            taskCount,
+                            p.getCreatedAt(),
+                            p.getDeadline(),
+                            p.getUpdatedAt(),
+                            taskIds,
+                            taskProgressSummary(p.getTasks()),
+                            progress,
+                            projectFlowLabel(p.getStatus(), p.getWorkflowStage(), p.getWorkflowStatus()),
+                            progress,
+                            p.getDescription()),
+                    includeBackup);
             return;
         }
 
         feishuBaseService.syncProject(
-                p.getId(), p.getType(), p.getStatus(),
-                p.getSalesName(), p.getPlannerName(),
-                p.getDeadline(), categoryName,
-                p.getPriceRange(), taskCount, progress,
-                projectFlow, currentReviewStage, reviewProgress,
+                p.getId(),
+                p.getType(),
+                p.getStatus(),
+                p.getSalesName(),
+                p.getPlannerName(),
+                p.getDeadline(),
+                categoryName,
+                p.getPriceRange(),
+                taskCount,
+                progress,
+                projectFlow,
+                currentReviewStage,
+                reviewProgress,
                 projectExtraFields(p, taskProgressSummary(p.getTasks())),
-                p.getCreatedAt()
-        );
+                p.getCreatedAt());
     }
 
     private void syncSubTask(Long taskId, boolean includeBackup) throws Exception {
-        SubTask t = subTaskRepository.findByIdWithProject(taskId)
+        SubTask t = subTaskRepository
+                .findByIdWithProject(taskId)
                 .or(() -> subTaskRepository.findById(taskId))
                 .orElseThrow(() -> new Exception("子任务不存在: " + taskId));
 
@@ -373,22 +439,42 @@ public class SyncWorker {
                 Integer score = reviewScore(review);
                 if (score != null) roleScores.put(review.getRole(), score);
                 if (score != null && review.getWeight() != null && review.getWeight() > 0) {
-                    weighted += score * review.getWeight(); weights += review.getWeight();
+                    weighted += score * review.getWeight();
+                    weights += review.getWeight();
                 }
             }
-            List<SubTaskDeliveryVersion> versions = deliveryVersionRepository == null ? List.of()
+            List<SubTaskDeliveryVersion> versions = deliveryVersionRepository == null
+                    ? List.of()
                     : deliveryVersionRepository.findBySubTaskIdOrderByVersionNoDesc(taskId);
             SubTaskDeliveryVersion latest = versions.isEmpty() ? null : versions.get(0);
             String deliveryImages = latest != null ? latest.getReferenceImagesJson() : t.getReferenceImagesJson();
             String deliveryFiles = latest != null ? latest.getAttachmentsJson() : t.getAttachmentsJson();
             double aggregate = weights > 0 ? Math.round(weighted / weights * 10d) / 10d : 0;
-            feishuBaseService.syncV2Task(new FeishuBaseService.V2TaskData(
-                    t.getId(), t.getProject() != null ? t.getProject().getId() : null, t.getName(), t.getStatus(),
-                    latest == null ? t.getReferenceImagesJson() : null, latest == null ? t.getAttachmentsJson() : null,
-                    t.getDesignerName(), t.getDetails(), t.getCreatedAt(), t.getPlannedDate(), t.getUpdatedAt(),
-                    deliveryImages, deliveryFiles, t.getSelfScore(), roleScores.get("sales"), roleScores.get("planner"),
-                    roleScores.get("admin"), weights > 0 ? aggregate : null, reviews.stream().map(ScoringRecord::getId).toList(),
-                    workflowStageLabel(t.getWorkflowStage()), taskProgress(t.getStatus()), t.getReviewComments()), includeBackup);
+            feishuBaseService.syncV2Task(
+                    new FeishuBaseService.V2TaskData(
+                            t.getId(),
+                            t.getProject() != null ? t.getProject().getId() : null,
+                            t.getName(),
+                            t.getStatus(),
+                            latest == null ? t.getReferenceImagesJson() : null,
+                            latest == null ? t.getAttachmentsJson() : null,
+                            t.getDesignerName(),
+                            t.getDetails(),
+                            t.getCreatedAt(),
+                            t.getPlannedDate(),
+                            t.getUpdatedAt(),
+                            deliveryImages,
+                            deliveryFiles,
+                            t.getSelfScore(),
+                            roleScores.get("sales"),
+                            roleScores.get("planner"),
+                            roleScores.get("admin"),
+                            weights > 0 ? aggregate : null,
+                            reviews.stream().map(ScoringRecord::getId).toList(),
+                            workflowStageLabel(t.getWorkflowStage()),
+                            taskProgress(t.getStatus()),
+                            t.getReviewComments()),
+                    includeBackup);
             return;
         }
 
@@ -402,16 +488,25 @@ public class SyncWorker {
         }
 
         feishuBaseService.syncSubTask(new FeishuBaseService.SubTaskSyncData(
-                t.getId(), t.getName(), t.getStatus(),
-                t.getDesignerName(), t.getPlannedDate(),
-                actualDate, t.getSelfScore(),
+                t.getId(),
+                t.getName(),
+                t.getStatus(),
+                t.getDesignerName(),
+                t.getPlannedDate(),
+                actualDate,
+                t.getSelfScore(),
                 t.getProject() != null ? t.getProject().getId() : null,
-                reviewRole(firstReview, "planner"), reviewStatus(firstReview), reviewScore(firstReview), reviewName(firstReview),
+                reviewRole(firstReview, "planner"),
+                reviewStatus(firstReview),
+                reviewScore(firstReview),
+                reviewName(firstReview),
                 reviewRole(secondReview, "channel_custom".equals(projectType) ? "sales" : "admin"),
-                reviewStatus(secondReview), reviewScore(secondReview), reviewName(secondReview),
+                reviewStatus(secondReview),
+                reviewScore(secondReview),
+                reviewName(secondReview),
                 finalReviewScore(firstReview, secondReview),
-                t.getCreatedAt(), subTaskExtraFields(t)
-        ));
+                t.getCreatedAt(),
+                subTaskExtraFields(t)));
     }
 
     private Map<String, String> projectExtraFields(Project p, String taskProgress) {
@@ -432,15 +527,16 @@ public class SyncWorker {
     }
 
     static String projectFlowLabel(String projectStatus, String workflowStage, String workflowStatus) {
-        String terminal = switch (projectStatus == null ? "" : projectStatus) {
-            case "draft" -> "草稿";
-            case "pending_planner" -> "待企划接单";
-            case "paused" -> "已暂停";
-            case "pending_terminate" -> "终止确认中";
-            case "terminated" -> "已终止";
-            case "completed" -> "已完成";
-            default -> null;
-        };
+        String terminal =
+                switch (projectStatus == null ? "" : projectStatus) {
+                    case "draft" -> "草稿";
+                    case "pending_planner" -> "待企划接单";
+                    case "paused" -> "已暂停";
+                    case "pending_terminate" -> "终止确认中";
+                    case "terminated" -> "已终止";
+                    case "completed" -> "已完成";
+                    default -> null;
+                };
         if (terminal != null) return terminal;
         String stage = workflowStageLabel(workflowStage);
         if (stage == null) stage = "未开始";
@@ -462,8 +558,10 @@ public class SyncWorker {
         int rejected = 0;
         for (SubTask task : safeTasks) {
             String status = task.getStatus();
-            if (List.of("approved", "completed", "sales_approved", "admin_approved").contains(status)) completed++;
-            else if (List.of("delivered", "submitted_for_review", "planner_approved", "scoring_planner").contains(status)) reviewing++;
+            if (List.of("approved", "completed", "sales_approved", "admin_approved")
+                    .contains(status)) completed++;
+            else if (List.of("delivered", "submitted_for_review", "planner_approved", "scoring_planner")
+                    .contains(status)) reviewing++;
             else if ("pending".equals(status)) pending++;
             else if ("rejected".equals(status)) rejected++;
             else active++;
@@ -524,7 +622,8 @@ public class SyncWorker {
     }
 
     private void syncScoring(Long recordId, boolean includeBackup) throws Exception {
-        ScoringRecord r = scoringRepository.findByIdWithTaskAndProject(recordId)
+        ScoringRecord r = scoringRepository
+                .findByIdWithTaskAndProject(recordId)
                 .or(() -> scoringRepository.findById(recordId))
                 .orElseThrow(() -> new Exception("评分记录不存在: " + recordId));
 
@@ -533,28 +632,46 @@ public class SyncWorker {
         if (feishuBaseService.isV2Active()) {
             Integer score = reviewScore(r);
             Double weighted = score == null ? null : score * (r.getWeight() == null ? 1d : r.getWeight());
-            feishuBaseService.syncV2Scoring(new FeishuBaseService.V2ScoringData(
-                    r.getId(), r.getRole(), r.getReviewerName(), task != null ? task.getId() : null,
-                    r.getReviewedAt(), score == null ? null : score.doubleValue(), r.getWeight(), weighted, r.getComment()), includeBackup);
+            feishuBaseService.syncV2Scoring(
+                    new FeishuBaseService.V2ScoringData(
+                            r.getId(),
+                            r.getRole(),
+                            r.getReviewerName(),
+                            task != null ? task.getId() : null,
+                            r.getReviewedAt(),
+                            score == null ? null : score.doubleValue(),
+                            r.getWeight(),
+                            weighted,
+                            r.getComment()),
+                    includeBackup);
             return;
         }
         feishuBaseService.syncScoring(new FeishuBaseService.ScoringSyncData(
-                r.getId(), r.getRole(), r.getScore(), r.getWeight(),
+                r.getId(),
+                r.getRole(),
+                r.getScore(),
+                r.getWeight(),
                 task != null ? task.getId() : null,
                 project != null ? project.getId() : null,
                 project != null ? project.getType() : null,
-                normalizedReviewStage(r), normalizedReviewStatus(r),
-                r.getReviewerName(), r.getComment(), r.getReviewedAt()
-        ));
+                normalizedReviewStage(r),
+                normalizedReviewStatus(r),
+                r.getReviewerName(),
+                r.getComment(),
+                r.getReviewedAt()));
     }
 
     private String currentReviewStage(Project project, List<ScoringRecord> reviews) {
         if (project.getTasks() == null || project.getTasks().isEmpty()) return "未进入审核";
         if (project.getTasks().stream().allMatch(t -> "completed".equals(t.getStatus()))) return "审核完成";
-        if (reviews.stream().anyMatch(r -> "second".equals(normalizedReviewStage(r))
-                && "rejected".equals(normalizedReviewStatus(r)))) return "二审已驳回";
-        if (reviews.stream().anyMatch(r -> "first".equals(normalizedReviewStage(r))
-                && "rejected".equals(normalizedReviewStatus(r)))) return "一审已驳回";
+        if (reviews.stream()
+                .anyMatch(
+                        r -> "second".equals(normalizedReviewStage(r)) && "rejected".equals(normalizedReviewStatus(r))))
+            return "二审已驳回";
+        if (reviews.stream()
+                .anyMatch(
+                        r -> "first".equals(normalizedReviewStage(r)) && "rejected".equals(normalizedReviewStatus(r))))
+            return "一审已驳回";
         if (project.getTasks().stream().anyMatch(t -> "planner_approved".equals(t.getStatus()))) return "二审中";
         if (project.getTasks().stream().anyMatch(t -> "delivered".equals(t.getStatus()))) return "一审中";
         return "未进入审核";
@@ -566,7 +683,8 @@ public class SyncWorker {
                 .findFirst()
                 .orElseGet(() -> reviews.stream()
                         .filter(r -> "first".equals(stage) == "planner".equals(r.getRole()))
-                        .findFirst().orElse(null));
+                        .findFirst()
+                        .orElse(null));
     }
 
     private boolean isApprovedReview(ScoringRecord record) {
@@ -578,13 +696,15 @@ public class SyncWorker {
         if (record.getReviewStatus() != null && !record.getReviewStatus().isBlank()) {
             return record.getReviewStatus();
         }
-        return record.getScore() != null
-                || (record.getAesthetics() != null && record.getInnovation() != null)
-                ? "approved" : "pending";
+        return record.getScore() != null || (record.getAesthetics() != null && record.getInnovation() != null)
+                ? "approved"
+                : "pending";
     }
 
     private String normalizedReviewStage(ScoringRecord record) {
-        if (record != null && record.getReviewStage() != null && !record.getReviewStage().isBlank()) {
+        if (record != null
+                && record.getReviewStage() != null
+                && !record.getReviewStage().isBlank()) {
             return record.getReviewStage();
         }
         return record != null && "planner".equals(record.getRole()) ? "first" : "second";
@@ -614,8 +734,10 @@ public class SyncWorker {
     private Double finalReviewScore(ScoringRecord firstReview, ScoringRecord secondReview) {
         Integer firstScore = reviewScore(firstReview);
         Integer secondScore = reviewScore(secondReview);
-        if (!isApprovedReview(firstReview) || !isApprovedReview(secondReview)
-                || firstScore == null || secondScore == null) {
+        if (!isApprovedReview(firstReview)
+                || !isApprovedReview(secondReview)
+                || firstScore == null
+                || secondScore == null) {
             return null;
         }
         double firstWeight = firstReview.getWeight() != null ? firstReview.getWeight() : 1.0;
@@ -626,15 +748,21 @@ public class SyncWorker {
     }
 
     private void syncActivityLog(Long logId, boolean includeBackup) throws Exception {
-        ActivityLog log = activityLogRepository.findById(logId)
-                .orElseThrow(() -> new Exception("操作日志不存在: " + logId));
+        ActivityLog log = activityLogRepository.findById(logId).orElseThrow(() -> new Exception("操作日志不存在: " + logId));
         if (feishuBaseService.isV2Active()) {
-            feishuBaseService.syncV2Log(new FeishuBaseService.V2LogData(log.getId(), log.getTime(), log.getRole(),
-                    log.getUsername(), log.getAction(), log.getChangedFields()), includeBackup);
+            feishuBaseService.syncV2Log(
+                    new FeishuBaseService.V2LogData(
+                            log.getId(),
+                            log.getTime(),
+                            log.getRole(),
+                            log.getUsername(),
+                            log.getAction(),
+                            log.getChangedFields()),
+                    includeBackup);
             return;
         }
-        feishuBaseService.syncActivityLog(log.getId(), log.getAction(), log.getUsername(), log.getRole(),
-                log.getProjectRefId(), log.getTime());
+        feishuBaseService.syncActivityLog(
+                log.getId(), log.getAction(), log.getUsername(), log.getRole(), log.getProjectRefId(), log.getTime());
     }
 
     private double taskProgress(String status) {
@@ -659,8 +787,13 @@ public class SyncWorker {
         }
         // 删除项目本身
         feishuBaseService.deleteProjectRecord(projectId);
-        log.info("已删除飞书项目及关联数据: project={}, subTasks={}, scores={}",
-                projectId, tasks.size(), tasks.stream().flatMap(t -> scoringRepository.findBySubTaskId(t.getId()).stream()).count());
+        log.info(
+                "已删除飞书项目及关联数据: project={}, subTasks={}, scores={}",
+                projectId,
+                tasks.size(),
+                tasks.stream()
+                        .flatMap(t -> scoringRepository.findBySubTaskId(t.getId()).stream())
+                        .count());
     }
 
     private void deleteSubTask(Long taskId) throws Exception {

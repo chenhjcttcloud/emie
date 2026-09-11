@@ -2,11 +2,6 @@ package com.emie.designpm.file.service;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.URI;
@@ -35,6 +30,10 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
 /**
  * 为 PDF、PPT 和 PPTX 提供统一预览文件。
@@ -86,12 +85,18 @@ public class FilePreviewService {
                 .connectTimeout(Duration.ofSeconds(Math.min(10, Math.max(1, conversionTimeoutSeconds))))
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
-        conversionExecutor = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
-                new ArrayBlockingQueue<>(32), runnable -> {
-            Thread thread = new Thread(runnable, "file-preview-converter");
-            thread.setDaemon(true);
-            return thread;
-        }, new ThreadPoolExecutor.AbortPolicy());
+        conversionExecutor = new ThreadPoolExecutor(
+                1,
+                1,
+                0,
+                TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(32),
+                runnable -> {
+                    Thread thread = new Thread(runnable, "file-preview-converter");
+                    thread.setDaemon(true);
+                    return thread;
+                },
+                new ThreadPoolExecutor.AbortPolicy());
     }
 
     @PreDestroy
@@ -235,9 +240,10 @@ public class FilePreviewService {
                         HttpRequest.BodyPublishers.ofByteArray(suffix.getBytes(StandardCharsets.UTF_8))))
                 .build();
 
-        HttpResponse<Path> response = httpClient.send(request,
-                HttpResponse.BodyHandlers.ofFile(destination,
-                        StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING));
+        HttpResponse<Path> response = httpClient.send(
+                request,
+                HttpResponse.BodyHandlers.ofFile(
+                        destination, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING));
         if (response.statusCode() != 200) {
             throw new PreviewException("转换服务返回异常状态（" + response.statusCode() + "）");
         }

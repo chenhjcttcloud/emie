@@ -1,15 +1,14 @@
 package com.emie.designpm.admin.service;
 
+import com.emie.designpm.admin.repository.UserRepository;
 import com.emie.designpm.auth.PasswordHasher;
 import com.emie.designpm.entity.User;
-import com.emie.designpm.admin.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
-import org.springframework.stereotype.Service;
-import org.springframework.core.env.Environment;
-
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.core.env.Environment;
+import org.springframework.stereotype.Service;
 
 @Service
 public class UserService {
@@ -40,14 +39,70 @@ public class UserService {
         }
 
         // 测试阶段每个角色只保留一个账号
-        userRepository.save(User.builder().userId("admin_liu").name("刘海娇").role("admin").roleLevel(0).title("管理员").password(pwd("admin_liu")).build());
-        userRepository.save(User.builder().userId("sales_sun").name("孙瑞婷").role("sales").roleLevel(1).title("销售").password(pwd("sales_sun")).build());
-        userRepository.save(User.builder().userId("sales_cai").name("蔡小露").role("sales").roleLevel(1).title("销售").password(pwd("sales_cai")).build());
-        userRepository.save(User.builder().userId("planner_zheng").name("郑诗绚").role("planner").roleLevel(2).title("产品企划").password(pwd("planner_zheng")).build());
-        userRepository.save(User.builder().userId("planner_wu").name("吴思欣").role("planner").roleLevel(2).title("产品企划").password(pwd("planner_wu")).build());
-        userRepository.save(User.builder().userId("designer_cheny").name("陈月珍").role("designer").roleLevel(3).title("设计师").password(pwd("designer_cheny")).build());
-        userRepository.save(User.builder().userId("designer_huang").name("黄海岚").role("designer").roleLevel(3).title("设计师").password(pwd("designer_huang")).build());
-        userRepository.save(User.builder().userId("supplychain_01").name("供应链01").role("supplychain").roleLevel(3).title("供应链").password(pwd("supplychain_01")).build());
+        userRepository.save(User.builder()
+                .userId("admin_liu")
+                .name("刘海娇")
+                .role("admin")
+                .roleLevel(0)
+                .title("管理员")
+                .password(pwd("admin_liu"))
+                .build());
+        userRepository.save(User.builder()
+                .userId("sales_sun")
+                .name("孙瑞婷")
+                .role("sales")
+                .roleLevel(1)
+                .title("销售")
+                .password(pwd("sales_sun"))
+                .build());
+        userRepository.save(User.builder()
+                .userId("sales_cai")
+                .name("蔡小露")
+                .role("sales")
+                .roleLevel(1)
+                .title("销售")
+                .password(pwd("sales_cai"))
+                .build());
+        userRepository.save(User.builder()
+                .userId("planner_zheng")
+                .name("郑诗绚")
+                .role("planner")
+                .roleLevel(2)
+                .title("产品企划")
+                .password(pwd("planner_zheng"))
+                .build());
+        userRepository.save(User.builder()
+                .userId("planner_wu")
+                .name("吴思欣")
+                .role("planner")
+                .roleLevel(2)
+                .title("产品企划")
+                .password(pwd("planner_wu"))
+                .build());
+        userRepository.save(User.builder()
+                .userId("designer_cheny")
+                .name("陈月珍")
+                .role("designer")
+                .roleLevel(3)
+                .title("设计师")
+                .password(pwd("designer_cheny"))
+                .build());
+        userRepository.save(User.builder()
+                .userId("designer_huang")
+                .name("黄海岚")
+                .role("designer")
+                .roleLevel(3)
+                .title("设计师")
+                .password(pwd("designer_huang"))
+                .build());
+        userRepository.save(User.builder()
+                .userId("supplychain_01")
+                .name("供应链01")
+                .role("supplychain")
+                .roleLevel(3)
+                .title("供应链")
+                .password(pwd("supplychain_01"))
+                .build());
         refreshCache();
     }
 
@@ -105,7 +160,9 @@ public class UserService {
         roleCache.clear();
         for (User u : all) {
             userCache.put(u.getUserId(), u);
-            roleCache.computeIfAbsent(u.getRole(), k -> new java.util.ArrayList<>()).add(u);
+            roleCache
+                    .computeIfAbsent(u.getRole(), k -> new java.util.ArrayList<>())
+                    .add(u);
         }
     }
 

@@ -1,19 +1,21 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.time.LocalDateTime;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "permission_versions",
-        uniqueConstraints = @UniqueConstraint(name = "uk_permission_version_subject",
-                columnNames = {"subject_type", "subject_key"}))
+@Table(
+        name = "permission_versions",
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_permission_version_subject",
+                        columnNames = {"subject_type", "subject_key"}))
 public class PermissionVersion {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -1,11 +1,10 @@
 package com.emie.designpm.admin.repository;
 
 import com.emie.designpm.entity.RolePermission;
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import java.util.List;
 
 public interface RolePermissionRepository extends JpaRepository<RolePermission, Long> {
 
@@ -13,7 +12,8 @@ public interface RolePermissionRepository extends JpaRepository<RolePermission, 
 
     void deleteByRoleId(Long roleId);
 
-    @Query("""
+    @Query(
+            """
             select rp.permission.code
             from RolePermission rp
             where rp.role.name = :roleName
@@ -23,7 +23,8 @@ public interface RolePermissionRepository extends JpaRepository<RolePermission, 
             """)
     List<String> findAllowedPermissionCodes(@Param("roleName") String roleName);
 
-    @Query("""
+    @Query(
+            """
             select rp.permission.code
             from RolePermission rp
             where rp.role.name = :roleName

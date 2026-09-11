@@ -1,10 +1,9 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
@@ -34,8 +33,12 @@ public class PointDifficultyConfig {
     private LocalDateTime updatedAt;
 
     @PrePersist
-    void onCreate() { createdAt = updatedAt = LocalDateTime.now(); }
+    void onCreate() {
+        createdAt = updatedAt = LocalDateTime.now();
+    }
 
     @PreUpdate
-    void onUpdate() { updatedAt = LocalDateTime.now(); }
+    void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }

@@ -1,30 +1,29 @@
 package com.emie.designpm.sync.service;
 
-import com.emie.designpm.sync.repository.SyncQueueRepository;
-import com.emie.designpm.admin.repository.ActivityLogRepository;
-import com.emie.designpm.admin.repository.SystemConfigRepository;
-import com.emie.designpm.project.repository.ProjectRepository;
-import com.emie.designpm.project.repository.SubTaskRepository;
-import com.emie.designpm.scoring.repository.ScoringRepository;
-import com.emie.designpm.sync.repository.SyncQueueOperations;
-import com.emie.designpm.feishu.service.FeishuBaseService;
-import com.emie.designpm.entity.ActivityLog;
-import com.emie.designpm.entity.SyncQueue;
-import org.junit.jupiter.api.Test;
-import org.mockito.InOrder;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionStatus;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
+
+import com.emie.designpm.admin.repository.ActivityLogRepository;
+import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.entity.ActivityLog;
+import com.emie.designpm.entity.SyncQueue;
+import com.emie.designpm.feishu.service.FeishuBaseService;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
+import com.emie.designpm.scoring.repository.ScoringRepository;
+import com.emie.designpm.sync.repository.SyncQueueOperations;
+import com.emie.designpm.sync.repository.SyncQueueRepository;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionStatus;
 
 /**
  * SyncWorker 按条目事务：processQueue 中每条队列任务在独立的主库短事务里执行
@@ -44,7 +43,8 @@ class SyncWorkerTransactionTest {
         SyncQueue item1 = queueItem(1L);
         SyncQueue item2 = queueItem(2L);
         when(queue.findTop20ByStatusAndNextRetryAtIsNullOrStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
-                eq("pending"), eq("pending"), any())).thenReturn(List.of(item1, item2));
+                        eq("pending"), eq("pending"), any()))
+                .thenReturn(List.of(item1, item2));
         when(logs.findById(1L)).thenReturn(Optional.of(log(1L)));
         when(logs.findById(2L)).thenReturn(Optional.of(log(2L)));
 
@@ -79,12 +79,20 @@ class SyncWorkerTransactionTest {
 
         SyncQueue item = queueItem(1L);
         when(queue.findTop20ByStatusAndNextRetryAtIsNullOrStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
-                eq("pending"), eq("pending"), any())).thenReturn(List.of(item));
+                        eq("pending"), eq("pending"), any()))
+                .thenReturn(List.of(item));
         when(logs.findById(1L)).thenReturn(Optional.of(log(1L)));
 
         // 旧 7 参构造器：itemTransaction = null，走非事务路径但处理语义不变
-        new SyncWorker(queue, mock(ProjectRepository.class), mock(SubTaskRepository.class),
-                mock(ScoringRepository.class), logs, feishu, mock(SyncQueueService.class)).processQueue();
+        new SyncWorker(
+                        queue,
+                        mock(ProjectRepository.class),
+                        mock(SubTaskRepository.class),
+                        mock(ScoringRepository.class),
+                        logs,
+                        feishu,
+                        mock(SyncQueueService.class))
+                .processQueue();
 
         verify(feishu).syncActivityLog(eq(1L), anyString(), anyString(), anyString(), any(), any());
         verify(queue, times(2)).saveQueue(item);
@@ -96,12 +104,18 @@ class SyncWorkerTransactionTest {
         SyncQueueRepository queue = mock(SyncQueueRepository.class);
         PlatformTransactionManager txManager = mock(PlatformTransactionManager.class);
 
-        SyncQueue stuck = SyncQueue.builder().entityType("project").entityId(9L)
-                .action("update").status("processing").retryCount(0).build();
+        SyncQueue stuck = SyncQueue.builder()
+                .entityType("project")
+                .entityId(9L)
+                .action("update")
+                .status("processing")
+                .retryCount(0)
+                .build();
         when(queue.findByStatusAndUpdatedAtBefore(eq("processing"), any())).thenReturn(List.of(stuck));
         // 本轮没有新的可处理条目
         when(queue.findTop20ByStatusAndNextRetryAtIsNullOrStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
-                eq("pending"), eq("pending"), any())).thenReturn(List.of());
+                        eq("pending"), eq("pending"), any()))
+                .thenReturn(List.of());
 
         worker(queue, mock(ActivityLogRepository.class), mock(FeishuBaseService.class), txManager)
                 .processQueue();
@@ -124,10 +138,12 @@ class SyncWorkerTransactionTest {
         SyncQueue item1 = queueItem(1L);
         SyncQueue item2 = queueItem(2L);
         when(queue.findTop20ByStatusAndNextRetryAtIsNullOrStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
-                eq("pending"), eq("pending"), any())).thenReturn(List.of(item1, item2));
+                        eq("pending"), eq("pending"), any()))
+                .thenReturn(List.of(item1, item2));
         when(logs.findById(1L)).thenReturn(Optional.of(log(1L)));
         when(logs.findById(2L)).thenReturn(Optional.of(log(2L)));
-        doThrow(new RuntimeException("boom")).when(feishu)
+        doThrow(new RuntimeException("boom"))
+                .when(feishu)
                 .syncActivityLog(eq(1L), anyString(), anyString(), anyString(), any(), any());
 
         worker(queue, logs, feishu, txManager).processQueue();
@@ -143,16 +159,31 @@ class SyncWorkerTransactionTest {
         verify(txManager, never()).rollback(any());
     }
 
-    private SyncWorker worker(SyncQueueOperations queue, ActivityLogRepository logs,
-                              FeishuBaseService feishu, PlatformTransactionManager txManager) {
-        return new SyncWorker(queue, mock(ProjectRepository.class), mock(SubTaskRepository.class),
-                mock(ScoringRepository.class), logs, feishu, mock(SyncQueueService.class),
-                mock(SystemConfigRepository.class), txManager);
+    private SyncWorker worker(
+            SyncQueueOperations queue,
+            ActivityLogRepository logs,
+            FeishuBaseService feishu,
+            PlatformTransactionManager txManager) {
+        return new SyncWorker(
+                queue,
+                mock(ProjectRepository.class),
+                mock(SubTaskRepository.class),
+                mock(ScoringRepository.class),
+                logs,
+                feishu,
+                mock(SyncQueueService.class),
+                mock(SystemConfigRepository.class),
+                txManager);
     }
 
     private SyncQueue queueItem(long entityId) {
-        return SyncQueue.builder().entityType("activity_log").entityId(entityId)
-                .action("update").status("pending").retryCount(0).build();
+        return SyncQueue.builder()
+                .entityType("activity_log")
+                .entityId(entityId)
+                .action("update")
+                .status("pending")
+                .retryCount(0)
+                .build();
     }
 
     private ActivityLog log(long id) {

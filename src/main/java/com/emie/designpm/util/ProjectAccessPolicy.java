@@ -3,14 +3,12 @@ package com.emie.designpm.util;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.SubTask;
-
 import java.util.Objects;
 
 /** 项目可见性与项目级管理权限的统一规则。 */
 public final class ProjectAccessPolicy {
 
-    private ProjectAccessPolicy() {
-    }
+    private ProjectAccessPolicy() {}
 
     public static boolean canView(Project project, AuthSession session) {
         if (project == null || session == null) return false;
@@ -44,11 +42,11 @@ public final class ProjectAccessPolicy {
     public static boolean canEditProjectInformation(Project project, AuthSession session) {
         if (project == null || session == null) return false;
         return ("channel_custom".equals(project.getType())
-                && "sales".equals(session.role())
-                && Objects.equals(session.userId(), project.getSalesId()))
+                        && "sales".equals(session.role())
+                        && Objects.equals(session.userId(), project.getSalesId()))
                 || ("regular".equals(project.getType())
-                && "planner".equals(session.role())
-                && Objects.equals(session.userId(), project.getPlannerId()));
+                        && "planner".equals(session.role())
+                        && Objects.equals(session.userId(), project.getPlannerId()));
     }
 
     static boolean canViewTask(SubTask task, String userId, String role) {

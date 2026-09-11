@@ -1,10 +1,9 @@
 package com.emie.designpm.compliance.repository;
 
 import com.emie.designpm.entity.ComplianceItem;
-import org.springframework.data.jpa.repository.JpaRepository;
-
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ComplianceItemRepository extends JpaRepository<ComplianceItem, Long> {
 

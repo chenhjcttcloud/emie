@@ -1,17 +1,16 @@
 package com.emie.designpm.architecture;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
+
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.lang.ArchRule;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-
-import java.util.Set;
-
-import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
-import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
-import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
 /**
  * 架构护栏：把包结构重构（package-by-feature）的成果、以及分层约束焊进 CI。
@@ -38,13 +37,17 @@ class ArchitectureRulesTest {
     @Test
     void controllers_services_repositories_live_in_feature_packages() {
         ArchRule rule = noClasses()
-                .that().resideInAnyPackage(
+                .that()
+                .resideInAnyPackage(
                         ROOT + ".controller", ROOT + ".controller..",
                         ROOT + ".service", ROOT + ".service..",
                         ROOT + ".repository", ROOT + ".repository..")
-                .should().beAnnotatedWith("org.springframework.web.bind.annotation.RestController")
-                .orShould().beAnnotatedWith("org.springframework.stereotype.Service")
-                .orShould().beAnnotatedWith("org.springframework.stereotype.Component")
+                .should()
+                .beAnnotatedWith("org.springframework.web.bind.annotation.RestController")
+                .orShould()
+                .beAnnotatedWith("org.springframework.stereotype.Service")
+                .orShould()
+                .beAnnotatedWith("org.springframework.stereotype.Component")
                 .as("controller/service/repository 必须放在 " + ROOT + ".<domain>.{controller|service|repository}，"
                         + "不得放在扁平的顶层包")
                 .allowEmptyShould(true);
@@ -54,9 +57,12 @@ class ArchitectureRulesTest {
     @Test
     void controllers_are_named_and_placed_consistently() {
         classes()
-                .that().areAnnotatedWith("org.springframework.web.bind.annotation.RestController")
-                .should().resideInAPackage(ROOT + ".*.controller")
-                .andShould().haveSimpleNameEndingWith("Controller")
+                .that()
+                .areAnnotatedWith("org.springframework.web.bind.annotation.RestController")
+                .should()
+                .resideInAPackage(ROOT + ".*.controller")
+                .andShould()
+                .haveSimpleNameEndingWith("Controller")
                 .check(production);
     }
 
@@ -66,9 +72,12 @@ class ArchitectureRulesTest {
         // 扁平的 com.emie.designpm.repository 不匹配 → 直接失败（不依赖 @Repository 注解，
         // Spring Data 的接口本身不带注解也会被这条抓到）。background.repository 合法保留。
         classes()
-                .that().areAssignableTo("org.springframework.data.repository.Repository")
-                .and().areInterfaces()
-                .should().resideInAPackage(ROOT + ".*.repository")
+                .that()
+                .areAssignableTo("org.springframework.data.repository.Repository")
+                .and()
+                .areInterfaces()
+                .should()
+                .resideInAPackage(ROOT + ".*.repository")
                 .check(production);
     }
 
@@ -79,17 +88,22 @@ class ArchitectureRulesTest {
     @Test
     void services_do_not_depend_on_controllers() {
         noClasses()
-                .that().resideInAPackage(ROOT + "..service..")
-                .should().dependOnClassesThat().resideInAPackage(ROOT + "..controller..")
+                .that()
+                .resideInAPackage(ROOT + "..service..")
+                .should()
+                .dependOnClassesThat()
+                .resideInAPackage(ROOT + "..controller..")
                 .check(production);
     }
 
     @Test
     void repositories_do_not_depend_on_services_or_controllers() {
         noClasses()
-                .that().resideInAPackage(ROOT + "..repository..")
-                .should().dependOnClassesThat().resideInAnyPackage(
-                        ROOT + "..service..", ROOT + "..controller..")
+                .that()
+                .resideInAPackage(ROOT + "..repository..")
+                .should()
+                .dependOnClassesThat()
+                .resideInAnyPackage(ROOT + "..service..", ROOT + "..controller..")
                 .check(production);
     }
 
@@ -98,8 +112,11 @@ class ArchitectureRulesTest {
         // service 层的例外：entity 通过 @EntityListeners(...SyncListener.class) 的类字面量
         // 引用 sync.service 的 3 个监听器，这是标准 JPA 用法，不算分层违规。
         noClasses()
-                .that().resideInAPackage(ROOT + ".entity..")
-                .should().dependOnClassesThat().resideInAPackage(ROOT + "..controller..")
+                .that()
+                .resideInAPackage(ROOT + ".entity..")
+                .should()
+                .dependOnClassesThat()
+                .resideInAPackage(ROOT + "..controller..")
                 .check(production);
     }
 
@@ -141,16 +158,19 @@ class ArchitectureRulesTest {
     @Test
     void no_new_controller_depends_on_a_repository() {
         noClasses()
-                .that().resideInAPackage(ROOT + "..controller..")
+                .that()
+                .resideInAPackage(ROOT + "..controller..")
                 .and(new com.tngtech.archunit.base.DescribedPredicate<>("not on the frozen allowlist") {
                     @Override
                     public boolean test(com.tngtech.archunit.core.domain.JavaClass javaClass) {
                         return !CONTROLLERS_ALLOWED_TO_TOUCH_REPOSITORIES.contains(javaClass.getFullName());
                     }
                 })
-                .should().dependOnClassesThat().resideInAPackage(ROOT + "..repository..")
-                .as("controller 不得直连 repository；业务查询应经 service。"
-                        + "（" + CONTROLLERS_ALLOWED_TO_TOUCH_REPOSITORIES.size() + " 个历史违规已冻结在清单里）")
+                .should()
+                .dependOnClassesThat()
+                .resideInAPackage(ROOT + "..repository..")
+                .as("controller 不得直连 repository；业务查询应经 service。" + "（"
+                        + CONTROLLERS_ALLOWED_TO_TOUCH_REPOSITORIES.size() + " 个历史违规已冻结在清单里）")
                 .check(production);
     }
 
@@ -170,9 +190,6 @@ class ArchitectureRulesTest {
     @org.junit.jupiter.api.Disabled("基线：跨域循环依赖是已知债，见 docs/adr。解耦后启用")
     @Test
     void feature_domains_are_free_of_cycles() {
-        slices()
-                .matching(ROOT + ".(*)..")
-                .should().beFreeOfCycles()
-                .check(production);
+        slices().matching(ROOT + ".(*)..").should().beFreeOfCycles().check(production);
     }
 }

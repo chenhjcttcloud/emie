@@ -1,35 +1,34 @@
 package com.emie.designpm.project.controller;
 
+import com.emie.designpm.admin.repository.ActivityLogRepository;
+import com.emie.designpm.admin.service.PermissionService;
+import com.emie.designpm.admin.service.UserService;
 import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.dto.ProjectDetailDTO;
 import com.emie.designpm.dto.ApiErrorResponse;
 import com.emie.designpm.dto.PageResponse;
+import com.emie.designpm.dto.ProjectDetailDTO;
 import com.emie.designpm.dto.ProjectListQuery;
 import com.emie.designpm.dto.ProjectSummaryDTO;
 import com.emie.designpm.entity.*;
-import com.emie.designpm.admin.repository.ActivityLogRepository;
-import com.emie.designpm.scoring.repository.ScoringRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
+import com.emie.designpm.project.service.ProjectAccessService;
+import com.emie.designpm.project.service.ProjectLifecycleCommandService;
 import com.emie.designpm.project.service.ProjectService;
 import com.emie.designpm.project.service.ProjectViewSupport;
-import com.emie.designpm.project.service.SubTaskCommandService;
-import com.emie.designpm.project.service.ProjectLifecycleCommandService;
-import com.emie.designpm.project.service.ProjectAccessService;
 import com.emie.designpm.project.service.ProjectWorkflowService;
-import com.emie.designpm.admin.service.PermissionService;
-import com.emie.designpm.admin.service.UserService;
+import com.emie.designpm.project.service.SubTaskCommandService;
+import com.emie.designpm.scoring.repository.ScoringRepository;
 import com.emie.designpm.util.ProjectAccessPolicy;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.http.ResponseEntity;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.beans.factory.annotation.Autowired;
-
-import java.time.format.DateTimeFormatter;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/projects")
@@ -45,23 +44,27 @@ public class ProjectController {
     private final PermissionService permissionService;
     private final ProjectViewSupport view;
     private final ProjectRequestSupport req;
+
     @Autowired(required = false)
     private UserService userService;
+
     @Autowired(required = false)
     private com.emie.designpm.feishu.service.FeishuChatService feishuChatService;
+
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     @Autowired
-    public ProjectController(ProjectService projectService,
-                             ActivityLogRepository activityLogRepository,
-                             SubTaskRepository subTaskRepository,
-                             ProjectAccessService projectAccessService,
-                             ProjectWorkflowService projectWorkflowService,
-                             PermissionService permissionService,
-                             SubTaskCommandService subTaskCommandService,
-                             ProjectLifecycleCommandService projectLifecycleCommandService,
-                             ProjectViewSupport view,
-                             ProjectRequestSupport req) {
+    public ProjectController(
+            ProjectService projectService,
+            ActivityLogRepository activityLogRepository,
+            SubTaskRepository subTaskRepository,
+            ProjectAccessService projectAccessService,
+            ProjectWorkflowService projectWorkflowService,
+            PermissionService permissionService,
+            SubTaskCommandService subTaskCommandService,
+            ProjectLifecycleCommandService projectLifecycleCommandService,
+            ProjectViewSupport view,
+            ProjectRequestSupport req) {
         this.projectService = projectService;
         this.subTaskCommandService = subTaskCommandService;
         this.projectLifecycleCommandService = projectLifecycleCommandService;
@@ -74,56 +77,102 @@ public class ProjectController {
         this.req = req;
     }
 
-    ProjectController(ProjectService projectService,
-                      ScoringRepository scoringRepository,
-                      ActivityLogRepository activityLogRepository,
-                      SubTaskRepository subTaskRepository,
-                      ProjectAccessService projectAccessService,
-                      ProjectWorkflowService projectWorkflowService,
-                      PermissionService permissionService,
-                      SubTaskCommandService subTaskCommandService,
-                      ProjectLifecycleCommandService projectLifecycleCommandService) {
-        this(projectService, activityLogRepository, subTaskRepository,
-                projectAccessService, projectWorkflowService, permissionService,
-                subTaskCommandService, projectLifecycleCommandService,
-                new ProjectViewSupport(projectService, scoringRepository, activityLogRepository,
-                        subTaskRepository, projectAccessService, projectWorkflowService, subTaskCommandService),
+    ProjectController(
+            ProjectService projectService,
+            ScoringRepository scoringRepository,
+            ActivityLogRepository activityLogRepository,
+            SubTaskRepository subTaskRepository,
+            ProjectAccessService projectAccessService,
+            ProjectWorkflowService projectWorkflowService,
+            PermissionService permissionService,
+            SubTaskCommandService subTaskCommandService,
+            ProjectLifecycleCommandService projectLifecycleCommandService) {
+        this(
+                projectService,
+                activityLogRepository,
+                subTaskRepository,
+                projectAccessService,
+                projectWorkflowService,
+                permissionService,
+                subTaskCommandService,
+                projectLifecycleCommandService,
+                new ProjectViewSupport(
+                        projectService,
+                        scoringRepository,
+                        activityLogRepository,
+                        subTaskRepository,
+                        projectAccessService,
+                        projectWorkflowService,
+                        subTaskCommandService),
                 new ProjectRequestSupport(permissionService));
     }
 
     /** 保留给轻量 Controller 单元测试；生产运行始终使用完整依赖构造器。 */
-    ProjectController(ProjectService projectService,
-                      ScoringRepository scoringRepository,
-                      ActivityLogRepository activityLogRepository,
-                      SubTaskRepository subTaskRepository,
-                      ProjectAccessService projectAccessService,
-                      ProjectWorkflowService projectWorkflowService,
-                      PermissionService permissionService) {
-        this(projectService, scoringRepository, activityLogRepository, subTaskRepository,
-                projectAccessService, projectWorkflowService, permissionService,
-                ProjectTaskController.unsupportedSubTaskCommands(), unsupportedProjectLifecycle());
+    ProjectController(
+            ProjectService projectService,
+            ScoringRepository scoringRepository,
+            ActivityLogRepository activityLogRepository,
+            SubTaskRepository subTaskRepository,
+            ProjectAccessService projectAccessService,
+            ProjectWorkflowService projectWorkflowService,
+            PermissionService permissionService) {
+        this(
+                projectService,
+                scoringRepository,
+                activityLogRepository,
+                subTaskRepository,
+                projectAccessService,
+                projectWorkflowService,
+                permissionService,
+                ProjectTaskController.unsupportedSubTaskCommands(),
+                unsupportedProjectLifecycle());
     }
 
     /** 保留给轻量 Controller 单元测试；生产运行始终使用完整依赖构造器。 */
-    ProjectController(ProjectService projectService,
-                      ScoringRepository scoringRepository,
-                      ActivityLogRepository activityLogRepository,
-                      SubTaskRepository subTaskRepository,
-                      ProjectAccessService projectAccessService,
-                      ProjectWorkflowService projectWorkflowService) {
-        this(projectService, scoringRepository, activityLogRepository, subTaskRepository,
-                projectAccessService, projectWorkflowService, null,
-                ProjectTaskController.unsupportedSubTaskCommands(), unsupportedProjectLifecycle());
+    ProjectController(
+            ProjectService projectService,
+            ScoringRepository scoringRepository,
+            ActivityLogRepository activityLogRepository,
+            SubTaskRepository subTaskRepository,
+            ProjectAccessService projectAccessService,
+            ProjectWorkflowService projectWorkflowService) {
+        this(
+                projectService,
+                scoringRepository,
+                activityLogRepository,
+                subTaskRepository,
+                projectAccessService,
+                projectWorkflowService,
+                null,
+                ProjectTaskController.unsupportedSubTaskCommands(),
+                unsupportedProjectLifecycle());
     }
 
     private static ProjectLifecycleCommandService unsupportedProjectLifecycle() {
         return new ProjectLifecycleCommandService() {
-            private UnsupportedOperationException unsupported() { return new UnsupportedOperationException("轻量测试未注入生命周期命令服务"); }
-            public Project terminateProject(Long id, Map<String,Object> body) { throw unsupported(); }
-            public Project cancelTerminate(Long id, Map<String,Object> body) { throw unsupported(); }
-            public Project pauseProject(Long id, Map<String,Object> body) { throw unsupported(); }
-            public Project resumeProject(Long id, Map<String,Object> body) { throw unsupported(); }
-            public void deleteProject(Long id) { throw unsupported(); }
+            private UnsupportedOperationException unsupported() {
+                return new UnsupportedOperationException("轻量测试未注入生命周期命令服务");
+            }
+
+            public Project terminateProject(Long id, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project cancelTerminate(Long id, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project pauseProject(Long id, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public Project resumeProject(Long id, Map<String, Object> body) {
+                throw unsupported();
+            }
+
+            public void deleteProject(Long id) {
+                throw unsupported();
+            }
         };
     }
 
@@ -149,9 +198,7 @@ public class ProjectController {
         }
 
         if (type != null) {
-            projects = projects.stream()
-                    .filter(p -> type.equals(p.getType()))
-                    .collect(Collectors.toList());
+            projects = projects.stream().filter(p -> type.equals(p.getType())).collect(Collectors.toList());
         }
 
         // 批量预计算子任务计数（避免 toSummary 中逐个调用 p.getTasks()）
@@ -188,10 +235,19 @@ public class ProjectController {
         int safeSize = Math.min(Math.max(size, 1), 50);
         try {
             ProjectListQuery query = new ProjectListQuery(
-                    normalizeType(type), normalizeStatus(status), trimToNull(category, 50), normalizeMarket(market),
-                    trimToNull(keyword, 100), normalizeDate(deadlineStart), normalizeDate(deadlineEnd), participating,
-                    PageRequest.of(safePage, safeSize), normalizeOwnerRole(ownerRole), trimToNull(ownerId, 100));
-            if (query.deadlineStart() != null && query.deadlineEnd() != null
+                    normalizeType(type),
+                    normalizeStatus(status),
+                    trimToNull(category, 50),
+                    normalizeMarket(market),
+                    trimToNull(keyword, 100),
+                    normalizeDate(deadlineStart),
+                    normalizeDate(deadlineEnd),
+                    participating,
+                    PageRequest.of(safePage, safeSize),
+                    normalizeOwnerRole(ownerRole),
+                    trimToNull(ownerId, 100));
+            if (query.deadlineStart() != null
+                    && query.deadlineEnd() != null
                     && query.deadlineStart().compareTo(query.deadlineEnd()) > 0) {
                 return ResponseEntity.badRequest().body(ApiErrorResponse.invalidQuery("开始日期不能晚于结束日期"));
             }
@@ -201,9 +257,14 @@ public class ProjectController {
             Map<Long, Double> scoreMap = projectService.computeProjectScoresBatch(projects);
             Map<Long, String> statusMap = projectService.computeProjectStatusMap(projects);
             List<ProjectSummaryDTO> items = projects.stream()
-                    .map(p -> toSummary(p, taskCountMap, scoreMap, statusMap)).toList();
-            return ResponseEntity.ok(new PageResponse<>(items, projectPage.getNumber(), projectPage.getSize(),
-                    projectPage.getTotalElements(), projectPage.getTotalPages()));
+                    .map(p -> toSummary(p, taskCountMap, scoreMap, statusMap))
+                    .toList();
+            return ResponseEntity.ok(new PageResponse<>(
+                    items,
+                    projectPage.getNumber(),
+                    projectPage.getSize(),
+                    projectPage.getTotalElements(),
+                    projectPage.getTotalPages()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(ApiErrorResponse.invalidQuery(e.getMessage()));
         }
@@ -228,8 +289,15 @@ public class ProjectController {
     private String normalizeStatus(String status) {
         String value = trimToNull(status, 40);
         if (value == null || "all".equals(value)) return null;
-        Set<String> allowed = Set.of("draft", "in_progress", "paused", "completed", "completed_pending_score",
-                "pending_planner", "pending_terminate", "terminated");
+        Set<String> allowed = Set.of(
+                "draft",
+                "in_progress",
+                "paused",
+                "completed",
+                "completed_pending_score",
+                "pending_planner",
+                "pending_terminate",
+                "terminated");
         if (!allowed.contains(value)) throw new IllegalArgumentException("项目状态参数无效");
         return value;
     }
@@ -262,14 +330,21 @@ public class ProjectController {
     @GetMapping("/my-tasks")
     public ResponseEntity<List<ProjectDetailDTO>> getMyTaskProjects(HttpServletRequest request) {
         AuthSession session = getSession(request);
-        if (session == null || !("admin".equals(session.role()) || "designer".equals(session.role())
-                || "supplychain".equals(session.role()) || "planner".equals(session.role()))) {
+        if (session == null
+                || !("admin".equals(session.role())
+                        || "designer".equals(session.role())
+                        || "supplychain".equals(session.role())
+                        || "planner".equals(session.role()))) {
             return ResponseEntity.status(403).build();
         }
         List<Project> projects = projectAccessService.findVisibleProjectsWithTasks(session);
-        List<Long> taskIds = projects.stream().flatMap(p -> p.getTasks().stream()).map(SubTask::getId).toList();
+        List<Long> taskIds = projects.stream()
+                .flatMap(p -> p.getTasks().stream())
+                .map(SubTask::getId)
+                .toList();
         Map<Long, List<Map<String, Object>>> scoringByTask = loadScoringDetails(taskIds);
-        return ResponseEntity.ok(projects.stream().map(p -> toDetail(p, scoringByTask, false)).toList());
+        return ResponseEntity.ok(
+                projects.stream().map(p -> toDetail(p, scoringByTask, false)).toList());
     }
 
     /** 设计师接单市场：仅返回仍开放、未指定负责人的设计师子任务。 */
@@ -280,24 +355,42 @@ public class ProjectController {
         if (!List.of("designer", "planner", "admin").contains(session.role())) {
             return ResponseEntity.status(403).body(Map.of("error", "当前角色无权查看接单市场"));
         }
-        List<Map<String, Object>> result = subTaskRepository.findOpenDesignerMarketTasks().stream().map(task -> {
-            Project project = task.getProject();
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("id", task.getId()); item.put("name", task.getName()); item.put("status", task.getStatus());
-            item.put("createdAt", task.getCreatedAt() == null ? null : task.getCreatedAt().format(DTF));
-            item.put("plannedDate", task.getPlannedDate()); item.put("designerId", task.getDesignerId());
-            item.put("pointRuleCode", task.getPointRuleCode()); item.put("basePointSnapshot", task.getBasePointSnapshot());
-            item.put("difficultyCode", task.getDifficultyCode()); item.put("difficultyMultiplierSnapshot", task.getDifficultyMultiplierSnapshot());
-            item.put("designerName", task.getDesignerName()); item.put("publisherId", task.getPublisherId());
-            item.put("publisherName", task.getPublisherName()); item.put("publisherRole", task.getPublisherRole());
-            item.put("assigneeRole", task.getAssigneeRole()); item.put("allocationStatus", task.getAllocationStatus());
-            item.put("marketPublishedAt", task.getMarketPublishedAt()); item.put("details", task.getDetails());
-            item.put("referenceImagesJson", task.getReferenceImagesJson()); item.put("attachmentsJson", task.getAttachmentsJson());
-            item.put("projectId", project.getId()); item.put("projectType", project.getType());
-            item.put("projectStatus", project.getStatus()); item.put("projectName", projectDisplayName(project));
-            item.put("relation", "market");
-            return item;
-        }).toList();
+        List<Map<String, Object>> result = subTaskRepository.findOpenDesignerMarketTasks().stream()
+                .map(task -> {
+                    Project project = task.getProject();
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("id", task.getId());
+                    item.put("name", task.getName());
+                    item.put("status", task.getStatus());
+                    item.put(
+                            "createdAt",
+                            task.getCreatedAt() == null
+                                    ? null
+                                    : task.getCreatedAt().format(DTF));
+                    item.put("plannedDate", task.getPlannedDate());
+                    item.put("designerId", task.getDesignerId());
+                    item.put("pointRuleCode", task.getPointRuleCode());
+                    item.put("basePointSnapshot", task.getBasePointSnapshot());
+                    item.put("difficultyCode", task.getDifficultyCode());
+                    item.put("difficultyMultiplierSnapshot", task.getDifficultyMultiplierSnapshot());
+                    item.put("designerName", task.getDesignerName());
+                    item.put("publisherId", task.getPublisherId());
+                    item.put("publisherName", task.getPublisherName());
+                    item.put("publisherRole", task.getPublisherRole());
+                    item.put("assigneeRole", task.getAssigneeRole());
+                    item.put("allocationStatus", task.getAllocationStatus());
+                    item.put("marketPublishedAt", task.getMarketPublishedAt());
+                    item.put("details", task.getDetails());
+                    item.put("referenceImagesJson", task.getReferenceImagesJson());
+                    item.put("attachmentsJson", task.getAttachmentsJson());
+                    item.put("projectId", project.getId());
+                    item.put("projectType", project.getType());
+                    item.put("projectStatus", project.getStatus());
+                    item.put("projectName", projectDisplayName(project));
+                    item.put("relation", "market");
+                    return item;
+                })
+                .toList();
         return ResponseEntity.ok(result);
     }
 
@@ -317,8 +410,7 @@ public class ProjectController {
         List<ActivityLog> detailLogs = new ArrayList<>(activityLogRepository.findTop200ByProjectIdOrderByTimeDesc(id));
         Collections.reverse(detailLogs);
         // 仅记录成功访问，避免把未授权探测误记为正常查询。
-        activityLogRepository.save(new ActivityLog(
-            "查询项目 #" + id, session.name(), session.role()));
+        activityLogRepository.save(new ActivityLog("查询项目 #" + id, session.name(), session.role()));
         return ResponseEntity.ok(toDetailWithLogs(projectOpt.get(), detailLogs));
     }
 
@@ -329,18 +421,17 @@ public class ProjectController {
             AuthSession session = getSession(request);
             if (session == null) return ResponseEntity.status(401).build();
             String type = Objects.toString(body.get("type"), "");
-            String permission = switch (type) {
-                case "channel_custom" -> "project.channel.create";
-                case "regular" -> "project.regular.create";
-                default -> null;
-            };
+            String permission =
+                    switch (type) {
+                        case "channel_custom" -> "project.channel.create";
+                        case "regular" -> "project.regular.create";
+                        default -> null;
+                    };
             if (permission == null) {
                 return ResponseEntity.badRequest().body(Map.of("error", "不支持的项目类型"));
             }
             if (permissionService != null && !permissionService.has(session.role(), permission)) {
-                return ResponseEntity.status(403).body(Map.of(
-                        "error", "当前账号没有新建此类项目的权限",
-                        "permission", permission));
+                return ResponseEntity.status(403).body(Map.of("error", "当前账号没有新建此类项目的权限", "permission", permission));
             }
             Project p = projectService.createProject(withSessionContext(body, request));
             if (p.isFeishuChatEnabled()) ensureProjectChat(p);
@@ -357,17 +448,26 @@ public class ProjectController {
         try {
             AuthSession session = getSession(request);
             Project p = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
-            if (!canCreateProjectChat(p, session)) return ResponseEntity.status(403).body(Map.of("error", "无权创建该项目群"));
-            if (feishuChatService == null || !feishuChatService.enabled()) return ResponseEntity.badRequest().body(Map.of("error", "飞书应用配置未完成"));
+            if (!canCreateProjectChat(p, session))
+                return ResponseEntity.status(403).body(Map.of("error", "无权创建该项目群"));
+            if (feishuChatService == null || !feishuChatService.enabled())
+                return ResponseEntity.badRequest().body(Map.of("error", "飞书应用配置未完成"));
             if (p.getFeishuChatId() != null && !p.getFeishuChatId().isBlank()) return ResponseEntity.ok(toDetail(p));
-            String owner = "channel_custom".equals(p.getType()) ? (p.getSalesName() + "（销售）") : (p.getPlannerName() + "（产品企划）");
+            String owner = "channel_custom".equals(p.getType())
+                    ? (p.getSalesName() + "（销售）")
+                    : (p.getPlannerName() + "（产品企划）");
             String name = ("channel_custom".equals(p.getType()) ? "定制" : "常规") + "-#" + p.getId() + "-" + owner;
             String chatId = feishuChatService.createChat(name, List.of());
             p.setFeishuChatEnabled(true);
-            p.setFeishuChatId(chatId); p.setFeishuChatStatus("created"); p.setFeishuChatError(null); p.setFeishuChatCreatedAt(java.time.LocalDateTime.now());
+            p.setFeishuChatId(chatId);
+            p.setFeishuChatStatus("created");
+            p.setFeishuChatError(null);
+            p.setFeishuChatCreatedAt(java.time.LocalDateTime.now());
             syncProjectChatMembers(p);
             return ResponseEntity.ok(toDetail(projectService.saveProject(p)));
-        } catch (Exception e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @PostMapping("/{id}/feishu-chat/dissolve")
@@ -375,17 +475,25 @@ public class ProjectController {
         try {
             AuthSession session = getSession(request);
             Project p = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
-            if (!canManageProjectChat(p, session)) return ResponseEntity.status(403).body(Map.of("error", "无权解散该项目群"));
-            if (!List.of("completed", "terminated", "pending_terminate").contains(p.getStatus())) return ResponseEntity.badRequest().body(Map.of("error", "项目未完成或未终止，不能解散群聊"));
+            if (!canManageProjectChat(p, session))
+                return ResponseEntity.status(403).body(Map.of("error", "无权解散该项目群"));
+            if (!List.of("completed", "terminated", "pending_terminate").contains(p.getStatus()))
+                return ResponseEntity.badRequest().body(Map.of("error", "项目未完成或未终止，不能解散群聊"));
             feishuChatService.dissolve(p.getFeishuChatId());
-            p.setFeishuChatStatus("dissolved"); p.setFeishuChatDissolvedAt(java.time.LocalDateTime.now());
+            p.setFeishuChatStatus("dissolved");
+            p.setFeishuChatDissolvedAt(java.time.LocalDateTime.now());
             return ResponseEntity.ok(toDetail(projectService.saveProject(p)));
-        } catch (Exception e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     private boolean canManageProjectChat(Project p, AuthSession s) {
         if (s == null) return false;
-        return "admin".equals(s.role()) || ("channel_custom".equals(p.getType()) ? Objects.equals(p.getSalesId(), s.userId()) : Objects.equals(p.getPlannerId(), s.userId()));
+        return "admin".equals(s.role())
+                || ("channel_custom".equals(p.getType())
+                        ? Objects.equals(p.getSalesId(), s.userId())
+                        : Objects.equals(p.getPlannerId(), s.userId()));
     }
 
     /** 产品企划可为任意渠道定制或公司常规品项目补建群；原项目负责人权限保持不变。 */
@@ -397,29 +505,28 @@ public class ProjectController {
     /** 编辑已创建项目的基础资料。权限不复用通用管理权限，严格限制为项目归属创建人。 */
     @PutMapping("/{id}")
     public ResponseEntity<?> updateProjectInformation(
-            @PathVariable Long id,
-            @RequestBody Map<String, Object> body,
-            HttpServletRequest request) {
+            @PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
             AuthSession session = getSession(request);
             if (session == null) return ResponseEntity.status(401).build();
             Project project = projectService.getProjectById(id).orElseThrow(() -> new RuntimeException("项目不存在"));
-            String permission = switch (project.getType()) {
-                case "channel_custom" -> "project.channel.edit";
-                case "regular" -> "project.regular.edit";
-                default -> null;
-            };
+            String permission =
+                    switch (project.getType()) {
+                        case "channel_custom" -> "project.channel.edit";
+                        case "regular" -> "project.regular.edit";
+                        default -> null;
+                    };
             if (permission == null) {
                 return ResponseEntity.badRequest().body(Map.of("error", "不支持的项目类型"));
             }
             if (permissionService != null && !permissionService.has(session.role(), permission)) {
-                return ResponseEntity.status(403).body(Map.of(
-                        "error", "当前账号没有编辑此类项目的权限",
-                        "permission", permission));
+                return ResponseEntity.status(403).body(Map.of("error", "当前账号没有编辑此类项目的权限", "permission", permission));
             }
             if (!ProjectAccessPolicy.canEditProjectInformation(project, session)) {
-                return ResponseEntity.status(403).body(Map.of("error", "仅该项目的"
-                        + ("channel_custom".equals(project.getType()) ? "销售" : "产品企划") + "可编辑项目信息"));
+                return ResponseEntity.status(403)
+                        .body(Map.of(
+                                "error",
+                                "仅该项目的" + ("channel_custom".equals(project.getType()) ? "销售" : "产品企划") + "可编辑项目信息"));
             }
             Project updated = projectService.updateProjectInformation(id, withSessionContext(body, request));
             return ResponseEntity.ok(toDetail(updated));
@@ -433,13 +540,12 @@ public class ProjectController {
     /** 企划接单 */
     @PostMapping("/{id}/accept")
     public ResponseEntity<?> plannerAccept(
-            @PathVariable Long id,
-            @RequestBody Map<String, String> body,
-            HttpServletRequest request) {
+            @PathVariable Long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
         ResponseEntity<?> denied = denyUnless(request, "project.accept");
         if (denied != null) return denied;
         Map<String, Object> safeBody = withSessionContext(new LinkedHashMap<>(body), request);
-        Project p = projectService.plannerAccept(id,
+        Project p = projectService.plannerAccept(
+                id,
                 (String) safeBody.getOrDefault("currentUser", ""),
                 (String) safeBody.getOrDefault("currentRole", ""),
                 (String) safeBody.getOrDefault("userId", ""));
@@ -449,18 +555,20 @@ public class ProjectController {
     /** 添加子任务 */
     @PostMapping("/{id}/tasks")
     public ResponseEntity<?> addTask(
-            @PathVariable Long id,
-            @RequestBody Map<String, Object> body,
-            HttpServletRequest request) {
+            @PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
             AuthSession session = getSession(request);
             if (permissionService != null && !permissionService.has(session.role(), "subtask.create")) {
-                return ResponseEntity.status(403).body(Map.of(
-                        "error", "当前账号没有新建子任务的权限",
-                        "permission", "subtask.create"));
+                return ResponseEntity.status(403)
+                        .body(Map.of(
+                                "error", "当前账号没有新建子任务的权限",
+                                "permission", "subtask.create"));
             }
             Project p = subTaskCommandService.addSubTask(id, withSessionContext(body, request));
-            if (p.isFeishuChatEnabled()) { ensureProjectChat(p); syncProjectChatMembers(p); }
+            if (p.isFeishuChatEnabled()) {
+                ensureProjectChat(p);
+                syncProjectChatMembers(p);
+            }
             return ResponseEntity.ok(toDetail(p));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -469,24 +577,40 @@ public class ProjectController {
 
     /** 建群与业务写入解耦：飞书暂时不可用时不阻断项目/子任务保存。 */
     private void ensureProjectChat(Project p) {
-        if (p == null || feishuChatService == null || !feishuChatService.enabled()
+        if (p == null
+                || feishuChatService == null
+                || !feishuChatService.enabled()
                 || (p.getFeishuChatId() != null && !p.getFeishuChatId().isBlank())) return;
         try {
-            String owner = "channel_custom".equals(p.getType()) ? (p.getSalesName() + "（销售）") : (p.getPlannerName() + "（产品企划）");
+            String owner = "channel_custom".equals(p.getType())
+                    ? (p.getSalesName() + "（销售）")
+                    : (p.getPlannerName() + "（产品企划）");
             String name = ("channel_custom".equals(p.getType()) ? "定制" : "常规") + "-#" + p.getId() + "-" + owner;
             String chatId = feishuChatService.createChat(name, collectProjectOpenIds(p));
-            p.setFeishuChatId(chatId); p.setFeishuChatStatus("created"); p.setFeishuChatError(null);
+            p.setFeishuChatId(chatId);
+            p.setFeishuChatStatus("created");
+            p.setFeishuChatError(null);
             p.setFeishuChatCreatedAt(java.time.LocalDateTime.now());
             projectService.saveProject(p);
         } catch (Exception e) {
-            p.setFeishuChatStatus("failed"); p.setFeishuChatError(e.getMessage()); projectService.saveProject(p);
+            p.setFeishuChatStatus("failed");
+            p.setFeishuChatError(e.getMessage());
+            projectService.saveProject(p);
         }
     }
 
     private void syncProjectChatMembers(Project p) {
-        if (p == null || feishuChatService == null || p.getFeishuChatId() == null || p.getFeishuChatId().isBlank()) return;
-        try { feishuChatService.addMembers(p.getFeishuChatId(), collectProjectOpenIds(p)); }
-        catch (Exception e) { p.setFeishuChatStatus("failed"); p.setFeishuChatError(e.getMessage()); projectService.saveProject(p); }
+        if (p == null
+                || feishuChatService == null
+                || p.getFeishuChatId() == null
+                || p.getFeishuChatId().isBlank()) return;
+        try {
+            feishuChatService.addMembers(p.getFeishuChatId(), collectProjectOpenIds(p));
+        } catch (Exception e) {
+            p.setFeishuChatStatus("failed");
+            p.setFeishuChatError(e.getMessage());
+            projectService.saveProject(p);
+        }
     }
 
     private Collection<String> collectProjectOpenIds(Project p) {
@@ -494,14 +618,20 @@ public class ProjectController {
         if (userService == null) return ids;
         for (String uid : Arrays.asList(p.getPlannerId(), p.getSalesId())) {
             if (uid == null || uid.isBlank()) continue;
-            User u = userService.getUserByUserId(uid); if (u != null && u.getFeishuOpenId() != null && !u.getFeishuOpenId().isBlank()) ids.add(u.getFeishuOpenId());
+            User u = userService.getUserByUserId(uid);
+            if (u != null && u.getFeishuOpenId() != null && !u.getFeishuOpenId().isBlank())
+                ids.add(u.getFeishuOpenId());
         }
-        if (p.getTasks() != null) for (SubTask t : p.getTasks()) {
-            for (String uid : Arrays.asList(t.getDesignerId(), t.getPublisherId())) {
-                if (uid == null || uid.isBlank()) continue;
-                User u = userService.getUserByUserId(uid); if (u != null && u.getFeishuOpenId() != null && !u.getFeishuOpenId().isBlank()) ids.add(u.getFeishuOpenId());
+        if (p.getTasks() != null)
+            for (SubTask t : p.getTasks()) {
+                for (String uid : Arrays.asList(t.getDesignerId(), t.getPublisherId())) {
+                    if (uid == null || uid.isBlank()) continue;
+                    User u = userService.getUserByUserId(uid);
+                    if (u != null
+                            && u.getFeishuOpenId() != null
+                            && !u.getFeishuOpenId().isBlank()) ids.add(u.getFeishuOpenId());
+                }
             }
-        }
         return ids;
     }
 
@@ -511,8 +641,8 @@ public class ProjectController {
         if (denied != null) return denied;
         AuthSession session = getSession(request);
         try {
-            Project project = projectWorkflowService.completeExecution(
-                    id, session.userId(), session.name(), session.role());
+            Project project =
+                    projectWorkflowService.completeExecution(id, session.userId(), session.name(), session.role());
             return ResponseEntity.ok(projectWorkflowService.build(project));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -525,24 +655,22 @@ public class ProjectController {
         if (denied != null) return denied;
         AuthSession session = getSession(request);
         try {
-            return ResponseEntity.ok(projectWorkflowService.submitReview(
-                    id, session.userId(), session.name(), session.role()));
+            return ResponseEntity.ok(
+                    projectWorkflowService.submitReview(id, session.userId(), session.name(), session.role()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
     @PostMapping("/{id}/workflow/review")
-    public ResponseEntity<?> reviewWorkflow(@PathVariable Long id,
-                                             @RequestBody Map<String, String> body,
-                                             HttpServletRequest request) {
+    public ResponseEntity<?> reviewWorkflow(
+            @PathVariable Long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
         ResponseEntity<?> denied = denyUnless(request, "project.workflow.review");
         if (denied != null) return denied;
         AuthSession session = getSession(request);
         try {
             return ResponseEntity.ok(projectWorkflowService.review(
-                    id, body.get("decision"), body.get("comment"),
-                    session.userId(), session.name(), session.role()));
+                    id, body.get("decision"), body.get("comment"), session.userId(), session.name(), session.role()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -550,14 +678,15 @@ public class ProjectController {
 
     /** 通用角色状态看板（sales/planner/supplychain/designer） */
     @GetMapping("/role-status")
-    public ResponseEntity<Map<String, Object>> roleStatus(@RequestParam String role,
-                                                          @RequestParam(defaultValue = "all") String scope,
-                                                          HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> roleStatus(
+            @RequestParam String role, @RequestParam(defaultValue = "all") String scope, HttpServletRequest request) {
         AuthSession session = getSession(request);
         if (session == null) return ResponseEntity.status(401).build();
         boolean allowed = "admin".equals(session.role())
                 || Objects.equals(session.role(), role)
-                || ("planner".equals(session.role()) && Set.of("planner", "promotion", "designer", "supplychain").contains(role));
+                || ("planner".equals(session.role())
+                        && Set.of("planner", "promotion", "designer", "supplychain")
+                                .contains(role));
         if (!allowed) {
             return ResponseEntity.status(403).body(Map.of("error", "无权查看该角色的状态看板"));
         }
@@ -584,7 +713,8 @@ public class ProjectController {
 
     /** 终止项目 */
     @PostMapping("/{id}/terminate")
-    public ResponseEntity<?> terminateProject(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
+    public ResponseEntity<?> terminateProject(
+            @PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
             ResponseEntity<?> denied = denyUnless(request, "project.terminate");
             if (denied != null) return denied;
@@ -599,7 +729,8 @@ public class ProjectController {
 
     /** 暂停项目 */
     @PostMapping("/{id}/pause")
-    public ResponseEntity<?> pauseProject(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
+    public ResponseEntity<?> pauseProject(
+            @PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
             ResponseEntity<?> denied = denyUnless(request, "project.pause");
             if (denied != null) return denied;
@@ -614,7 +745,8 @@ public class ProjectController {
 
     /** 取消终止 */
     @PostMapping("/{id}/cancel-terminate")
-    public ResponseEntity<?> cancelTerminate(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
+    public ResponseEntity<?> cancelTerminate(
+            @PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
             ResponseEntity<?> denied = denyUnless(request, "project.resume");
             if (denied != null) return denied;
@@ -629,7 +761,8 @@ public class ProjectController {
 
     /** 继续项目 */
     @PostMapping("/{id}/resume")
-    public ResponseEntity<?> resumeProject(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
+    public ResponseEntity<?> resumeProject(
+            @PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
             ResponseEntity<?> denied = denyUnless(request, "project.resume");
             if (denied != null) return denied;
@@ -663,8 +796,7 @@ public class ProjectController {
 
     private ResponseEntity<?> denyUnlessProjectManager(Long projectId, HttpServletRequest request) {
         AuthSession session = getSession(request);
-        Project project = projectService.getProjectById(projectId)
-                .orElseThrow(() -> new RuntimeException("项目不存在"));
+        Project project = projectService.getProjectById(projectId).orElseThrow(() -> new RuntimeException("项目不存在"));
         return ProjectAccessPolicy.canManage(project, session)
                 ? null
                 : ResponseEntity.status(403).body(Map.of("error", "无权操作该项目"));
@@ -672,8 +804,8 @@ public class ProjectController {
 
     // ==================== DTO Mappers ====================
 
-    private ProjectSummaryDTO toSummary(Project p, Map<Long, int[]> taskCountMap, Map<Long, Double> scoreMap,
-                                        Map<Long, String> statusMap) {
+    private ProjectSummaryDTO toSummary(
+            Project p, Map<Long, int[]> taskCountMap, Map<Long, Double> scoreMap, Map<Long, String> statusMap) {
         ProjectSummaryDTO dto = new ProjectSummaryDTO();
         dto.setId(p.getId());
         dto.setProjectCode(p.getProjectCode());
@@ -688,7 +820,8 @@ public class ProjectController {
         dto.setProductName(p.getProductName());
         dto.setDeadline(p.getDeadline());
         dto.setProductRequirements(p.getProductRequirements());
-        dto.setProductCategory(p.getProductCategory() != null ? p.getProductCategory().getName() : null);
+        dto.setProductCategory(
+                p.getProductCategory() != null ? p.getProductCategory().getName() : null);
         dto.setTargetMarket(p.getTargetMarket());
         dto.setComplianceItems(p.getComplianceItems());
         dto.setPriceRange(p.getPriceRange());
@@ -716,9 +849,8 @@ public class ProjectController {
         return view.toDetailWithLogs(project, logs);
     }
 
-    private ProjectDetailDTO toDetail(Project project,
-                                      Map<Long, List<Map<String, Object>>> scoring,
-                                      boolean includeLogs) {
+    private ProjectDetailDTO toDetail(
+            Project project, Map<Long, List<Map<String, Object>>> scoring, boolean includeLogs) {
         return view.toDetail(project, scoring, includeLogs);
     }
 
@@ -737,5 +869,4 @@ public class ProjectController {
     private Map<String, Object> withSessionContext(Map<String, Object> body, HttpServletRequest request) {
         return req.withSessionContext(body, request);
     }
-
 }

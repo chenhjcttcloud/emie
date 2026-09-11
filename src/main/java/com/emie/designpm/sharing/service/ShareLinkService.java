@@ -1,26 +1,25 @@
 package com.emie.designpm.sharing.service;
 
+import com.emie.designpm.admin.repository.UserRepository;
 import com.emie.designpm.auth.PasswordHasher;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.ShareLink;
 import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.project.repository.ProjectRepository;
-import com.emie.designpm.sharing.repository.ShareLinkRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
-import com.emie.designpm.admin.repository.UserRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
-import org.springframework.beans.factory.annotation.Autowired;
-
+import com.emie.designpm.sharing.repository.ShareLinkRepository;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class ShareLinkService {
@@ -41,11 +40,12 @@ public class ShareLinkService {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     @Autowired
-    public ShareLinkService(ShareLinkRepository shareLinkRepository,
-                            ProjectRepository projectRepository,
-                            SubTaskRepository subTaskRepository,
-                            UserRepository userRepository,
-                            PlatformTransactionManager transactionManager) {
+    public ShareLinkService(
+            ShareLinkRepository shareLinkRepository,
+            ProjectRepository projectRepository,
+            SubTaskRepository subTaskRepository,
+            UserRepository userRepository,
+            PlatformTransactionManager transactionManager) {
         this.shareLinkRepository = shareLinkRepository;
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
@@ -56,20 +56,21 @@ public class ShareLinkService {
     }
 
     /** 保留测试/嵌入式调用方的构造器。 */
-    public ShareLinkService(ShareLinkRepository shareLinkRepository,
-                            ProjectRepository projectRepository,
-                            SubTaskRepository subTaskRepository,
-                            UserRepository userRepository) {
+    public ShareLinkService(
+            ShareLinkRepository shareLinkRepository,
+            ProjectRepository projectRepository,
+            SubTaskRepository subTaskRepository,
+            UserRepository userRepository) {
         this(shareLinkRepository, projectRepository, subTaskRepository, userRepository, null);
     }
 
     /** 生成分享链接 */
     @Transactional
-    public Map<String, Object> createShareLink(String targetType, Long targetId,
-                                               String createdBy, Long expiresInSec, String rawPassword) {
+    public Map<String, Object> createShareLink(
+            String targetType, Long targetId, String createdBy, Long expiresInSec, String rawPassword) {
         validateExpiry(expiresInSec, true);
-        User creator = userRepository.findByUserId(createdBy)
-                .orElseThrow(() -> new IllegalArgumentException("创建分享链接的用户不存在"));
+        User creator =
+                userRepository.findByUserId(createdBy).orElseThrow(() -> new IllegalArgumentException("创建分享链接的用户不存在"));
         validateTarget(targetType, targetId, creator);
 
         String token = generateToken();
@@ -123,8 +124,8 @@ public class ShareLinkService {
 
     /** 只在短事务内校验分享链接并递增查看次数。 */
     private ShareAccess prepareShareAccess(String token, String password) {
-        ShareLink link = shareLinkRepository.findByToken(token)
-                .orElseThrow(() -> new IllegalArgumentException("分享链接不存在"));
+        ShareLink link =
+                shareLinkRepository.findByToken(token).orElseThrow(() -> new IllegalArgumentException("分享链接不存在"));
 
         // 校验状态
         if ("revoked".equals(link.getStatus())) {
@@ -171,12 +172,18 @@ public class ShareLinkService {
         }
         link = shareLinkRepository.findById(link.getId()).orElseThrow(() -> new IllegalArgumentException("分享链接不存在"));
 
-        return new ShareAccess(link.getTargetType(), link.getTargetId(), Map.of(
-                "token", token,
-                "targetType", link.getTargetType(),
-                "createdAt", link.getCreatedAt() != null ? link.getCreatedAt().toString() : "",
-                "viewCount", link.getViewCount()
-        ));
+        return new ShareAccess(
+                link.getTargetType(),
+                link.getTargetId(),
+                Map.of(
+                        "token",
+                        token,
+                        "targetType",
+                        link.getTargetType(),
+                        "createdAt",
+                        link.getCreatedAt() != null ? link.getCreatedAt().toString() : "",
+                        "viewCount",
+                        link.getViewCount()));
     }
 
     private record ShareAccess(String targetType, Long targetId, Map<String, Object> meta) {}
@@ -203,22 +210,23 @@ public class ShareLinkService {
 
     /** 获取当前用户创建的所有分享链接 */
     public List<Map<String, Object>> getUserShares(String userId) {
-        return shareLinkRepository.findByCreatedByOrderByCreatedAtDesc(userId)
-                .stream().map(this::toShareInfo).collect(Collectors.toList());
+        return shareLinkRepository.findByCreatedByOrderByCreatedAtDesc(userId).stream()
+                .map(this::toShareInfo)
+                .collect(Collectors.toList());
     }
 
     /** 管理员获取全部分享链接 */
     public List<Map<String, Object>> getAllShares() {
         return shareLinkRepository.findAll().stream()
                 .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
-                .map(this::toShareInfo).collect(Collectors.toList());
+                .map(this::toShareInfo)
+                .collect(Collectors.toList());
     }
 
     /** 收回分享链接 */
     @Transactional
     public void revokeShare(Long id, String userId) {
-        ShareLink link = shareLinkRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("分享链接不存在"));
+        ShareLink link = shareLinkRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("分享链接不存在"));
         if (!link.getCreatedBy().equals(userId)) {
             throw new IllegalArgumentException("只能收回自己创建的分享链接");
         }
@@ -232,8 +240,7 @@ public class ShareLinkService {
     /** 管理员收回任意分享链接 */
     @Transactional
     public void adminRevokeShare(Long id) {
-        ShareLink link = shareLinkRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("分享链接不存在"));
+        ShareLink link = shareLinkRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("分享链接不存在"));
         if ("revoked".equals(link.getStatus())) {
             throw new IllegalArgumentException("该链接已被收回");
         }
@@ -244,8 +251,7 @@ public class ShareLinkService {
     /** 管理员更新分享链接（过期时间、密码） */
     @Transactional
     public void adminUpdateShare(Long id, Long expiresInSec, String rawPassword) {
-        ShareLink link = shareLinkRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("分享链接不存在"));
+        ShareLink link = shareLinkRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("分享链接不存在"));
         if ("revoked".equals(link.getStatus())) {
             throw new IllegalArgumentException("该链接已被收回，无法修改");
         }
@@ -316,15 +322,15 @@ public class ShareLinkService {
     private void validateTarget(String targetType, Long targetId, User creator) {
         switch (targetType) {
             case "project" -> {
-                Project project = projectRepository.findById(targetId)
-                        .orElseThrow(() -> new IllegalArgumentException("项目不存在"));
+                Project project =
+                        projectRepository.findById(targetId).orElseThrow(() -> new IllegalArgumentException("项目不存在"));
                 if (!canAccessProject(creator, project)) {
                     throw new IllegalArgumentException("无权分享该项目");
                 }
             }
             case "sub_task" -> {
-                SubTask task = subTaskRepository.findById(targetId)
-                        .orElseThrow(() -> new IllegalArgumentException("子任务不存在"));
+                SubTask task =
+                        subTaskRepository.findById(targetId).orElseThrow(() -> new IllegalArgumentException("子任务不存在"));
                 if (!canAccessSubTask(creator, task)) {
                     throw new IllegalArgumentException("无权分享该子任务");
                 }
@@ -347,8 +353,8 @@ public class ShareLinkService {
 
     /** 获取项目详情（脱敏后） */
     private Map<String, Object> fetchProjectData(Long projectId) {
-        Project project = projectRepository.findByIdWithTasks(projectId)
-                .orElseThrow(() -> new IllegalArgumentException("项目不存在"));
+        Project project =
+                projectRepository.findByIdWithTasks(projectId).orElseThrow(() -> new IllegalArgumentException("项目不存在"));
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("type", "project");
@@ -362,8 +368,12 @@ public class ShareLinkService {
         data.put("deadline", safe(project.getDeadline()));
         data.put("productRequirements", safe(project.getProductRequirements()));
         data.put("description", safe(project.getDescription()));
-        data.put("createdAt", project.getCreatedAt() != null ? project.getCreatedAt().toString() : "");
-        data.put("updatedAt", project.getUpdatedAt() != null ? project.getUpdatedAt().toString() : "");
+        data.put(
+                "createdAt",
+                project.getCreatedAt() != null ? project.getCreatedAt().toString() : "");
+        data.put(
+                "updatedAt",
+                project.getUpdatedAt() != null ? project.getUpdatedAt().toString() : "");
 
         // 类目
         if (project.getProductCategory() != null) {
@@ -396,7 +406,8 @@ public class ShareLinkService {
 
     /** 获取子任务详情（脱敏后） */
     private Map<String, Object> fetchSubTaskData(Long subTaskId) {
-        SubTask task = subTaskRepository.findByIdWithProject(subTaskId)
+        SubTask task = subTaskRepository
+                .findByIdWithProject(subTaskId)
                 .orElseThrow(() -> new IllegalArgumentException("子任务不存在"));
 
         Map<String, Object> data = new LinkedHashMap<>();
@@ -413,7 +424,9 @@ public class ShareLinkService {
         // 关联项目信息
         if (task.getProject() != null) {
             data.put("projectId", task.getProject().getId());
-            data.put("projectTypeLabel", "channel_custom".equals(task.getProject().getType()) ? "渠道定制单" : "公司常规品");
+            data.put(
+                    "projectTypeLabel",
+                    "channel_custom".equals(task.getProject().getType()) ? "渠道定制单" : "公司常规品");
             data.put("projectStatus", task.getProject().getStatus());
             data.put("projectDeadline", safe(task.getProject().getDeadline()));
             data.put("projectPlannerName", safe(task.getProject().getPlannerName()));
@@ -432,8 +445,10 @@ public class ShareLinkService {
         m.put("targetId", link.getTargetId());
         m.put("createdBy", link.getCreatedBy());
         // 获取创建人显示名称
-        String createdByName = userRepository.findByUserId(link.getCreatedBy())
-                .map(u -> u.getName()).orElse(link.getCreatedBy());
+        String createdByName = userRepository
+                .findByUserId(link.getCreatedBy())
+                .map(u -> u.getName())
+                .orElse(link.getCreatedBy());
         m.put("createdByName", createdByName);
         m.put("createdAt", link.getCreatedAt() != null ? link.getCreatedAt().toString() : "");
         m.put("expiresAt", link.getExpiresAt() != null ? link.getExpiresAt().toString() : "");
@@ -488,8 +503,9 @@ public class ShareLinkService {
             case "admin" -> true;
             case "sales" -> Objects.equals(user.getUserId(), project.getSalesId());
             case "planner" -> Objects.equals(user.getUserId(), project.getPlannerId());
-            case "designer", "supplychain" -> project.getTasks() != null && project.getTasks().stream()
-                    .anyMatch(task -> Objects.equals(user.getUserId(), task.getDesignerId()));
+            case "designer", "supplychain" -> project.getTasks() != null
+                    && project.getTasks().stream()
+                            .anyMatch(task -> Objects.equals(user.getUserId(), task.getDesignerId()));
             default -> false;
         };
     }

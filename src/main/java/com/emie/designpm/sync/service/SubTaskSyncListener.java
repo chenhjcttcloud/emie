@@ -22,13 +22,18 @@ public class SubTaskSyncListener implements ApplicationContextAware {
         syncQueueService = ctx.getBean(SyncQueueService.class);
     }
 
-    @PostPersist public void onCreated(SubTask t) {
+    @PostPersist
+    public void onCreated(SubTask t) {
         enqueueAfterCommit("sub_task", t.getId(), "update", "子任务创建已入队");
     }
-    @PostUpdate public void onUpdated(SubTask t) {
+
+    @PostUpdate
+    public void onUpdated(SubTask t) {
         enqueueAfterCommit("sub_task", t.getId(), "update", "子任务更新已入队");
     }
-    @PostRemove public void onDeleted(SubTask t) {
+
+    @PostRemove
+    public void onDeleted(SubTask t) {
         enqueueAfterCommit("sub_task", t.getId(), "delete", "子任务删除已入队");
     }
 

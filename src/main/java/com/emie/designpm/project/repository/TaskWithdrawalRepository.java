@@ -1,12 +1,14 @@
 package com.emie.designpm.project.repository;
+
 import com.emie.designpm.entity.TaskWithdrawal;
+import java.util.Collection;
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import java.util.Collection;
-import java.util.List;
-public interface TaskWithdrawalRepository extends JpaRepository<TaskWithdrawal,Long> {
+
+public interface TaskWithdrawalRepository extends JpaRepository<TaskWithdrawal, Long> {
     List<TaskWithdrawal> findBySubTaskIdOrderByCreatedAtDesc(Long subTaskId);
 
     @Query("SELECT t FROM TaskWithdrawal t WHERE t.subTaskId IN :subTaskIds")

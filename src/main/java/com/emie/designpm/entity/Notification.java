@@ -1,12 +1,11 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
 
 /** 用户站内通知；即使外部渠道失败，也必须保留。 */
 @Data
@@ -14,11 +13,13 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "notifications", indexes = {
-        @Index(name = "idx_notification_recipient_status", columnList = "recipientUserId,status,createdAt"),
-        @Index(name = "idx_notification_event", columnList = "eventId"),
-        @Index(name = "idx_notification_aggregate", columnList = "aggregateType,aggregateId")
-})
+@Table(
+        name = "notifications",
+        indexes = {
+            @Index(name = "idx_notification_recipient_status", columnList = "recipientUserId,status,createdAt"),
+            @Index(name = "idx_notification_event", columnList = "eventId"),
+            @Index(name = "idx_notification_aggregate", columnList = "aggregateType,aggregateId")
+        })
 public class Notification {
 
     @Id

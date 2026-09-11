@@ -1,27 +1,26 @@
 package com.emie.designpm.admin.controller;
 
-import com.emie.designpm.entity.User;
-import com.emie.designpm.reference.repository.DepartmentRepository;
-import com.emie.designpm.admin.repository.RoleRepository;
-import com.emie.designpm.admin.service.UserService;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.emie.designpm.admin.repository.RoleRepository;
+import com.emie.designpm.admin.service.UserService;
+import com.emie.designpm.entity.User;
+import com.emie.designpm.reference.repository.DepartmentRepository;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+
 class UserControllerRoleGroupingTest {
 
     @Test
     void usersEndpointIncludesCustomRolesAndKeepsStandardEmptyGroups() {
         UserService users = mock(UserService.class);
-        UserController controller = new UserController(users, mock(DepartmentRepository.class),
-                mock(RoleRepository.class));
+        UserController controller =
+                new UserController(users, mock(DepartmentRepository.class), mock(RoleRepository.class));
         User promotion = User.builder()
                 .id(1L)
                 .userId("promotion_user")

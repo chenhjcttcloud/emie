@@ -1,30 +1,29 @@
 package com.emie.designpm.project.controller;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import com.emie.designpm.admin.repository.ActivityLogRepository;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.SubTask;
-import com.emie.designpm.admin.repository.ActivityLogRepository;
-import com.emie.designpm.scoring.repository.ScoringRepository;
+import com.emie.designpm.feishu.service.FeishuChatService;
 import com.emie.designpm.project.repository.SubTaskRepository;
 import com.emie.designpm.project.service.ProjectAccessService;
-import com.emie.designpm.project.service.ProjectViewSupport;
-import com.emie.designpm.project.service.ProjectService;
-import com.emie.designpm.project.service.ProjectWorkflowService;
-import com.emie.designpm.feishu.service.FeishuChatService;
-import com.emie.designpm.project.service.SubTaskCommandService;
 import com.emie.designpm.project.service.ProjectLifecycleCommandService;
+import com.emie.designpm.project.service.ProjectService;
+import com.emie.designpm.project.service.ProjectViewSupport;
+import com.emie.designpm.project.service.ProjectWorkflowService;
+import com.emie.designpm.project.service.SubTaskCommandService;
+import com.emie.designpm.scoring.repository.ScoringRepository;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.util.ReflectionTestUtils;
-
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.when;
 
 class ProjectControllerSubTaskTest {
 
@@ -33,13 +32,20 @@ class ProjectControllerSubTaskTest {
         ProjectService projects = mock(ProjectService.class);
         SubTaskCommandService commands = mock(SubTaskCommandService.class);
         doThrow(new RuntimeException("仅项目负责人企划可创建子任务"))
-                .when(commands).addSubTask(org.mockito.ArgumentMatchers.eq(9L), org.mockito.ArgumentMatchers.anyMap());
-        ProjectController controller = new ProjectController(projects, mock(ScoringRepository.class),
-                mock(ActivityLogRepository.class), mock(SubTaskRepository.class), mock(ProjectAccessService.class),
-                mock(ProjectWorkflowService.class), null, commands, mock(ProjectLifecycleCommandService.class));
+                .when(commands)
+                .addSubTask(org.mockito.ArgumentMatchers.eq(9L), org.mockito.ArgumentMatchers.anyMap());
+        ProjectController controller = new ProjectController(
+                projects,
+                mock(ScoringRepository.class),
+                mock(ActivityLogRepository.class),
+                mock(SubTaskRepository.class),
+                mock(ProjectAccessService.class),
+                mock(ProjectWorkflowService.class),
+                null,
+                commands,
+                mock(ProjectLifecycleCommandService.class));
 
-        var response = controller.addTask(9L, Map.of("name", "包装设计"),
-                request("planner-2", "planner"));
+        var response = controller.addTask(9L, Map.of("name", "包装设计"), request("planner-2", "planner"));
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals(Map.of("error", "仅项目负责人企划可创建子任务"), response.getBody());
@@ -87,8 +93,8 @@ class ProjectControllerSubTaskTest {
         task.setAllocationStatus("market_open");
         when(tasks.findOpenDesignerMarketTasks()).thenReturn(List.of(task));
 
-        var response = controller(tasks, mock(ScoringRepository.class))
-                .getTaskMarket(request("designer-1", "designer"));
+        var response =
+                controller(tasks, mock(ScoringRepository.class)).getTaskMarket(request("designer-1", "designer"));
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         @SuppressWarnings("unchecked")
@@ -109,14 +115,19 @@ class ProjectControllerSubTaskTest {
     void plannerCanCreateMissingChatForChannelAndRegularProjects() throws Exception {
         ProjectService projects = mock(ProjectService.class);
         FeishuChatService chats = mock(FeishuChatService.class);
-        ProjectController controller = new ProjectController(projects, mock(ScoringRepository.class),
-                mock(ActivityLogRepository.class), mock(SubTaskRepository.class), mock(ProjectAccessService.class),
+        ProjectController controller = new ProjectController(
+                projects,
+                mock(ScoringRepository.class),
+                mock(ActivityLogRepository.class),
+                mock(SubTaskRepository.class),
+                mock(ProjectAccessService.class),
                 mock(ProjectWorkflowService.class));
         ReflectionTestUtils.setField(controller, "feishuChatService", chats);
         when(chats.enabled()).thenReturn(true);
         when(chats.createChat(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyCollection()))
                 .thenReturn("chat-1", "chat-2");
-        when(projects.saveProject(org.mockito.ArgumentMatchers.any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(projects.saveProject(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         when(projects.computeProjectStatus(org.mockito.ArgumentMatchers.any())).thenReturn("planner_accepted");
 
         Project channel = project(12L, "渠道新品", "");
@@ -138,16 +149,26 @@ class ProjectControllerSubTaskTest {
     }
 
     private ProjectController controller(SubTaskRepository tasks, ScoringRepository scoring) {
-        return new ProjectController(mock(ProjectService.class), scoring, mock(ActivityLogRepository.class),
-                tasks, mock(ProjectAccessService.class), mock(ProjectWorkflowService.class));
+        return new ProjectController(
+                mock(ProjectService.class),
+                scoring,
+                mock(ActivityLogRepository.class),
+                tasks,
+                mock(ProjectAccessService.class),
+                mock(ProjectWorkflowService.class));
     }
 
     private ProjectTaskController taskController(SubTaskRepository tasks, ScoringRepository scoring) {
         ProjectService projects = mock(ProjectService.class);
         SubTaskCommandService commands = ProjectTaskController.unsupportedSubTaskCommands();
-        ProjectViewSupport view = new ProjectViewSupport(projects, scoring,
-                mock(ActivityLogRepository.class), tasks, mock(ProjectAccessService.class),
-                mock(ProjectWorkflowService.class), commands);
+        ProjectViewSupport view = new ProjectViewSupport(
+                projects,
+                scoring,
+                mock(ActivityLogRepository.class),
+                tasks,
+                mock(ProjectAccessService.class),
+                mock(ProjectWorkflowService.class),
+                commands);
         return new ProjectTaskController(projects, commands, view, new ProjectRequestSupport(null));
     }
 

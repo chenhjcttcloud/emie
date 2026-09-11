@@ -1,22 +1,21 @@
 package com.emie.designpm.project.service;
 
-import com.emie.designpm.entity.Project;
-import com.emie.designpm.entity.ProjectWorkflowAttempt;
-import com.emie.designpm.project.repository.ProjectRepository;
-import com.emie.designpm.project.repository.ProjectWorkflowAttemptRepository;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-
-import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import com.emie.designpm.entity.Project;
+import com.emie.designpm.entity.ProjectWorkflowAttempt;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.project.repository.ProjectWorkflowAttemptRepository;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class ProjectWorkflowServiceTest {
 
@@ -65,8 +64,8 @@ class ProjectWorkflowServiceTest {
         when(projects.findByIdForUpdate(9L)).thenReturn(Optional.of(project));
         ProjectWorkflowService service = new ProjectWorkflowService(projects, attempts);
 
-        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
-                () -> service.review(9L, "approved", "", "sales-2", "其他销售", "sales"));
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class, () -> service.review(9L, "approved", "", "sales-2", "其他销售", "sales"));
 
         assertEquals("当前用户无权审核该流程阶段", error.getMessage());
     }

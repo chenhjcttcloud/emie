@@ -7,8 +7,7 @@ package com.emie.designpm.project.service;
  */
 final class CustomPriceRangeValidator {
 
-    private CustomPriceRangeValidator() {
-    }
+    private CustomPriceRangeValidator() {}
 
     static void validate(String value) {
         try {

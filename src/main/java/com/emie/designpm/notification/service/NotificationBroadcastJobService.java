@@ -5,12 +5,8 @@ import com.emie.designpm.notification.repository.NotificationBroadcastJobReposit
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.annotation.PreDestroy;
 import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.stereotype.Service;
-
+import jakarta.annotation.PreDestroy;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -18,6 +14,9 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
 
 /** 将耗时的全员飞书广播移出 HTTP 请求线程，并持久化可轮询的任务状态。 */
 @Service
@@ -33,20 +32,22 @@ public class NotificationBroadcastJobService {
     private volatile String runningJobId;
 
     @Autowired
-    public NotificationBroadcastJobService(NotificationTestService notificationTestService,
-                                           NotificationBroadcastJobRepository repository,
-                                           ObjectMapper objectMapper) {
-        this(notificationTestService, repository, objectMapper,
-                Executors.newSingleThreadExecutor(runnable -> {
-                    Thread thread = new Thread(runnable, "notification-broadcast");
-                    thread.setDaemon(true);
-                    return thread;
-                }));
+    public NotificationBroadcastJobService(
+            NotificationTestService notificationTestService,
+            NotificationBroadcastJobRepository repository,
+            ObjectMapper objectMapper) {
+        this(notificationTestService, repository, objectMapper, Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "notification-broadcast");
+            thread.setDaemon(true);
+            return thread;
+        }));
     }
 
-    NotificationBroadcastJobService(NotificationTestService notificationTestService,
-                                    NotificationBroadcastJobRepository repository,
-                                    ObjectMapper objectMapper, ExecutorService executor) {
+    NotificationBroadcastJobService(
+            NotificationTestService notificationTestService,
+            NotificationBroadcastJobRepository repository,
+            ObjectMapper objectMapper,
+            ExecutorService executor) {
         this.notificationTestService = notificationTestService;
         this.repository = repository;
         this.objectMapper = objectMapper;
@@ -57,8 +58,7 @@ public class NotificationBroadcastJobService {
         notificationTestService.validateTemporaryBroadcast(title, content);
         LocalDateTime now = LocalDateTime.now();
         String jobId = UUID.randomUUID().toString();
-        NotificationBroadcastJob job = new NotificationBroadcastJob(
-                jobId, operatorUserId, instanceId, now);
+        NotificationBroadcastJob job = new NotificationBroadcastJob(jobId, operatorUserId, instanceId, now);
         try {
             repository.saveAndFlush(job);
         } catch (DataIntegrityViolationException e) {
@@ -68,8 +68,7 @@ public class NotificationBroadcastJobService {
         try {
             executor.submit(() -> execute(jobId, title, content, operatorUserId));
         } catch (RuntimeException e) {
-            repository.completeRunningJob(jobId, instanceId, "failed", null,
-                    "后台执行器不可用，请重新发送", LocalDateTime.now());
+            repository.completeRunningJob(jobId, instanceId, "failed", null, "后台执行器不可用，请重新发送", LocalDateTime.now());
             runningJobId = null;
             throw e;
         }
@@ -77,8 +76,8 @@ public class NotificationBroadcastJobService {
     }
 
     public Map<String, Object> status(String jobId) {
-        NotificationBroadcastJob job = repository.findById(jobId)
-                .orElseThrow(() -> new IllegalArgumentException("发送任务不存在或已过期"));
+        NotificationBroadcastJob job =
+                repository.findById(jobId).orElseThrow(() -> new IllegalArgumentException("发送任务不存在或已过期"));
         return toMap(job);
     }
 
@@ -134,8 +133,7 @@ public class NotificationBroadcastJobService {
 
     private String safeMessage(Exception e) {
         String message = e.getMessage();
-        return message == null || message.isBlank() ? "后台发送失败" :
-                message.substring(0, Math.min(message.length(), 500));
+        return message == null || message.isBlank() ? "后台发送失败" : message.substring(0, Math.min(message.length(), 500));
     }
 
     @PreDestroy

@@ -1,24 +1,23 @@
 package com.emie.designpm;
 
-import com.emie.designpm.file.service.FileArchiveService;
-import com.emie.designpm.file.service.FilePreviewService;
-import com.sun.net.httpserver.HttpServer;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.springframework.test.util.ReflectionTestUtils;
-
-import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.concurrent.atomic.AtomicInteger;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
+import com.emie.designpm.file.service.FileArchiveService;
+import com.emie.designpm.file.service.FilePreviewService;
+import com.sun.net.httpserver.HttpServer;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class FilePreviewServiceTest {
 
@@ -72,7 +71,8 @@ class FilePreviewServiceTest {
         FileArchiveService archive = mock(FileArchiveService.class);
         Path source = Files.writeString(tempDir.resolve("slides.pptx"), "fake-presentation");
         when(archive.resolveFile("slides.pptx")).thenReturn(source);
-        service = createService(archive, "http://127.0.0.1:" + converter.getAddress().getPort());
+        service = createService(
+                archive, "http://127.0.0.1:" + converter.getAddress().getPort());
 
         assertEquals("processing", service.preparePreview("slides.pptx", false).status());
         FilePreviewService.PreviewStatus status = awaitTerminalStatus("slides.pptx");
@@ -87,7 +87,8 @@ class FilePreviewServiceTest {
 
     private FilePreviewService createService(FileArchiveService archive, String converterUrl) {
         FilePreviewService result = new FilePreviewService(archive);
-        ReflectionTestUtils.setField(result, "cacheDir", tempDir.resolve("preview-cache").toString());
+        ReflectionTestUtils.setField(
+                result, "cacheDir", tempDir.resolve("preview-cache").toString());
         ReflectionTestUtils.setField(result, "converterUrl", converterUrl);
         ReflectionTestUtils.setField(result, "maxSourceBytes", 1024L * 1024L);
         ReflectionTestUtils.setField(result, "maxCacheBytes", 10L * 1024L * 1024L);

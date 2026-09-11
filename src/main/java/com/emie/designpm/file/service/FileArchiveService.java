@@ -1,32 +1,31 @@
 package com.emie.designpm.file.service;
 
+import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.entity.FileRecord;
 import com.emie.designpm.entity.SystemConfig;
 import com.emie.designpm.file.repository.FileRecordRepository;
-import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.SftpException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import jakarta.annotation.PostConstruct;
 import java.io.*;
-import java.nio.file.attribute.FileTime;
 import java.nio.file.*;
+import java.nio.file.attribute.FileTime;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class FileArchiveService {
@@ -49,8 +48,7 @@ public class FileArchiveService {
     private Path uploadPath;
     private Path restoreCachePath;
 
-    public FileArchiveService(FileRecordRepository fileRecordRepository,
-                              SystemConfigRepository configRepository) {
+    public FileArchiveService(FileRecordRepository fileRecordRepository, SystemConfigRepository configRepository) {
         this.fileRecordRepository = fileRecordRepository;
         this.configRepository = configRepository;
     }
@@ -71,9 +69,14 @@ public class FileArchiveService {
 
     /** 上传成功后记录文件信息 */
     @Transactional
-    public FileRecord recordUpload(String storedName, String originalName,
-                                   long fileSize, String mimeType,
-                                   String targetType, Long targetId, String ownerUserId) {
+    public FileRecord recordUpload(
+            String storedName,
+            String originalName,
+            long fileSize,
+            String mimeType,
+            String targetType,
+            Long targetId,
+            String ownerUserId) {
         FileRecord record = FileRecord.builder()
                 .storedName(storedName)
                 .originalName(originalName)
@@ -124,8 +127,7 @@ public class FileArchiveService {
                 return;
             }
             LocalDateTime cutoff = LocalDateTime.now().minusDays(HOT_RETENTION_DAYS);
-            List<FileRecord> toArchive = fileRecordRepository
-                    .findByStorageTierAndCreatedAtBefore("local", cutoff);
+            List<FileRecord> toArchive = fileRecordRepository.findByStorageTierAndCreatedAtBefore("local", cutoff);
 
             log.info("找到 {} 个文件需要归档", toArchive.size());
             for (FileRecord record : toArchive) {
@@ -155,7 +157,9 @@ public class FileArchiveService {
             throw new FileNotFoundException("归档失败，源文件不存在: " + record.getStoredName());
         }
 
-        if (sourceFile.startsWith(restoreCachePath) && record.getArchivePath() != null && !record.getArchivePath().isBlank()) {
+        if (sourceFile.startsWith(restoreCachePath)
+                && record.getArchivePath() != null
+                && !record.getArchivePath().isBlank()) {
             Files.deleteIfExists(sourceFile);
             record.setStorageTier("archived");
             record.setArchivedAt(LocalDateTime.now());
@@ -187,8 +191,12 @@ public class FileArchiveService {
             // 5. 删除本地源文件
             Files.deleteIfExists(sourceFile);
 
-            log.info("归档成功: {} -> {} ({} bytes -> {} bytes)",
-                    record.getStoredName(), nasTarget, record.getFileSize(), record.getArchiveSize());
+            log.info(
+                    "归档成功: {} -> {} ({} bytes -> {} bytes)",
+                    record.getStoredName(),
+                    nasTarget,
+                    record.getFileSize(),
+                    record.getArchiveSize());
 
         } finally {
             Files.deleteIfExists(gzFile);
@@ -246,13 +254,15 @@ public class FileArchiveService {
             }
 
             // 1. 从 NAS scp 拉回压缩文件到临时目录
-            Path tempGz = restoreCachePath.resolve(record.getStoredName() + ".restoring.gz").normalize();
+            Path tempGz = restoreCachePath
+                    .resolve(record.getStoredName() + ".restoring.gz")
+                    .normalize();
             sftpDownload(archivePath, tempGz);
 
             // 2. 解压到缓存目录
             Path restoredPath = restoreCachePath.resolve(record.getStoredName()).normalize();
             try (GZIPInputStream gzis = new GZIPInputStream(new FileInputStream(tempGz.toFile()));
-                 FileOutputStream fos = new FileOutputStream(restoredPath.toFile())) {
+                    FileOutputStream fos = new FileOutputStream(restoredPath.toFile())) {
                 byte[] buf = new byte[8192];
                 int len;
                 while ((len = gzis.read(buf)) > 0) {
@@ -314,7 +324,7 @@ public class FileArchiveService {
     /** GZIP 压缩文件 */
     private void compressFile(Path source, Path target) throws IOException {
         try (FileInputStream fis = new FileInputStream(source.toFile());
-             GZIPOutputStream gzos = new GZIPOutputStream(new FileOutputStream(target.toFile()))) {
+                GZIPOutputStream gzos = new GZIPOutputStream(new FileOutputStream(target.toFile()))) {
             byte[] buf = new byte[8192];
             int len;
             while ((len = fis.read(buf)) > 0) {
@@ -347,7 +357,10 @@ public class FileArchiveService {
         String nasHost = getNasConfig("nas.host");
         String nasUser = getNasConfig("nas.user");
         String nasPassword = getNasConfig("nas.password");
-        if (nasHost.isBlank() || nasUser.isBlank() || nasPassword.isBlank() || getNasPath().isBlank()) {
+        if (nasHost.isBlank()
+                || nasUser.isBlank()
+                || nasPassword.isBlank()
+                || getNasPath().isBlank()) {
             throw new Exception("NAS 配置不完整");
         }
 
@@ -390,8 +403,10 @@ public class FileArchiveService {
     }
 
     private String getNasConfig(String key) {
-        return configRepository.findByConfigKey(key)
-                .map(SystemConfig::getConfigValue).orElse("");
+        return configRepository
+                .findByConfigKey(key)
+                .map(SystemConfig::getConfigValue)
+                .orElse("");
     }
 
     private String getNasPath() {
@@ -495,8 +510,8 @@ public class FileArchiveService {
 
     /** 获取已归档文件列表 */
     public List<Map<String, Object>> getArchivedFiles() {
-        return fileRecordRepository.findByStorageTierOrderByCreatedAtDesc("archived")
-                .stream().map(r -> {
+        return fileRecordRepository.findByStorageTierOrderByCreatedAtDesc("archived").stream()
+                .map(r -> {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("id", r.getId());
                     m.put("storedName", r.getStoredName());
@@ -504,18 +519,20 @@ public class FileArchiveService {
                     m.put("fileSize", r.getFileSize());
                     m.put("archiveSize", r.getArchiveSize());
                     m.put("archivePath", r.getArchivePath());
-                    m.put("archivedAt", r.getArchivedAt() != null ? r.getArchivedAt().toString() : "");
+                    m.put(
+                            "archivedAt",
+                            r.getArchivedAt() != null ? r.getArchivedAt().toString() : "");
                     m.put("createdAt", r.getCreatedAt().toString());
                     return m;
-                }).collect(Collectors.toList());
+                })
+                .collect(Collectors.toList());
     }
 
     /** 手动归档所有符合条件文件 */
     public Map<String, Object> manualArchive() {
         Map<String, Object> result = new LinkedHashMap<>();
         LocalDateTime cutoff = LocalDateTime.now().minusDays(HOT_RETENTION_DAYS);
-        List<FileRecord> toArchive = fileRecordRepository
-                .findByStorageTierAndCreatedAtBefore("local", cutoff);
+        List<FileRecord> toArchive = fileRecordRepository.findByStorageTierAndCreatedAtBefore("local", cutoff);
         int success = 0, fail = 0;
         for (FileRecord record : toArchive) {
             try {
@@ -534,8 +551,8 @@ public class FileArchiveService {
 
     /** 恢复指定文件到本地 */
     public void restoreFile(Long fileId) throws Exception {
-        FileRecord record = fileRecordRepository.findById(fileId)
-                .orElseThrow(() -> new IllegalArgumentException("文件记录不存在"));
+        FileRecord record =
+                fileRecordRepository.findById(fileId).orElseThrow(() -> new IllegalArgumentException("文件记录不存在"));
         if (!"archived".equals(record.getStorageTier())) {
             throw new IllegalArgumentException("该文件不在归档状态");
         }

@@ -1,15 +1,14 @@
 package com.emie.designpm.designrequirement.service;
 
 import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.entity.DesignRequirement;
-import com.emie.designpm.entity.DesignRequirementScore;
 import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
 import com.emie.designpm.designrequirement.repository.DesignRequirementScoreRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
+import com.emie.designpm.entity.DesignRequirement;
+import com.emie.designpm.entity.DesignRequirementScore;
 import java.time.LocalDateTime;
 import java.util.*;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class DesignRequirementScoringService {
@@ -21,8 +20,8 @@ public class DesignRequirementScoringService {
     }
 
     @org.springframework.beans.factory.annotation.Autowired
-    public DesignRequirementScoringService(DesignRequirementScoreRepository scores,
-                                           DesignRequirementRepository requirements) {
+    public DesignRequirementScoringService(
+            DesignRequirementScoreRepository scores, DesignRequirementRepository requirements) {
         this.scores = scores;
         this.requirements = requirements;
     }
@@ -44,7 +43,8 @@ public class DesignRequirementScoringService {
     public void activateSelfScore(DesignRequirement d) {
         List<DesignRequirementScore> records = scores.findByRequirementIdOrderByIdAsc(d.getId());
         DesignRequirementScore self = records.stream()
-                .filter(s -> "self".equals(s.getStage())).findFirst()
+                .filter(s -> "self".equals(s.getStage()))
+                .findFirst()
                 .orElseThrow(() -> new IllegalStateException("该需求尚未配置设计师自评"));
         // 每次重新交付都视为一个全新的评分周期，绝不能沿用上次的任何分数。
         for (DesignRequirementScore record : records) {
@@ -96,8 +96,7 @@ public class DesignRequirementScoringService {
     /** 需求行锁；单元测试（requirements 为 null）时退化为直接使用传入实体。 */
     private DesignRequirement lockRequirement(DesignRequirement d) {
         if (requirements == null) return d;
-        return requirements.findByIdForUpdate(d.getId())
-                .orElseThrow(() -> new IllegalArgumentException("设计需求不存在"));
+        return requirements.findByIdForUpdate(d.getId()).orElseThrow(() -> new IllegalArgumentException("设计需求不存在"));
     }
 
     /** 若传入的是游离实体（如控制器先加载后传入），同步持久化锁内判定的状态，
@@ -110,40 +109,44 @@ public class DesignRequirementScoringService {
     }
 
     public List<Map<String, Object>> pendingItems(String role, String userId) {
-        return scores.findVisibleForReviewer(normalizeRole(role), userId).stream().map(s -> {
-            DesignRequirement d = s.getRequirement();
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("itemKind", "design_requirement");
-            item.put("requirementId", d.getId());
-            item.put("taskId", d.getId());
-            item.put("taskName", d.getName());
-            item.put("taskStatus", d.getStatus());
-            item.put("projectId", d.getId());
-            item.put("projectType", "design_requirement");
-            item.put("projectName", d.getName());
-            item.put("plannerId", d.getPlannerId());
-            item.put("plannerName", d.getPlannerName());
-            item.put("plannedDate", d.getDeadline());
-            item.put("designerId", d.getDesignerId());
-            item.put("designerName", d.getDesignerName());
-            item.put("isPending", "pending".equals(s.getStatus()));
-            item.put("scoringRecords", scoreMaps(scores.findByRequirementIdOrderByIdAsc(d.getId())));
-            return item;
-        }).toList();
+        return scores.findVisibleForReviewer(normalizeRole(role), userId).stream()
+                .map(s -> {
+                    DesignRequirement d = s.getRequirement();
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("itemKind", "design_requirement");
+                    item.put("requirementId", d.getId());
+                    item.put("taskId", d.getId());
+                    item.put("taskName", d.getName());
+                    item.put("taskStatus", d.getStatus());
+                    item.put("projectId", d.getId());
+                    item.put("projectType", "design_requirement");
+                    item.put("projectName", d.getName());
+                    item.put("plannerId", d.getPlannerId());
+                    item.put("plannerName", d.getPlannerName());
+                    item.put("plannedDate", d.getDeadline());
+                    item.put("designerId", d.getDesignerId());
+                    item.put("designerName", d.getDesignerName());
+                    item.put("isPending", "pending".equals(s.getStatus()));
+                    item.put("scoringRecords", scoreMaps(scores.findByRequirementIdOrderByIdAsc(d.getId())));
+                    return item;
+                })
+                .toList();
     }
 
     public List<Map<String, Object>> scoreMaps(List<DesignRequirementScore> records) {
-        return records.stream().map(s -> {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("role", s.getRole());
-            m.put("stage", s.getStage());
-            m.put("reviewerId", s.getReviewerId());
-            m.put("reviewerName", s.getReviewerName());
-            m.put("status", s.getStatus());
-            m.put("score", s.getScore());
-            m.put("scoredAt", s.getScoredAt());
-            return m;
-        }).toList();
+        return records.stream()
+                .map(s -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("role", s.getRole());
+                    m.put("stage", s.getStage());
+                    m.put("reviewerId", s.getReviewerId());
+                    m.put("reviewerName", s.getReviewerName());
+                    m.put("status", s.getStatus());
+                    m.put("score", s.getScore());
+                    m.put("scoredAt", s.getScoredAt());
+                    return m;
+                })
+                .toList();
     }
 
     private DesignRequirementScore ownPending(DesignRequirement d, AuthSession session, String stage) {
@@ -152,7 +155,8 @@ public class DesignRequirementScoringService {
                 .filter(s -> stage.equals(s.getStage()) && "pending".equals(s.getStatus()))
                 .filter(s -> Objects.equals(s.getReviewerId(), session.userId())
                         || (s.getReviewerId() == null && Objects.equals(s.getRole(), role)))
-                .findFirst().orElseThrow(() -> new IllegalArgumentException("当前没有需要您完成的评分"));
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("当前没有需要您完成的评分"));
     }
 
     private void complete(DesignRequirementScore record, AuthSession session, int value) {
@@ -178,7 +182,8 @@ public class DesignRequirementScoringService {
 
     private String normalizeRole(String role) {
         if (role == null) return "";
-        if ("Promotion".equalsIgnoreCase(role) || "product_promotion".equalsIgnoreCase(role)
+        if ("Promotion".equalsIgnoreCase(role)
+                || "product_promotion".equalsIgnoreCase(role)
                 || "product-promotion".equalsIgnoreCase(role)) return "promotion";
         return role.toLowerCase(Locale.ROOT);
     }

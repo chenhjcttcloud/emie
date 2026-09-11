@@ -1,28 +1,30 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
 @NoArgsConstructor
 @Entity
-@Table(name = "projects", indexes = {
-    @Index(name = "idx_sales_id", columnList = "salesId"),
-    @Index(name = "idx_planner_id", columnList = "plannerId"),
-    @Index(name = "idx_project_status", columnList = "status"),
-    @Index(name = "idx_created_at", columnList = "createdAt"),
-    @Index(name = "idx_project_status_planner", columnList = "status,plannerId"),
-    @Index(name = "idx_project_status_sales", columnList = "status,salesId"),
-    @Index(name = "idx_project_type_status", columnList = "type,status"),
-    @Index(name = "idx_project_product_name", columnList = "productName"),
-    @Index(name = "idx_project_type_created", columnList = "type,createdAt"),
-    @Index(name = "idx_project_sales_type_created", columnList = "salesId,type,createdAt"),
-    @Index(name = "idx_project_planner_type_created", columnList = "plannerId,type,createdAt")
-})
+@Table(
+        name = "projects",
+        indexes = {
+            @Index(name = "idx_sales_id", columnList = "salesId"),
+            @Index(name = "idx_planner_id", columnList = "plannerId"),
+            @Index(name = "idx_project_status", columnList = "status"),
+            @Index(name = "idx_created_at", columnList = "createdAt"),
+            @Index(name = "idx_project_status_planner", columnList = "status,plannerId"),
+            @Index(name = "idx_project_status_sales", columnList = "status,salesId"),
+            @Index(name = "idx_project_type_status", columnList = "type,status"),
+            @Index(name = "idx_project_product_name", columnList = "productName"),
+            @Index(name = "idx_project_type_created", columnList = "type,createdAt"),
+            @Index(name = "idx_project_sales_type_created", columnList = "salesId,type,createdAt"),
+            @Index(name = "idx_project_planner_type_created", columnList = "plannerId,type,createdAt")
+        })
 @EntityListeners(com.emie.designpm.sync.service.ProjectSyncListener.class)
 public class Project {
 
@@ -53,12 +55,16 @@ public class Project {
     /** 项目协作群信息；由飞书机器人创建和维护。 */
     @Column(length = 100)
     private String feishuChatId;
+
     @Column(length = 20)
     private String feishuChatStatus = "not_created";
+
     @Column(nullable = false)
     private boolean feishuChatEnabled = false;
+
     @Column(columnDefinition = "TEXT")
     private String feishuChatError;
+
     private LocalDateTime feishuChatCreatedAt;
     private LocalDateTime feishuChatDissolvedAt;
 
@@ -69,6 +75,7 @@ public class Project {
     // 产品企划
     @Column(nullable = true)
     private String plannerId;
+
     @Column(nullable = true)
     private String plannerName;
 
@@ -124,9 +131,14 @@ public class Project {
     @Column(columnDefinition = "TEXT")
     private String ipSubOptions;
 
-    @Column(length=100) private String creativeAuthorId;
-    @Column(length=200) private String creativeAuthorName;
-    @Column(length=50) private String source;
+    @Column(length = 100)
+    private String creativeAuthorId;
+
+    @Column(length = 200)
+    private String creativeAuthorName;
+
+    @Column(length = 50)
+    private String source;
 
     /** 终止请求发起方（用于双方确认终止流程） */
     private String terminateRequester;

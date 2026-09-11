@@ -1,19 +1,5 @@
 package com.emie.designpm.notification.service;
 
-import com.emie.designpm.entity.NotificationBroadcastJob;
-import com.emie.designpm.notification.repository.NotificationBroadcastJobRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.dao.DataIntegrityViolationException;
-
-import java.time.LocalDateTime;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -22,6 +8,19 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
+import com.emie.designpm.entity.NotificationBroadcastJob;
+import com.emie.designpm.notification.repository.NotificationBroadcastJobRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 
 class NotificationBroadcastJobServiceTest {
 
@@ -58,16 +57,16 @@ class NotificationBroadcastJobServiceTest {
         when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("duplicate running_slot"));
         jobs = service(notifications, repository);
 
-        IllegalStateException error = assertThrows(IllegalStateException.class,
-                () -> jobs.start("更新", "今晚发布", "admin-1"));
+        IllegalStateException error =
+                assertThrows(IllegalStateException.class, () -> jobs.start("更新", "今晚发布", "admin-1"));
         assertEquals("已有全员通知正在发送，请等待当前任务完成", error.getMessage());
     }
 
     @Test
     void interruptedRunningJobBecomesSafeTerminalStateAndRemainsQueryableOnStartup() {
         NotificationBroadcastJobRepository repository = inMemoryRepository();
-        NotificationBroadcastJob stale = new NotificationBroadcastJob("old-job", "admin-1", "old-instance",
-                LocalDateTime.now().minusMinutes(5));
+        NotificationBroadcastJob stale = new NotificationBroadcastJob(
+                "old-job", "admin-1", "old-instance", LocalDateTime.now().minusMinutes(5));
         repository.saveAndFlush(stale);
         jobs = service(mock(NotificationTestService.class), repository);
         jobs.recoverInterruptedJobsOnStartup();
@@ -79,8 +78,8 @@ class NotificationBroadcastJobServiceTest {
         assertNotNull(status.get("completedAt"));
     }
 
-    private NotificationBroadcastJobService service(NotificationTestService notifications,
-                                                    NotificationBroadcastJobRepository repository) {
+    private NotificationBroadcastJobService service(
+            NotificationTestService notifications, NotificationBroadcastJobRepository repository) {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         return new NotificationBroadcastJobService(notifications, repository, new ObjectMapper(), executor);
     }
@@ -93,25 +92,29 @@ class NotificationBroadcastJobServiceTest {
             store.put(job.getId(), job);
             return job;
         });
-        when(repository.findById(anyString())).thenAnswer(invocation -> Optional.ofNullable(store.get(invocation.getArgument(0))));
-        when(repository.failInterruptedJobs(any(LocalDateTime.class), anyString())).thenAnswer(invocation -> {
-            LocalDateTime now = invocation.getArgument(0);
-            String error = invocation.getArgument(1);
-            int changed = 0;
-            for (NotificationBroadcastJob job : store.values()) {
-                if ("running".equals(job.getStatus())) {
-                    job.setStatus("failed");
-                    job.setError(error);
-                    job.setCompletedAt(now);
-                    changed++;
-                }
-            }
-            return changed;
-        });
-        when(repository.completeRunningJob(anyString(), anyString(), anyString(), any(), any(), any(LocalDateTime.class)))
+        when(repository.findById(anyString()))
+                .thenAnswer(invocation -> Optional.ofNullable(store.get(invocation.getArgument(0))));
+        when(repository.failInterruptedJobs(any(LocalDateTime.class), anyString()))
+                .thenAnswer(invocation -> {
+                    LocalDateTime now = invocation.getArgument(0);
+                    String error = invocation.getArgument(1);
+                    int changed = 0;
+                    for (NotificationBroadcastJob job : store.values()) {
+                        if ("running".equals(job.getStatus())) {
+                            job.setStatus("failed");
+                            job.setError(error);
+                            job.setCompletedAt(now);
+                            changed++;
+                        }
+                    }
+                    return changed;
+                });
+        when(repository.completeRunningJob(
+                        anyString(), anyString(), anyString(), any(), any(), any(LocalDateTime.class)))
                 .thenAnswer(invocation -> {
                     NotificationBroadcastJob job = store.get(invocation.getArgument(0));
-                    if (job == null || !"running".equals(job.getStatus())
+                    if (job == null
+                            || !"running".equals(job.getStatus())
                             || !job.getOwnerInstanceId().equals(invocation.getArgument(1))) return 0;
                     job.setStatus(invocation.getArgument(2));
                     job.setResultJson(invocation.getArgument(3));
@@ -119,7 +122,8 @@ class NotificationBroadcastJobServiceTest {
                     job.setCompletedAt(invocation.getArgument(5));
                     return 1;
                 });
-        when(repository.failOwnedJobs(anyString(), any(LocalDateTime.class), anyString())).thenReturn(0);
+        when(repository.failOwnedJobs(anyString(), any(LocalDateTime.class), anyString()))
+                .thenReturn(0);
         return repository;
     }
 

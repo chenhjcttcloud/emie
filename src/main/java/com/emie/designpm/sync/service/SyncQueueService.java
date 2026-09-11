@@ -2,15 +2,14 @@ package com.emie.designpm.sync.service;
 
 import com.emie.designpm.entity.SyncQueue;
 import com.emie.designpm.sync.repository.SyncQueueRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SyncQueueService {
@@ -33,8 +32,8 @@ public class SyncQueueService {
     }
 
     private String enqueueDeduplicated(String entityType, Long entityId, String action) {
-        List<SyncQueue> activeItems = syncQueueRepository.findByEntityTypeAndEntityIdAndStatusIn(
-                entityType, entityId, ACTIVE_STATUSES);
+        List<SyncQueue> activeItems =
+                syncQueueRepository.findByEntityTypeAndEntityIdAndStatusIn(entityType, entityId, ACTIVE_STATUSES);
 
         if ("delete".equals(action)) {
             Optional<SyncQueue> existingDelete = activeItems.stream()
@@ -67,16 +66,16 @@ public class SyncQueueService {
                 syncQueueRepository.save(item);
                 return "updated";
             }
-            boolean processingReconcile = activeItems.stream().anyMatch(item ->
-                    "processing".equals(item.getStatus()) && "reconcile".equals(item.getAction()));
+            boolean processingReconcile = activeItems.stream()
+                    .anyMatch(item -> "processing".equals(item.getStatus()) && "reconcile".equals(item.getAction()));
             if (!processingReconcile && !activeItems.isEmpty()) return "skipped";
             // 对账正在写主表时发生真实业务更新，另建后续任务，确保备份增量不丢失。
             if (processingReconcile && "reconcile".equals(action)) return "skipped";
         }
 
         // 失败任务应在业务记录再次变更或全量重刷时复用并重置，避免不断产生重复失败记录。
-        Optional<SyncQueue> failed = syncQueueRepository
-                .findFirstByEntityTypeAndEntityIdAndStatusOrderByCreatedAtDesc(entityType, entityId, "fail");
+        Optional<SyncQueue> failed = syncQueueRepository.findFirstByEntityTypeAndEntityIdAndStatusOrderByCreatedAtDesc(
+                entityType, entityId, "fail");
         if (failed.isPresent()) {
             SyncQueue item = failed.get();
             item.setAction(action);
@@ -125,15 +124,15 @@ public class SyncQueueService {
         int added = 0;
         int skipped = 0;
         for (Long id : ids) {
-            List<SyncQueue> active = syncQueueRepository.findByEntityTypeAndEntityIdAndStatusIn(
-                    entityType, id, ACTIVE_STATUSES);
+            List<SyncQueue> active =
+                    syncQueueRepository.findByEntityTypeAndEntityIdAndStatusIn(entityType, id, ACTIVE_STATUSES);
             if (!active.isEmpty()) {
                 skipped++;
                 continue;
             }
 
-            List<SyncQueue> completed = syncQueueRepository.findByEntityTypeAndEntityIdAndStatusIn(
-                    entityType, id, List.of("done"));
+            List<SyncQueue> completed =
+                    syncQueueRepository.findByEntityTypeAndEntityIdAndStatusIn(entityType, id, List.of("done"));
             if (!completed.isEmpty()) {
                 SyncQueue item = completed.get(completed.size() - 1);
                 item.setStatus("pending");
@@ -161,8 +160,8 @@ public class SyncQueueService {
     /** 管理员精准重试一条已失败任务，避免为单条字段问题触发全量重刷。 */
     @Transactional
     public Map<String, Object> retryFailed(Long queueId) {
-        SyncQueue item = syncQueueRepository.findById(queueId)
-                .orElseThrow(() -> new IllegalArgumentException("同步任务不存在"));
+        SyncQueue item =
+                syncQueueRepository.findById(queueId).orElseThrow(() -> new IllegalArgumentException("同步任务不存在"));
         if (!"fail".equals(item.getStatus())) {
             throw new IllegalStateException("仅失败任务可以重试");
         }
@@ -171,8 +170,15 @@ public class SyncQueueService {
         item.setErrorMsg(null);
         item.setNextRetryAt(null);
         syncQueueRepository.save(item);
-        return Map.of("id", item.getId(), "entityType", item.getEntityType(),
-                "entityId", item.getEntityId(), "status", item.getStatus());
+        return Map.of(
+                "id",
+                item.getId(),
+                "entityType",
+                item.getEntityType(),
+                "entityId",
+                item.getEntityId(),
+                "status",
+                item.getStatus());
     }
 
     /** 统计 */
@@ -191,13 +197,16 @@ public class SyncQueueService {
         stats.put("failRetryExceeded", failRetry);
         stats.put("lastSuccessAt", latestDone.map(SyncQueue::getUpdatedAt).orElse(null));
         stats.put("lastFailureAt", latestFail.map(SyncQueue::getUpdatedAt).orElse(null));
-        stats.put("lastFailure", latestFail.map(item -> Map.of(
-                "id", item.getId(),
-                "entityType", item.getEntityType(),
-                "entityId", item.getEntityId(),
-                "retryCount", item.getRetryCount() == null ? 0 : item.getRetryCount(),
-                "error", item.getErrorMsg() == null ? "未知错误" : item.getErrorMsg()
-        )).orElse(null));
+        stats.put(
+                "lastFailure",
+                latestFail
+                        .map(item -> Map.of(
+                                "id", item.getId(),
+                                "entityType", item.getEntityType(),
+                                "entityId", item.getEntityId(),
+                                "retryCount", item.getRetryCount() == null ? 0 : item.getRetryCount(),
+                                "error", item.getErrorMsg() == null ? "未知错误" : item.getErrorMsg()))
+                        .orElse(null));
         return stats;
     }
 }

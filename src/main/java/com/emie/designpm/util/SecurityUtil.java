@@ -17,15 +17,15 @@ public class SecurityUtil {
     // 只精确匹配真实事件属性，避免把 one=/online=/done=/continue= 等合法文本误改写；
     // 要求前面是空白或字符串开头（(^|\s)），从而不命中单词中部的 on（如 donation=）。
     private static final String EVENT_HANDLER_ATTR_NAMES =
-            "abort|auxclick|beforeinput|beforematch|beforetoggle|blur|cancel|canplay|canplaythrough|change|click|" +
-            "close|contextlost|contextmenu|contextrestored|copy|cuechange|cut|dblclick|drag|dragend|dragenter|" +
-            "dragleave|dragover|dragstart|drop|durationchange|emptied|ended|error|focus|formdata|input|invalid|" +
-            "keydown|keypress|keyup|load|loadeddata|loadedmetadata|loadstart|mousedown|mouseenter|mouseleave|" +
-            "mousemove|mouseout|mouseover|mouseup|paste|pause|play|playing|progress|ratechange|reset|resize|" +
-            "scroll|scrollend|securitypolicyviolation|seeked|seeking|select|slotchange|stalled|submit|suspend|" +
-            "timeupdate|toggle|volumechange|waiting|wheel";
-    private static final Pattern XSS_EVENT_HANDLER_ATTR = Pattern.compile(
-            "(?i)(^|\\s)on(?:" + EVENT_HANDLER_ATTR_NAMES + ")\\s*=");
+            "abort|auxclick|beforeinput|beforematch|beforetoggle|blur|cancel|canplay|canplaythrough|change|click|"
+                    + "close|contextlost|contextmenu|contextrestored|copy|cuechange|cut|dblclick|drag|dragend|dragenter|"
+                    + "dragleave|dragover|dragstart|drop|durationchange|emptied|ended|error|focus|formdata|input|invalid|"
+                    + "keydown|keypress|keyup|load|loadeddata|loadedmetadata|loadstart|mousedown|mouseenter|mouseleave|"
+                    + "mousemove|mouseout|mouseover|mouseup|paste|pause|play|playing|progress|ratechange|reset|resize|"
+                    + "scroll|scrollend|securitypolicyviolation|seeked|seeking|select|slotchange|stalled|submit|suspend|"
+                    + "timeupdate|toggle|volumechange|waiting|wheel";
+    private static final Pattern XSS_EVENT_HANDLER_ATTR =
+            Pattern.compile("(?i)(^|\\s)on(?:" + EVENT_HANDLER_ATTR_NAMES + ")\\s*=");
 
     // 允许上传的图片扩展名
     // 设计源文件可放入参考图片区域，但不参与缩略图/在线预览。
@@ -33,17 +33,13 @@ public class SecurityUtil {
 
     // 允许上传的附件扩展名（办公文档 + 图片 + PDF）
     private static final List<String> ALLOWED_ATTACHMENT_EXTS = Arrays.asList(
-        "jpg", "jpeg", "png", "gif", "bmp", "webp",
-        "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
-        "txt", "csv", "zip", "rar", "7z", "ai", "step", "stp"
-    );
+            "jpg", "jpeg", "png", "gif", "bmp", "webp", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt",
+            "csv", "zip", "rar", "7z", "ai", "step", "stp");
 
     // 禁止上传的扩展名（高危）
     private static final List<String> BLOCKED_EXTS = Arrays.asList(
-        "sql", "sh", "bat", "cmd", "exe", "dll", "so", "jar",
-        "war", "php", "asp", "aspx", "jsp", "py", "rb", "pl",
-        "vbs", "ps1", "msi", "reg", "scr"
-    );
+            "sql", "sh", "bat", "cmd", "exe", "dll", "so", "jar", "war", "php", "asp", "aspx", "jsp", "py", "rb", "pl",
+            "vbs", "ps1", "msi", "reg", "scr");
 
     /**
      * 截断并清理文本（防止 XSS 和超长文本）

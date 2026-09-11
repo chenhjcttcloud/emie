@@ -1,20 +1,18 @@
 package com.emie.designpm.designrequirement.service;
 
-import com.emie.designpm.designrequirement.service.DesignRequirementScoringService;
-import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.entity.DesignRequirement;
-import com.emie.designpm.entity.DesignRequirementScore;
-import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
-import com.emie.designpm.designrequirement.repository.DesignRequirementScoreRepository;
-import org.junit.jupiter.api.Test;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+
+import com.emie.designpm.auth.AuthSession;
+import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
+import com.emie.designpm.designrequirement.repository.DesignRequirementScoreRepository;
+import com.emie.designpm.entity.DesignRequirement;
+import com.emie.designpm.entity.DesignRequirementScore;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
 
 class DesignRequirementScoringServiceTest {
 
@@ -54,13 +52,15 @@ class DesignRequirementScoringServiceTest {
     @Test
     void rejectsEarlyUnauthorizedAndRepeatedScoresAndNewCycleClearsOldScores() {
         Fixture f = fixture("sales", "sales-1", "销售一");
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(
+                IllegalArgumentException.class,
                 () -> f.service.submitSelfScore(f.requirement, session("sales-1", "sales", "销售一"), 80));
 
         f.service.activateSelfScore(f.requirement);
         f.service.submitSelfScore(f.requirement, session("designer-1", "designer", "设计师一"), 80);
         f.service.submitReview(f.requirement, session("sales-1", "sales", "销售一"), 81);
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(
+                IllegalArgumentException.class,
                 () -> f.service.submitReview(f.requirement, session("sales-1", "sales", "销售一"), 82));
 
         f.service.activateSelfScore(f.requirement);
@@ -142,8 +142,12 @@ class DesignRequirementScoringServiceTest {
         return new Fixture(service, requirement, records);
     }
 
-    private LockedFixture lockedFixture(String creatorRole, String creatorId, String creatorName,
-                                        DesignRequirementRepository requirements, DesignRequirement locked) {
+    private LockedFixture lockedFixture(
+            String creatorRole,
+            String creatorId,
+            String creatorName,
+            DesignRequirementRepository requirements,
+            DesignRequirement locked) {
         DesignRequirementScoreRepository repository = mock(DesignRequirementScoreRepository.class);
         List<DesignRequirementScore> records = new ArrayList<>();
         when(repository.save(any())).thenAnswer(invocation -> {
@@ -175,17 +179,27 @@ class DesignRequirementScoringServiceTest {
     }
 
     private DesignRequirementScore record(List<DesignRequirementScore> records, String role) {
-        return records.stream().filter(s -> role.equals(s.getRole())).findFirst().orElseThrow();
+        return records.stream()
+                .filter(s -> role.equals(s.getRole()))
+                .findFirst()
+                .orElseThrow();
     }
 
     private void assertRoles(List<DesignRequirementScore> records, String... roles) {
-        assertEquals(List.of(roles), records.stream().map(DesignRequirementScore::getRole).toList());
+        assertEquals(
+                List.of(roles),
+                records.stream().map(DesignRequirementScore::getRole).toList());
     }
 
-    private record Fixture(DesignRequirementScoringService service, DesignRequirement requirement,
-                           List<DesignRequirementScore> records) {}
+    private record Fixture(
+            DesignRequirementScoringService service,
+            DesignRequirement requirement,
+            List<DesignRequirementScore> records) {}
 
-    private record LockedFixture(DesignRequirementScoringService service, DesignRequirement requirement,
-                                 List<DesignRequirementScore> records,
-                                 DesignRequirementRepository requirements, DesignRequirement locked) {}
+    private record LockedFixture(
+            DesignRequirementScoringService service,
+            DesignRequirement requirement,
+            List<DesignRequirementScore> records,
+            DesignRequirementRepository requirements,
+            DesignRequirement locked) {}
 }

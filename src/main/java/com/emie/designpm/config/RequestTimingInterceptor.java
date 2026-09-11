@@ -19,8 +19,11 @@ public class RequestTimingInterceptor implements HandlerInterceptor {
     }
 
     @Override
-    public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler,
-                           org.springframework.web.servlet.ModelAndView modelAndView) {
+    public void postHandle(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            Object handler,
+            org.springframework.web.servlet.ModelAndView modelAndView) {
         Object started = request.getAttribute(START);
         if (started instanceof Long && request.getRequestURI().startsWith("/api/")) {
             response.setHeader("X-Response-Time-Ms", String.valueOf((System.nanoTime() - (Long) started) / 1_000_000L));
@@ -28,15 +31,21 @@ public class RequestTimingInterceptor implements HandlerInterceptor {
     }
 
     @Override
-    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
+    public void afterCompletion(
+            HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         Object started = request.getAttribute(START);
         if (!(started instanceof Long)) return;
         long elapsedMs = (System.nanoTime() - (Long) started) / 1_000_000L;
         if (request.getRequestURI().startsWith("/api/")) {
             response.setHeader("X-Response-Time-Ms", String.valueOf(elapsedMs));
             // 只记录 URI path，不记录 query：query 中可能携带 token/password/code 等敏感参数。
-            if (elapsedMs >= SLOW_MS) log.warn("慢接口 path={} method={} status={} elapsedMs={}",
-                    request.getRequestURI(), request.getMethod(), response.getStatus(), elapsedMs);
+            if (elapsedMs >= SLOW_MS)
+                log.warn(
+                        "慢接口 path={} method={} status={} elapsedMs={}",
+                        request.getRequestURI(),
+                        request.getMethod(),
+                        response.getStatus(),
+                        elapsedMs);
         }
     }
 }

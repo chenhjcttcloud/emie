@@ -6,10 +6,6 @@ import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.ScoringRecord;
 import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.scoring.repository.ScoringRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -20,6 +16,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional
@@ -29,17 +28,19 @@ public class ProjectScoringService {
     private final DesignRequirementScoringService designRequirementScoringService;
     private final ScoringWeightConfig scoringWeights;
 
-    public ProjectScoringService(ScoringRepository scoringRepository,
-                                 SystemConfigRepository systemConfigRepository,
-                                 ProjectAccessService projectAccessService) {
+    public ProjectScoringService(
+            ScoringRepository scoringRepository,
+            SystemConfigRepository systemConfigRepository,
+            ProjectAccessService projectAccessService) {
         this(scoringRepository, systemConfigRepository, projectAccessService, null);
     }
 
     @Autowired
-    public ProjectScoringService(ScoringRepository scoringRepository,
-                                 SystemConfigRepository systemConfigRepository,
-                                 ProjectAccessService projectAccessService,
-                                 DesignRequirementScoringService designRequirementScoringService) {
+    public ProjectScoringService(
+            ScoringRepository scoringRepository,
+            SystemConfigRepository systemConfigRepository,
+            ProjectAccessService projectAccessService,
+            DesignRequirementScoringService designRequirementScoringService) {
         this.scoringRepository = scoringRepository;
         this.projectAccessService = projectAccessService;
         this.designRequirementScoringService = designRequirementScoringService;
@@ -52,10 +53,13 @@ public class ProjectScoringService {
         // 工作台徽章必须和评分中心使用同一批聚合条目，避免旧的 SQL 口径
         // 只统计部分任务状态、漏掉设计需求或把评分记录重复计数。
         long projectPending = getPendingScoringTasks(role, userId).stream()
-                .filter(item -> Boolean.TRUE.equals(item.get("isPending"))).count();
-        long requirementPending = designRequirementScoringService == null ? 0L
+                .filter(item -> Boolean.TRUE.equals(item.get("isPending")))
+                .count();
+        long requirementPending = designRequirementScoringService == null
+                ? 0L
                 : designRequirementScoringService.pendingItems(role, userId).stream()
-                .filter(item -> Boolean.TRUE.equals(item.get("isPending"))).count();
+                        .filter(item -> Boolean.TRUE.equals(item.get("isPending")))
+                        .count();
         return projectPending + requirementPending;
     }
 
@@ -83,9 +87,11 @@ public class ProjectScoringService {
         List<SubTask> tasks = project.getTasks();
         if (tasks == null || tasks.isEmpty()) return null;
         Map<String, Double> weights = scoringWeights.weightMap(project.getType());
-        Map<Long, List<ScoringRecord>> recordsByTask = scoringRepository.findBySubTaskIds(
-                        tasks.stream().map(SubTask::getId).toList())
-                .stream().collect(Collectors.groupingBy(sr -> sr.getSubTask().getId()));
+        Map<Long, List<ScoringRecord>> recordsByTask =
+                scoringRepository
+                        .findBySubTaskIds(tasks.stream().map(SubTask::getId).toList())
+                        .stream()
+                        .collect(Collectors.groupingBy(sr -> sr.getSubTask().getId()));
         double totalScore = 0;
         int scoredCount = 0;
         for (SubTask task : tasks) {
@@ -117,7 +123,9 @@ public class ProjectScoringService {
     public Map<Long, Double> computeProjectScoresBatch(List<Project> projects) {
         if (projects == null || projects.isEmpty()) return Collections.emptyMap();
         Map<String, Map<String, Double>> weightsByType = projects.stream()
-                .map(Project::getType).filter(Objects::nonNull).distinct()
+                .map(Project::getType)
+                .filter(Objects::nonNull)
+                .distinct()
                 .collect(Collectors.toMap(type -> type, scoringWeights::weightMap));
         List<Long> projectIds = projects.stream().map(Project::getId).collect(Collectors.toList());
         // 一次 SQL 查全部
@@ -127,7 +135,8 @@ public class ProjectScoringService {
         for (ScoringRecord sr : allRecords) {
             if (sr.getSubTask() != null && sr.getSubTask().getProject() != null) {
                 Long pid = sr.getSubTask().getProject().getId();
-                recordsByProjectAndTask.computeIfAbsent(pid, k -> new HashMap<>())
+                recordsByProjectAndTask
+                        .computeIfAbsent(pid, k -> new HashMap<>())
                         .computeIfAbsent(sr.getSubTask().getId(), k -> new ArrayList<>())
                         .add(sr);
             }
@@ -135,7 +144,8 @@ public class ProjectScoringService {
         // 逐项目计算：只遍历已有评分记录的子任务，未产生评分记录的项目分数为 null。
         Map<Long, Double> result = new HashMap<>();
         for (Project p : projects) {
-            Map<Long, List<ScoringRecord>> recordsByTask = recordsByProjectAndTask.getOrDefault(p.getId(), Collections.emptyMap());
+            Map<Long, List<ScoringRecord>> recordsByTask =
+                    recordsByProjectAndTask.getOrDefault(p.getId(), Collections.emptyMap());
             double totalScore = 0;
             int scoredCount = 0;
             for (List<ScoringRecord> taskRecords : recordsByTask.values()) {
@@ -146,7 +156,8 @@ public class ProjectScoringService {
                 for (ScoringRecord sr : taskRecords) {
                     Double normalizedScore = toHundredPointScore(sr);
                     if (normalizedScore != null) {
-                        Map<String, Double> weights = weightsByType.get(task.getProject().getType());
+                        Map<String, Double> weights =
+                                weightsByType.get(task.getProject().getType());
                         if (weights == null) weights = scoringWeights.weightMap("regular");
                         double weight = weights.getOrDefault(sr.getRole(), 0.25);
                         weightedSum += normalizedScore * weight;
@@ -169,11 +180,14 @@ public class ProjectScoringService {
     public List<Map<String, Object>> getPendingScoringTasks(String role, String userId) {
         List<Project> projects = getProjectsByRoleAndUser(role, userId);
         List<Map<String, Object>> result = new ArrayList<>();
-        List<Long> taskIds = projects.stream().flatMap(p -> p.getTasks().stream())
-                .map(SubTask::getId).toList();
-        Map<Long, List<ScoringRecord>> recordsByTask = taskIds.isEmpty() ? Map.of()
+        List<Long> taskIds = projects.stream()
+                .flatMap(p -> p.getTasks().stream())
+                .map(SubTask::getId)
+                .toList();
+        Map<Long, List<ScoringRecord>> recordsByTask = taskIds.isEmpty()
+                ? Map.of()
                 : scoringRepository.findBySubTaskIds(taskIds).stream()
-                .collect(Collectors.groupingBy(sr -> sr.getSubTask().getId()));
+                        .collect(Collectors.groupingBy(sr -> sr.getSubTask().getId()));
 
         for (Project p : projects) {
             for (SubTask t : p.getTasks()) {
@@ -182,9 +196,8 @@ public class ProjectScoringService {
                     continue;
                 }
                 List<ScoringRecord> records = recordsByTask.getOrDefault(t.getId(), List.of());
-                Optional<ScoringRecord> myRecord = records.stream()
-                        .filter(sr -> role.equals(sr.getRole()))
-                        .findFirst();
+                Optional<ScoringRecord> myRecord =
+                        records.stream().filter(sr -> role.equals(sr.getRole())).findFirst();
                 if (myRecord.isEmpty() || "waiting".equals(myRecord.get().getReviewStatus())) {
                     continue;
                 }
@@ -195,34 +208,47 @@ public class ProjectScoringService {
                 item.put("taskStatus", t.getStatus());
                 item.put("projectId", p.getId());
                 item.put("projectType", p.getType());
-                item.put("projectName", p.getProductName() != null && !p.getProductName().isBlank()
-                        ? p.getProductName().trim() : p.getProductRequirements());
+                item.put(
+                        "projectName",
+                        p.getProductName() != null && !p.getProductName().isBlank()
+                                ? p.getProductName().trim()
+                                : p.getProductRequirements());
                 item.put("plannerId", p.getPlannerId());
                 item.put("plannerName", p.getPlannerName());
                 item.put("plannedDate", t.getPlannedDate());
-                item.put("lastActivityAt", records.stream().map(ScoringRecord::getReviewedAt).filter(Objects::nonNull).max(LocalDateTime::compareTo).orElse(null));
+                item.put(
+                        "lastActivityAt",
+                        records.stream()
+                                .map(ScoringRecord::getReviewedAt)
+                                .filter(Objects::nonNull)
+                                .max(LocalDateTime::compareTo)
+                                .orElse(null));
                 item.put("designerId", t.getDesignerId());
                 item.put("designerName", t.getDesignerName());
                 item.put("selfScore", t.getSelfScore());
                 item.put("selfAesthetics", t.getSelfAesthetics());
                 item.put("selfInnovation", t.getSelfInnovation());
                 item.put("isPending", isScoringRecordPending(myRecord.get()));
-                item.put("scoringRecords", records.stream().map(sr -> {
-                    Map<String, Object> m = new LinkedHashMap<>();
-                    m.put("role", sr.getRole());
-                    m.put("scoreType", sr.getScoreType());
-                    m.put("reviewStage", sr.getReviewStage());
-                    m.put("reviewStatus", sr.getReviewStatus());
-                    m.put("reviewerId", sr.getReviewerId());
-                    m.put("reviewerName", sr.getReviewerName());
-                    m.put("reviewedAt", sr.getReviewedAt());
-                    m.put("comment", sr.getComment());
-                    m.put("score", sr.getScore());
-                    m.put("aesthetics", sr.getAesthetics());
-                    m.put("innovation", sr.getInnovation());
-                    m.put("weight", scoringWeights.pct(p.getType(), sr.getRole()) / 100.0);
-                    return m;
-                }).collect(Collectors.toList()));
+                item.put(
+                        "scoringRecords",
+                        records.stream()
+                                .map(sr -> {
+                                    Map<String, Object> m = new LinkedHashMap<>();
+                                    m.put("role", sr.getRole());
+                                    m.put("scoreType", sr.getScoreType());
+                                    m.put("reviewStage", sr.getReviewStage());
+                                    m.put("reviewStatus", sr.getReviewStatus());
+                                    m.put("reviewerId", sr.getReviewerId());
+                                    m.put("reviewerName", sr.getReviewerName());
+                                    m.put("reviewedAt", sr.getReviewedAt());
+                                    m.put("comment", sr.getComment());
+                                    m.put("score", sr.getScore());
+                                    m.put("aesthetics", sr.getAesthetics());
+                                    m.put("innovation", sr.getInnovation());
+                                    m.put("weight", scoringWeights.pct(p.getType(), sr.getRole()) / 100.0);
+                                    return m;
+                                })
+                                .collect(Collectors.toList()));
                 result.add(item);
             }
         }
@@ -277,9 +303,7 @@ public class ProjectScoringService {
     }
 
     private List<String> getRequiredScoringRoles(String projectType) {
-        return "channel_custom".equals(projectType)
-                ? List.of("planner", "sales")
-                : List.of("planner", "admin");
+        return "channel_custom".equals(projectType) ? List.of("planner", "sales") : List.of("planner", "admin");
     }
 
     private List<String> getRequiredScoringRoles(SubTask task) {
@@ -295,8 +319,7 @@ public class ProjectScoringService {
         if (record.getReviewStatus() != null) {
             return "approved".equals(record.getReviewStatus());
         }
-        return record.getScore() != null
-                || (record.getAesthetics() != null && record.getInnovation() != null);
+        return record.getScore() != null || (record.getAesthetics() != null && record.getInnovation() != null);
     }
 
     private boolean isScoringRecordPending(ScoringRecord record) {
@@ -318,7 +341,8 @@ public class ProjectScoringService {
 
     private String projectType(SubTask task) {
         return task.getProject() != null && task.getProject().getType() != null
-                ? task.getProject().getType() : "regular";
+                ? task.getProject().getType()
+                : "regular";
     }
 
     /** 当前系统设置中的角色权重（小数形式），用于历史评分重新核算。 */

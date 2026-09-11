@@ -6,15 +6,14 @@ import com.emie.designpm.entity.ProjectWorkflowAttempt;
 import com.emie.designpm.project.repository.ProjectRepository;
 import com.emie.designpm.project.repository.ProjectWorkflowAttemptRepository;
 import com.emie.designpm.util.SecurityUtil;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /** 项目级子任务总流程：五阶段推进与三类审核阶段的多轮留痕。 */
 @Service
@@ -88,8 +87,8 @@ public class ProjectWorkflowService {
     }
 
     @Transactional
-    public Map<String, Object> review(Long projectId, String decision, String comment,
-                                      String userId, String userName, String role) {
+    public Map<String, Object> review(
+            Long projectId, String decision, String comment, String userId, String userName, String role) {
         Project project = loadActive(projectId);
         requireReviewer(project, userId, role);
         String stage = currentStage(project);
@@ -104,8 +103,7 @@ public class ProjectWorkflowService {
             throw new IllegalArgumentException("驳回时必须填写原因");
         }
 
-        ProjectWorkflowAttempt attempt = attempts
-                .findFirstByProjectIdAndStageKeyOrderByAttemptNoDesc(projectId, stage)
+        ProjectWorkflowAttempt attempt = attempts.findFirstByProjectIdAndStageKeyOrderByAttemptNoDesc(projectId, stage)
                 .filter(item -> "pending".equals(item.getStatus()))
                 .orElseThrow(() -> new IllegalArgumentException("未找到待审核轮次"));
         attempt.setStatus(decision);
@@ -117,14 +115,17 @@ public class ProjectWorkflowService {
 
         if ("rejected".equals(decision)) {
             project.setWorkflowStatus("rejected");
-            addLog(project, "子任务总流程：" + LABELS.get(stage) + "第 " + attempt.getAttemptNo()
-                    + " 轮未通过", userName, role);
+            addLog(project, "子任务总流程：" + LABELS.get(stage) + "第 " + attempt.getAttemptNo() + " 轮未通过", userName, role);
         } else {
             int nextIndex = STAGES.indexOf(stage) + 1;
             project.setWorkflowStage(STAGES.get(nextIndex));
             project.setWorkflowStatus("current");
-            addLog(project, "子任务总流程：" + LABELS.get(stage) + "第 " + attempt.getAttemptNo()
-                    + " 轮通过，进入" + LABELS.get(project.getWorkflowStage()), userName, role);
+            addLog(
+                    project,
+                    "子任务总流程：" + LABELS.get(stage) + "第 " + attempt.getAttemptNo() + " 轮通过，进入"
+                            + LABELS.get(project.getWorkflowStage()),
+                    userName,
+                    role);
         }
         projects.save(project);
         return build(project);
@@ -146,7 +147,11 @@ public class ProjectWorkflowService {
                 row.put("submittedByName", item.getSubmittedByName());
                 row.put("submittedAt", item.getSubmittedAt().format(DTF));
                 row.put("reviewerName", item.getReviewerName());
-                row.put("reviewedAt", item.getReviewedAt() == null ? null : item.getReviewedAt().format(DTF));
+                row.put(
+                        "reviewedAt",
+                        item.getReviewedAt() == null
+                                ? null
+                                : item.getReviewedAt().format(DTF));
                 row.put("comment", item.getComment());
                 history.add(row);
             });
@@ -154,7 +159,11 @@ public class ProjectWorkflowService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("currentStage", stage);
         result.put("status", status);
-        result.put("stages", STAGES.stream().map(key -> Map.of("key", key, "label", LABELS.get(key))).toList());
+        result.put(
+                "stages",
+                STAGES.stream()
+                        .map(key -> Map.of("key", key, "label", LABELS.get(key)))
+                        .toList());
         result.put("attempts", history);
         return result;
     }
@@ -162,8 +171,8 @@ public class ProjectWorkflowService {
     /** 流程推进/审核一律加项目行锁（FOR UPDATE），在锁内重校验阶段与轮次，
      *  防止并发提交导致留痕（attempt 记录）与项目阶段/轮次计数矛盾（P2-3/P2-19）。 */
     private Project loadActive(Long projectId) {
-        Project project = projects.findByIdForUpdate(projectId)
-                .orElseThrow(() -> new IllegalArgumentException("项目不存在"));
+        Project project =
+                projects.findByIdForUpdate(projectId).orElseThrow(() -> new IllegalArgumentException("项目不存在"));
         if (List.of("terminated", "paused", "pending_terminate").contains(project.getStatus())) {
             throw new IllegalArgumentException("项目当前状态不能推进子任务总流程");
         }

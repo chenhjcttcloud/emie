@@ -1,12 +1,11 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
 
 /**
  * 通知领域事件 Outbox。业务事务提交时写入，后续由通知编排器异步处理。
@@ -16,12 +15,15 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "notification_events", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_notification_event_idempotency", columnNames = "idempotencyKey")
-}, indexes = {
-        @Index(name = "idx_notification_event_status_time", columnList = "status,occurredAt"),
-        @Index(name = "idx_notification_event_aggregate", columnList = "aggregateType,aggregateId")
-})
+@Table(
+        name = "notification_events",
+        uniqueConstraints = {
+            @UniqueConstraint(name = "uk_notification_event_idempotency", columnNames = "idempotencyKey")
+        },
+        indexes = {
+            @Index(name = "idx_notification_event_status_time", columnList = "status,occurredAt"),
+            @Index(name = "idx_notification_event_aggregate", columnList = "aggregateType,aggregateId")
+        })
 public class NotificationEvent {
 
     @Id

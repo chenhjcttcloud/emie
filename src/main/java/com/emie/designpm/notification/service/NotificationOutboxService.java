@@ -4,11 +4,10 @@ import com.emie.designpm.entity.NotificationAuditLog;
 import com.emie.designpm.entity.NotificationEvent;
 import com.emie.designpm.notification.repository.NotificationAuditLogRepository;
 import com.emie.designpm.notification.repository.NotificationEventRepository;
+import java.time.LocalDateTime;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDateTime;
 
 /**
  * 第一阶段的可靠通知入口。调用方必须在原业务事务内发布事件，
@@ -20,23 +19,35 @@ public class NotificationOutboxService {
     private final NotificationEventRepository eventRepository;
     private final NotificationAuditLogRepository auditLogRepository;
 
-    public NotificationOutboxService(NotificationEventRepository eventRepository,
-                                    NotificationAuditLogRepository auditLogRepository) {
+    public NotificationOutboxService(
+            NotificationEventRepository eventRepository, NotificationAuditLogRepository auditLogRepository) {
         this.eventRepository = eventRepository;
         this.auditLogRepository = auditLogRepository;
     }
 
     @Transactional
-    public NotificationEvent publish(String eventType, String aggregateType, Long aggregateId,
-                                     Integer aggregateVersion, String actorUserId,
-                                     String idempotencyKey, String payload) {
-        return eventRepository.findByIdempotencyKey(idempotencyKey).orElseGet(() -> saveNewEvent(
-                eventType, aggregateType, aggregateId, aggregateVersion, actorUserId, idempotencyKey, payload));
+    public NotificationEvent publish(
+            String eventType,
+            String aggregateType,
+            Long aggregateId,
+            Integer aggregateVersion,
+            String actorUserId,
+            String idempotencyKey,
+            String payload) {
+        return eventRepository
+                .findByIdempotencyKey(idempotencyKey)
+                .orElseGet(() -> saveNewEvent(
+                        eventType, aggregateType, aggregateId, aggregateVersion, actorUserId, idempotencyKey, payload));
     }
 
-    private NotificationEvent saveNewEvent(String eventType, String aggregateType, Long aggregateId,
-                                           Integer aggregateVersion, String actorUserId,
-                                           String idempotencyKey, String payload) {
+    private NotificationEvent saveNewEvent(
+            String eventType,
+            String aggregateType,
+            Long aggregateId,
+            Integer aggregateVersion,
+            String actorUserId,
+            String idempotencyKey,
+            String payload) {
         try {
             // Notification 与审计都引用该事件；使用 saveAndFlush 保证 IDENTITY 主键已生成，
             // 避免在同一通知事务中写入空 event_id。

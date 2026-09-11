@@ -1,13 +1,13 @@
 package com.emie.designpm;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.util.ProjectAccessPolicy;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProjectAccessPolicyTest {
 
@@ -16,30 +16,24 @@ class ProjectAccessPolicyTest {
         Project project = projectWithPendingTask("designer");
         project.getTasks().getFirst().setAllocationStatus("market_open");
 
-        assertFalse(ProjectAccessPolicy.canView(project,
-                new AuthSession("supply-1", "supplychain", "供应链")));
-        assertTrue(ProjectAccessPolicy.canView(project,
-                new AuthSession("designer-1", "designer", "设计师")));
+        assertFalse(ProjectAccessPolicy.canView(project, new AuthSession("supply-1", "supplychain", "供应链")));
+        assertTrue(ProjectAccessPolicy.canView(project, new AuthSession("designer-1", "designer", "设计师")));
     }
 
     @Test
     void designerCannotSeeUnassignedSupplyChainTask() {
         Project project = projectWithPendingTask("supplychain");
 
-        assertFalse(ProjectAccessPolicy.canView(project,
-                new AuthSession("designer-1", "designer", "设计师")));
-        assertFalse(ProjectAccessPolicy.canView(project,
-                new AuthSession("supply-1", "supplychain", "供应链")));
+        assertFalse(ProjectAccessPolicy.canView(project, new AuthSession("designer-1", "designer", "设计师")));
+        assertFalse(ProjectAccessPolicy.canView(project, new AuthSession("supply-1", "supplychain", "供应链")));
     }
 
     @Test
     void legacyTaskWithoutRoleIsVisibleOnlyToDesigners() {
         Project project = projectWithPendingTask(null);
 
-        assertFalse(ProjectAccessPolicy.canView(project,
-                new AuthSession("designer-1", "designer", "设计师")));
-        assertFalse(ProjectAccessPolicy.canView(project,
-                new AuthSession("supply-1", "supplychain", "供应链")));
+        assertFalse(ProjectAccessPolicy.canView(project, new AuthSession("designer-1", "designer", "设计师")));
+        assertFalse(ProjectAccessPolicy.canView(project, new AuthSession("supply-1", "supplychain", "供应链")));
     }
 
     @Test
@@ -64,12 +58,9 @@ class ProjectAccessPolicyTest {
         project.setType("channel_custom");
         project.setSalesId("sales-1");
 
-        assertTrue(ProjectAccessPolicy.canEditProjectInformation(project,
-                new AuthSession("sales-1", "sales", "销售")));
-        assertFalse(ProjectAccessPolicy.canEditProjectInformation(project,
-                new AuthSession("sales-2", "sales", "销售")));
-        assertFalse(ProjectAccessPolicy.canEditProjectInformation(project,
-                new AuthSession("admin-1", "admin", "管理员")));
+        assertTrue(ProjectAccessPolicy.canEditProjectInformation(project, new AuthSession("sales-1", "sales", "销售")));
+        assertFalse(ProjectAccessPolicy.canEditProjectInformation(project, new AuthSession("sales-2", "sales", "销售")));
+        assertFalse(ProjectAccessPolicy.canEditProjectInformation(project, new AuthSession("admin-1", "admin", "管理员")));
     }
 
     @Test
@@ -78,12 +69,11 @@ class ProjectAccessPolicyTest {
         project.setType("regular");
         project.setPlannerId("planner-1");
 
-        assertTrue(ProjectAccessPolicy.canEditProjectInformation(project,
-                new AuthSession("planner-1", "planner", "企划")));
-        assertFalse(ProjectAccessPolicy.canEditProjectInformation(project,
-                new AuthSession("planner-2", "planner", "企划")));
-        assertFalse(ProjectAccessPolicy.canEditProjectInformation(project,
-                new AuthSession("sales-1", "sales", "销售")));
+        assertTrue(
+                ProjectAccessPolicy.canEditProjectInformation(project, new AuthSession("planner-1", "planner", "企划")));
+        assertFalse(
+                ProjectAccessPolicy.canEditProjectInformation(project, new AuthSession("planner-2", "planner", "企划")));
+        assertFalse(ProjectAccessPolicy.canEditProjectInformation(project, new AuthSession("sales-1", "sales", "销售")));
     }
 
     private Project projectWithPendingTask(String assigneeRole) {

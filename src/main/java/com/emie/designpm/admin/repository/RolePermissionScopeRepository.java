@@ -1,15 +1,15 @@
 package com.emie.designpm.admin.repository;
 
 import com.emie.designpm.entity.RolePermissionScope;
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.List;
-
 public interface RolePermissionScopeRepository extends JpaRepository<RolePermissionScope, Long> {
 
-    @Query("""
+    @Query(
+            """
             select distinct scope.scopeType
             from RolePermissionScope scope
             join scope.rolePermission assignment
@@ -19,10 +19,10 @@ public interface RolePermissionScopeRepository extends JpaRepository<RolePermiss
               and assignment.permission.enabled = true
             order by scope.scopeType
             """)
-    List<String> findScopeTypes(@Param("roleName") String roleName,
-                                @Param("permissionCode") String permissionCode);
+    List<String> findScopeTypes(@Param("roleName") String roleName, @Param("permissionCode") String permissionCode);
 
-    @Query("""
+    @Query(
+            """
             select scope
             from RolePermissionScope scope
             join fetch scope.rolePermission assignment

@@ -1,24 +1,23 @@
 package com.emie.designpm.notification.service;
 
-import com.emie.designpm.feishu.service.FeishuBaseService;
+import com.emie.designpm.background.repository.NotificationAuditLogRepository;
+import com.emie.designpm.background.repository.NotificationDeliveryRepository;
+import com.emie.designpm.background.repository.NotificationEventRepository;
+import com.emie.designpm.background.repository.NotificationRepository;
+import com.emie.designpm.background.repository.UserRepository;
 import com.emie.designpm.entity.Notification;
 import com.emie.designpm.entity.NotificationAuditLog;
 import com.emie.designpm.entity.NotificationDelivery;
-import com.emie.designpm.entity.User;
 import com.emie.designpm.entity.NotificationEvent;
-import com.emie.designpm.background.repository.NotificationAuditLogRepository;
-import com.emie.designpm.background.repository.NotificationDeliveryRepository;
-import com.emie.designpm.background.repository.NotificationRepository;
-import com.emie.designpm.background.repository.UserRepository;
-import com.emie.designpm.background.repository.NotificationEventRepository;
+import com.emie.designpm.entity.User;
+import com.emie.designpm.feishu.service.FeishuBaseService;
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
 
 /** 失败的飞书投递按退避时间重试，超过上限进入死信并保留审计。 */
 @Service
@@ -32,21 +31,34 @@ public class NotificationRetryService implements NotificationRetryOperations {
     private final NotificationEventRepository events;
     private final NotificationRecipientRouter recipientRouter;
 
-    public NotificationRetryService(NotificationDeliveryRepository deliveries, NotificationRepository notifications,
-                                    UserRepository users, NotificationAuditLogRepository audits, FeishuBaseService feishu) {
+    public NotificationRetryService(
+            NotificationDeliveryRepository deliveries,
+            NotificationRepository notifications,
+            UserRepository users,
+            NotificationAuditLogRepository audits,
+            FeishuBaseService feishu) {
         this(deliveries, notifications, users, audits, feishu, null, null);
     }
 
-    public NotificationRetryService(NotificationDeliveryRepository deliveries, NotificationRepository notifications,
-                                    UserRepository users, NotificationAuditLogRepository audits, FeishuBaseService feishu,
-                                    NotificationEventRepository events) {
+    public NotificationRetryService(
+            NotificationDeliveryRepository deliveries,
+            NotificationRepository notifications,
+            UserRepository users,
+            NotificationAuditLogRepository audits,
+            FeishuBaseService feishu,
+            NotificationEventRepository events) {
         this(deliveries, notifications, users, audits, feishu, events, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
-    public NotificationRetryService(NotificationDeliveryRepository deliveries, NotificationRepository notifications,
-                                    UserRepository users, NotificationAuditLogRepository audits, FeishuBaseService feishu,
-                                    NotificationEventRepository events, NotificationRecipientRouter recipientRouter) {
+    public NotificationRetryService(
+            NotificationDeliveryRepository deliveries,
+            NotificationRepository notifications,
+            UserRepository users,
+            NotificationAuditLogRepository audits,
+            FeishuBaseService feishu,
+            NotificationEventRepository events,
+            NotificationRecipientRouter recipientRouter) {
         this.deliveries = deliveries;
         this.notifications = notifications;
         this.users = users;
@@ -61,15 +73,24 @@ public class NotificationRetryService implements NotificationRetryOperations {
         if (isTestRecipientOverrideEnabled()) return;
         // 先恢复崩溃残留的认领（长时间停留在 processing 的投递），避免永久滞留。
         deliveries.recoverStuckClaims(LocalDateTime.now().minusMinutes(10), LocalDateTime.now());
-        List<NotificationDelivery> due = deliveries
-                .findTop50ByStatusInAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(
-                        List.of("failed", "pending"), LocalDateTime.now());
-        Map<Long, Notification> notificationById = notifications.findByIdIn(due.stream()
-                .map(NotificationDelivery::getNotificationId).filter(java.util.Objects::nonNull).distinct().toList())
-                .stream().collect(java.util.stream.Collectors.toMap(Notification::getId, n -> n));
-        Map<String, User> userById = users.findByUserIdIn(notificationById.values().stream()
-                .map(Notification::getRecipientUserId).filter(java.util.Objects::nonNull).distinct().toList())
-                .stream().collect(java.util.stream.Collectors.toMap(User::getUserId, u -> u));
+        List<NotificationDelivery> due = deliveries.findTop50ByStatusInAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(
+                List.of("failed", "pending"), LocalDateTime.now());
+        Map<Long, Notification> notificationById = notifications
+                .findByIdIn(due.stream()
+                        .map(NotificationDelivery::getNotificationId)
+                        .filter(java.util.Objects::nonNull)
+                        .distinct()
+                        .toList())
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Notification::getId, n -> n));
+        Map<String, User> userById = users
+                .findByUserIdIn(notificationById.values().stream()
+                        .map(Notification::getRecipientUserId)
+                        .filter(java.util.Objects::nonNull)
+                        .distinct()
+                        .toList())
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(User::getUserId, u -> u));
         for (NotificationDelivery delivery : due) {
             // 认领（CAS：failed/pending -> processing）；并发调度轮次/多实例下只有一个能成功，
             // 防止同一投递被多轮重复发送飞书消息。认领失败说明其它轮次正在处理，跳过。
@@ -87,9 +108,14 @@ public class NotificationRetryService implements NotificationRetryOperations {
     public List<Map<String, Object>> recentFeishuDeliveries() {
         List<Map<String, Object>> result = new java.util.ArrayList<>();
         List<NotificationDelivery> recent = deliveries.findRecentFeishu();
-        Map<Long, Notification> byId = notifications.findByIdIn(recent.stream()
-                .map(NotificationDelivery::getNotificationId).filter(java.util.Objects::nonNull).distinct().toList())
-                .stream().collect(java.util.stream.Collectors.toMap(Notification::getId, n -> n));
+        Map<Long, Notification> byId = notifications
+                .findByIdIn(recent.stream()
+                        .map(NotificationDelivery::getNotificationId)
+                        .filter(java.util.Objects::nonNull)
+                        .distinct()
+                        .toList())
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Notification::getId, n -> n));
         for (NotificationDelivery d : recent) {
             Notification n = byId.get(d.getNotificationId());
             if (n != null) {
@@ -98,7 +124,8 @@ public class NotificationRetryService implements NotificationRetryOperations {
                 row.put("notificationId", n.getId());
                 row.put("recipientUserId", n.getRecipientUserId());
                 users.findByUserId(n.getRecipientUserId()).ifPresent(u -> row.put("recipientName", u.getName()));
-                NotificationEvent event = events == null ? null : events.findById(n.getEventId()).orElse(null);
+                NotificationEvent event =
+                        events == null ? null : events.findById(n.getEventId()).orElse(null);
                 if (event != null) {
                     row.put("eventType", event.getEventType());
                     row.put("processLabel", processLabel(event.getEventType()));
@@ -155,8 +182,8 @@ public class NotificationRetryService implements NotificationRetryOperations {
         if (isTestRecipientOverrideEnabled()) {
             throw new IllegalStateException("测试环境已阻止重试历史飞书投递，请触发新的业务通知进行验证");
         }
-        NotificationDelivery d = deliveries.findById(deliveryId)
-                .orElseThrow(() -> new IllegalArgumentException("通知投递记录不存在"));
+        NotificationDelivery d =
+                deliveries.findById(deliveryId).orElseThrow(() -> new IllegalArgumentException("通知投递记录不存在"));
         if (!"feishu".equals(d.getChannel())) throw new IllegalArgumentException("仅支持重试飞书通知");
         d.setStatus("failed");
         d.setRetryCount(0);
@@ -164,17 +191,24 @@ public class NotificationRetryService implements NotificationRetryOperations {
         d.setNextRetryAt(LocalDateTime.now());
         d.setErrorMsg("管理员手动重新排队");
         deliveries.save(d);
-        notifications.findById(d.getNotificationId()).ifPresent(n -> audit(n, d, "admin_retry_queued", "管理员 " + operatorUserId + " 手动重新排队"));
+        notifications
+                .findById(d.getNotificationId())
+                .ifPresent(n -> audit(n, d, "admin_retry_queued", "管理员 " + operatorUserId + " 手动重新排队"));
     }
 
-    private void retry(NotificationDelivery delivery, Map<Long, Notification> notificationById, Map<String, User> userById) {
+    private void retry(
+            NotificationDelivery delivery, Map<Long, Notification> notificationById, Map<String, User> userById) {
         Notification notification = notificationById.get(delivery.getNotificationId());
-        if (notification == null || delivery.getCardPayload() == null || delivery.getCardPayload().isBlank()) {
+        if (notification == null
+                || delivery.getCardPayload() == null
+                || delivery.getCardPayload().isBlank()) {
             deadLetter(delivery, "通知内容或卡片载荷不存在");
             return;
         }
         User user = userById.get(notification.getRecipientUserId());
-        if (user == null || user.getFeishuOpenId() == null || user.getFeishuOpenId().isBlank()) {
+        if (user == null
+                || user.getFeishuOpenId() == null
+                || user.getFeishuOpenId().isBlank()) {
             scheduleOrDeadLetter(delivery, "收件人未绑定飞书 Open ID");
             return;
         }
@@ -182,7 +216,8 @@ public class NotificationRetryService implements NotificationRetryOperations {
             LocalDateTime now = LocalDateTime.now();
             if (delivery.getFirstAttemptAt() == null) delivery.setFirstAttemptAt(now);
             delivery.setLastAttemptAt(now);
-            delivery.setExternalMessageId(feishu.sendInteractiveMessage(user.getFeishuOpenId(), delivery.getCardPayload()));
+            delivery.setExternalMessageId(
+                    feishu.sendInteractiveMessage(user.getFeishuOpenId(), delivery.getCardPayload()));
             delivery.setStatus("delivered");
             delivery.setFailedAt(null);
             delivery.setDeliveredAt(LocalDateTime.now());
@@ -204,7 +239,8 @@ public class NotificationRetryService implements NotificationRetryOperations {
             return;
         }
         delivery.setStatus("failed");
-        delivery.setNextRetryAt(LocalDateTime.now().plusSeconds(Math.min(900, 30L << Math.min(delivery.getRetryCount(), 4))));
+        delivery.setNextRetryAt(
+                LocalDateTime.now().plusSeconds(Math.min(900, 30L << Math.min(delivery.getRetryCount(), 4))));
         deliveries.save(delivery);
     }
 
@@ -213,17 +249,27 @@ public class NotificationRetryService implements NotificationRetryOperations {
         delivery.setErrorMsg(error);
         delivery.setNextRetryAt(null);
         deliveries.save(delivery);
-        notifications.findById(delivery.getNotificationId()).ifPresent(n -> audit(n, delivery, "feishu_dead_letter", error));
+        notifications
+                .findById(delivery.getNotificationId())
+                .ifPresent(n -> audit(n, delivery, "feishu_dead_letter", error));
     }
 
     private void audit(Notification n, NotificationDelivery d, String action, String detail) {
-        audits.save(NotificationAuditLog.builder().eventId(n.getEventId()).notificationId(n.getId())
-                .deliveryId(d.getId()).action(action).detail(detail).createdAt(LocalDateTime.now()).build());
+        audits.save(NotificationAuditLog.builder()
+                .eventId(n.getEventId())
+                .notificationId(n.getId())
+                .deliveryId(d.getId())
+                .action(action)
+                .detail(detail)
+                .createdAt(LocalDateTime.now())
+                .build());
     }
 
     private boolean isTestRecipientOverrideEnabled() {
         return recipientRouter != null && recipientRouter.isTestOverrideEnabled();
     }
 
-    private String limit(String value) { return value == null ? "未知错误" : value.substring(0, Math.min(1000, value.length())); }
+    private String limit(String value) {
+        return value == null ? "未知错误" : value.substring(0, Math.min(1000, value.length()));
+    }
 }

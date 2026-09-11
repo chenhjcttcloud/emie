@@ -1,25 +1,24 @@
 package com.emie.designpm;
 
-import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.entity.Department;
-import com.emie.designpm.entity.Project;
-import com.emie.designpm.entity.SubTask;
-import com.emie.designpm.entity.User;
-import com.emie.designpm.reference.repository.DepartmentRepository;
-import com.emie.designpm.project.repository.ProjectRepository;
-import com.emie.designpm.admin.repository.UserRepository;
-import com.emie.designpm.project.service.ProjectAccessService;
-import com.emie.designpm.admin.service.PermissionService;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
+import com.emie.designpm.admin.repository.UserRepository;
+import com.emie.designpm.admin.service.PermissionService;
+import com.emie.designpm.auth.AuthSession;
+import com.emie.designpm.entity.Department;
+import com.emie.designpm.entity.Project;
+import com.emie.designpm.entity.SubTask;
+import com.emie.designpm.entity.User;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.project.service.ProjectAccessService;
+import com.emie.designpm.reference.repository.DepartmentRepository;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
 
 class ProjectAccessServiceTest {
 
@@ -33,7 +32,12 @@ class ProjectAccessServiceTest {
         User head = user("designer-head", "designer", 7L);
         User member = user("designer-member", "designer", 7L);
         Department department = Department.builder()
-                .id(7L).name("设计部").role("designer").headUserId(head.getUserId()).active(true).build();
+                .id(7L)
+                .name("设计部")
+                .role("designer")
+                .headUserId(head.getUserId())
+                .active(true)
+                .build();
         Project memberProject = new Project();
         memberProject.setId(99L);
         SubTask task = new SubTask();
@@ -52,8 +56,7 @@ class ProjectAccessServiceTest {
 
         assertEquals(List.of(memberProject), visible);
         assertEquals(List.of(head, member), access.visibleUsers("designer", head.getUserId(), "designer"));
-        assertTrue(access.canView(memberProject,
-                new AuthSession(head.getUserId(), "designer", "负责人")));
+        assertTrue(access.canView(memberProject, new AuthSession(head.getUserId(), "designer", "负责人")));
     }
 
     @Test
@@ -73,8 +76,7 @@ class ProjectAccessServiceTest {
         when(users.findByUserId(member.getUserId())).thenReturn(Optional.of(member));
         when(departments.findByHeadUserId(member.getUserId())).thenReturn(Optional.empty());
 
-        assertFalse(access.canView(otherProject,
-                new AuthSession(member.getUserId(), "designer", "成员")));
+        assertFalse(access.canView(otherProject, new AuthSession(member.getUserId(), "designer", "成员")));
         assertEquals(List.of(member), access.visibleUsers("designer", member.getUserId(), "designer"));
     }
 
@@ -95,8 +97,7 @@ class ProjectAccessServiceTest {
         when(permissions.has("designer", "project.detail.view")).thenReturn(true);
         when(permissions.scopes("designer", "project.detail.view")).thenReturn(List.of("own"));
 
-        assertFalse(access.canView(memberProject,
-                new AuthSession(head.getUserId(), "designer", "负责人")));
+        assertFalse(access.canView(memberProject, new AuthSession(head.getUserId(), "designer", "负责人")));
     }
 
     @Test
@@ -109,8 +110,7 @@ class ProjectAccessServiceTest {
         when(permissions.has("observer", "project.detail.view")).thenReturn(true);
         when(permissions.scopes("observer", "project.detail.view")).thenReturn(List.of("all"));
 
-        assertTrue(access.canView(new Project(),
-                new AuthSession("observer-1", "observer", "观察员")));
+        assertTrue(access.canView(new Project(), new AuthSession("observer-1", "observer", "观察员")));
     }
 
     @Test
@@ -125,11 +125,15 @@ class ProjectAccessServiceTest {
         task.setAssigneeRole("promotion");
         project.getTasks().add(task);
 
-        assertTrue(access.canView(project,
-                new AuthSession("promotion-1", "Promotion", "产品推广")));
+        assertTrue(access.canView(project, new AuthSession("promotion-1", "Promotion", "产品推广")));
     }
 
     private User user(String userId, String role, Long departmentId) {
-        return User.builder().userId(userId).name(userId).role(role).departmentId(departmentId).build();
+        return User.builder()
+                .userId(userId)
+                .name(userId)
+                .role(role)
+                .departmentId(departmentId)
+                .build();
     }
 }

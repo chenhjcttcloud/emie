@@ -1,27 +1,26 @@
 package com.emie.designpm.feishu.controller;
 
-import com.emie.designpm.auth.controller.AuthController;
-import com.emie.designpm.auth.AuthSessions;
-import com.emie.designpm.config.AuthFilter;
-import com.emie.designpm.entity.User;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
+
 import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.admin.repository.UserRepository;
 import com.emie.designpm.admin.service.PermissionService;
+import com.emie.designpm.auth.AuthSessions;
+import com.emie.designpm.auth.controller.AuthController;
+import com.emie.designpm.config.AuthFilter;
+import com.emie.designpm.entity.User;
 import com.lark.oapi.service.authen.v1.model.GetUserInfoRespBody;
+import java.util.Arrays;
+import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.bind.annotation.PostMapping;
-
-import java.util.Arrays;
-import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
 
 class FeishuPendingAccessTest {
 

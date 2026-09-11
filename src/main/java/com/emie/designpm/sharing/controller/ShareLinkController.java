@@ -1,16 +1,15 @@
 package com.emie.designpm.sharing.controller;
 
-import com.emie.designpm.auth.AuthSessions;
-import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.sharing.service.ShareLinkService;
 import com.emie.designpm.admin.service.PermissionService;
+import com.emie.designpm.auth.AuthSession;
+import com.emie.designpm.auth.AuthSessions;
+import com.emie.designpm.sharing.service.ShareLinkService;
+import jakarta.servlet.http.HttpServletRequest;
+import java.util.List;
+import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.Map;
-import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * 分享链接管理接口（需登录认证）
@@ -34,23 +33,23 @@ public class ShareLinkController {
 
     /** 创建分享链接 */
     @PostMapping
-    public ResponseEntity<?> create(@RequestBody Map<String, Object> body,
-                                    @RequestHeader("X-Auth-Token") String token) {
+    public ResponseEntity<?> create(
+            @RequestBody Map<String, Object> body, @RequestHeader("X-Auth-Token") String token) {
         try {
             AuthSession session = AuthSessions.validateToken(token);
             if (session == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "未登录"));
             }
             if (permissionService != null && !permissionService.has(session.role(), "project.share.create")) {
-                return ResponseEntity.status(403).body(Map.of(
-                        "error", "当前账号没有创建项目分享链接的权限",
-                        "permission", "project.share.create"));
+                return ResponseEntity.status(403)
+                        .body(Map.of(
+                                "error", "当前账号没有创建项目分享链接的权限",
+                                "permission", "project.share.create"));
             }
 
             String targetType = (String) body.get("targetType");
             Object targetIdRaw = body.get("targetId");
-            Long expiresIn = body.get("expiresIn") != null
-                    ? ((Number) body.get("expiresIn")).longValue() : null;
+            Long expiresIn = body.get("expiresIn") != null ? ((Number) body.get("expiresIn")).longValue() : null;
             String password = (String) body.get("password");
 
             if (targetType == null || targetType.isBlank()) {
@@ -61,8 +60,8 @@ public class ShareLinkController {
             }
             Long targetId = ((Number) targetIdRaw).longValue();
 
-            Map<String, Object> result = shareLinkService.createShareLink(
-                    targetType, targetId, session.userId(), expiresIn, password);
+            Map<String, Object> result =
+                    shareLinkService.createShareLink(targetType, targetId, session.userId(), expiresIn, password);
             return ResponseEntity.ok(result);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -82,8 +81,7 @@ public class ShareLinkController {
 
     /** 管理员获取全部分享列表 */
     @GetMapping("/admin/all")
-    public ResponseEntity<?> adminList(@RequestHeader("X-Auth-Token") String token,
-                                       HttpServletRequest request) {
+    public ResponseEntity<?> adminList(@RequestHeader("X-Auth-Token") String token, HttpServletRequest request) {
         AuthSession session = AuthSessions.validateToken(token);
         if (session == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未登录"));
@@ -97,9 +95,8 @@ public class ShareLinkController {
 
     /** 管理员强制收回任意分享链接 */
     @PostMapping("/admin/{id}/revoke")
-    public ResponseEntity<?> adminRevoke(@PathVariable Long id,
-                                         @RequestHeader("X-Auth-Token") String token,
-                                         HttpServletRequest request) {
+    public ResponseEntity<?> adminRevoke(
+            @PathVariable Long id, @RequestHeader("X-Auth-Token") String token, HttpServletRequest request) {
         try {
             AuthSession session = AuthSessions.validateToken(token);
             if (session == null) {
@@ -117,10 +114,11 @@ public class ShareLinkController {
 
     /** 管理员更新分享链接（过期时间、密码） */
     @PutMapping("/admin/{id}")
-    public ResponseEntity<?> adminUpdate(@PathVariable Long id,
-                                         @RequestBody Map<String, Object> body,
-                                         @RequestHeader("X-Auth-Token") String token,
-                                         HttpServletRequest request) {
+    public ResponseEntity<?> adminUpdate(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body,
+            @RequestHeader("X-Auth-Token") String token,
+            HttpServletRequest request) {
         try {
             AuthSession session = AuthSessions.validateToken(token);
             if (session == null) {
@@ -129,8 +127,7 @@ public class ShareLinkController {
             if (!AuthSessions.isAdmin(request)) {
                 return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
             }
-            Long expiresIn = body.get("expiresIn") != null
-                    ? ((Number) body.get("expiresIn")).longValue() : null;
+            Long expiresIn = body.get("expiresIn") != null ? ((Number) body.get("expiresIn")).longValue() : null;
             String password = (String) body.get("password");
             shareLinkService.adminUpdateShare(id, expiresIn, password);
             return ResponseEntity.ok(Map.of("message", "分享链接已更新"));
@@ -141,8 +138,7 @@ public class ShareLinkController {
 
     /** 收回分享链接 */
     @PostMapping("/{id}/revoke")
-    public ResponseEntity<?> revoke(@PathVariable Long id,
-                                    @RequestHeader("X-Auth-Token") String token) {
+    public ResponseEntity<?> revoke(@PathVariable Long id, @RequestHeader("X-Auth-Token") String token) {
         try {
             AuthSession session = AuthSessions.validateToken(token);
             if (session == null) {

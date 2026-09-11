@@ -1,27 +1,26 @@
 package com.emie.designpm.admin.controller;
 
-import com.emie.designpm.auth.AuthSessions;
-import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.entity.SystemConfig;
-import com.emie.designpm.entity.User;
 import com.emie.designpm.admin.service.AdminService;
 import com.emie.designpm.admin.service.AdminWorkloadService;
-import com.emie.designpm.notification.service.NotificationBroadcastJobService;
-import com.emie.designpm.notification.service.NotificationTestService;
-import com.emie.designpm.notification.service.NotificationRetryOperations;
 import com.emie.designpm.admin.service.PermissionManagementService;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.CacheControl;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
+import com.emie.designpm.auth.AuthSession;
+import com.emie.designpm.auth.AuthSessions;
+import com.emie.designpm.dto.PageResponse;
+import com.emie.designpm.entity.SystemConfig;
+import com.emie.designpm.entity.User;
+import com.emie.designpm.notification.service.NotificationBroadcastJobService;
+import com.emie.designpm.notification.service.NotificationRetryOperations;
+import com.emie.designpm.notification.service.NotificationTestService;
+import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
+import java.time.LocalDate;
+import java.util.*;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import com.emie.designpm.dto.PageResponse;
-
-import java.util.*;
-import java.time.LocalDate;
-import java.io.IOException;
-import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
@@ -35,11 +34,13 @@ public class AdminController {
     private final NotificationRetryOperations notificationRetryService;
     private final PermissionManagementService permissionManagementService;
 
-    public AdminController(AdminService adminService, AdminWorkloadService adminWorkloadService,
-                           NotificationTestService notificationTestService,
-                           NotificationBroadcastJobService notificationBroadcastJobService,
-                           NotificationRetryOperations notificationRetryService,
-                           PermissionManagementService permissionManagementService) {
+    public AdminController(
+            AdminService adminService,
+            AdminWorkloadService adminWorkloadService,
+            NotificationTestService notificationTestService,
+            NotificationBroadcastJobService notificationBroadcastJobService,
+            NotificationRetryOperations notificationRetryService,
+            PermissionManagementService permissionManagementService) {
         this.adminService = adminService;
         this.adminWorkloadService = adminWorkloadService;
         this.notificationTestService = notificationTestService;
@@ -71,7 +72,9 @@ public class AdminController {
         try {
             String version = System.getenv("APP_VERSION");
             emitter.send(SseEmitter.event().name("version").data(version == null ? "" : version));
-        } catch (IOException e) { emitter.completeWithError(e); }
+        } catch (IOException e) {
+            emitter.completeWithError(e);
+        }
         return emitter;
     }
 
@@ -86,8 +89,7 @@ public class AdminController {
     /** 批量更新配置 */
     @PutMapping("/configs")
     public ResponseEntity<Map<String, String>> updateConfigs(
-            @RequestBody Map<String, Object> body,
-            @RequestHeader("X-Auth-Token") String token) {
+            @RequestBody Map<String, Object> body, @RequestHeader("X-Auth-Token") String token) {
         @SuppressWarnings("unchecked")
         Map<String, String> configs = (Map<String, String>) body.get("configs");
         String updatedBy = getUserFromToken(token);
@@ -97,8 +99,7 @@ public class AdminController {
 
     /** 保存配置后，向当前管理员验证站内及飞书通知渠道。 */
     @PostMapping("/notifications/test")
-    public ResponseEntity<Map<String, Object>> sendNotificationTest(
-            @RequestHeader("X-Auth-Token") String token) {
+    public ResponseEntity<Map<String, Object>> sendNotificationTest(@RequestHeader("X-Auth-Token") String token) {
         AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
         if (!"admin".equals(session.role())) return ResponseEntity.status(403).build();
@@ -110,22 +111,23 @@ public class AdminController {
     }
 
     @PostMapping("/notifications/temporary-broadcast")
-    public ResponseEntity<?> sendTemporaryBroadcast(@RequestBody Map<String, String> body,
-                                                     @RequestHeader("X-Auth-Token") String token) {
+    public ResponseEntity<?> sendTemporaryBroadcast(
+            @RequestBody Map<String, String> body, @RequestHeader("X-Auth-Token") String token) {
         AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
         if (!"admin".equals(session.role())) return ResponseEntity.status(403).build();
         try {
-            return ResponseEntity.accepted().body(notificationBroadcastJobService.start(
-                    body.get("title"), body.get("content"), session.userId()));
+            return ResponseEntity.accepted()
+                    .body(notificationBroadcastJobService.start(
+                            body.get("title"), body.get("content"), session.userId()));
         } catch (IllegalArgumentException | IllegalStateException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
     @GetMapping("/notifications/temporary-broadcast/{jobId}")
-    public ResponseEntity<?> getTemporaryBroadcastStatus(@PathVariable String jobId,
-                                                          @RequestHeader("X-Auth-Token") String token) {
+    public ResponseEntity<?> getTemporaryBroadcastStatus(
+            @PathVariable String jobId, @RequestHeader("X-Auth-Token") String token) {
         AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
         try {
@@ -149,14 +151,15 @@ public class AdminController {
         try {
             notificationRetryService.retryNow(id, session.userId());
             return ResponseEntity.ok(Map.of("message", "通知已重新排队"));
-        } catch (IllegalArgumentException e) { return ResponseEntity.badRequest().body(Map.of("error", e.getMessage())); }
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     /** 上传管理图片（logo / login-bg） */
     @PostMapping("/upload-image")
     public ResponseEntity<Map<String, Object>> uploadImage(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam("type") String type) {
+            @RequestParam("file") MultipartFile file, @RequestParam("type") String type) {
         if (!type.equals("logo") && !type.equals("login-bg")) {
             return ResponseEntity.badRequest().body(Map.of("error", "type 参数必须为 logo 或 login-bg"));
         }
@@ -192,9 +195,7 @@ public class AdminController {
     /** 更新用户角色 */
     @PutMapping("/users/{id}/role")
     public ResponseEntity<Map<String, Object>> updateUserRole(
-            @PathVariable Long id,
-            @RequestBody Map<String, String> body,
-            @RequestHeader("X-Auth-Token") String token) {
+            @PathVariable Long id, @RequestBody Map<String, String> body, @RequestHeader("X-Auth-Token") String token) {
         String newRole = body.get("role");
         User user;
         try {
@@ -215,8 +216,7 @@ public class AdminController {
     /** 重置用户密码 */
     @PutMapping("/users/{id}/reset-password")
     public ResponseEntity<Map<String, String>> resetPassword(
-            @PathVariable Long id,
-            @RequestBody Map<String, String> body) {
+            @PathVariable Long id, @RequestBody Map<String, String> body) {
         String newPassword = body.get("password");
         try {
             adminService.resetPassword(id, newPassword);
@@ -240,8 +240,7 @@ public class AdminController {
     /** 编辑用户资料 */
     @PutMapping("/users/{id}")
     public ResponseEntity<Map<String, Object>> updateUser(
-            @PathVariable Long id,
-            @RequestBody Map<String, String> body) {
+            @PathVariable Long id, @RequestBody Map<String, String> body) {
         try {
             Map<String, Object> result = adminService.updateUser(id, body);
             return ResponseEntity.ok(result);
@@ -294,7 +293,11 @@ public class AdminController {
             List<String> permissions = (List<String>) body.get("permissions");
             Map<String, List<String>> scopes = parseScopes(body.get("scopes"));
             return ResponseEntity.ok(permissionManagementService.createRole(
-                    name, displayName, description, permissions, scopes,
+                    name,
+                    displayName,
+                    description,
+                    permissions,
+                    scopes,
                     permissionActor(token, (String) body.get("reason"), request)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -315,7 +318,11 @@ public class AdminController {
             List<String> permissions = (List<String>) body.get("permissions");
             Map<String, List<String>> scopes = parseScopes(body.get("scopes"));
             return ResponseEntity.ok(permissionManagementService.updateRole(
-                    id, displayName, description, permissions, scopes,
+                    id,
+                    displayName,
+                    description,
+                    permissions,
+                    scopes,
                     permissionActor(token, (String) body.get("reason"), request)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -347,8 +354,7 @@ public class AdminController {
 
     /** 更新评分权重 */
     @PutMapping("/scoring-weights")
-    public ResponseEntity<Map<String, Object>> updateScoringWeights(
-            @RequestBody Map<String, Object> body) {
+    public ResponseEntity<Map<String, Object>> updateScoringWeights(@RequestBody Map<String, Object> body) {
         try {
             adminService.updateScoringWeights(body);
             return ResponseEntity.ok(Map.of("success", true, "message", "评分权重已更新"));
@@ -361,8 +367,7 @@ public class AdminController {
 
     /** 清空所有项目业务数据（测试用，保留用户/角色/部门/系统配置） */
     @DeleteMapping("/clear-data")
-    public ResponseEntity<Map<String, Object>> clearAllProjectData(
-            @RequestHeader("X-Auth-Token") String token) {
+    public ResponseEntity<Map<String, Object>> clearAllProjectData(@RequestHeader("X-Auth-Token") String token) {
         AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
         Map<String, Object> result = adminService.clearAllProjectData();
@@ -376,8 +381,7 @@ public class AdminController {
     // ==================== 工作量统计 ====================
 
     @GetMapping("/workload")
-    public ResponseEntity<Map<String, Object>> getWorkload(
-            @RequestHeader("X-Auth-Token") String token) {
+    public ResponseEntity<Map<String, Object>> getWorkload(@RequestHeader("X-Auth-Token") String token) {
         AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
         if (!"admin".equals(session.role())) return ResponseEntity.status(403).build();
@@ -410,13 +414,11 @@ public class AdminController {
         return session != null ? session.name() : "未知";
     }
 
-    private PermissionManagementService.Actor permissionActor(
-            String token, String reason, HttpServletRequest request) {
+    private PermissionManagementService.Actor permissionActor(String token, String reason, HttpServletRequest request) {
         AuthSession session = AuthSessions.validateToken(token);
         if (session == null) throw new IllegalArgumentException("登录状态已失效");
         return new PermissionManagementService.Actor(
-                session.userId(), session.name(), reason,
-                request != null ? request.getRemoteAddr() : null);
+                session.userId(), session.name(), reason, request != null ? request.getRemoteAddr() : null);
     }
 
     private Map<String, List<String>> parseScopes(Object raw) {
@@ -424,7 +426,9 @@ public class AdminController {
         Map<String, List<String>> result = new LinkedHashMap<>();
         map.forEach((key, value) -> {
             if (value instanceof Collection<?> values) {
-                result.put(String.valueOf(key), values.stream().map(String::valueOf).toList());
+                result.put(
+                        String.valueOf(key),
+                        values.stream().map(String::valueOf).toList());
             }
         });
         return result;

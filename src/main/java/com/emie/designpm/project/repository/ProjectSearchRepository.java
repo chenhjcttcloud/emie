@@ -2,9 +2,8 @@ package com.emie.designpm.project.repository;
 
 import com.emie.designpm.dto.ProjectListQuery;
 import com.emie.designpm.entity.Project;
-import org.springframework.data.domain.Page;
-
 import java.util.List;
+import org.springframework.data.domain.Page;
 
 /** 项目列表动态查询片段：仅拼接实际使用的条件，避免空参数 OR 破坏索引计划。 */
 public interface ProjectSearchRepository {

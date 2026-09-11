@@ -1,19 +1,18 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.time.LocalDateTime;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "permissions", indexes = {
-        @Index(name = "idx_permission_module_enabled", columnList = "module,enabled")
-})
+@Table(
+        name = "permissions",
+        indexes = {@Index(name = "idx_permission_module_enabled", columnList = "module,enabled")})
 public class PermissionDefinition {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

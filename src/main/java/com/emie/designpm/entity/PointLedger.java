@@ -1,18 +1,22 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
 @Entity
-@Table(name = "point_ledgers", uniqueConstraints = @UniqueConstraint(
-        name = "uk_point_ledger_task_rule_user", columnNames = {"user_id", "sub_task_id", "rule_code"}))
+@Table(
+        name = "point_ledgers",
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_point_ledger_task_rule_user",
+                        columnNames = {"user_id", "sub_task_id", "rule_code"}))
 public class PointLedger {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(name = "user_id", nullable = false, length = 100)
@@ -37,5 +41,8 @@ public class PointLedger {
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
-    @PrePersist void onCreate() { if (createdAt == null) createdAt = LocalDateTime.now(); }
+    @PrePersist
+    void onCreate() {
+        if (createdAt == null) createdAt = LocalDateTime.now();
+    }
 }

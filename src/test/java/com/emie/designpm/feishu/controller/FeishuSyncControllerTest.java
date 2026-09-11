@@ -1,21 +1,20 @@
 package com.emie.designpm.feishu.controller;
 
-import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.project.repository.ProjectRepository;
-import com.emie.designpm.admin.repository.ActivityLogRepository;
-import com.emie.designpm.scoring.repository.ScoringRepository;
-import com.emie.designpm.project.repository.SubTaskRepository;
-import com.emie.designpm.feishu.service.FeishuBaseService;
-import com.emie.designpm.sync.service.SyncQueueService;
-import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.*;
 
+import com.emie.designpm.admin.repository.ActivityLogRepository;
+import com.emie.designpm.auth.AuthSession;
+import com.emie.designpm.feishu.service.FeishuBaseService;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
+import com.emie.designpm.scoring.repository.ScoringRepository;
+import com.emie.designpm.sync.service.SyncQueueService;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 
 class FeishuSyncControllerTest {
 
@@ -40,8 +39,13 @@ class FeishuSyncControllerTest {
         when(feishu.activateV2Base()).thenReturn(Map.of("active", true));
         when(feishu.validateBackupTables()).thenReturn(Map.of("valid", true, "tables", List.of()));
         when(projects.findIdsAfter(anyLong(), any())).thenThrow(new IllegalStateException("database unavailable"));
-        FeishuSyncController controller = new FeishuSyncController(queueService, feishu, projects,
-                mock(SubTaskRepository.class), mock(ScoringRepository.class), mock(ActivityLogRepository.class));
+        FeishuSyncController controller = new FeishuSyncController(
+                queueService,
+                feishu,
+                projects,
+                mock(SubTaskRepository.class),
+                mock(ScoringRepository.class),
+                mock(ActivityLogRepository.class));
 
         var response = controller.activateV2(adminRequest());
 
@@ -76,9 +80,11 @@ class FeishuSyncControllerTest {
         when(tasks.findAll()).thenReturn(List.of());
         when(scoring.findAll()).thenReturn(List.of());
         when(logs.findAll()).thenReturn(List.of());
-        when(queueService.enqueueAll(anyString(), anyList())).thenReturn(Map.of("total", 0, "added", 0, "updated", 0, "skipped", 0));
+        when(queueService.enqueueAll(anyString(), anyList()))
+                .thenReturn(Map.of("total", 0, "added", 0, "updated", 0, "skipped", 0));
 
-        FeishuSyncController controller = new FeishuSyncController(queueService, feishu, projects, tasks, scoring, logs);
+        FeishuSyncController controller =
+                new FeishuSyncController(queueService, feishu, projects, tasks, scoring, logs);
 
         var response = controller.fullResync();
 
@@ -95,8 +101,7 @@ class FeishuSyncControllerTest {
         SyncQueueService queueService = mock(SyncQueueService.class);
         FeishuBaseService feishu = mock(FeishuBaseService.class);
         when(feishu.validateBackupTables()).thenReturn(Map.of("valid", true, "tables", List.of()));
-        doThrow(new Exception("飞书不可用"))
-                .when(feishu).reconcileMirrors(Set.of(), Set.of(), Set.of(), Set.of());
+        doThrow(new Exception("飞书不可用")).when(feishu).reconcileMirrors(Set.of(), Set.of(), Set.of(), Set.of());
 
         FeishuSyncController controller = controller(queueService, feishu);
         var response = controller.fullResync();
@@ -109,8 +114,8 @@ class FeishuSyncControllerTest {
     void retryEndpointDelegatesSingleQueueItemToService() {
         SyncQueueService queueService = mock(SyncQueueService.class);
         FeishuBaseService feishu = mock(FeishuBaseService.class);
-        when(queueService.retryFailed(7748L)).thenReturn(Map.of(
-                "id", 7748L, "entityType", "sub_task", "entityId", 1081L, "status", "pending"));
+        when(queueService.retryFailed(7748L))
+                .thenReturn(Map.of("id", 7748L, "entityType", "sub_task", "entityId", 1081L, "status", "pending"));
 
         FeishuSyncController controller = controller(queueService, feishu);
 
@@ -127,8 +132,12 @@ class FeishuSyncControllerTest {
     }
 
     private FeishuSyncController controller(SyncQueueService queueService, FeishuBaseService feishu) {
-        return new FeishuSyncController(queueService, feishu,
-                mock(ProjectRepository.class), mock(SubTaskRepository.class), mock(ScoringRepository.class),
+        return new FeishuSyncController(
+                queueService,
+                feishu,
+                mock(ProjectRepository.class),
+                mock(SubTaskRepository.class),
+                mock(ScoringRepository.class),
                 mock(ActivityLogRepository.class));
     }
 }

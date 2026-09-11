@@ -1,21 +1,22 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
 @Entity
-@Table(name = "scoring_records", indexes = {
-    @Index(name = "idx_scoring_sub_task", columnList = "sub_task_id"),
-    @Index(name = "idx_scoring_role", columnList = "role"),
-    @Index(name = "idx_scoring_role_score", columnList = "role,score"),
-    @Index(name = "idx_scoring_task_role", columnList = "sub_task_id,role"),
-    @Index(name = "idx_scoring_role_status_task", columnList = "role,reviewStatus,sub_task_id")
-})
+@Table(
+        name = "scoring_records",
+        indexes = {
+            @Index(name = "idx_scoring_sub_task", columnList = "sub_task_id"),
+            @Index(name = "idx_scoring_role", columnList = "role"),
+            @Index(name = "idx_scoring_role_score", columnList = "role,score"),
+            @Index(name = "idx_scoring_task_role", columnList = "sub_task_id,role"),
+            @Index(name = "idx_scoring_role_status_task", columnList = "role,reviewStatus,sub_task_id")
+        })
 @EntityListeners(com.emie.designpm.sync.service.ScoringSyncListener.class)
 public class ScoringRecord {
 

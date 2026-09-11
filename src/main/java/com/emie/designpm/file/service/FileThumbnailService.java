@@ -1,8 +1,5 @@
 package com.emie.designpm.file.service;
 
-import org.springframework.stereotype.Service;
-
-import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -10,9 +7,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import javax.imageio.ImageIO;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
+import org.springframework.stereotype.Service;
 
 /** 生成并缓存图片缩略图，原图只在用户点击预览时读取。 */
 @Service
@@ -37,8 +36,12 @@ public class FileThumbnailService {
         String safeName = storedName.replaceAll("[^a-zA-Z0-9._-]", "_");
         boolean aiFile = storedName.toLowerCase(java.util.Locale.ROOT).endsWith(".ai");
         // AI 预览规格单独带版本，确保旧的 96 DPI / 640px 缓存自动失效。
-        Path target = cacheRoot.resolve(safeName + (aiFile ? ".ai-preview-v2.png" : ".png")).normalize();
-        if (Files.exists(target) && Files.getLastModifiedTime(target).toMillis() >= Files.getLastModifiedTime(source).toMillis()) {
+        Path target = cacheRoot
+                .resolve(safeName + (aiFile ? ".ai-preview-v2.png" : ".png"))
+                .normalize();
+        if (Files.exists(target)
+                && Files.getLastModifiedTime(target).toMillis()
+                        >= Files.getLastModifiedTime(source).toMillis()) {
             return target;
         }
         boolean acquired = false;
@@ -48,7 +51,9 @@ public class FileThumbnailService {
                 throw new IOException("缩略图生成任务繁忙，请稍后重试");
             }
             acquired = true;
-            if (Files.exists(target) && Files.getLastModifiedTime(target).toMillis() >= Files.getLastModifiedTime(source).toMillis()) {
+            if (Files.exists(target)
+                    && Files.getLastModifiedTime(target).toMillis()
+                            >= Files.getLastModifiedTime(source).toMillis()) {
                 return target;
             }
             BufferedImage input = aiFile ? renderPdfCompatibleAi(source) : ImageIO.read(source.toFile());
@@ -64,7 +69,8 @@ public class FileThumbnailService {
                     try {
                         graphics.setColor(Color.WHITE);
                         graphics.fillRect(0, 0, width, height);
-                        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                        graphics.setRenderingHint(
+                                RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
                         graphics.drawImage(input, 0, 0, width, height, null);
                     } finally {
                         graphics.dispose();
@@ -95,12 +101,16 @@ public class FileThumbnailService {
     }
 
     private void writePngAtomically(BufferedImage image, Path target) throws IOException {
-        Path temp = target.resolveSibling(target.getFileName() + ".tmp-" + Thread.currentThread().getId());
+        Path temp = target.resolveSibling(
+                target.getFileName() + ".tmp-" + Thread.currentThread().getId());
         try {
             if (!ImageIO.write(image, "png", temp.toFile())) {
                 throw new IOException("系统不支持 PNG 编码");
             }
-            Files.move(temp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+            Files.move(
+                    temp,
+                    target,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
                     java.nio.file.StandardCopyOption.ATOMIC_MOVE);
         } finally {
             Files.deleteIfExists(temp);

@@ -1,11 +1,5 @@
 package com.emie.designpm.admin.service;
 
-import com.emie.designpm.entity.PermissionAuditLog;
-import com.emie.designpm.entity.PermissionDefinition;
-import com.emie.designpm.entity.PermissionVersion;
-import com.emie.designpm.entity.Role;
-import com.emie.designpm.entity.RolePermission;
-import com.emie.designpm.entity.RolePermissionScope;
 import com.emie.designpm.admin.repository.PermissionAuditLogRepository;
 import com.emie.designpm.admin.repository.PermissionDefinitionRepository;
 import com.emie.designpm.admin.repository.PermissionVersionRepository;
@@ -13,11 +7,14 @@ import com.emie.designpm.admin.repository.RolePermissionRepository;
 import com.emie.designpm.admin.repository.RolePermissionScopeRepository;
 import com.emie.designpm.admin.repository.RoleRepository;
 import com.emie.designpm.admin.repository.UserRepository;
+import com.emie.designpm.entity.PermissionAuditLog;
+import com.emie.designpm.entity.PermissionDefinition;
+import com.emie.designpm.entity.PermissionVersion;
+import com.emie.designpm.entity.Role;
+import com.emie.designpm.entity.RolePermission;
+import com.emie.designpm.entity.RolePermissionScope;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -27,6 +24,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PermissionManagementService {
@@ -41,15 +40,16 @@ public class PermissionManagementService {
     private final PermissionService permissionService;
     private final ObjectMapper objectMapper;
 
-    public PermissionManagementService(PermissionDefinitionRepository permissionRepository,
-                                       RoleRepository roleRepository,
-                                       RolePermissionRepository rolePermissionRepository,
-                                       RolePermissionScopeRepository scopeRepository,
-                                       PermissionVersionRepository versionRepository,
-                                       PermissionAuditLogRepository auditRepository,
-                                       UserRepository userRepository,
-                                       PermissionService permissionService,
-                                       ObjectMapper objectMapper) {
+    public PermissionManagementService(
+            PermissionDefinitionRepository permissionRepository,
+            RoleRepository roleRepository,
+            RolePermissionRepository rolePermissionRepository,
+            RolePermissionScopeRepository scopeRepository,
+            PermissionVersionRepository versionRepository,
+            PermissionAuditLogRepository auditRepository,
+            UserRepository userRepository,
+            PermissionService permissionService,
+            ObjectMapper objectMapper) {
         this.permissionRepository = permissionRepository;
         this.roleRepository = roleRepository;
         this.rolePermissionRepository = rolePermissionRepository;
@@ -77,15 +77,19 @@ public class PermissionManagementService {
     }
 
     @Transactional
-    public Map<String, Object> createRole(String name, String displayName, String description,
-                                          List<String> permissionCodes, Actor actor) {
+    public Map<String, Object> createRole(
+            String name, String displayName, String description, List<String> permissionCodes, Actor actor) {
         return createRole(name, displayName, description, permissionCodes, Map.of(), actor);
     }
 
     @Transactional
-    public Map<String, Object> createRole(String name, String displayName, String description,
-                                          List<String> permissionCodes, Map<String, List<String>> scopes,
-                                          Actor actor) {
+    public Map<String, Object> createRole(
+            String name,
+            String displayName,
+            String description,
+            List<String> permissionCodes,
+            Map<String, List<String>> scopes,
+            Actor actor) {
         String roleName = validateRoleName(name);
         if (roleRepository.findAll().stream()
                 .map(Role::getName)
@@ -116,23 +120,25 @@ public class PermissionManagementService {
     }
 
     @Transactional
-    public Map<String, Object> updateRole(Long roleId, String displayName, String description,
-                                          List<String> permissionCodes, Actor actor) {
-        Role role = roleRepository.findById(roleId)
-                .orElseThrow(() -> new IllegalArgumentException("角色不存在"));
+    public Map<String, Object> updateRole(
+            Long roleId, String displayName, String description, List<String> permissionCodes, Actor actor) {
+        Role role = roleRepository.findById(roleId).orElseThrow(() -> new IllegalArgumentException("角色不存在"));
         return updateRole(roleId, displayName, description, permissionCodes, currentScopes(role), actor);
     }
 
     @Transactional
-    public Map<String, Object> updateRole(Long roleId, String displayName, String description,
-                                          List<String> permissionCodes, Map<String, List<String>> scopes,
-                                          Actor actor) {
-        Role role = roleRepository.findById(roleId)
-                .orElseThrow(() -> new IllegalArgumentException("角色不存在"));
+    public Map<String, Object> updateRole(
+            Long roleId,
+            String displayName,
+            String description,
+            List<String> permissionCodes,
+            Map<String, List<String>> scopes,
+            Actor actor) {
+        Role role = roleRepository.findById(roleId).orElseThrow(() -> new IllegalArgumentException("角色不存在"));
         validateDisplayName(displayName);
         validateReason(actor.reason());
-        Map<String, Object> before = snapshot(role, currentSelectedPermissions(role.getName()),
-                currentScopes(role), currentVersion(role.getName()));
+        Map<String, Object> before = snapshot(
+                role, currentSelectedPermissions(role.getName()), currentScopes(role), currentVersion(role.getName()));
 
         role.setDisplayName(displayName.trim());
         role.setDescription(description != null ? description.trim() : "");
@@ -147,8 +153,7 @@ public class PermissionManagementService {
 
     @Transactional
     public void deleteRole(Long roleId, Actor actor) {
-        Role role = roleRepository.findById(roleId)
-                .orElseThrow(() -> new IllegalArgumentException("角色不存在"));
+        Role role = roleRepository.findById(roleId).orElseThrow(() -> new IllegalArgumentException("角色不存在"));
         if (Boolean.TRUE.equals(role.getIsSystem())) {
             throw new IllegalArgumentException("系统内置角色不可删除");
         }
@@ -156,8 +161,8 @@ public class PermissionManagementService {
             throw new IllegalArgumentException("该角色下还有用户，无法删除。请先变更用户的角色");
         }
         validateReason(actor.reason());
-        Map<String, Object> before = snapshot(role, currentSelectedPermissions(role.getName()),
-                currentScopes(role), currentVersion(role.getName()));
+        Map<String, Object> before = snapshot(
+                role, currentSelectedPermissions(role.getName()), currentScopes(role), currentVersion(role.getName()));
         rolePermissionRepository.deleteByRoleId(roleId);
         roleRepository.delete(role);
         writeAudit(actor, "role.delete", role.getName(), before, null);
@@ -166,23 +171,23 @@ public class PermissionManagementService {
     @Transactional
     public Map<String, Object> rollbackRole(Long roleId, Long auditId, Actor actor) {
         validateReason(actor.reason());
-        Role role = roleRepository.findById(roleId)
-                .orElseThrow(() -> new IllegalArgumentException("角色不存在"));
-        PermissionAuditLog source = auditRepository.findById(auditId)
-                .orElseThrow(() -> new IllegalArgumentException("权限历史版本不存在"));
-        if (!"role".equals(source.getTargetType()) || !role.getName().equals(source.getTargetKey())
+        Role role = roleRepository.findById(roleId).orElseThrow(() -> new IllegalArgumentException("角色不存在"));
+        PermissionAuditLog source =
+                auditRepository.findById(auditId).orElseThrow(() -> new IllegalArgumentException("权限历史版本不存在"));
+        if (!"role".equals(source.getTargetType())
+                || !role.getName().equals(source.getTargetKey())
                 || source.getAfterData() == null) {
             throw new IllegalArgumentException("该历史版本不属于当前角色或不可回滚");
         }
         Map<String, Object> target;
         try {
-            target = objectMapper.readValue(source.getAfterData(),
-                    new com.fasterxml.jackson.core.type.TypeReference<>() {});
+            target = objectMapper.readValue(
+                    source.getAfterData(), new com.fasterxml.jackson.core.type.TypeReference<>() {});
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("历史权限快照损坏，无法回滚");
         }
-        Map<String, Object> before = snapshot(role, currentSelectedPermissions(role.getName()),
-                currentScopes(role), currentVersion(role.getName()));
+        Map<String, Object> before = snapshot(
+                role, currentSelectedPermissions(role.getName()), currentScopes(role), currentVersion(role.getName()));
         role.setDisplayName(String.valueOf(target.getOrDefault("displayName", role.getDisplayName())));
         role.setDescription(String.valueOf(target.getOrDefault("description", role.getDescription())));
         List<String> permissions = stringList(target.get("permissions"));
@@ -199,7 +204,10 @@ public class PermissionManagementService {
 
     private List<String> stringList(Object value) {
         if (!(value instanceof Collection<?> collection)) return List.of();
-        return collection.stream().filter(java.util.Objects::nonNull).map(String::valueOf).toList();
+        return collection.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(String::valueOf)
+                .toList();
     }
 
     private Map<String, List<String>> scopeMap(Object value) {
@@ -238,8 +246,8 @@ public class PermissionManagementService {
         return selected;
     }
 
-    private Map<String, List<String>> replaceScopes(Role role, Set<String> selected,
-                                                     Map<String, List<String>> requested) {
+    private Map<String, List<String>> replaceScopes(
+            Role role, Set<String> selected, Map<String, List<String>> requested) {
         Set<String> scopePermissions = Set.of("project.view", "project.detail.view", "subtask.view");
         Set<String> validScopes = Set.of("all", "own", "participated", "department", "role_team");
         Map<String, List<String>> normalized = new LinkedHashMap<>();
@@ -249,7 +257,8 @@ public class PermissionManagementService {
             if (!selected.contains(code) || !scopePermissions.contains(code)) continue;
             List<String> values = requested == null ? List.of() : requested.getOrDefault(code, List.of());
             LinkedHashSet<String> clean = values.stream()
-                    .filter(java.util.Objects::nonNull).map(String::trim)
+                    .filter(java.util.Objects::nonNull)
+                    .map(String::trim)
                     .filter(validScopes::contains)
                     .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
             if (clean.isEmpty()) {
@@ -271,11 +280,13 @@ public class PermissionManagementService {
     private Map<String, List<String>> currentScopes(Role role) {
         Map<String, LinkedHashSet<String>> grouped = new LinkedHashMap<>();
         for (RolePermissionScope scope : scopeRepository.findByRoleId(role.getId())) {
-            grouped.computeIfAbsent(scope.getRolePermission().getPermission().getCode(),
-                    ignored -> new LinkedHashSet<>()).add(scope.getScopeType());
+            grouped.computeIfAbsent(
+                            scope.getRolePermission().getPermission().getCode(), ignored -> new LinkedHashSet<>())
+                    .add(scope.getScopeType());
         }
         Map<String, List<String>> result = new LinkedHashMap<>();
-        grouped.forEach((code, values) -> result.put(code, values.stream().sorted().toList()));
+        grouped.forEach(
+                (code, values) -> result.put(code, values.stream().sorted().toList()));
         return result;
     }
 
@@ -294,14 +305,16 @@ public class PermissionManagementService {
     }
 
     private long currentVersion(String roleName) {
-        return versionRepository.findBySubjectTypeAndSubjectKey("role", roleName)
+        return versionRepository
+                .findBySubjectTypeAndSubjectKey("role", roleName)
                 .map(PermissionVersion::getVersion)
                 .orElse(1L);
     }
 
     private Set<String> currentSelectedPermissions(String roleName) {
         @SuppressWarnings("unchecked")
-        List<String> capabilities = (List<String>) permissionService.capabilities(roleName).get("permissions");
+        List<String> capabilities =
+                (List<String>) permissionService.capabilities(roleName).get("permissions");
         Set<String> defined = permissionRepository.findByEnabledTrueOrderByModuleAscCodeAsc().stream()
                 .map(PermissionDefinition::getCode)
                 .collect(java.util.stream.Collectors.toSet());
@@ -320,7 +333,8 @@ public class PermissionManagementService {
         result.put("scopes", currentScopes(role));
         result.put("permissionVersion", currentVersion(role.getName()));
         result.put("isSystem", role.getIsSystem());
-        result.put("createdAt", role.getCreatedAt() != null ? role.getCreatedAt().toString() : "");
+        result.put(
+                "createdAt", role.getCreatedAt() != null ? role.getCreatedAt().toString() : "");
         return result;
     }
 
@@ -334,8 +348,8 @@ public class PermissionManagementService {
         return result;
     }
 
-    private Map<String, Object> snapshot(Role role, Set<String> permissions,
-                                         Map<String, List<String>> scopes, long version) {
+    private Map<String, Object> snapshot(
+            Role role, Set<String> permissions, Map<String, List<String>> scopes, long version) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("name", role.getName());
         result.put("displayName", role.getDisplayName());
@@ -346,8 +360,8 @@ public class PermissionManagementService {
         return result;
     }
 
-    private void writeAudit(Actor actor, String action, String targetKey,
-                            Map<String, Object> before, Map<String, Object> after) {
+    private void writeAudit(
+            Actor actor, String action, String targetKey, Map<String, Object> before, Map<String, Object> after) {
         PermissionAuditLog log = new PermissionAuditLog();
         log.setActorUserId(actor.userId());
         log.setActorName(actor.name());
@@ -389,6 +403,5 @@ public class PermissionManagementService {
         }
     }
 
-    public record Actor(String userId, String name, String reason, String sourceIp) {
-    }
+    public record Actor(String userId, String name, String reason, String sourceIp) {}
 }

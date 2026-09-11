@@ -1,24 +1,25 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "file_records", indexes = {
-    @Index(name = "idx_file_tier", columnList = "storageTier"),
-    @Index(name = "idx_file_created", columnList = "createdAt"),
-    @Index(name = "idx_file_stored", columnList = "storedName"),
-    @Index(name = "idx_file_owner", columnList = "ownerUserId")
-})
+@Table(
+        name = "file_records",
+        indexes = {
+            @Index(name = "idx_file_tier", columnList = "storageTier"),
+            @Index(name = "idx_file_created", columnList = "createdAt"),
+            @Index(name = "idx_file_stored", columnList = "storedName"),
+            @Index(name = "idx_file_owner", columnList = "ownerUserId")
+        })
 public class FileRecord {
 
     @Id

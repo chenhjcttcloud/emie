@@ -1,22 +1,23 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
 
 /** 项目子任务总流程中审核阶段的不可覆盖轮次记录。 */
 @Data
 @NoArgsConstructor
 @Entity
-@Table(name = "project_workflow_attempts",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_project_workflow_attempt_round",
-                columnNames = {"project_id", "stageKey", "attemptNo"}),
+@Table(
+        name = "project_workflow_attempts",
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_project_workflow_attempt_round",
+                        columnNames = {"project_id", "stageKey", "attemptNo"}),
         indexes = {
-                @Index(name = "idx_project_workflow_attempt_project", columnList = "project_id,id"),
-                @Index(name = "idx_project_workflow_attempt_status", columnList = "status,submittedAt")
+            @Index(name = "idx_project_workflow_attempt_project", columnList = "project_id,id"),
+            @Index(name = "idx_project_workflow_attempt_status", columnList = "status,submittedAt")
         })
 public class ProjectWorkflowAttempt {
 

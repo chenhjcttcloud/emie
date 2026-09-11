@@ -1,18 +1,17 @@
 package com.emie.designpm.config;
 
-import com.emie.designpm.auth.AuthSessions;
-import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.admin.service.PermissionService;
+import com.emie.designpm.auth.AuthSession;
+import com.emie.designpm.auth.AuthSessions;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.core.annotation.Order;
-import org.springframework.stereotype.Component;
-import org.springframework.beans.factory.annotation.Autowired;
+import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
 
 /**
  * 简单认证过滤器。
@@ -36,10 +35,11 @@ public class AuthFilter implements Filter {
      * - img-src 显式允许 http(s)/data：safeImageSrc 允许外域图片（登录页/头部 logo、背景图）。
      * - /share/** 由 PublicShareController 自行设置分享页 CSP，此处跳过避免双头叠加歧义。
      */
-    private static final String SITE_CSP = "default-src 'self'; script-src 'self' 'unsafe-eval'; script-src-attr 'none'; "
-            + "style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data: blob:; "
-            + "frame-src 'self' blob:; "
-            + "object-src 'none'; base-uri 'self'";
+    private static final String SITE_CSP =
+            "default-src 'self'; script-src 'self' 'unsafe-eval'; script-src-attr 'none'; "
+                    + "style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data: blob:; "
+                    + "frame-src 'self' blob:; "
+                    + "object-src 'none'; base-uri 'self'";
 
     @Autowired
     public AuthFilter(PermissionService permissionService) {
@@ -73,25 +73,26 @@ public class AuthFilter implements Filter {
         }
 
         // 允许无需认证的路径
-        if (path.equals("/api/auth/login") ||
-            path.equals("/api/auth/logout") ||
-            path.equals("/api/auth/feishu/callback") ||
-            path.equals("/api/auth/feishu/config") ||
-            path.equals("/api/auth/feishu/auto-login") ||
-            path.equals("/api/auth/feishu/exchange") ||
-            path.equals("/api/admin/public-config") ||
-            path.equals("/api/admin/version/stream") ||
-            path.equals("/api/health/live") ||
-            path.startsWith("/api/files/permanent/") ||
-            path.equals("/favicon.ico") ||
-            // P1-7 遗留闭环：uploads/admin 下的管理图片（logo/login-bg）需匿名可访问。
-            // 精确前缀白名单 + FileController.checkDownloadAccess 的 ADMIN_MANAGED_IMAGE
-            // 正则兜底（匿名 + 非白名单文件名 → 401），不重新打开 P1-7 的口子。
-            path.startsWith("/api/files/download/admin/") ||
-            path.startsWith("/css/") ||
-            path.startsWith("/js/") ||
-            path.equals("/") ||
-            path.equals("/index.html")) {
+        if (path.equals("/api/auth/login")
+                || path.equals("/api/auth/logout")
+                || path.equals("/api/auth/feishu/callback")
+                || path.equals("/api/auth/feishu/config")
+                || path.equals("/api/auth/feishu/auto-login")
+                || path.equals("/api/auth/feishu/exchange")
+                || path.equals("/api/admin/public-config")
+                || path.equals("/api/admin/version/stream")
+                || path.equals("/api/health/live")
+                || path.startsWith("/api/files/permanent/")
+                || path.equals("/favicon.ico")
+                ||
+                // P1-7 遗留闭环：uploads/admin 下的管理图片（logo/login-bg）需匿名可访问。
+                // 精确前缀白名单 + FileController.checkDownloadAccess 的 ADMIN_MANAGED_IMAGE
+                // 正则兜底（匿名 + 非白名单文件名 → 401），不重新打开 P1-7 的口子。
+                path.startsWith("/api/files/download/admin/")
+                || path.startsWith("/css/")
+                || path.startsWith("/js/")
+                || path.equals("/")
+                || path.equals("/index.html")) {
             chain.doFilter(request, response);
             return;
         }
@@ -113,8 +114,11 @@ public class AuthFilter implements Filter {
             }
             req.setAttribute("authSession", session);
             if ("pending".equals(session.role()) && !path.equals("/api/auth/me")) {
-                log.warn("认证过滤器拒绝请求 path={} userId={} role={} reason=pending-role",
-                        path, session.userId(), session.role());
+                log.warn(
+                        "认证过滤器拒绝请求 path={} userId={} role={} reason=pending-role",
+                        path,
+                        session.userId(),
+                        session.role());
                 res.setStatus(403);
                 res.setContentType("application/json;charset=UTF-8");
                 res.getWriter().write("{\"error\":\"账号等待管理员分配角色\"}");
@@ -122,12 +126,16 @@ public class AuthFilter implements Filter {
             }
             String adminPermission = requiredPermission(req.getMethod(), path);
             if (adminPermission != null && !hasPermission(session, adminPermission)) {
-                log.warn("认证过滤器拒绝请求 path={} userId={} role={} permission={}",
-                        path, session.userId(), session.role(), adminPermission);
+                log.warn(
+                        "认证过滤器拒绝请求 path={} userId={} role={} permission={}",
+                        path,
+                        session.userId(),
+                        session.role(),
+                        adminPermission);
                 res.setStatus(403);
                 res.setContentType("application/json;charset=UTF-8");
-                res.getWriter().write("{\"error\":\"当前账号没有访问此系统管理功能的权限\","
-                        + "\"permission\":\"" + adminPermission + "\"}");
+                res.getWriter()
+                        .write("{\"error\":\"当前账号没有访问此系统管理功能的权限\"," + "\"permission\":\"" + adminPermission + "\"}");
                 return;
             }
             if (adminPermission != null) {
@@ -161,10 +169,11 @@ public class AuthFilter implements Filter {
 
     private String requiredPermission(String method, String path) {
         if (!"GET".equals(method) && path.startsWith("/api/departments")) return "admin.department.manage";
-        if (!"GET".equals(method) && (path.startsWith("/api/categories")
-                || path.startsWith("/api/compliance")
-                || path.startsWith("/api/price-ranges")
-                || path.startsWith("/api/ip-options"))) return "admin.catalog.manage";
+        if (!"GET".equals(method)
+                && (path.startsWith("/api/categories")
+                        || path.startsWith("/api/compliance")
+                        || path.startsWith("/api/price-ranges")
+                        || path.startsWith("/api/ip-options"))) return "admin.catalog.manage";
         if (!"GET".equals(method) && path.startsWith("/api/users/org/")) return "admin.department.manage";
         if (path.equals("/api/system/archive") && "POST".equals(method)) return "admin.system_monitor.manage";
         if (path.startsWith("/api/system/")) return "admin.system_monitor.view";

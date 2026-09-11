@@ -23,9 +23,8 @@ public final class PermissionCatalog {
             "page.projects.regular.view",
             "page.design_requirements.view",
             "page.subtasks.mine.view",
-            "page.scoring.view"
-            ,"page.image_library.view"
-    );
+            "page.scoring.view",
+            "page.image_library.view");
 
     private static final Map<String, String> LEGACY_ALIASES;
 
@@ -50,8 +49,7 @@ public final class PermissionCatalog {
         LEGACY_ALIASES = Map.copyOf(aliases);
     }
 
-    private PermissionCatalog() {
-    }
+    private PermissionCatalog() {}
 
     public static String normalizeRole(String role) {
         if (role == null) return "";
@@ -151,7 +149,8 @@ public final class PermissionCatalog {
         if ("admin".equals(role)) {
             permissions.add("admin.identity.switch");
         }
-        if (Set.of("admin", "sales", "planner", "promotion", "designer", "supplychain").contains(role)) {
+        if (Set.of("admin", "sales", "planner", "promotion", "designer", "supplychain")
+                .contains(role)) {
             permissions.add("file.upload");
             permissions.add("file.download");
             permissions.add("file.preview");

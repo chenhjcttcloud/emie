@@ -3,11 +3,10 @@ package com.emie.designpm.project.service;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.notification.service.NotificationWorkflowService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.HashMap;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 项目/子任务通知的封装：构造通知上下文、吞掉通知失败不阻断业务。
@@ -38,23 +37,33 @@ final class ProjectNotifier {
         return context;
     }
 
-    void safeNotify(String eventType, String recipientUserId, String aggregateType, Long aggregateId,
-                    String actorUserId, Map<String, String> context) {
+    void safeNotify(
+            String eventType,
+            String recipientUserId,
+            String aggregateType,
+            Long aggregateId,
+            String actorUserId,
+            Map<String, String> context) {
         try {
-            notificationWorkflowService.notifyUser(eventType, recipientUserId, aggregateType, aggregateId, actorUserId, context);
+            notificationWorkflowService.notifyUser(
+                    eventType, recipientUserId, aggregateType, aggregateId, actorUserId, context);
         } catch (Exception e) {
             log.error("通知创建失败但业务操作继续: eventType={}, aggregate={}#{}", eventType, aggregateType, aggregateId, e);
         }
     }
 
-    void safeNotifyAfterCommit(String eventType, String recipientUserId, String aggregateType, Long aggregateId,
-                               String actorUserId, Map<String, String> context) {
+    void safeNotifyAfterCommit(
+            String eventType,
+            String recipientUserId,
+            String aggregateType,
+            Long aggregateId,
+            String actorUserId,
+            Map<String, String> context) {
         try {
             notificationWorkflowService.notifyUserAfterCommit(
                     eventType, recipientUserId, aggregateType, aggregateId, actorUserId, context);
         } catch (Exception e) {
-            log.error("提交后通知注册失败但业务操作继续: eventType={}, aggregate={}#{}",
-                    eventType, aggregateType, aggregateId, e);
+            log.error("提交后通知注册失败但业务操作继续: eventType={}, aggregate={}#{}", eventType, aggregateType, aggregateId, e);
         }
     }
 }

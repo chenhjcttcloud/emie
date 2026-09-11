@@ -1,23 +1,22 @@
 package com.emie.designpm.sync.service;
 
-import com.emie.designpm.feishu.service.FeishuBaseService;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.*;
+
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import com.emie.designpm.project.repository.ProjectRepository;
 import com.emie.designpm.admin.repository.ActivityLogRepository;
-import com.emie.designpm.scoring.repository.ScoringRepository;
+import com.emie.designpm.feishu.service.FeishuBaseService;
+import com.emie.designpm.project.repository.ProjectRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
+import com.emie.designpm.scoring.repository.ScoringRepository;
 import com.emie.designpm.sync.repository.SyncQueueRepository;
-import org.junit.jupiter.api.Test;
-import org.slf4j.LoggerFactory;
-
 import java.util.List;
 import java.util.Set;
-
-import static org.mockito.Mockito.*;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 class SyncWorkerSchedulingTest {
 
@@ -26,7 +25,8 @@ class SyncWorkerSchedulingTest {
         SyncQueueRepository queue = mock(SyncQueueRepository.class);
         SyncQueueService queueService = mock(SyncQueueService.class);
         when(queue.findTop20ByStatusAndNextRetryAtIsNullOrStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
-                eq("pending"), eq("pending"), any())).thenReturn(List.of());
+                        eq("pending"), eq("pending"), any()))
+                .thenReturn(List.of());
 
         worker(queue, queueService).processQueue();
 
@@ -59,8 +59,7 @@ class SyncWorkerSchedulingTest {
         when(scorings.findAll()).thenReturn(List.of());
         when(logs.findAll()).thenReturn(List.of());
 
-        new SyncWorker(queue, projects, tasks, scorings, logs, feishu, queueService)
-                .reconcileCurrentData();
+        new SyncWorker(queue, projects, tasks, scorings, logs, feishu, queueService).reconcileCurrentData();
 
         verify(feishu).reconcileMirrors(Set.of(), Set.of(), Set.of(), Set.of());
         verify(queueService).enqueueAllForReconciliation("project", List.of());
@@ -84,7 +83,8 @@ class SyncWorkerSchedulingTest {
         when(scorings.findAll()).thenReturn(List.of());
         when(logs.findAll()).thenReturn(List.of());
         doThrow(new IllegalStateException("mirror unavailable"))
-                .when(feishu).reconcileMirrors(Set.of(), Set.of(), Set.of(), Set.of());
+                .when(feishu)
+                .reconcileMirrors(Set.of(), Set.of(), Set.of(), Set.of());
 
         Logger logger = (Logger) LoggerFactory.getLogger(SyncWorker.class);
         ListAppender<ILoggingEvent> captured = new ListAppender<>();
@@ -93,8 +93,7 @@ class SyncWorkerSchedulingTest {
         logger.setAdditive(false);
         logger.addAppender(captured);
         try {
-            new SyncWorker(queue, projects, tasks, scorings, logs, feishu, queueService)
-                    .reconcileCurrentData();
+            new SyncWorker(queue, projects, tasks, scorings, logs, feishu, queueService).reconcileCurrentData();
         } finally {
             logger.detachAppender(captured);
             logger.setAdditive(originalAdditive);
@@ -102,8 +101,9 @@ class SyncWorkerSchedulingTest {
         }
 
         verifyNoInteractions(queueService);
-        assertTrue(captured.list.stream().anyMatch(event -> event.getLevel() == Level.ERROR
-                && event.getFormattedMessage().contains("mirror unavailable")));
+        assertTrue(captured.list.stream()
+                .anyMatch(event -> event.getLevel() == Level.ERROR
+                        && event.getFormattedMessage().contains("mirror unavailable")));
     }
 
     private SyncWorker worker(SyncQueueRepository queue, SyncQueueService queueService) {
@@ -114,7 +114,6 @@ class SyncWorkerSchedulingTest {
                 mock(ScoringRepository.class),
                 mock(ActivityLogRepository.class),
                 mock(FeishuBaseService.class),
-                queueService
-        );
+                queueService);
     }
 }

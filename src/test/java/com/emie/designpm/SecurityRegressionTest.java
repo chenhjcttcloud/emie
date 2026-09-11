@@ -1,10 +1,10 @@
 package com.emie.designpm;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.emie.designpm.auth.PasswordHasher;
 import com.emie.designpm.util.SecurityUtil;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 class SecurityRegressionTest {
 

@@ -2,9 +2,8 @@ package com.emie.designpm.project.service;
 
 import com.emie.designpm.admin.service.UserService;
 import com.emie.designpm.entity.User;
-import org.springframework.stereotype.Component;
-
 import java.util.List;
+import org.springframework.stereotype.Component;
 
 /** 子任务负责人角色规则，供命令服务及兼容迁移代码共同使用。 */
 @Component

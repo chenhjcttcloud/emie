@@ -1,21 +1,23 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.time.LocalDateTime;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "sync_queue", indexes = {
-    @Index(name = "idx_sync_status", columnList = "status,createdAt"),
-    @Index(name = "idx_sync_entity_status", columnList = "entityType,entityId,status")
-})
+@Table(
+        name = "sync_queue",
+        indexes = {
+            @Index(name = "idx_sync_status", columnList = "status,createdAt"),
+            @Index(name = "idx_sync_entity_status", columnList = "entityType,entityId,status")
+        })
 public class SyncQueue {
 
     @Id

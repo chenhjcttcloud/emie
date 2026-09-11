@@ -1,19 +1,21 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
 @Entity
-@Table(name = "activity_logs", indexes = {
-    @Index(name = "idx_activity_project", columnList = "project_id"),
-    @Index(name = "idx_activity_time", columnList = "time"),
-    @Index(name = "idx_activity_username_time", columnList = "username,time"),
-    @Index(name = "idx_activity_role_time", columnList = "role,time")
-})
+@Table(
+        name = "activity_logs",
+        indexes = {
+            @Index(name = "idx_activity_project", columnList = "project_id"),
+            @Index(name = "idx_activity_time", columnList = "time"),
+            @Index(name = "idx_activity_username_time", columnList = "username,time"),
+            @Index(name = "idx_activity_role_time", columnList = "role,time")
+        })
 public class ActivityLog {
 
     @Id
@@ -42,11 +44,15 @@ public class ActivityLog {
     /** 审计元数据：实体类型/ID及变更前后快照（JSON，兼容历史日志为空） */
     @Column(length = 50)
     private String entityType;
+
     private Long entityId;
+
     @Column(columnDefinition = "LONGTEXT")
     private String beforeData;
+
     @Column(columnDefinition = "LONGTEXT")
     private String afterData;
+
     @Column(columnDefinition = "TEXT")
     private String changedFields;
 
@@ -69,9 +75,16 @@ public class ActivityLog {
         this.time = LocalDateTime.now();
     }
 
-    public ActivityLog(String action, String username, String role, Project project,
-                       String entityType, Long entityId, String beforeData,
-                       String afterData, String changedFields) {
+    public ActivityLog(
+            String action,
+            String username,
+            String role,
+            Project project,
+            String entityType,
+            Long entityId,
+            String beforeData,
+            String afterData,
+            String changedFields) {
         this(action, username, role, project);
         this.entityType = entityType;
         this.entityId = entityId;

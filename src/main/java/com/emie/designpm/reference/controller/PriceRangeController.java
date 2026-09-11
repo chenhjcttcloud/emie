@@ -4,12 +4,11 @@ import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.PriceRange;
 import com.emie.designpm.reference.repository.PriceRangeRepository;
 import com.emie.designpm.util.SecurityUtil;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
-
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/price-ranges")
@@ -17,7 +16,9 @@ public class PriceRangeController {
 
     private final PriceRangeRepository repo;
 
-    public PriceRangeController(PriceRangeRepository repo) { this.repo = repo; }
+    public PriceRangeController(PriceRangeRepository repo) {
+        this.repo = repo;
+    }
 
     @GetMapping
     public ResponseEntity<List<PriceRange>> listActive() {
@@ -37,19 +38,27 @@ public class PriceRangeController {
         if (name == null || name.isBlank()) return ResponseEntity.badRequest().build();
         int sortOrder = 0;
         if (body.containsKey("sortOrder")) {
-            try { sortOrder = Integer.parseInt(body.get("sortOrder")); } catch (NumberFormatException ignored) {}
+            try {
+                sortOrder = Integer.parseInt(body.get("sortOrder"));
+            } catch (NumberFormatException ignored) {
+            }
         }
         return ResponseEntity.ok(repo.save(new PriceRange(SecurityUtil.sanitizeText(name.trim(), 50), sortOrder)));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<PriceRange> update(@PathVariable Long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
+    public ResponseEntity<PriceRange> update(
+            @PathVariable Long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
         if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         PriceRange item = repo.findById(id).orElse(null);
         if (item == null) return ResponseEntity.notFound().build();
-        if (body.containsKey("name") && body.get("name") != null) item.setName(SecurityUtil.sanitizeText(body.get("name").trim(), 50));
+        if (body.containsKey("name") && body.get("name") != null)
+            item.setName(SecurityUtil.sanitizeText(body.get("name").trim(), 50));
         if (body.containsKey("sortOrder")) {
-            try { item.setSortOrder(Integer.parseInt(body.get("sortOrder"))); } catch (NumberFormatException ignored) {}
+            try {
+                item.setSortOrder(Integer.parseInt(body.get("sortOrder")));
+            } catch (NumberFormatException ignored) {
+            }
         }
         if (body.containsKey("active")) item.setActive("true".equals(body.get("active")));
         return ResponseEntity.ok(repo.save(item));

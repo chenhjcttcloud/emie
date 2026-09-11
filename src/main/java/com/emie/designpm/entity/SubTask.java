@@ -1,21 +1,23 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
 @Entity
-@Table(name = "sub_tasks", indexes = {
-    @Index(name = "idx_sub_task_designer", columnList = "designerId"),
-    @Index(name = "idx_sub_task_project", columnList = "project_id"),
-    @Index(name = "idx_sub_task_status", columnList = "status"),
-    @Index(name = "idx_sub_task_status_designer", columnList = "status,designerId"),
-    @Index(name = "idx_sub_task_project_status", columnList = "project_id,status"),
-    @Index(name = "idx_sub_task_assignee_designer_status", columnList = "assigneeRole,designerId,status")
-})
+@Table(
+        name = "sub_tasks",
+        indexes = {
+            @Index(name = "idx_sub_task_designer", columnList = "designerId"),
+            @Index(name = "idx_sub_task_project", columnList = "project_id"),
+            @Index(name = "idx_sub_task_status", columnList = "status"),
+            @Index(name = "idx_sub_task_status_designer", columnList = "status,designerId"),
+            @Index(name = "idx_sub_task_project_status", columnList = "project_id,status"),
+            @Index(name = "idx_sub_task_assignee_designer_status", columnList = "assigneeRole,designerId,status")
+        })
 @EntityListeners(com.emie.designpm.sync.service.SubTaskSyncListener.class)
 public class SubTask {
 
@@ -66,6 +68,7 @@ public class SubTask {
 
     @Column(length = 500)
     private String assignmentReason;
+
     private Boolean countInPerformanceSnapshot;
 
     /** 接单所需能力标签，JSON 字符串数组。 */
@@ -84,6 +87,7 @@ public class SubTask {
 
     /** 创建并派发该子任务的用户。用于“我的子任务”同时覆盖负责人与发布人。 */
     private String publisherId;
+
     private String publisherName;
     private String publisherRole;
 

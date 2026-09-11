@@ -1,21 +1,19 @@
 package com.emie.designpm.config;
 
-import com.emie.designpm.auth.AuthSessions;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.emie.designpm.auth.AuthSession;
+import com.emie.designpm.auth.AuthSessions;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
-
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AuthFilterTokenTransportTest {
     private final List<String> userIds = new ArrayList<>();
@@ -29,8 +27,7 @@ class AuthFilterTokenTransportTest {
     @Test
     void permanentSessionsUseZeroExpiry() {
         AuthSession direct = new AuthSession("user-1", "sales", "销售");
-        AuthSession impersonated = new AuthSession(
-                "user-2", "designer", "设计师", "admin-1", "admin");
+        AuthSession impersonated = new AuthSession("user-2", "designer", "设计师", "admin-1", "admin");
 
         assertEquals(0L, direct.expiresAt());
         assertEquals(0L, impersonated.expiresAt());
@@ -91,7 +88,8 @@ class AuthFilterTokenTransportTest {
         assertEquals(200, response.getStatus());
         String csp = response.getHeader("Content-Security-Policy");
         assertNotNull(csp);
-        assertTrue(csp.contains("script-src 'self' 'unsafe-eval'"),
+        assertTrue(
+                csp.contains("script-src 'self' 'unsafe-eval'"),
                 "CSP 必须显式含 unsafe-eval（事件运行时 new Function 依赖，缺失会导致全站点击失效）");
         assertTrue(csp.contains("script-src-attr 'none'"), "CSP 必须包含 script-src-attr 'none'");
         assertTrue(csp.contains("object-src 'none'"));
@@ -106,7 +104,8 @@ class AuthFilterTokenTransportTest {
         filter.doFilter(request, response, chain);
 
         assertEquals(200, response.getStatus());
-        assertNull(response.getHeader("Content-Security-Policy"),
+        assertNull(
+                response.getHeader("Content-Security-Policy"),
                 "站点级 CSP 应跳过 /share/**，由 PublicShareController 设置分享页自身 CSP");
         assertNotNull(response.getHeader("X-Content-Type-Options"));
     }
@@ -128,8 +127,7 @@ class AuthFilterTokenTransportTest {
     void adminPrefixPassesFilterButControllerEnforcesFailClosed() throws Exception {
         // 过滤器按目录前缀放行 /api/files/download/admin/**；
         // 非 ADMIN_MANAGED_IMAGE 文件名在 FileController.checkDownloadAccess 中被拒绝（匿名 → 401）。
-        MockHttpServletRequest request =
-                new MockHttpServletRequest("GET", "/api/files/download/admin/secret-plan.pdf");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/files/download/admin/secret-plan.pdf");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain();
 

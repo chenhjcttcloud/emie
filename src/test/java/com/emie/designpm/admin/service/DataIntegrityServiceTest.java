@@ -1,22 +1,21 @@
 package com.emie.designpm.admin.service;
 
-import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
-import com.emie.designpm.file.repository.FileRecordRepository;
-import com.emie.designpm.project.repository.ProjectRepository;
-import com.emie.designpm.project.repository.SubTaskRepository;
-import org.springframework.data.domain.Pageable;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Collections;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
+import com.emie.designpm.file.repository.FileRecordRepository;
+import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.Pageable;
 
 class DataIntegrityServiceTest {
     @Test
@@ -33,7 +32,8 @@ class DataIntegrityServiceTest {
         when(file.getId()).thenReturn(1L);
         when(file.getStoredName()).thenReturn("present.png");
         when(projects.findIntegrityProjectsAfter(0L, Pageable.ofSize(500))).thenReturn(List.of(project));
-        when(requirements.findIntegrityRequirementsAfter(0L, Pageable.ofSize(500))).thenReturn(List.of());
+        when(requirements.findIntegrityRequirementsAfter(0L, Pageable.ofSize(500)))
+                .thenReturn(List.of());
         when(subTasks.findIntegritySubTasksAfter(0L, Pageable.ofSize(500))).thenReturn(List.of());
         when(files.findIntegrityFilesAfter(0L, Pageable.ofSize(500))).thenReturn(List.of(file));
 
@@ -54,17 +54,19 @@ class DataIntegrityServiceTest {
         DesignRequirementRepository requirements = mock(DesignRequirementRepository.class);
         FileRecordRepository files = mock(FileRecordRepository.class);
         SubTaskRepository subTasks = mock(SubTaskRepository.class);
-        FileRecordRepository.IntegrityFileProjection boundary = mock(FileRecordRepository.IntegrityFileProjection.class);
-        FileRecordRepository.IntegrityFileProjection finalRecord = mock(FileRecordRepository.IntegrityFileProjection.class);
+        FileRecordRepository.IntegrityFileProjection boundary =
+                mock(FileRecordRepository.IntegrityFileProjection.class);
+        FileRecordRepository.IntegrityFileProjection finalRecord =
+                mock(FileRecordRepository.IntegrityFileProjection.class);
         when(boundary.getId()).thenReturn(500L);
         when(boundary.getStoredName()).thenReturn("first.png");
         when(finalRecord.getId()).thenReturn(501L);
         when(finalRecord.getStoredName()).thenReturn("last.png");
-        when(files.findIntegrityFilesAfter(0L, Pageable.ofSize(500)))
-                .thenReturn(Collections.nCopies(500, boundary));
+        when(files.findIntegrityFilesAfter(0L, Pageable.ofSize(500))).thenReturn(Collections.nCopies(500, boundary));
         when(files.findIntegrityFilesAfter(500L, Pageable.ofSize(500))).thenReturn(List.of(finalRecord));
         when(projects.findIntegrityProjectsAfter(0L, Pageable.ofSize(500))).thenReturn(List.of());
-        when(requirements.findIntegrityRequirementsAfter(0L, Pageable.ofSize(500))).thenReturn(List.of());
+        when(requirements.findIntegrityRequirementsAfter(0L, Pageable.ofSize(500)))
+                .thenReturn(List.of());
         when(subTasks.findIntegritySubTasksAfter(0L, Pageable.ofSize(500))).thenReturn(List.of());
 
         Map<String, Object> report = new DataIntegrityService(projects, subTasks, requirements, files).scan();

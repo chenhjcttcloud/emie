@@ -1,12 +1,18 @@
 package com.emie.designpm.project.service;
 
-import com.emie.designpm.notification.repository.NotificationRepository;
 import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.admin.service.UserService;
+import com.emie.designpm.designrequirement.service.DesignRequirementScoringService;
+import com.emie.designpm.entity.*;
 import com.emie.designpm.file.repository.FileRecordRepository;
+import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.materialmarket.repository.DesignerMarketEligibilityRepository;
+import com.emie.designpm.notification.repository.NotificationRepository;
+import com.emie.designpm.notification.service.NotificationWorkflowService;
 import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
 import com.emie.designpm.points.repository.PointAppealRepository;
 import com.emie.designpm.points.repository.PointLedgerRepository;
+import com.emie.designpm.points.service.PointsService;
 import com.emie.designpm.project.repository.ProjectRepository;
 import com.emie.designpm.project.repository.SubTaskDeliveryVersionRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
@@ -14,32 +20,14 @@ import com.emie.designpm.project.repository.TaskWithdrawalRepository;
 import com.emie.designpm.reference.repository.IpOptionRepository;
 import com.emie.designpm.reference.repository.ProductCategoryRepository;
 import com.emie.designpm.scoring.repository.ScoringRepository;
-import com.emie.designpm.admin.service.UserService;
-import com.emie.designpm.notification.service.NotificationWorkflowService;
-import com.emie.designpm.points.service.PointsService;
 import com.emie.designpm.sync.service.SyncQueueService;
-import com.emie.designpm.designrequirement.service.DesignRequirementScoringService;
-import com.emie.designpm.file.service.FileArchiveService;
-import com.emie.designpm.dto.ProjectListQuery;
-import com.emie.designpm.entity.*;
-import com.emie.designpm.util.SecurityUtil;
-import com.emie.designpm.util.ProjectAccessPolicy;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.stereotype.Service;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.transaction.annotation.Transactional;
+import java.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeParseException;
-import java.util.*;
-import java.util.stream.Collectors;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional
@@ -72,17 +60,19 @@ public class DefaultProjectLifecycleCommandService implements ProjectLifecycleCo
     private DesignRequirementScoringService designRequirementScoringService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public DefaultProjectLifecycleCommandService(ProjectRepository projectRepository,
-                          SubTaskRepository subTaskRepository,
-                          ScoringRepository scoringRepository,
-                          SubTaskDeliveryVersionRepository deliveryVersionRepository,
-                          UserService userService,
-                          ProductCategoryRepository productCategoryRepository,
-                          IpOptionRepository ipOptionRepository,
-                          SystemConfigRepository systemConfigRepository,
-                          SyncQueueService syncQueueService,
-                          FileArchiveService fileArchiveService,
-                          ProjectAccessService projectAccessService, NotificationWorkflowService notificationWorkflowService) {
+    public DefaultProjectLifecycleCommandService(
+            ProjectRepository projectRepository,
+            SubTaskRepository subTaskRepository,
+            ScoringRepository scoringRepository,
+            SubTaskDeliveryVersionRepository deliveryVersionRepository,
+            UserService userService,
+            ProductCategoryRepository productCategoryRepository,
+            IpOptionRepository ipOptionRepository,
+            SystemConfigRepository systemConfigRepository,
+            SyncQueueService syncQueueService,
+            FileArchiveService fileArchiveService,
+            ProjectAccessService projectAccessService,
+            NotificationWorkflowService notificationWorkflowService) {
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
         this.scoringRepository = scoringRepository;
@@ -102,30 +92,59 @@ public class DefaultProjectLifecycleCommandService implements ProjectLifecycleCo
     void setPointsService(PointsService pointsService) {
         this.pointsService = pointsService;
     }
+
     @Autowired(required = false)
-    void setMarketEligibilityRepository(DesignerMarketEligibilityRepository repository) { this.marketEligibilityRepository = repository; }
+    void setMarketEligibilityRepository(DesignerMarketEligibilityRepository repository) {
+        this.marketEligibilityRepository = repository;
+    }
+
     @Autowired(required = false)
-    void setTaskWithdrawalRepository(TaskWithdrawalRepository repository) { this.taskWithdrawalRepository = repository; }
+    void setTaskWithdrawalRepository(TaskWithdrawalRepository repository) {
+        this.taskWithdrawalRepository = repository;
+    }
+
     @Autowired(required = false)
-    void setPointAdjustmentLedgerRepository(PointAdjustmentLedgerRepository repository) { this.pointAdjustmentLedgerRepository = repository; }
+    void setPointAdjustmentLedgerRepository(PointAdjustmentLedgerRepository repository) {
+        this.pointAdjustmentLedgerRepository = repository;
+    }
+
     @Autowired(required = false)
-    void setPointLedgerRepository(PointLedgerRepository repository) { this.pointLedgerRepository = repository; }
+    void setPointLedgerRepository(PointLedgerRepository repository) {
+        this.pointLedgerRepository = repository;
+    }
+
     @Autowired(required = false)
-    void setPointAppealRepository(PointAppealRepository repository) { this.pointAppealRepository = repository; }
+    void setPointAppealRepository(PointAppealRepository repository) {
+        this.pointAppealRepository = repository;
+    }
+
     @Autowired(required = false)
-    void setNotificationRepository(NotificationRepository repository) { this.notificationRepository = repository; }
+    void setNotificationRepository(NotificationRepository repository) {
+        this.notificationRepository = repository;
+    }
+
     @Autowired(required = false)
-    void setFileRecordRepository(FileRecordRepository repository) { this.fileRecordRepository = repository; }
+    void setFileRecordRepository(FileRecordRepository repository) {
+        this.fileRecordRepository = repository;
+    }
+
     @Autowired(required = false)
-    void setDesignRequirementScoringService(DesignRequirementScoringService service) { this.designRequirementScoringService = service; }
+    void setDesignRequirementScoringService(DesignRequirementScoringService service) {
+        this.designRequirementScoringService = service;
+    }
+
     @Autowired(required = false)
-    void setSubTaskAssignmentPolicy(SubTaskAssignmentPolicy policy) { this.subTaskAssignmentPolicy = policy; }
+    void setSubTaskAssignmentPolicy(SubTaskAssignmentPolicy policy) {
+        this.subTaskAssignmentPolicy = policy;
+    }
+
     @Autowired(required = false)
-    void setSubTaskInputPolicy(SubTaskInputPolicy policy) { this.subTaskInputPolicy = policy; }
+    void setSubTaskInputPolicy(SubTaskInputPolicy policy) {
+        this.subTaskInputPolicy = policy;
+    }
 
     private Project lockProject(Long projectId) {
-        return projectRepository.findByIdForUpdate(projectId)
-                .orElseThrow(() -> new RuntimeException("项目不存在"));
+        return projectRepository.findByIdForUpdate(projectId).orElseThrow(() -> new RuntimeException("项目不存在"));
     }
 
     /** All task workflow mutations must acquire locks in project -> subtask order. */
@@ -207,7 +226,8 @@ public class DefaultProjectLifecycleCommandService implements ProjectLifecycleCo
 
         // 恢复到暂停前的状态
         String prevStatus = p.getPrePauseStatus();
-        if (prevStatus != null && List.of("pending_planner", "planner_accepted", "in_progress").contains(prevStatus)) {
+        if (prevStatus != null
+                && List.of("pending_planner", "planner_accepted", "in_progress").contains(prevStatus)) {
             p.setStatus(prevStatus);
         } else {
             // 降级：根据是否有活动任务来判断
@@ -239,20 +259,29 @@ public class DefaultProjectLifecycleCommandService implements ProjectLifecycleCo
         }
 
         // 1) 关联调账记录（异议调账按 appealId、退单调账按 withdrawalId）
-        List<Long> withdrawalIds = taskWithdrawalRepository == null ? List.of()
-                : taskWithdrawalRepository.findBySubTaskIdIn(taskIds).stream().map(TaskWithdrawal::getId).toList();
-        List<Long> ledgerIds = pointLedgerRepository == null ? List.of()
-                : pointLedgerRepository.findBySubTaskIdIn(taskIds).stream().map(PointLedger::getId).toList();
-        List<Long> appealIds = (pointAppealRepository == null || ledgerIds.isEmpty()) ? List.of()
-                : pointAppealRepository.findByPointLedgerIdIn(ledgerIds).stream().map(PointAppeal::getId).toList();
-        if (pointAdjustmentLedgerRepository != null
-                && (!appealIds.isEmpty() || !withdrawalIds.isEmpty())) {
+        List<Long> withdrawalIds = taskWithdrawalRepository == null
+                ? List.of()
+                : taskWithdrawalRepository.findBySubTaskIdIn(taskIds).stream()
+                        .map(TaskWithdrawal::getId)
+                        .toList();
+        List<Long> ledgerIds = pointLedgerRepository == null
+                ? List.of()
+                : pointLedgerRepository.findBySubTaskIdIn(taskIds).stream()
+                        .map(PointLedger::getId)
+                        .toList();
+        List<Long> appealIds = (pointAppealRepository == null || ledgerIds.isEmpty())
+                ? List.of()
+                : pointAppealRepository.findByPointLedgerIdIn(ledgerIds).stream()
+                        .map(PointAppeal::getId)
+                        .toList();
+        if (pointAdjustmentLedgerRepository != null && (!appealIds.isEmpty() || !withdrawalIds.isEmpty())) {
             pointAdjustmentLedgerRepository.deleteProjectRelated(appealIds, withdrawalIds);
         }
         // 2) 退单记录（FK → sub_tasks，必须先删）
         if (taskWithdrawalRepository != null) taskWithdrawalRepository.deleteBySubTaskIds(taskIds);
         // 3) 积分异议（FK → point_ledgers，必须先删）
-        if (pointAppealRepository != null && !ledgerIds.isEmpty()) pointAppealRepository.deleteByPointLedgerIds(ledgerIds);
+        if (pointAppealRepository != null && !ledgerIds.isEmpty())
+            pointAppealRepository.deleteByPointLedgerIds(ledgerIds);
         // 4) 积分流水
         if (pointLedgerRepository != null) pointLedgerRepository.deleteBySubTaskIds(taskIds);
         // 5) 交付版本（FK → sub_tasks）

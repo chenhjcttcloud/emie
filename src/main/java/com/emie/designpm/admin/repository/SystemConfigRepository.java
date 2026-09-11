@@ -1,10 +1,9 @@
 package com.emie.designpm.admin.repository;
 
 import com.emie.designpm.entity.SystemConfig;
-import org.springframework.data.jpa.repository.JpaRepository;
-
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface SystemConfigRepository extends JpaRepository<SystemConfig, Long> {
 

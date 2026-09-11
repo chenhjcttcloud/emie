@@ -1,8 +1,8 @@
 package com.emie.designpm.util;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import org.junit.jupiter.api.Test;
 
 class TextEncodingUtilTest {
     @Test

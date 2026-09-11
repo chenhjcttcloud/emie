@@ -1,6 +1,9 @@
 package com.emie.designpm.config;
 
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
@@ -8,12 +11,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.UUID;
+import org.springframework.web.server.ResponseStatusException;
 
 /** 统一系统异常边界：记录完整堆栈，向客户端返回稳定且不泄露内部实现的错误结构。 */
 @RestControllerAdvice
@@ -21,15 +20,16 @@ public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, Object>> handleBadRequest(IllegalArgumentException ex, HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> handleBadRequest(
+            IllegalArgumentException ex, HttpServletRequest request) {
         String traceId = traceId();
         log.warn("请求参数不合法 traceId={} path={} detail={}", traceId, request.getRequestURI(), ex.getMessage());
         return response(HttpStatus.BAD_REQUEST, "请求参数不合法，请检查输入", null, traceId);
     }
 
     @ExceptionHandler(java.time.format.DateTimeParseException.class)
-    public ResponseEntity<Map<String, Object>> handleBadDateTime(java.time.format.DateTimeParseException ex,
-                                                                 HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> handleBadDateTime(
+            java.time.format.DateTimeParseException ex, HttpServletRequest request) {
         String traceId = traceId();
         log.warn("日期时间格式错误 traceId={} path={} detail={}", traceId, request.getRequestURI(), ex.getMessage());
         return response(HttpStatus.BAD_REQUEST, "日期或时间格式不正确，请检查输入", null, traceId);
@@ -49,8 +49,8 @@ public class GlobalExceptionHandler {
 
     /** Preserve deliberate HTTP status responses (for example, unauthenticated API calls). */
     @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<Map<String, Object>> handleResponseStatus(ResponseStatusException ex,
-                                                                     HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> handleResponseStatus(
+            ResponseStatusException ex, HttpServletRequest request) {
         String traceId = traceId();
         log.warn("请求返回状态码 traceId={} path={} status={}", traceId, request.getRequestURI(), ex.getStatusCode());
         String message = ex.getReason() == null || ex.getReason().isBlank() ? "请求无法完成" : ex.getReason();
@@ -64,7 +64,8 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.INTERNAL_SERVER_ERROR, "系统处理失败，请稍后重试", null, traceId);
     }
 
-    private ResponseEntity<Map<String, Object>> response(HttpStatus status, String error, String detail, String traceId) {
+    private ResponseEntity<Map<String, Object>> response(
+            HttpStatus status, String error, String detail, String traceId) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("error", error);
         if (detail != null && !detail.isBlank()) body.put("message", detail);

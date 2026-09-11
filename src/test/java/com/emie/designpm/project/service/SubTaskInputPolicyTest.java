@@ -1,27 +1,33 @@
 package com.emie.designpm.project.service;
 
-import com.emie.designpm.admin.service.UserService;
-import com.emie.designpm.entity.User;
-import org.junit.jupiter.api.Test;
-import java.util.List;
-import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+
+import com.emie.designpm.admin.service.UserService;
+import com.emie.designpm.entity.User;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
 
 class SubTaskInputPolicyTest {
     private final UserService users = mock(UserService.class);
     private final SubTaskInputPolicy policy = new SubTaskInputPolicy(users);
 
-    @Test void normalizesAndDeduplicatesSkillTags() {
+    @Test
+    void normalizesAndDeduplicatesSkillTags() {
         assertEquals("[\"ID\",\"视觉\"]", policy.skillTags(List.of(" ID ", "视觉", "ID")));
     }
 
-    @Test void rejectsInvalidMilestoneMonth() {
+    @Test
+    void rejectsInvalidMilestoneMonth() {
         assertThrows(RuntimeException.class, () -> policy.milestoneMonth("2026-13"));
     }
 
-    @Test void validatesCollaboratorAndNormalizesOutput() {
-        User user = new User(); user.setRole("designer"); user.setName("协作者");
+    @Test
+    void validatesCollaboratorAndNormalizesOutput() {
+        User user = new User();
+        user.setRole("designer");
+        user.setName("协作者");
         when(users.getUserByUserId("d-2")).thenReturn(user);
         String result = policy.collaboratorAllocations(List.of(Map.of("userId", "d-2", "ratio", 20)), "d-1");
         assertTrue(result.contains("\"userId\":\"d-2\""));

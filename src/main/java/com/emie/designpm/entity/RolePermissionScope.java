@@ -1,19 +1,21 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.time.LocalDateTime;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "role_permission_scopes",
-        uniqueConstraints = @UniqueConstraint(name = "uk_role_permission_scope",
-                columnNames = {"role_permission_id", "scope_type", "scope_value"}),
+@Table(
+        name = "role_permission_scopes",
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_role_permission_scope",
+                        columnNames = {"role_permission_id", "scope_type", "scope_value"}),
         indexes = @Index(name = "idx_role_permission_scope_assignment", columnList = "role_permission_id"))
 public class RolePermissionScope {
     @Id

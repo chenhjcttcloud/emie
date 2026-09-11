@@ -1,22 +1,23 @@
 package com.emie.designpm.project.service;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
 import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.admin.service.UserService;
+import com.emie.designpm.entity.Project;
+import com.emie.designpm.file.service.FileArchiveService;
+import com.emie.designpm.notification.service.NotificationWorkflowService;
 import com.emie.designpm.project.repository.ProjectRepository;
 import com.emie.designpm.project.repository.SubTaskDeliveryVersionRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
 import com.emie.designpm.reference.repository.IpOptionRepository;
 import com.emie.designpm.reference.repository.ProductCategoryRepository;
 import com.emie.designpm.scoring.repository.ScoringRepository;
-import com.emie.designpm.admin.service.UserService;
-import com.emie.designpm.notification.service.NotificationWorkflowService;
 import com.emie.designpm.sync.service.SyncQueueService;
-import com.emie.designpm.file.service.FileArchiveService;
-import com.emie.designpm.entity.Project;
-import org.junit.jupiter.api.Test;
 import java.util.Map;
 import java.util.Optional;
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.Test;
 
 class ProjectLifecycleCommandServiceTest {
     @Test
@@ -27,11 +28,17 @@ class ProjectLifecycleCommandServiceTest {
         when(projects.findByIdForUpdate(9L)).thenReturn(Optional.of(project));
         when(projects.save(project)).thenReturn(project);
         DefaultProjectLifecycleCommandService service = new DefaultProjectLifecycleCommandService(
-                projects, mock(SubTaskRepository.class), mock(ScoringRepository.class),
-                mock(SubTaskDeliveryVersionRepository.class), mock(UserService.class),
-                mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
-                mock(SystemConfigRepository.class), mock(SyncQueueService.class),
-                mock(FileArchiveService.class), mock(ProjectAccessService.class),
+                projects,
+                mock(SubTaskRepository.class),
+                mock(ScoringRepository.class),
+                mock(SubTaskDeliveryVersionRepository.class),
+                mock(UserService.class),
+                mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class),
+                mock(SystemConfigRepository.class),
+                mock(SyncQueueService.class),
+                mock(FileArchiveService.class),
+                mock(ProjectAccessService.class),
                 mock(NotificationWorkflowService.class));
 
         Project result = service.pauseProject(9L, Map.of("currentUser", "测试用户", "currentRole", "planner"));
@@ -44,17 +51,23 @@ class ProjectLifecycleCommandServiceTest {
     @Test
     void resumeRejectsNonPausedProject() {
         ProjectRepository projects = mock(ProjectRepository.class);
-        Project project = new Project(); project.setStatus("in_progress");
+        Project project = new Project();
+        project.setStatus("in_progress");
         when(projects.findByIdForUpdate(9L)).thenReturn(Optional.of(project));
         DefaultProjectLifecycleCommandService service = new DefaultProjectLifecycleCommandService(
-                projects, mock(SubTaskRepository.class), mock(ScoringRepository.class),
-                mock(SubTaskDeliveryVersionRepository.class), mock(UserService.class),
-                mock(ProductCategoryRepository.class), mock(IpOptionRepository.class),
-                mock(SystemConfigRepository.class), mock(SyncQueueService.class),
-                mock(FileArchiveService.class), mock(ProjectAccessService.class),
+                projects,
+                mock(SubTaskRepository.class),
+                mock(ScoringRepository.class),
+                mock(SubTaskDeliveryVersionRepository.class),
+                mock(UserService.class),
+                mock(ProductCategoryRepository.class),
+                mock(IpOptionRepository.class),
+                mock(SystemConfigRepository.class),
+                mock(SyncQueueService.class),
+                mock(FileArchiveService.class),
+                mock(ProjectAccessService.class),
                 mock(NotificationWorkflowService.class));
-        RuntimeException error = assertThrows(RuntimeException.class,
-                () -> service.resumeProject(9L, Map.of()));
+        RuntimeException error = assertThrows(RuntimeException.class, () -> service.resumeProject(9L, Map.of()));
         assertEquals("只有暂停中的项目可以继续", error.getMessage());
     }
 }

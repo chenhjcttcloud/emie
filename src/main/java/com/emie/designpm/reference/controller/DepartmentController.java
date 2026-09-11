@@ -1,18 +1,17 @@
 package com.emie.designpm.reference.controller;
 
+import com.emie.designpm.admin.service.UserService;
 import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.Department;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.reference.repository.DepartmentRepository;
-import com.emie.designpm.admin.service.UserService;
 import com.emie.designpm.util.SecurityUtil;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/departments")
@@ -21,8 +20,7 @@ public class DepartmentController {
     private final DepartmentRepository departmentRepository;
     private final UserService userService;
 
-    public DepartmentController(DepartmentRepository departmentRepository,
-                                UserService userService) {
+    public DepartmentController(DepartmentRepository departmentRepository, UserService userService) {
         this.departmentRepository = departmentRepository;
         this.userService = userService;
     }
@@ -60,9 +58,11 @@ public class DepartmentController {
     /** 更新部门 */
     @PutMapping("/{id}")
     @Transactional
-    public ResponseEntity<Department> update(@PathVariable Long id, @RequestBody Department dept, HttpServletRequest request) {
+    public ResponseEntity<Department> update(
+            @PathVariable Long id, @RequestBody Department dept, HttpServletRequest request) {
         if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
-        return departmentRepository.findById(id)
+        return departmentRepository
+                .findById(id)
                 .map(existing -> {
                     if (!isValidHeadRole(dept.getRole(), dept.getHeadUserId())) {
                         return ResponseEntity.badRequest().<Department>build();

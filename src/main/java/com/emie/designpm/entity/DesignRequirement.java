@@ -1,22 +1,23 @@
 package com.emie.designpm.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
 
 /** 独立的设计需求项目，不与渠道定制单、公司常规品共用 projects 表。 */
 @Data
 @NoArgsConstructor
 @Entity
-@Table(name = "design_requirements", indexes = {
-        @Index(name = "idx_design_requirement_status", columnList = "status"),
-        @Index(name = "idx_design_requirement_owner", columnList = "ownerId"),
-        @Index(name = "idx_design_requirement_planner", columnList = "plannerId"),
-        @Index(name = "idx_design_requirement_designer", columnList = "designerId"),
-        @Index(name = "idx_design_requirement_created", columnList = "createdAt")
-})
+@Table(
+        name = "design_requirements",
+        indexes = {
+            @Index(name = "idx_design_requirement_status", columnList = "status"),
+            @Index(name = "idx_design_requirement_owner", columnList = "ownerId"),
+            @Index(name = "idx_design_requirement_planner", columnList = "plannerId"),
+            @Index(name = "idx_design_requirement_designer", columnList = "designerId"),
+            @Index(name = "idx_design_requirement_created", columnList = "createdAt")
+        })
 public class DesignRequirement {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -45,10 +46,13 @@ public class DesignRequirement {
 
     @Column(length = 120)
     private String feishuChatId;
+
     @Column(length = 30)
     private String feishuChatStatus = "not_created";
+
     @Column(columnDefinition = "TEXT")
     private String feishuChatError;
+
     private LocalDateTime feishuChatCreatedAt;
     private LocalDateTime feishuChatDissolvedAt;
 
@@ -74,8 +78,10 @@ public class DesignRequirement {
     private String deliveryReferenceImagesJson;
 
     private LocalDateTime deliveredAt;
+
     @Column(columnDefinition = "TEXT")
     private String rejectionComments;
+
     private String rejectionDeadline;
 
     @Column(nullable = false)
@@ -92,5 +98,7 @@ public class DesignRequirement {
     }
 
     @PreUpdate
-    protected void onUpdate() { updatedAt = LocalDateTime.now(); }
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }

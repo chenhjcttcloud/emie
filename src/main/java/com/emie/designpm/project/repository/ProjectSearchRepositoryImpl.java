@@ -1,8 +1,8 @@
 package com.emie.designpm.project.repository;
 
 import com.emie.designpm.dto.ProjectListQuery;
-import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.ProductCategory;
+import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.SubTask;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -13,11 +13,10 @@ import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 
 /** Criteria API 实现，确保内容查询和 count 查询使用相同的权限与筛选条件。 */
 public class ProjectSearchRepositoryImpl implements ProjectSearchRepository {
@@ -35,7 +34,9 @@ public class ProjectSearchRepositoryImpl implements ProjectSearchRepository {
         CriteriaQuery<Project> contentQuery = cb.createQuery(Project.class);
         Root<Project> project = contentQuery.from(Project.class);
         project.fetch("productCategory", JoinType.LEFT);
-        contentQuery.select(project).distinct(true)
+        contentQuery
+                .select(project)
+                .distinct(true)
                 .where(predicates(cb, project, query, viewerRole, visibleUserIds))
                 .orderBy(cb.desc(project.get("createdAt")), cb.desc(project.get("id")));
         TypedQuery<Project> typedQuery = entityManager.createQuery(contentQuery);
@@ -45,7 +46,8 @@ public class ProjectSearchRepositoryImpl implements ProjectSearchRepository {
 
         CriteriaQuery<Long> countQuery = cb.createQuery(Long.class);
         Root<Project> countProject = countQuery.from(Project.class);
-        countQuery.select(cb.countDistinct(countProject.get("id")))
+        countQuery
+                .select(cb.countDistinct(countProject.get("id")))
                 .where(predicates(cb, countProject, query, viewerRole, visibleUserIds));
         long total = entityManager.createQuery(countQuery).getSingleResult();
         return new PageImpl<>(content, query.pageable(), total);
@@ -57,7 +59,8 @@ public class ProjectSearchRepositoryImpl implements ProjectSearchRepository {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Long> countQuery = cb.createQuery(Long.class);
         Root<Project> project = countQuery.from(Project.class);
-        countQuery.select(cb.countDistinct(project.get("id")))
+        countQuery
+                .select(cb.countDistinct(project.get("id")))
                 .where(predicates(cb, project, query, viewerRole, visibleUserIds));
         return entityManager.createQuery(countQuery).getSingleResult();
     }
@@ -68,13 +71,18 @@ public class ProjectSearchRepositoryImpl implements ProjectSearchRepository {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Long> idsQuery = cb.createQuery(Long.class);
         Root<Project> project = idsQuery.from(Project.class);
-        idsQuery.select(project.get("id")).distinct(true)
+        idsQuery.select(project.get("id"))
+                .distinct(true)
                 .where(predicates(cb, project, query, viewerRole, visibleUserIds));
         return entityManager.createQuery(idsQuery).getResultList();
     }
 
-    private Predicate[] predicates(CriteriaBuilder cb, Root<Project> project, ProjectListQuery query,
-                                   String viewerRole, List<String> visibleUserIds) {
+    private Predicate[] predicates(
+            CriteriaBuilder cb,
+            Root<Project> project,
+            ProjectListQuery query,
+            String viewerRole,
+            List<String> visibleUserIds) {
         List<Predicate> predicates = new ArrayList<>();
         addAccessPredicate(cb, project, predicates, query, viewerRole, visibleUserIds);
 
@@ -93,45 +101,65 @@ public class ProjectSearchRepositoryImpl implements ProjectSearchRepository {
         if (query.market() != null) {
             predicates.add(cb.like(cb.lower(project.get("targetMarket")), contains(query.market())));
         }
-        if (query.deadlineStart() != null) predicates.add(cb.greaterThanOrEqualTo(project.get("deadline"), query.deadlineStart()));
-        if (query.deadlineEnd() != null) predicates.add(cb.lessThanOrEqualTo(project.get("deadline"), query.deadlineEnd()));
+        if (query.deadlineStart() != null)
+            predicates.add(cb.greaterThanOrEqualTo(project.get("deadline"), query.deadlineStart()));
+        if (query.deadlineEnd() != null)
+            predicates.add(cb.lessThanOrEqualTo(project.get("deadline"), query.deadlineEnd()));
         if (query.keyword() != null) addKeywordPredicate(cb, project, predicates, query.keyword());
         if (query.ownerRole() != null && query.ownerId() != null) {
-            predicates.add(cb.equal("sales".equals(query.ownerRole())
-                    ? project.get("salesId") : project.get("plannerId"), query.ownerId()));
+            predicates.add(cb.equal(
+                    "sales".equals(query.ownerRole()) ? project.get("salesId") : project.get("plannerId"),
+                    query.ownerId()));
         }
         return predicates.toArray(Predicate[]::new);
     }
 
-    private void addAccessPredicate(CriteriaBuilder cb, Root<Project> project, List<Predicate> predicates,
-                                    ProjectListQuery query, String viewerRole, List<String> userIds) {
+    private void addAccessPredicate(
+            CriteriaBuilder cb,
+            Root<Project> project,
+            List<Predicate> predicates,
+            ProjectListQuery query,
+            String viewerRole,
+            List<String> userIds) {
         if ("admin".equals(viewerRole)) return;
         switch (viewerRole) {
             case "sales" -> predicates.add(project.get("salesId").in(userIds));
             case "planner" -> predicates.add(cb.or(
                     project.get("plannerId").in(userIds),
-                    cb.and(cb.equal(project.get("type"), "channel_custom"),
+                    cb.and(
+                            cb.equal(project.get("type"), "channel_custom"),
                             cb.equal(project.get("status"), "pending_planner"),
                             cb.or(cb.isNull(project.get("plannerId")), cb.equal(project.get("plannerId"), "")))));
             default -> addAssigneePredicate(cb, project, predicates, query, viewerRole, userIds);
         }
     }
 
-    private void addAssigneePredicate(CriteriaBuilder cb, Root<Project> project, List<Predicate> predicates,
-                                      ProjectListQuery query, String role, List<String> userIds) {
+    private void addAssigneePredicate(
+            CriteriaBuilder cb,
+            Root<Project> project,
+            List<Predicate> predicates,
+            ProjectListQuery query,
+            String role,
+            List<String> userIds) {
         Join<Project, SubTask> task = project.join("tasks", JoinType.INNER);
         Predicate rolePredicate = "designer".equals(role)
-                ? cb.or(cb.equal(task.get("assigneeRole"), role), cb.isNull(task.get("assigneeRole")), cb.equal(task.get("assigneeRole"), ""))
+                ? cb.or(
+                        cb.equal(task.get("assigneeRole"), role),
+                        cb.isNull(task.get("assigneeRole")),
+                        cb.equal(task.get("assigneeRole"), ""))
                 : cb.equal(task.get("assigneeRole"), role);
         Predicate assignment = query.participating()
                 ? cb.and(task.get("designerId").in(userIds), cb.notEqual(task.get("status"), "pending"))
-                : cb.or(task.get("designerId").in(userIds),
-                        cb.and(cb.or(cb.isNull(task.get("designerId")), cb.equal(task.get("designerId"), "")),
+                : cb.or(
+                        task.get("designerId").in(userIds),
+                        cb.and(
+                                cb.or(cb.isNull(task.get("designerId")), cb.equal(task.get("designerId"), "")),
                                 cb.equal(task.get("status"), "pending")));
         predicates.add(cb.and(rolePredicate, assignment));
     }
 
-    private void addKeywordPredicate(CriteriaBuilder cb, Root<Project> project, List<Predicate> predicates, String keyword) {
+    private void addKeywordPredicate(
+            CriteriaBuilder cb, Root<Project> project, List<Predicate> predicates, String keyword) {
         String like = contains(keyword);
         List<Predicate> fields = new ArrayList<>(List.of(
                 cb.like(cb.lower(project.get("projectCode")), like),
@@ -152,6 +180,7 @@ public class ProjectSearchRepositoryImpl implements ProjectSearchRepository {
     }
 
     private String contains(String text) {
-        return "%" + text.toLowerCase().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+        return "%"
+                + text.toLowerCase().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
     }
 }

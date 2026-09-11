@@ -1,16 +1,14 @@
 package com.emie.designpm.sharing.controller;
 
 import com.emie.designpm.sharing.service.ShareLinkService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletResponse;
-
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.*;
 
 /**
  * 公开分享页面（无需登录）
@@ -28,9 +26,10 @@ public class PublicShareController {
     }
 
     @GetMapping(value = "/share/{token}", produces = MediaType.TEXT_HTML_VALUE + ";charset=UTF-8")
-    public String viewShare(@PathVariable String token,
-                            @RequestParam(value = "password", required = false) String password,
-                            HttpServletResponse response) {
+    public String viewShare(
+            @PathVariable String token,
+            @RequestParam(value = "password", required = false) String password,
+            HttpServletResponse response) {
         response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
         response.setHeader("Pragma", "no-cache");
         response.setHeader("Referrer-Policy", "no-referrer");
@@ -57,9 +56,8 @@ public class PublicShareController {
     }
 
     @PostMapping(value = "/share/{token}", produces = MediaType.TEXT_HTML_VALUE + ";charset=UTF-8")
-    public String viewShareWithPassword(@PathVariable String token,
-                                        @RequestParam("password") String password,
-                                        HttpServletResponse response) {
+    public String viewShareWithPassword(
+            @PathVariable String token, @RequestParam("password") String password, HttpServletResponse response) {
         return viewShare(token, password, response);
     }
 
@@ -68,7 +66,8 @@ public class PublicShareController {
     private String renderPasswordPage(String token, String errorMessage) {
         // 错误提示仅在存在时渲染（避免空错误块占位）；隐藏逻辑由 /js/share.js 事件委托处理。
         String errorHtml = errorMessage != null && !errorMessage.isBlank()
-                ? "<div class=\"error\" id=\"pwErr\">" + esc(errorMessage) + "</div>" : "";
+                ? "<div class=\"error\" id=\"pwErr\">" + esc(errorMessage) + "</div>"
+                : "";
         return """
             <!DOCTYPE html>
             <html lang="zh-CN">
@@ -92,7 +91,8 @@ public class PublicShareController {
             </div>
             </body>
             </html>
-            """.formatted(esc(token), errorHtml);
+            """
+                .formatted(esc(token), errorHtml);
     }
 
     private String renderSharePage(Map<String, Object> data) {
@@ -134,14 +134,17 @@ public class PublicShareController {
         if (tasks.isEmpty()) {
             taskRows = "<tr><td colspan='4' class='empty-row'>暂无子任务</td></tr>";
         } else {
-            taskRows = tasks.stream().map(t -> {
-                String name = safe(t, "name");
-                String tStatus = safe(t, "statusLabel");
-                String designer = safe(t, "designerName");
-                String planned = safe(t, "plannedDate");
-                return "<tr><td>" + esc(name) + "</td><td><span class=\"tag tag-" + esc(String.valueOf(t.getOrDefault("status", "")))
-                        + "\">" + esc(tStatus) + "</span></td><td>" + esc(designer) + "</td><td>" + esc(planned) + "</td></tr>";
-            }).collect(Collectors.joining());
+            taskRows = tasks.stream()
+                    .map(t -> {
+                        String name = safe(t, "name");
+                        String tStatus = safe(t, "statusLabel");
+                        String designer = safe(t, "designerName");
+                        String planned = safe(t, "plannedDate");
+                        return "<tr><td>" + esc(name) + "</td><td><span class=\"tag tag-"
+                                + esc(String.valueOf(t.getOrDefault("status", ""))) + "\">" + esc(tStatus)
+                                + "</span></td><td>" + esc(designer) + "</td><td>" + esc(planned) + "</td></tr>";
+                    })
+                    .collect(Collectors.joining());
         }
 
         return """
@@ -192,15 +195,24 @@ public class PublicShareController {
             <div class="footer">由 EMIE 产品管理系统生成 · 仅供查看，不可操作</div>
             </body>
             </html>
-            """.formatted(
-                    esc(title), esc(viewCount),
-                    esc(projectTitle != null && !projectTitle.isBlank() ? projectTitle : "项目详情"),
-                    esc(safe(data, "status")), esc(statusLabel), esc(createdAt.substring(0, Math.min(10, createdAt.length()))),
-                    esc(typeLabel), esc(deadline), esc(salesName), esc(plannerName),
-                    esc(productCategory), esc(ipName == null || ipName.isBlank() ? "无IP" : ipName), esc(priceRange),
-                    esc(productRequirements), esc(description),
-                    taskRows
-            );
+            """
+                .formatted(
+                        esc(title),
+                        esc(viewCount),
+                        esc(projectTitle != null && !projectTitle.isBlank() ? projectTitle : "项目详情"),
+                        esc(safe(data, "status")),
+                        esc(statusLabel),
+                        esc(createdAt.substring(0, Math.min(10, createdAt.length()))),
+                        esc(typeLabel),
+                        esc(deadline),
+                        esc(salesName),
+                        esc(plannerName),
+                        esc(productCategory),
+                        esc(ipName == null || ipName.isBlank() ? "无IP" : ipName),
+                        esc(priceRange),
+                        esc(productRequirements),
+                        esc(description),
+                        taskRows);
     }
 
     private String renderSubTaskPage(Map<String, Object> data) {
@@ -243,26 +255,28 @@ public class PublicShareController {
             <div class="footer">由 EMIE 产品管理系统生成 · 仅供查看，不可操作</div>
             </body>
             </html>
-            """.formatted(
-                    esc(name), esc(status), esc(statusLabel),
-                    esc(designerName), esc(plannedDate),
-                    esc(actualDate != null && !actualDate.isBlank() ? actualDate : "尚未完成"),
-                    esc(deliverables != null && !deliverables.isBlank() ? deliverables : "暂无交付成果")
-            );
+            """
+                .formatted(
+                        esc(name),
+                        esc(status),
+                        esc(statusLabel),
+                        esc(designerName),
+                        esc(plannedDate),
+                        esc(actualDate != null && !actualDate.isBlank() ? actualDate : "尚未完成"),
+                        esc(deliverables != null && !deliverables.isBlank() ? deliverables : "暂无交付成果"));
     }
 
     private String renderErrorPage(String message) {
-        return "<!DOCTYPE html>\n" +
-            "<html lang=\"zh-CN\">\n<head>\n<meta charset=\"UTF-8\">\n" +
-            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
-            "<title>分享链接 - EMIE</title>\n" +
-            "<link rel=\"stylesheet\" href=\"/css/share.css?v=1\">\n" +
-            "</head>\n<body class=\"centered\">\n" +
-            "<div class=\"err-card\">\n" +
-            "  <div class=\"err-emoji\">😕</div>\n" +
-            "  <h1>" + esc(message) + "</h1>\n" +
-            "  <p>请联系分享者获取最新的链接</p>\n" +
-            "</div>\n</body>\n</html>";
+        return "<!DOCTYPE html>\n" + "<html lang=\"zh-CN\">\n<head>\n<meta charset=\"UTF-8\">\n"
+                + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
+                + "<title>分享链接 - EMIE</title>\n"
+                + "<link rel=\"stylesheet\" href=\"/css/share.css?v=1\">\n"
+                + "</head>\n<body class=\"centered\">\n"
+                + "<div class=\"err-card\">\n"
+                + "  <div class=\"err-emoji\">😕</div>\n"
+                + "  <h1>"
+                + esc(message) + "</h1>\n" + "  <p>请联系分享者获取最新的链接</p>\n"
+                + "</div>\n</body>\n</html>";
     }
 
     private static String safe(Map<String, Object> map, String key) {

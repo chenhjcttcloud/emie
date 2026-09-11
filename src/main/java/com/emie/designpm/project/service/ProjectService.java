@@ -1,43 +1,42 @@
 package com.emie.designpm.project.service;
 
-import com.emie.designpm.notification.repository.NotificationRepository;
+import com.emie.designpm.admin.service.UserService;
+import com.emie.designpm.auth.AuthSession;
+import com.emie.designpm.dto.ProjectListQuery;
+import com.emie.designpm.entity.*;
 import com.emie.designpm.file.repository.FileRecordRepository;
+import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.materialmarket.repository.DesignerMarketEligibilityRepository;
+import com.emie.designpm.notification.repository.NotificationRepository;
+import com.emie.designpm.notification.service.NotificationWorkflowService;
 import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
 import com.emie.designpm.points.repository.PointAppealRepository;
 import com.emie.designpm.points.repository.PointLedgerRepository;
+import com.emie.designpm.points.service.PointsService;
 import com.emie.designpm.project.repository.ProjectRepository;
 import com.emie.designpm.project.repository.SubTaskDeliveryVersionRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
 import com.emie.designpm.project.repository.TaskWithdrawalRepository;
 import com.emie.designpm.reference.repository.IpOptionRepository;
 import com.emie.designpm.reference.repository.ProductCategoryRepository;
-import com.emie.designpm.admin.service.UserService;
-import com.emie.designpm.notification.service.NotificationWorkflowService;
-import com.emie.designpm.points.service.PointsService;
 import com.emie.designpm.sync.service.SyncQueueService;
-import com.emie.designpm.file.service.FileArchiveService;
-import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.dto.ProjectListQuery;
-import com.emie.designpm.entity.*;
-import com.emie.designpm.util.SecurityUtil;
 import com.emie.designpm.util.ProjectAccessPolicy;
+import com.emie.designpm.util.SecurityUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.stereotype.Service;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.transaction.annotation.Transactional;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional
@@ -69,17 +68,18 @@ public class ProjectService {
     private final ProjectNotifier notifier;
     private final ProjectScoringService projectScoringService;
 
-    public ProjectService(ProjectRepository projectRepository,
-                          SubTaskRepository subTaskRepository,
-                          SubTaskDeliveryVersionRepository deliveryVersionRepository,
-                          UserService userService,
-                          ProductCategoryRepository productCategoryRepository,
-                          IpOptionRepository ipOptionRepository,
-                          SyncQueueService syncQueueService,
-                          FileArchiveService fileArchiveService,
-                          ProjectAccessService projectAccessService,
-                          NotificationWorkflowService notificationWorkflowService,
-                          ProjectScoringService projectScoringService) {
+    public ProjectService(
+            ProjectRepository projectRepository,
+            SubTaskRepository subTaskRepository,
+            SubTaskDeliveryVersionRepository deliveryVersionRepository,
+            UserService userService,
+            ProductCategoryRepository productCategoryRepository,
+            IpOptionRepository ipOptionRepository,
+            SyncQueueService syncQueueService,
+            FileArchiveService fileArchiveService,
+            ProjectAccessService projectAccessService,
+            NotificationWorkflowService notificationWorkflowService,
+            ProjectScoringService projectScoringService) {
         this.projectRepository = projectRepository;
         this.subTaskRepository = subTaskRepository;
         this.deliveryVersionRepository = deliveryVersionRepository;
@@ -99,24 +99,51 @@ public class ProjectService {
     void setPointsService(PointsService pointsService) {
         this.pointsService = pointsService;
     }
+
     @Autowired(required = false)
-    void setMarketEligibilityRepository(DesignerMarketEligibilityRepository repository) { this.marketEligibilityRepository = repository; }
+    void setMarketEligibilityRepository(DesignerMarketEligibilityRepository repository) {
+        this.marketEligibilityRepository = repository;
+    }
+
     @Autowired(required = false)
-    void setTaskWithdrawalRepository(TaskWithdrawalRepository repository) { this.taskWithdrawalRepository = repository; }
+    void setTaskWithdrawalRepository(TaskWithdrawalRepository repository) {
+        this.taskWithdrawalRepository = repository;
+    }
+
     @Autowired(required = false)
-    void setPointAdjustmentLedgerRepository(PointAdjustmentLedgerRepository repository) { this.pointAdjustmentLedgerRepository = repository; }
+    void setPointAdjustmentLedgerRepository(PointAdjustmentLedgerRepository repository) {
+        this.pointAdjustmentLedgerRepository = repository;
+    }
+
     @Autowired(required = false)
-    void setPointLedgerRepository(PointLedgerRepository repository) { this.pointLedgerRepository = repository; }
+    void setPointLedgerRepository(PointLedgerRepository repository) {
+        this.pointLedgerRepository = repository;
+    }
+
     @Autowired(required = false)
-    void setPointAppealRepository(PointAppealRepository repository) { this.pointAppealRepository = repository; }
+    void setPointAppealRepository(PointAppealRepository repository) {
+        this.pointAppealRepository = repository;
+    }
+
     @Autowired(required = false)
-    void setNotificationRepository(NotificationRepository repository) { this.notificationRepository = repository; }
+    void setNotificationRepository(NotificationRepository repository) {
+        this.notificationRepository = repository;
+    }
+
     @Autowired(required = false)
-    void setFileRecordRepository(FileRecordRepository repository) { this.fileRecordRepository = repository; }
+    void setFileRecordRepository(FileRecordRepository repository) {
+        this.fileRecordRepository = repository;
+    }
+
     @Autowired(required = false)
-    void setSubTaskAssignmentPolicy(SubTaskAssignmentPolicy policy) { this.subTaskAssignmentPolicy = policy; }
+    void setSubTaskAssignmentPolicy(SubTaskAssignmentPolicy policy) {
+        this.subTaskAssignmentPolicy = policy;
+    }
+
     @Autowired(required = false)
-    void setSubTaskInputPolicy(SubTaskInputPolicy policy) { this.subTaskInputPolicy = policy; }
+    void setSubTaskInputPolicy(SubTaskInputPolicy policy) {
+        this.subTaskInputPolicy = policy;
+    }
 
     // ==================== Query ====================
 
@@ -144,7 +171,8 @@ public class ProjectService {
         return projectAccessService.findParticipatingProjectsLight(role, userId);
     }
 
-    public Page<Project> getProjectsPage(String role, String userId, String type, boolean participating, Pageable pageable) {
+    public Page<Project> getProjectsPage(
+            String role, String userId, String type, boolean participating, Pageable pageable) {
         return projectAccessService.findVisibleProjectsPage(role, userId, type, participating, pageable);
     }
 
@@ -200,11 +228,11 @@ public class ProjectService {
             int total = ((Number) row[1]).intValue();
             int done = ((Number) row[2]).intValue();
             int actionable = row.length > 3 ? ((Number) row[3]).intValue() : 0;
-            map.put(pid, new int[]{total, done, actionable});
+            map.put(pid, new int[] {total, done, actionable});
         }
         // 没有子任务的项目也补 0
         for (Project p : projects) {
-            map.putIfAbsent(p.getId(), new int[]{0, 0, 0});
+            map.putIfAbsent(p.getId(), new int[] {0, 0, 0});
         }
         return map;
     }
@@ -215,7 +243,8 @@ public class ProjectService {
     @Transactional(readOnly = true)
     public Map<Long, String> computeProjectStatusMap(List<Project> projects) {
         if (projects == null || projects.isEmpty()) return Collections.emptyMap();
-        List<Long> ids = projects.stream().map(Project::getId).filter(Objects::nonNull).toList();
+        List<Long> ids =
+                projects.stream().map(Project::getId).filter(Objects::nonNull).toList();
         if (ids.isEmpty()) return Collections.emptyMap();
         Map<Long, String> result = projectRepository.findAllWithTasksByIdIn(ids).stream()
                 .collect(Collectors.toMap(Project::getId, this::computeProjectStatus));
@@ -245,18 +274,18 @@ public class ProjectService {
             ObjectMapper mapper = new ObjectMapper();
             List<Map<String, Object>> files = mapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {});
             List<Map<String, Object>> cleaned = files.stream()
-                .filter(f -> {
-                    String name = (String) f.get("name");
-                    if (name == null) return false;
-                    return isImage ? SecurityUtil.isValidImageFile(name) : SecurityUtil.isValidAttachmentFile(name);
-                })
-                .filter(f -> {
-                    // 只保留有url引用的文件（已上传到服务端）
-                    String url = (String) f.get("url");
-                    return url != null && !url.isEmpty();
-                })
-                .limit(maxCount)
-                .collect(Collectors.toList());
+                    .filter(f -> {
+                        String name = (String) f.get("name");
+                        if (name == null) return false;
+                        return isImage ? SecurityUtil.isValidImageFile(name) : SecurityUtil.isValidAttachmentFile(name);
+                    })
+                    .filter(f -> {
+                        // 只保留有url引用的文件（已上传到服务端）
+                        String url = (String) f.get("url");
+                        return url != null && !url.isEmpty();
+                    })
+                    .limit(maxCount)
+                    .collect(Collectors.toList());
             return mapper.writeValueAsString(cleaned);
         } catch (Exception e) {
             return "[]";
@@ -282,7 +311,8 @@ public class ProjectService {
         String deadline = SecurityUtil.sanitizeText((String) body.get("deadline"), 20);
         String productRequirements = SecurityUtil.sanitizeText((String) body.get("productRequirements"), 2000);
         String description = SecurityUtil.sanitizeText((String) body.getOrDefault("description", ""), 2000);
-        boolean feishuChatEnabled = Boolean.parseBoolean(String.valueOf(body.getOrDefault("feishuChatEnabled", "false")));
+        boolean feishuChatEnabled =
+                Boolean.parseBoolean(String.valueOf(body.getOrDefault("feishuChatEnabled", "false")));
 
         if ("channel_custom".equals(type) && !List.of("sales", "admin").contains(currentRole)) {
             throw new RuntimeException("仅销售或管理员可创建渠道定制项目");
@@ -376,7 +406,8 @@ public class ProjectService {
         }
         String ipName = SecurityUtil.sanitizeText((String) body.get("ipName"), 100);
         if (ipName != null && !ipName.isBlank()) {
-            IpOption ipOption = ipOptionRepository.findByName(ipName.trim())
+            IpOption ipOption = ipOptionRepository
+                    .findByName(ipName.trim())
                     .filter(option -> Boolean.TRUE.equals(option.getActive()))
                     .orElseThrow(() -> new RuntimeException("请选择有效的IP"));
             p.setIpName(ipOption.getName());
@@ -388,8 +419,7 @@ public class ProjectService {
 
         // Log
         String currentUser = (String) body.getOrDefault("currentUser", "");
-        String logAction = "channel_custom".equals(type)
-                ? "销售提交渠道定制项目" : "产品企划新建常规品设计项目";
+        String logAction = "channel_custom".equals(type) ? "销售提交渠道定制项目" : "产品企划新建常规品设计项目";
         p.getLogs().add(new ActivityLog(logAction, currentUser, currentRole, p));
 
         Project saved = saveProjectWithUniqueCodeRetry(p);
@@ -397,7 +427,12 @@ public class ProjectService {
         fileArchiveService.bindFilesFromJson(attsJson, "project", saved.getId());
         // 批量历史导入不应向每位负责人逐条发送即时通知；导入本身仍保留操作日志与同步记录。
         if (!suppressNotifications) {
-            notifier.safeNotify("PROJECT_ASSIGNED", saved.getPlannerId(), "project", saved.getId(), currentUserId,
+            notifier.safeNotify(
+                    "PROJECT_ASSIGNED",
+                    saved.getPlannerId(),
+                    "project",
+                    saved.getId(),
+                    currentUserId,
                     notifier.context(saved, null, currentUser, ""));
         }
         return saved;
@@ -449,13 +484,11 @@ public class ProjectService {
 
     /** 编辑项目资料；项目类型和销售/企划归属在创建后不可通过本接口变更。 */
     public Project updateProjectInformation(Long projectId, Map<String, Object> body) {
-        Project p = projectRepository.findById(projectId)
-                .orElseThrow(() -> new RuntimeException("项目不存在"));
+        Project p = projectRepository.findById(projectId).orElseThrow(() -> new RuntimeException("项目不存在"));
 
         AuthSession session = new AuthSession(
-                (String) body.getOrDefault("currentUserId", ""),
-                (String) body.getOrDefault("currentRole", ""),
-                (String) body.getOrDefault("currentUser", ""));
+                (String) body.getOrDefault("currentUserId", ""), (String) body.getOrDefault("currentRole", ""), (String)
+                        body.getOrDefault("currentUser", ""));
         if (!ProjectAccessPolicy.canEditProjectInformation(p, session)) {
             throw new SecurityException("仅该项目的" + ("channel_custom".equals(p.getType()) ? "销售" : "产品企划") + "可编辑项目信息");
         }
@@ -477,7 +510,8 @@ public class ProjectService {
         if (categoryName == null || categoryName.isBlank()) {
             p.setProductCategory(null);
         } else {
-            p.setProductCategory(productCategoryRepository.findByName(categoryName.trim())
+            p.setProductCategory(productCategoryRepository
+                    .findByName(categoryName.trim())
                     .orElseThrow(() -> new RuntimeException("请选择有效的产品类目")));
         }
         p.setProductCategoryNote(SecurityUtil.sanitizeText((String) body.getOrDefault("productCategoryNote", ""), 500));
@@ -492,14 +526,16 @@ public class ProjectService {
             p.setIpName(null);
             p.setIpSubOptions(null);
         } else {
-            IpOption ipOption = ipOptionRepository.findByName(ipName.trim())
+            IpOption ipOption = ipOptionRepository
+                    .findByName(ipName.trim())
                     .filter(option -> Boolean.TRUE.equals(option.getActive()))
                     .orElseThrow(() -> new RuntimeException("请选择有效的IP"));
             p.setIpName(ipOption.getName());
             p.setIpSubOptions(validateIpSubOptions((String) body.get("ipSubOptions"), ipOption));
         }
 
-        String referenceImagesJson = validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true);
+        String referenceImagesJson =
+                validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true);
         String attachmentsJson = validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false);
         p.setReferenceImagesJson(referenceImagesJson);
         p.setAttachmentsJson(attachmentsJson);
@@ -509,8 +545,17 @@ public class ProjectService {
         }
 
         Map<String, Object> after = snapshotProject(p);
-        p.getLogs().add(new ActivityLog("编辑项目信息：" + p.getProductName(), session.name(), session.role(), p,
-                "project", p.getId(), AuditJson.toJson(before), AuditJson.toJson(after), AuditJson.changedFields(before, after)));
+        p.getLogs()
+                .add(new ActivityLog(
+                        "编辑项目信息：" + p.getProductName(),
+                        session.name(),
+                        session.role(),
+                        p,
+                        "project",
+                        p.getId(),
+                        AuditJson.toJson(before),
+                        AuditJson.toJson(after),
+                        AuditJson.changedFields(before, after)));
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(referenceImagesJson, "project", saved.getId());
         fileArchiveService.bindFilesFromJson(attachmentsJson, "project", saved.getId());
@@ -523,7 +568,11 @@ public class ProjectService {
         data.put("deadline", project.getDeadline());
         data.put("productRequirements", project.getProductRequirements());
         data.put("description", project.getDescription());
-        data.put("productCategory", project.getProductCategory() != null ? project.getProductCategory().getName() : null);
+        data.put(
+                "productCategory",
+                project.getProductCategory() != null
+                        ? project.getProductCategory().getName()
+                        : null);
         data.put("productCategoryNote", project.getProductCategoryNote());
         data.put("targetMarket", project.getTargetMarket());
         data.put("complianceItems", project.getComplianceItems());
@@ -544,8 +593,7 @@ public class ProjectService {
             throw new RuntimeException("仅企划或管理员可执行接单");
         }
         // 使用悲观锁锁定项目行，防止并发接单
-        Project p = projectRepository.findByIdForUpdate(projectId)
-                .orElseThrow(() -> new RuntimeException("项目不存在"));
+        Project p = projectRepository.findByIdForUpdate(projectId).orElseThrow(() -> new RuntimeException("项目不存在"));
 
         if (!List.of("draft", "pending_planner").contains(p.getStatus())) {
             throw new RuntimeException("当前项目状态不允许接单");
@@ -555,7 +603,9 @@ public class ProjectService {
         if ((p.getPlannerId() == null || p.getPlannerId().isBlank()) && userId != null && !userId.isBlank()) {
             p.setPlannerId(userId);
             p.setPlannerName(userService.getUserName(userId));
-        } else if (p.getPlannerId() != null && !p.getPlannerId().isBlank() && !p.getPlannerId().equals(userId)) {
+        } else if (p.getPlannerId() != null
+                && !p.getPlannerId().isBlank()
+                && !p.getPlannerId().equals(userId)) {
             // 已被其他企划接单
             throw new RuntimeException("该项目已被其他产品企划接单");
         }
@@ -569,8 +619,11 @@ public class ProjectService {
         List<String> configured;
         List<String> selected;
         try {
-            configured = objectMapper.readValue(Optional.ofNullable(ipOption.getSubOptionsJson()).orElse("[]"), new TypeReference<List<String>>() {});
-            selected = objectMapper.readValue(Optional.ofNullable(submittedJson).orElse("[]"), new TypeReference<List<String>>() {});
+            configured = objectMapper.readValue(
+                    Optional.ofNullable(ipOption.getSubOptionsJson()).orElse("[]"),
+                    new TypeReference<List<String>>() {});
+            selected = objectMapper.readValue(
+                    Optional.ofNullable(submittedJson).orElse("[]"), new TypeReference<List<String>>() {});
         } catch (Exception e) {
             throw new RuntimeException("二级IP选项格式无效");
         }
@@ -604,7 +657,9 @@ public class ProjectService {
     public Map<String, Object> getRoleStatus(String role, String viewerRole, String viewerUserId, String scope) {
         List<User> users = projectAccessService.visibleUsers(viewerRole, viewerUserId, role);
         if ("planner".equals(viewerRole) && "planner".equals(role) && "mine".equalsIgnoreCase(scope)) {
-            users = users.stream().filter(u -> Objects.equals(u.getUserId(), viewerUserId)).toList();
+            users = users.stream()
+                    .filter(u -> Objects.equals(u.getUserId(), viewerUserId))
+                    .toList();
         }
         Map<String, Object> result = new LinkedHashMap<>();
 
@@ -612,8 +667,8 @@ public class ProjectService {
             // 批量查询所有用户的子任务（一次 SQL 替代 N 次）
             List<String> userIds = users.stream().map(User::getUserId).collect(Collectors.toList());
             List<SubTask> allTasks = userIds.isEmpty() ? List.of() : subTaskRepository.findByDesignerIds(userIds);
-            Map<String, List<SubTask>> tasksByUser = allTasks.stream()
-                    .collect(Collectors.groupingBy(SubTask::getDesignerId));
+            Map<String, List<SubTask>> tasksByUser =
+                    allTasks.stream().collect(Collectors.groupingBy(SubTask::getDesignerId));
 
             for (User u : users) {
                 Map<String, Object> info = new LinkedHashMap<>();
@@ -628,17 +683,22 @@ public class ProjectService {
                         .filter(t -> List.of("accepted", "rejected").contains(t.getStatus()))
                         .collect(Collectors.toList());
                 List<SubTask> completedTasks = userTasks.stream()
-                        .filter(t -> List.of("approved", "completed", "sales_approved", "admin_approved").contains(t.getStatus()))
+                        .filter(t -> List.of("approved", "completed", "sales_approved", "admin_approved")
+                                .contains(t.getStatus()))
                         .collect(Collectors.toList());
 
-                info.put("activeTasks", activeTasks.stream().map(t -> {
-                    Map<String, Object> tm = new LinkedHashMap<>();
-                    tm.put("id", t.getId());
-                    tm.put("name", t.getName());
-                    tm.put("status", t.getStatus());
-                    tm.put("projectId", t.getProject().getId());
-                    return tm;
-                }).collect(Collectors.toList()));
+                info.put(
+                        "activeTasks",
+                        activeTasks.stream()
+                                .map(t -> {
+                                    Map<String, Object> tm = new LinkedHashMap<>();
+                                    tm.put("id", t.getId());
+                                    tm.put("name", t.getName());
+                                    tm.put("status", t.getStatus());
+                                    tm.put("projectId", t.getProject().getId());
+                                    return tm;
+                                })
+                                .collect(Collectors.toList()));
                 info.put("completedTasks", completedTasks.size());
                 info.put("busy", !activeTasks.isEmpty());
                 info.put("label", "designer".equals(role) ? "设计师" : ("promotion".equals(role) ? "产品推广" : "供应链"));
@@ -646,16 +706,23 @@ public class ProjectService {
             }
         } else if ("sales".equals(role) || "planner".equals(role)) {
             List<String> userIds = users.stream().map(User::getUserId).toList();
-            List<Project> allRoleProjects = userIds.isEmpty() ? List.of()
+            List<Project> allRoleProjects = userIds.isEmpty()
+                    ? List.of()
                     : ("sales".equals(role)
-                    ? projectRepository.findBySalesIdsLight(userIds)
-                    : projectRepository.findByPlannerIdsLight(userIds));
+                            ? projectRepository.findBySalesIdsLight(userIds)
+                            : projectRepository.findByPlannerIdsLight(userIds));
             Map<String, List<Project>> projectsByUser = allRoleProjects.stream()
-                    .collect(Collectors.groupingBy(p -> "sales".equals(role) ? p.getSalesId()
+                    .collect(Collectors.groupingBy(
+                            p -> "sales".equals(role)
+                                    ? p.getSalesId()
                                     : (p.getPlannerId() == null ? "" : p.getPlannerId()),
-                            LinkedHashMap::new, Collectors.toList()));
+                            LinkedHashMap::new,
+                            Collectors.toList()));
             List<Project> unassignedPlannerProjects = "planner".equals(role)
-                    ? allRoleProjects.stream().filter(p -> p.getPlannerId() == null || p.getPlannerId().isBlank()).toList()
+                    ? allRoleProjects.stream()
+                            .filter(p ->
+                                    p.getPlannerId() == null || p.getPlannerId().isBlank())
+                            .toList()
                     : List.of();
             for (User u : users) {
                 Map<String, Object> info = new LinkedHashMap<>();
@@ -666,31 +733,44 @@ public class ProjectService {
                 List<Project> projects = new ArrayList<>(projectsByUser.getOrDefault(u.getUserId(), List.of()));
                 if ("planner".equals(role)) projects.addAll(unassignedPlannerProjects);
                 List<Project> activeProjects = projects.stream()
-                        .filter(p -> !List.of("draft", "terminated", "completed").contains(p.getStatus()))
+                        .filter(p ->
+                                !List.of("draft", "terminated", "completed").contains(p.getStatus()))
                         .collect(Collectors.toList());
 
-                info.put("activeProjects", activeProjects.stream().map(p -> {
-                    Map<String, Object> pm = new LinkedHashMap<>();
-                    pm.put("id", p.getId());
-                    pm.put("projectCode", p.getProjectCode());
-                    pm.put("productName", p.getProductName());
-                    pm.put("status", p.getStatus());
-                    pm.put("type", p.getType());
-                    return pm;
-                }).collect(Collectors.toList()));
+                info.put(
+                        "activeProjects",
+                        activeProjects.stream()
+                                .map(p -> {
+                                    Map<String, Object> pm = new LinkedHashMap<>();
+                                    pm.put("id", p.getId());
+                                    pm.put("projectCode", p.getProjectCode());
+                                    pm.put("productName", p.getProductName());
+                                    pm.put("status", p.getStatus());
+                                    pm.put("type", p.getType());
+                                    return pm;
+                                })
+                                .collect(Collectors.toList()));
                 if ("planner".equals(role)) {
                     List<Map<String, Object>> activeTasks = activeProjects.stream()
                             .flatMap(p -> p.getTasks().stream()
-                                    .filter(t -> List.of("pending", "accepted", "rejected").contains(t.getStatus()))
+                                    .filter(t -> List.of("pending", "accepted", "rejected")
+                                            .contains(t.getStatus()))
                                     .map(t -> {
                                         Map<String, Object> tm = new LinkedHashMap<>();
-                                        tm.put("id", t.getId()); tm.put("name", t.getName()); tm.put("status", t.getStatus());
-                                        tm.put("projectId", p.getId()); return tm;
+                                        tm.put("id", t.getId());
+                                        tm.put("name", t.getName());
+                                        tm.put("status", t.getStatus());
+                                        tm.put("projectId", p.getId());
+                                        return tm;
                                     }))
                             .toList();
                     info.put("activeTasks", activeTasks);
                 }
-                info.put("completedProjects", projects.stream().filter(p -> "completed".equals(p.getStatus())).count());
+                info.put(
+                        "completedProjects",
+                        projects.stream()
+                                .filter(p -> "completed".equals(p.getStatus()))
+                                .count());
                 info.put("busy", !activeProjects.isEmpty());
                 info.put("label", "sales".equals(role) ? "销售" : "产品企划");
                 result.put(u.getUserId(), info);
@@ -709,17 +789,18 @@ public class ProjectService {
     public String computeProjectStatus(Project p) {
         String status = p.getStatus();
         if ("completed".equals(status)) return status;
-        if (List.of("draft", "pending_planner", "planner_accepted", "paused", "pending_terminate", "terminated").contains(status)) {
+        if (List.of("draft", "pending_planner", "planner_accepted", "paused", "pending_terminate", "terminated")
+                .contains(status)) {
             return status;
         }
         if (p.getTasks().isEmpty()) return status;
         boolean bulkStageDone = p.getTasks().stream().anyMatch(t -> "bulk".equals(t.getWorkflowStage()))
                 && p.getTasks().stream()
-                .filter(t -> "bulk".equals(t.getWorkflowStage()))
-                .allMatch(t -> "completed".equals(t.getStatus()));
+                        .filter(t -> "bulk".equals(t.getWorkflowStage()))
+                        .allMatch(t -> "completed".equals(t.getStatus()));
         // 所有子任务是否都已通过验收（兼容旧 approved 和新 completed 状态）
-        boolean allApproved = p.getTasks().stream().allMatch(t ->
-            "completed".equals(t.getStatus()) || "approved".equals(t.getStatus()));
+        boolean allApproved = p.getTasks().stream()
+                .allMatch(t -> "completed".equals(t.getStatus()) || "approved".equals(t.getStatus()));
         if (!allApproved || !bulkStageDone) return "in_progress";
         // 所有子任务已通过 → 检查评分是否全部完成
         boolean allScored = p.getTasks().stream().allMatch(t -> isTaskFullyCompleted(t));
@@ -729,16 +810,17 @@ public class ProjectService {
     public static String computeProjectStatusStatic(Project p) {
         String status = p.getStatus();
         if ("completed".equals(status)) return status;
-        if (List.of("draft", "pending_planner", "planner_accepted", "paused", "pending_terminate", "terminated").contains(status)) {
+        if (List.of("draft", "pending_planner", "planner_accepted", "paused", "pending_terminate", "terminated")
+                .contains(status)) {
             return status;
         }
         if (p.getTasks().isEmpty()) return status;
         boolean bulkStageDone = p.getTasks().stream().anyMatch(t -> "bulk".equals(t.getWorkflowStage()))
                 && p.getTasks().stream()
-                .filter(t -> "bulk".equals(t.getWorkflowStage()))
-                .allMatch(t -> "completed".equals(t.getStatus()));
-        boolean allApproved = p.getTasks().stream().allMatch(t ->
-            "completed".equals(t.getStatus()) || "approved".equals(t.getStatus()));
+                        .filter(t -> "bulk".equals(t.getWorkflowStage()))
+                        .allMatch(t -> "completed".equals(t.getStatus()));
+        boolean allApproved = p.getTasks().stream()
+                .allMatch(t -> "completed".equals(t.getStatus()) || "approved".equals(t.getStatus()));
         return allApproved && bulkStageDone ? "completed" : "in_progress";
     }
 
