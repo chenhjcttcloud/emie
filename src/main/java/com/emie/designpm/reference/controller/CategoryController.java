@@ -2,11 +2,11 @@ package com.emie.designpm.reference.controller;
 
 import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.ProductCategory;
+import com.emie.designpm.reference.dto.CategoryUpsertRequest;
 import com.emie.designpm.reference.repository.ProductCategoryRepository;
 import com.emie.designpm.util.SecurityUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
-import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -35,41 +35,38 @@ public class CategoryController {
 
     /** 新增类目 */
     @PostMapping
-    public ResponseEntity<ProductCategory> create(@RequestBody Map<String, String> body, HttpServletRequest request) {
+    public ResponseEntity<ProductCategory> create(@RequestBody CategoryUpsertRequest body, HttpServletRequest request) {
         if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
-        String name = body.get("name");
+        String name = body.name();
         if (name == null || name.isBlank()) {
             return ResponseEntity.badRequest().build();
         }
-        int sortOrder = 0;
-        if (body.containsKey("sortOrder")) {
-            try {
-                sortOrder = Integer.parseInt(body.get("sortOrder"));
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        ProductCategory cat = new ProductCategory(SecurityUtil.sanitizeText(name.trim(), 50), sortOrder);
+        ProductCategory cat = new ProductCategory(SecurityUtil.sanitizeText(name.trim(), 50), parseSortOrder(body, 0));
         return ResponseEntity.ok(repo.save(cat));
     }
 
     /** 更新类目 */
     @PutMapping("/{id}")
     public ResponseEntity<ProductCategory> update(
-            @PathVariable Long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
+            @PathVariable Long id, @RequestBody CategoryUpsertRequest body, HttpServletRequest request) {
         if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         ProductCategory cat = repo.findById(id).orElse(null);
         if (cat == null) return ResponseEntity.notFound().build();
 
-        if (body.containsKey("name") && body.get("name") != null)
-            cat.setName(SecurityUtil.sanitizeText(body.get("name").trim(), 50));
-        if (body.containsKey("sortOrder")) {
-            try {
-                cat.setSortOrder(Integer.parseInt(body.get("sortOrder")));
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        if (body.containsKey("active")) cat.setActive("true".equals(body.get("active")));
+        if (body.name() != null)
+            cat.setName(SecurityUtil.sanitizeText(body.name().trim(), 50));
+        if (body.sortOrder() != null) cat.setSortOrder(parseSortOrder(body, cat.getSortOrder()));
+        if (body.active() != null) cat.setActive("true".equals(body.active()));
         return ResponseEntity.ok(repo.save(cat));
+    }
+
+    private static int parseSortOrder(CategoryUpsertRequest body, int fallback) {
+        if (body.sortOrder() == null) return fallback;
+        try {
+            return Integer.parseInt(body.sortOrder());
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
     }
 
     /** 删除类目 */

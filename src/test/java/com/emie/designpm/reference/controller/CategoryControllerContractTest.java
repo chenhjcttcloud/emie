@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.ProductCategory;
+import com.emie.designpm.reference.dto.CategoryUpsertRequest;
 import com.emie.designpm.reference.repository.ProductCategoryRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,6 +45,18 @@ class CategoryControllerContractTest {
     }
 
     @Test
+    void requestDtoAcceptsTheActualWireFormatsTheFrontendSends() throws Exception {
+        CategoryUpsertRequest createBody =
+                json.readValue("{\"name\":\"箱包\",\"sortOrder\":3}", CategoryUpsertRequest.class);
+        assertEquals("3", createBody.sortOrder());
+
+        CategoryUpsertRequest updateBody =
+                json.readValue("{\"sortOrder\":9,\"active\":\"false\"}", CategoryUpsertRequest.class);
+        assertEquals("9", updateBody.sortOrder());
+        assertEquals("false", updateBody.active());
+    }
+
+    @Test
     void listActiveReturnsRepositoryResultUnfiltered() {
         ProductCategory active = new ProductCategory("家具", 1);
         when(repo.findByActiveTrueOrderBySortOrderAsc()).thenReturn(List.of(active));
@@ -63,7 +76,7 @@ class CategoryControllerContractTest {
 
     @Test
     void createRejectsNonAdmin() {
-        var response = controller.create(Map.of("name", "新类目"), request("planner"));
+        var response = controller.create(new CategoryUpsertRequest("新类目", null, null), request("planner"));
 
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         verify(repo, never()).save(any());
@@ -71,7 +84,7 @@ class CategoryControllerContractTest {
 
     @Test
     void createRejectsBlankName() {
-        var response = controller.create(Map.of("name", "   "), request("admin"));
+        var response = controller.create(new CategoryUpsertRequest("   ", null, null), request("admin"));
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         verify(repo, never()).save(any());
@@ -81,12 +94,12 @@ class CategoryControllerContractTest {
     void createDefaultsSortOrderToZeroWhenAbsentOrUnparsable() {
         when(repo.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = controller.create(Map.of("name", "文具"), request("admin"));
+        var response = controller.create(new CategoryUpsertRequest("文具", null, null), request("admin"));
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(0, response.getBody().getSortOrder());
 
-        response = controller.create(Map.of("name", "文具二", "sortOrder", "not-a-number"), request("admin"));
+        response = controller.create(new CategoryUpsertRequest("文具二", "not-a-number", null), request("admin"));
         assertEquals(0, response.getBody().getSortOrder());
     }
 
@@ -94,7 +107,7 @@ class CategoryControllerContractTest {
     void createSanitizesAndTrimsName() {
         when(repo.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = controller.create(Map.of("name", "  <b>饰品</b>  ", "sortOrder", "5"), request("admin"));
+        var response = controller.create(new CategoryUpsertRequest("  <b>饰品</b>  ", "5", null), request("admin"));
 
         assertEquals("饰品", response.getBody().getName());
         assertEquals(5, response.getBody().getSortOrder());
@@ -104,7 +117,7 @@ class CategoryControllerContractTest {
     void updateReturnsNotFoundForMissingId() {
         when(repo.findById(404L)).thenReturn(Optional.empty());
 
-        var response = controller.update(404L, Map.of("name", "x"), request("admin"));
+        var response = controller.update(404L, new CategoryUpsertRequest("x", null, null), request("admin"));
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
     }
@@ -116,7 +129,7 @@ class CategoryControllerContractTest {
         when(repo.findById(1L)).thenReturn(Optional.of(existing));
         when(repo.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = controller.update(1L, Map.of("active", "false"), request("admin"));
+        var response = controller.update(1L, new CategoryUpsertRequest(null, null, "false"), request("admin"));
 
         assertEquals("原名", response.getBody().getName());
         assertEquals(1, response.getBody().getSortOrder());
