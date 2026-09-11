@@ -2,6 +2,7 @@ package com.emie.designpm.reference.controller;
 
 import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.entity.IpOption;
+import com.emie.designpm.reference.dto.IpOptionUpsertRequest;
 import com.emie.designpm.reference.repository.IpOptionRepository;
 import com.emie.designpm.util.SecurityUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,15 +38,15 @@ public class IpOptionController {
     }
 
     @PostMapping
-    public ResponseEntity<?> create(@RequestBody Map<String, String> body, HttpServletRequest request) {
+    public ResponseEntity<?> create(@RequestBody IpOptionUpsertRequest body, HttpServletRequest request) {
         if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
-        String name = normalizeName(body.get("name"));
+        String name = normalizeName(body.name());
         if (name == null) return ResponseEntity.badRequest().body(Map.of("error", "请输入IP名称"));
         if (repository.findByName(name).isPresent()) {
             return ResponseEntity.badRequest().body(Map.of("error", "IP名称已存在"));
         }
         try {
-            IpOption item = new IpOption(name, parseSortOrder(body.get("sortOrder")));
+            IpOption item = new IpOption(name, parseSortOrder(body.sortOrder()));
             applySubOptions(item, body);
             return ResponseEntity.ok(repository.save(item));
         } catch (DataIntegrityViolationException e) {
@@ -55,12 +56,12 @@ public class IpOptionController {
 
     @PutMapping("/{id}")
     public ResponseEntity<?> update(
-            @PathVariable Long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
+            @PathVariable Long id, @RequestBody IpOptionUpsertRequest body, HttpServletRequest request) {
         if (!AuthSessions.isAdmin(request)) return ResponseEntity.status(403).build();
         IpOption item = repository.findById(id).orElse(null);
         if (item == null) return ResponseEntity.notFound().build();
-        if (body.containsKey("name")) {
-            String name = normalizeName(body.get("name"));
+        if (body.name() != null) {
+            String name = normalizeName(body.name());
             if (name == null) return ResponseEntity.badRequest().body(Map.of("error", "请输入IP名称"));
             if (repository
                     .findByName(name)
@@ -70,9 +71,9 @@ public class IpOptionController {
             }
             item.setName(name);
         }
-        if (body.containsKey("sortOrder")) item.setSortOrder(parseSortOrder(body.get("sortOrder")));
-        if (body.containsKey("active")) item.setActive(Boolean.parseBoolean(body.get("active")));
-        if (body.containsKey("subOptions") || body.containsKey("subOptionSelectionMode")) applySubOptions(item, body);
+        if (body.sortOrder() != null) item.setSortOrder(parseSortOrder(body.sortOrder()));
+        if (body.active() != null) item.setActive(Boolean.parseBoolean(body.active()));
+        if (body.subOptions() != null || body.subOptionSelectionMode() != null) applySubOptions(item, body);
         try {
             return ResponseEntity.ok(repository.save(item));
         } catch (DataIntegrityViolationException e) {
@@ -103,9 +104,9 @@ public class IpOptionController {
         }
     }
 
-    private static void applySubOptions(IpOption item, Map<String, String> body) {
-        List<String> subOptions = normalizeSubOptions(body.get("subOptions"));
-        String mode = "single".equals(body.get("subOptionSelectionMode")) ? "single" : "multiple";
+    private static void applySubOptions(IpOption item, IpOptionUpsertRequest body) {
+        List<String> subOptions = normalizeSubOptions(body.subOptions());
+        String mode = "single".equals(body.subOptionSelectionMode()) ? "single" : "multiple";
         try {
             item.setSubOptionsJson(JSON.writeValueAsString(subOptions));
             item.setSubOptionSelectionMode(mode);

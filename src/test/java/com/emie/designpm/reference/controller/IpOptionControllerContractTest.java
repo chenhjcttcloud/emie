@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.IpOption;
+import com.emie.designpm.reference.dto.IpOptionUpsertRequest;
 import com.emie.designpm.reference.repository.IpOptionRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -56,6 +57,19 @@ class IpOptionControllerContractTest {
                 serialized);
     }
 
+    /** 前端实际线上格式：sortOrder/active/subOptions 全部以字符串发送，见 admin-catalog.js saveIpOption。 */
+    @Test
+    void requestDtoAcceptsTheActualWireFormatsTheFrontendSends() throws Exception {
+        IpOptionUpsertRequest createBody = json.readValue(
+                "{\"name\":\"熊猫计划\",\"sortOrder\":\"3\",\"subOptions\":\"联名款\",\"subOptionSelectionMode\":\"single\"}",
+                IpOptionUpsertRequest.class);
+        assertEquals("3", createBody.sortOrder());
+        assertEquals("联名款", createBody.subOptions());
+
+        IpOptionUpsertRequest updateBody = json.readValue("{\"active\":\"false\"}", IpOptionUpsertRequest.class);
+        assertEquals("false", updateBody.active());
+    }
+
     @Test
     void listActiveReturnsRepositoryResultUnfiltered() {
         IpOption active = new IpOption("A", 1);
@@ -72,11 +86,12 @@ class IpOptionControllerContractTest {
 
     @Test
     void createRejectsNonAdminAndBlankName() {
-        var forbidden = controller.create(Map.of("name", "熊猫计划"), request("planner"));
+        var forbidden =
+                controller.create(new IpOptionUpsertRequest("熊猫计划", null, null, null, null), request("planner"));
         assertEquals(HttpStatus.FORBIDDEN, forbidden.getStatusCode());
         verify(repo, never()).save(any());
 
-        var blank = controller.create(Map.of("name", "  "), request("admin"));
+        var blank = controller.create(new IpOptionUpsertRequest("  ", null, null, null, null), request("admin"));
         assertEquals(HttpStatus.BAD_REQUEST, blank.getStatusCode());
         assertEquals(Map.of("error", "请输入IP名称"), blank.getBody());
     }
@@ -85,7 +100,7 @@ class IpOptionControllerContractTest {
     void createRejectsDuplicateNameAtApplicationLayer() {
         when(repo.findByName("已存在")).thenReturn(Optional.of(new IpOption("已存在", 0)));
 
-        var response = controller.create(Map.of("name", "已存在"), request("admin"));
+        var response = controller.create(new IpOptionUpsertRequest("已存在", null, null, null, null), request("admin"));
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals(Map.of("error", "IP名称已存在"), response.getBody());
@@ -97,7 +112,7 @@ class IpOptionControllerContractTest {
         when(repo.findByName("并发重名")).thenReturn(Optional.empty());
         when(repo.save(any())).thenThrow(new DataIntegrityViolationException("duplicate key"));
 
-        var response = controller.create(Map.of("name", "并发重名"), request("admin"));
+        var response = controller.create(new IpOptionUpsertRequest("并发重名", null, null, null, null), request("admin"));
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals(Map.of("error", "IP名称已存在"), response.getBody());
@@ -109,10 +124,7 @@ class IpOptionControllerContractTest {
         when(repo.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         var response = controller.create(
-                Map.of(
-                        "name", "熊猫计划",
-                        "subOptions", "联名款, 限定款\n联名款", // 逗号/换行分隔，重复项去重
-                        "subOptionSelectionMode", "single"),
+                new IpOptionUpsertRequest("熊猫计划", null, null, "联名款, 限定款\n联名款", "single"), // 逗号/换行分隔，重复项去重
                 request("admin"));
 
         IpOption saved = (IpOption) response.getBody();
@@ -126,7 +138,7 @@ class IpOptionControllerContractTest {
         when(repo.findByName(any())).thenReturn(Optional.empty());
         when(repo.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = controller.create(Map.of("name", "无二级选项"), request("admin"));
+        var response = controller.create(new IpOptionUpsertRequest("无二级选项", null, null, null, null), request("admin"));
 
         IpOption saved = (IpOption) response.getBody();
         assertEquals("multiple", saved.getSubOptionSelectionMode());
@@ -139,7 +151,9 @@ class IpOptionControllerContractTest {
 
         assertEquals(
                 HttpStatus.NOT_FOUND,
-                controller.update(404L, Map.of("name", "x"), request("admin")).getStatusCode());
+                controller
+                        .update(404L, new IpOptionUpsertRequest("x", null, null, null, null), request("admin"))
+                        .getStatusCode());
     }
 
     @Test
@@ -149,7 +163,8 @@ class IpOptionControllerContractTest {
         when(repo.findById(1L)).thenReturn(Optional.of(existing));
         when(repo.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = controller.update(1L, Map.of("active", "false"), request("admin"));
+        var response =
+                controller.update(1L, new IpOptionUpsertRequest(null, null, "false", null, null), request("admin"));
 
         IpOption saved = (IpOption) response.getBody();
         assertEquals("原名", saved.getName());
