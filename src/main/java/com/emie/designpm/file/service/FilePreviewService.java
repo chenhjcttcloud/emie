@@ -36,8 +36,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * 为 PDF、PPT 和 PPTX 提供统一预览文件。
- * PDF 直接返回原文件；演示文稿通过独立转换服务生成 PDF 并缓存在本地。
+ * 为 AI、PDF、PPT 和 PPTX 提供统一预览文件。
+ * PDF 兼容的 AI 和 PDF 直接返回原文件；演示文稿通过独立转换服务生成 PDF 并缓存在本地。
  */
 @Service
 public class FilePreviewService {
@@ -108,7 +108,7 @@ public class FilePreviewService {
 
     public boolean isPreviewable(String storedName) {
         String extension = extensionOf(storedName);
-        return "pdf".equals(extension) || "ppt".equals(extension) || "pptx".equals(extension);
+        return "ai".equals(extension) || "pdf".equals(extension) || "ppt".equals(extension) || "pptx".equals(extension);
     }
 
     public synchronized PreviewStatus preparePreview(String storedName, boolean retry) {
@@ -117,6 +117,15 @@ public class FilePreviewService {
         }
         if ("pdf".equals(extensionOf(storedName))) {
             return new PreviewStatus(READY, "PDF 可直接预览");
+        }
+        if ("ai".equals(extensionOf(storedName))) {
+            try {
+                return isUsablePdf(fileArchiveService.resolveFile(storedName))
+                        ? new PreviewStatus(READY, "AI 矢量预览已就绪")
+                        : new PreviewStatus(FAILED, "AI 文件未包含 PDF 兼容预览");
+            } catch (Exception e) {
+                return new PreviewStatus(FAILED, "AI 文件预览加载失败");
+            }
         }
 
         Path cached = previewCacheFile(storedName);
@@ -155,6 +164,10 @@ public class FilePreviewService {
         }
         if ("pdf".equals(extensionOf(storedName))) {
             return fileArchiveService.resolveFile(storedName);
+        }
+        if ("ai".equals(extensionOf(storedName))) {
+            Path source = fileArchiveService.resolveFile(storedName);
+            return isUsablePdf(source) ? source : null;
         }
         Path cached = previewCacheFile(storedName);
         if (isUsablePdf(cached)) {

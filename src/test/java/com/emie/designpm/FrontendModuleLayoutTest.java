@@ -141,6 +141,10 @@ class FrontendModuleLayoutTest {
         }
         String projectUploads = readResource("/static/js/project-uploads.js");
         assertTrue(
+                projectUploads.contains("new IntersectionObserver")
+                        && projectUploads.contains("protectedImageViewportObserver.observe(img)"),
+                "受保护缩略图应仅在接近视口时加载，避免图档库一次请求全部图片");
+        assertTrue(
                 projectUploads.contains("const originalBlob = payload.blob")
                         && projectUploads.contains("return { type: originalType, blob: originalBlob }"),
                 "快捷键复制 PNG 时应直接写入原图字节，保留原图 DPI");

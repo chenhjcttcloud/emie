@@ -657,7 +657,7 @@ function protectedFileUrl(url) {
 }
 
 function isPreviewableFile(fileName) {
-  return /\.(pdf|ppt|pptx)$/i.test(fileName || '');
+  return /\.(ai|pdf|ppt|pptx)$/i.test(fileName || '');
 }
 
 function isRasterImageFile(fileName) {

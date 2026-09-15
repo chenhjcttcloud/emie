@@ -295,25 +295,40 @@ document.addEventListener('error', function(e) {
 
 // 受保护图片不要让原生 img 直接请求接口（原生请求无法附加 X-Auth-Token）。
 // 统一先通过 fetch 取二进制，再把 blob URL 交给 img，兼容 Cookie 和旧 token 会话。
+function loadProtectedImage(img) {
+  if (img.dataset.authLoading === 'true' || img.dataset.authLoaded === 'true') return;
+  const source = img.dataset.authSrc;
+  if (!source) return;
+  img.dataset.authLoading = 'true';
+  const token = localStorage.getItem('design_pm_token');
+  const headers = token ? { 'X-Auth-Token': token } : {};
+  fetch(source, { headers, credentials: 'same-origin' })
+    .then(readImageBlob)
+    .then(blob => {
+      img.src = URL.createObjectURL(blob);
+      img.dataset.authLoaded = 'true';
+    })
+    .catch(() => {
+      img.dataset.authError = 'true';
+      if (img.dataset.fullSrc && img.src !== img.dataset.fullSrc) img.src = img.dataset.fullSrc;
+    })
+    .finally(() => { img.dataset.authLoading = 'false'; });
+}
+
+const protectedImageViewportObserver = 'IntersectionObserver' in window
+  ? new IntersectionObserver(entries => entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      protectedImageViewportObserver.unobserve(entry.target);
+      loadProtectedImage(entry.target);
+    }), { rootMargin: '300px' })
+  : null;
+
 function hydrateProtectedImages(root = document) {
   root.querySelectorAll?.('img[data-auth-src]').forEach(img => {
-    if (img.dataset.authLoading === 'true' || img.dataset.authLoaded === 'true') return;
-    const source = img.dataset.authSrc;
-    if (!source) return;
-    img.dataset.authLoading = 'true';
-    const token = localStorage.getItem('design_pm_token');
-    const headers = token ? { 'X-Auth-Token': token } : {};
-    fetch(source, { headers, credentials: 'same-origin' })
-      .then(readImageBlob)
-      .then(blob => {
-        img.src = URL.createObjectURL(blob);
-        img.dataset.authLoaded = 'true';
-      })
-      .catch(() => {
-        img.dataset.authError = 'true';
-        if (img.dataset.fullSrc && img.src !== img.dataset.fullSrc) img.src = img.dataset.fullSrc;
-      })
-      .finally(() => { img.dataset.authLoading = 'false'; });
+    if (img.dataset.authLoading === 'true' || img.dataset.authLoaded === 'true' || img.dataset.authObserved === 'true') return;
+    if (!protectedImageViewportObserver) return loadProtectedImage(img);
+    img.dataset.authObserved = 'true';
+    protectedImageViewportObserver.observe(img);
   });
 }
 

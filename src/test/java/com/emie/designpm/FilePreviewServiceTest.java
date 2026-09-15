@@ -53,6 +53,17 @@ class FilePreviewServiceTest {
     }
 
     @Test
+    void pdfCompatibleAiUsesOriginalVectorFile() throws Exception {
+        FileArchiveService archive = mock(FileArchiveService.class);
+        Path ai = Files.writeString(tempDir.resolve("artwork.ai"), "%PDF-1.7\n%%EOF");
+        when(archive.resolveFile("artwork.ai")).thenReturn(ai);
+        service = createService(archive, "http://127.0.0.1:1");
+
+        assertEquals("ready", service.preparePreview("artwork.ai", false).status());
+        assertEquals(ai, service.resolvePreviewFile("artwork.ai"));
+    }
+
+    @Test
     void presentationIsConvertedOnceAndCachedAsPdf() throws Exception {
         byte[] generatedPdf = "%PDF-1.4\n1 0 obj\n%%EOF".getBytes(StandardCharsets.US_ASCII);
         AtomicInteger conversionCount = new AtomicInteger();
