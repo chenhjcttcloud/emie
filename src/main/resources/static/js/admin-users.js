@@ -62,7 +62,7 @@ async function renderAdminUsers(container, page = 0, filters = {}) {
       </div>
       <div class="config-card-body">
         <div class="admin-user-filters">
-          <input type="text" id="userSearchInput" placeholder="🔍 搜索用户ID/姓名..." data-emie-action="input:users-filter" style="flex:1;max-width:300px;">
+          <input type="text" id="userSearchInput" placeholder="🔍 搜索账号ID/姓名..." data-emie-action="input:users-filter" style="flex:1;max-width:300px;">
           <select id="userRoleFilter" data-emie-action="change:users-filter">
             <option value="">全部角色</option>
             <option value="pending">待分配</option>
@@ -80,8 +80,8 @@ async function renderAdminUsers(container, page = 0, filters = {}) {
           <table class="admin-user-table">
             <thead>
               <tr>
-                <th style="width:40px;">#</th>
-                <th>用户ID</th>
+                <th style="width:72px;">系统ID</th>
+                <th>账号ID</th>
                 <th>姓名</th>
                 <th>角色</th>
                 <th>状态</th>
@@ -91,9 +91,9 @@ async function renderAdminUsers(container, page = 0, filters = {}) {
               </tr>
             </thead>
             <tbody id="adminUserTableBody">
-              ${users.map((u, i) => `
+              ${users.map(u => `
                 <tr data-user-id="${escHtml(u.userId)}" data-role="${adminUserRoleKey(u.role)}" data-name="${escHtml(u.name)}" data-status="${u.status || 'active'}">
-                  <td style="color:var(--gray-400);">${i + 1}</td>
+                  <td style="color:var(--gray-400);">${u.id ?? '-'}</td>
                   <td><strong>${escHtml(u.userId)}</strong></td>
                   <td>${escHtml(u.name)}</td>
                   <td><span class="admin-user-role-badge role-${adminUserRoleClass(u.role)}">${adminUserRoleLabels[adminUserRoleKey(u.role)] || u.role}</span></td>
@@ -155,7 +155,7 @@ function openEditUserModal(userData) {
         <div id="editUserError" style="color:var(--danger);font-size:13px;display:none;margin-bottom:12px;text-align:center;padding:8px;background:var(--danger-light);border-radius:6px;"></div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label"><span class="required">*</span> 用户ID</label>
+            <label class="form-label"><span class="required">*</span> 账号ID</label>
             <input type="text" class="form-input" id="editUserId" value="${escHtml(userData.userId)}" placeholder="登录用ID" required>
           </div>
           <div class="form-group">

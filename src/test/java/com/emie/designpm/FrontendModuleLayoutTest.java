@@ -144,6 +144,12 @@ class FrontendModuleLayoutTest {
                 projectUploads.contains("new IntersectionObserver")
                         && projectUploads.contains("protectedImageViewportObserver.observe(img)"),
                 "受保护缩略图应仅在接近视口时加载，避免图档库一次请求全部图片");
+        String imageLibrary = readResource("/static/js/image-library.js");
+        assertTrue(
+                imageLibrary.contains("project-pagination image-library-pagination")
+                        && imageLibrary.contains("image-library-page-controls")
+                        && imageLibrary.contains("共 ${filteredItems.length} 项"),
+                "图档库分页应使用居中的紧凑分页条并清楚显示结果范围");
         assertTrue(
                 projectUploads.contains("const originalBlob = payload.blob")
                         && projectUploads.contains("return { type: originalType, blob: originalBlob }"),
@@ -168,6 +174,15 @@ class FrontendModuleLayoutTest {
 
         assertTrue(adminUsers.contains("function adminUserRoleClass(role)"));
         assertTrue(adminUsers.contains(".trim().toLowerCase()"), "角色徽章 CSS 类名应忽略角色键大小写");
+        assertTrue(
+                adminUsers.contains("<th style=\"width:72px;\">系统ID</th>")
+                        && adminUsers.contains("${u.id ?? '-'}")
+                        && adminUsers.contains("<th>账号ID</th>"),
+                "用户管理应显示后端系统主键，并把内部登录标识明确标注为账号ID");
+        assertTrue(
+                readResource("/static/js/core-identity.js")
+                        .contains("<div class=\"identity-user-id\">账号：${escHtml(u.userId)}</div>"),
+                "身份切换器应明确说明显示的是内部账号ID");
         assertFalse(
                 adminUsers.matches("(?s).*role-\\$\\{(u\\.role|userData\\.role|existingRole)\\}.*"),
                 "角色徽章不应直接使用未规范化的角色键");
