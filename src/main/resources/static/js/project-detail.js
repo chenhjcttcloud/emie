@@ -254,6 +254,7 @@ function renderSubTaskCard(detail, task, idx) {
   }[task.workflowStage] || '未设置阶段';
   const rejectionRecords = Array.isArray(task.rejectionRecords) ? task.rejectionRecords : [];
   const latestRejection = rejectionRecords.length ? rejectionRecords[rejectionRecords.length - 1] : null;
+  const isRedelivering = task.status === 'accepted' && latestRejection && !latestRejection.cancelled;
   const deliveryVersions = Array.isArray(task.deliveryVersions) ? task.deliveryVersions : [];
   const visibleDeadline = task.status === 'rejected' && latestRejection?.requiredCompletionDate
     ? latestRejection.requiredCompletionDate : task.plannedDate;
@@ -307,7 +308,7 @@ function renderSubTaskCard(detail, task, idx) {
         <button class="btn btn-danger btn-sm" data-emie-action="click:detail-task-reject" data-project-id="${detail.id}" data-task-id="${task.id}">↩️ 驳回</button>
       ` : ''}
       ${myTask && task.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-accept" data-project-id="${detail.id}" data-task-id="${task.id}">✅ 接单</button>` : ''}
-      ${myTask && task.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-deliver" data-project-id="${detail.id}" data-task-id="${task.id}">📤 交付成果</button>` : ''}
+      ${myTask && task.status === 'accepted' ? (isRedelivering ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-redeliver" data-project-id="${detail.id}" data-task-id="${task.id}">📤 重新交付</button>` : `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-deliver" data-project-id="${detail.id}" data-task-id="${task.id}">📤 交付成果</button>`) : ''}
       ${task.status === 'rejected' && task.activeRejectionCycleId && task.activeRejectionRole === EMIE.state.currentRole && (
         (isPlanner && task.activeRejectionRole === 'planner')
         || (EMIE.state.currentRole === 'sales' && detail.type === 'channel_custom')
@@ -1156,6 +1157,8 @@ if (registerEventAction) {
     taskAccept(Number(element.dataset.projectId), Number(element.dataset.taskId)));
   registerEventAction('detail-task-deliver', (_event, element) =>
     taskDeliver(Number(element.dataset.projectId), Number(element.dataset.taskId)));
+  registerEventAction('detail-task-redeliver', (_event, element) =>
+    taskRedeliver(Number(element.dataset.projectId), Number(element.dataset.taskId)));
   registerEventAction('detail-task-confirm-revision', (_event, element) =>
     taskConfirmRevision(Number(element.dataset.projectId), Number(element.dataset.taskId)));
   registerEventAction('detail-task-correct', (_event, element) =>

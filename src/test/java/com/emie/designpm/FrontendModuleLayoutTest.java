@@ -302,6 +302,14 @@ class FrontendModuleLayoutTest {
                         && designerTasks.contains("当轮提交内容")
                         && designerTasks.contains("record.rejectionAttachmentsJson"),
                 "已发布子任务应可从独立详情查看每一轮修改要求、提交快照和附件");
+        assertTrue(
+                designerTasks.contains("const isRedelivering = t.status === 'accepted'")
+                        && designerTasks.contains("data-emie-action=\"click:designer-redeliver\"")
+                        && designerTasks.contains("registerEventAction('designer-redeliver'")
+                        && detail.contains("const isRedelivering = task.status === 'accepted'")
+                        && detail.contains("data-emie-action=\"click:detail-task-redeliver\"")
+                        && detail.contains("registerEventAction('detail-task-redeliver'"),
+                "确认修改后，工作台和项目详情都必须调用重新交付而不是首次交付");
         String projects = readResource("/static/js/dashboard-projects.js");
         String lists = readResource("/static/js/dashboard-lists.js");
         assertTrue(
