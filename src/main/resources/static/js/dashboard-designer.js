@@ -9,6 +9,7 @@ const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const taskAccept = (...args) => EMIE.actions.taskAccept(...args);
 const taskDeliver = (...args) => EMIE.actions.taskDeliver(...args);
 const taskRedeliver = (...args) => EMIE.actions.taskRedeliver(...args);
+const taskCorrectDelivery = (...args) => EMIE.actions.taskCorrectDelivery(...args);
 const submitTaskReview = (...args) => EMIE.actions.submitTaskReview(...args);
 const taskConfirmRevision = (...args) => EMIE.actions.taskConfirmRevision(...args);
 const openScoring = (...args) => EMIE.actions.openScoring(...args);
@@ -152,6 +153,7 @@ function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
         const needScore = t.scoringRecords && t.scoringRecords.some(sr => sr.score == null && (sr.role === 'designer' || sr.role === 'supplychain'));
         const modificationCount = Array.isArray(t.rejectionRecords) ? t.rejectionRecords.length : 0;
         const deliveryVersions = Array.isArray(t.deliveryVersions) ? t.deliveryVersions : [];
+        const latestDelivery = deliveryVersions[0];
         const rejectionRecords = Array.isArray(t.rejectionRecords) ? t.rejectionRecords : [];
         const isRedelivering = t.status === 'accepted' && rejectionRecords.some(record => !record.cancelled);
         return `<div class="subtask-card" style="${t._unassigned ? 'border-left:3px solid var(--warning);' : ''}">
@@ -171,14 +173,15 @@ function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
           ${t.details ? `<div style="font-size:13px;color:var(--gray-600);margin-top:8px;">📝 ${escHtml(t.details)}</div>` : ''}
           ${t.reviewComments ? `<div class="review-box ${t.status === 'rejected' ? 'rejected' : 'approved'}">${t.status === 'rejected' ? '驳回意见' : '验收意见'}：${escHtml(t.reviewComments)}</div>` : ''}
           ${t.scoringRecords ? renderScoringMini(t) : ''}
-          ${deliveryVersions.length ? `<div style="margin-top:12px;"><div style="font-size:13px;font-weight:700;margin-bottom:6px;">交付版本 <span style="color:var(--gray-400);font-weight:400;">(${deliveryVersions.length})</span></div>${deliveryVersions.map(version => { const rejection = rejectionRecords.find(record => Number(record.attemptNo) === Number(version.versionNo)); return `<details style="border:1px solid var(--gray-200);border-radius:8px;margin-bottom:5px;overflow:hidden;background:var(--gray-50);"><summary style="display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;list-style:none;font-size:12px;"><strong>V${version.versionNo}</strong><span class="badge ${version.submissionType === 'redelivery' ? 'badge-rejected' : version.submissionType === 'correction' ? 'badge-pending' : 'badge-completed'}">${version.submissionType === 'redelivery' ? '驳回后重交' : version.submissionType === 'correction' ? '主动修正' : '首次交付'}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray-600);">${escHtml(version.changeSummary || '')}</span><span style="color:var(--gray-400);white-space:nowrap;">${version.submittedAt ? fmtDT(version.submittedAt) : ''}</span><span style="color:var(--gray-400);">⌄</span></summary><div style="padding:10px 12px;border-top:1px solid var(--gray-200);background:#fff;"><div style="font-size:12px;color:var(--gray-700);white-space:pre-wrap;">${escHtml(version.deliverables || '未填写文字交付内容')}</div>${rejection ? `<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#FFF8F8;color:#A32D2D;font-size:12px;"><strong>驳回意见：</strong>${escHtml(rejection.reason || '未填写驳回意见')}</div>` : ''}${taskDetailFiles(version.referenceImagesJson, true)}${taskDetailFiles(version.attachmentsJson, false)}</div></details>`; }).join('')}</div>` : ''}
+          ${latestDelivery ? `<div style="margin-top:12px;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;background:var(--gray-50);"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><strong style="font-size:13px;">最新提交</strong><span style="font-size:11px;color:var(--gray-400);">${fmtDT(latestDelivery.submittedAt)}</span></div><div style="font-size:12px;color:var(--gray-700);white-space:pre-wrap;">${escHtml(latestDelivery.deliverables || '未填写文字交付内容')}</div>${taskDetailFiles(latestDelivery.referenceImagesJson, true)}${taskDetailFiles(latestDelivery.attachmentsJson, false)}</div>` : ''}
           <div class="subtask-actions">
             ${!readOnly && t.status === 'pending' && !t._unassigned ? `<button class="btn btn-primary btn-sm" data-emie-action="click:designer-accept" data-project-id="${t.projectId}" data-task-id="${t.id}">✅ 接单</button>` : ''}
             ${!readOnly && t._unassigned ? `<button class="btn btn-success btn-sm" data-emie-action="click:designer-accept-market" data-project-id="${t.projectId}" data-task-id="${t.id}" data-task-snapshot="${escHtml(JSON.stringify(t))}">⚡ 抢单</button>` : ''}
             ${!readOnly && t.status === 'accepted' && t.designerId === getCurrentUserId() ? (isRedelivering ? `<button class="btn btn-primary btn-sm" data-emie-action="click:designer-redeliver" data-project-id="${t.projectId}" data-task-id="${t.id}">📤 重新交付</button>` : `<button class="btn btn-warning btn-sm" data-emie-action="click:designer-withdraw" data-project-id="${t.projectId}" data-task-id="${t.id}">↩️ 退单</button><button class="btn btn-primary btn-sm" data-emie-action="click:designer-deliver" data-project-id="${t.projectId}" data-task-id="${t.id}">📤 交付成果</button>`) : ''}
             ${!readOnly && t.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-action="click:designer-revision" data-project-id="${t.projectId}" data-task-id="${t.id}">🛠️ 确认修改</button>` : ''}
-            ${!readOnly && ['delivered', 'planner_approved', 'sales_approved', 'admin_approved'].includes(t.status) && t.designerId === getCurrentUserId() ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-correct" data-project-id="${t.projectId}" data-task-id="${t.id}">📝 修正交付</button>` : ''}
+            ${!readOnly && t.status === 'delivered' && t.designerId === getCurrentUserId() ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-correct" data-project-id="${t.projectId}" data-task-id="${t.id}">📝 更正当前交付</button>` : ''}
             ${!readOnly && needScore ? `<button class="btn btn-warning btn-sm" data-emie-action="click:designer-score" data-project-id="${t.projectId}" data-task-id="${t.id}">⭐ 评分</button>` : ''}
+            ${deliveryVersions.length ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-history" data-task-id="${t.id}">📚 提交历史</button>` : ''}
             <button class="btn btn-outline btn-sm" data-emie-action="click:designer-detail" data-task-id="${t.id}">查看子任务详情${modificationCount ? `（${modificationCount}）` : ''}</button>
             <button class="btn btn-outline btn-sm" data-emie-action="click:designer-detail-project" data-project-id="${t.projectId}">查看项目</button>
           </div>
@@ -190,6 +193,35 @@ function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
 function taskDetailFiles(json, images) {
   const renderer = images ? EMIE.actions.renderSubTaskImages : EMIE.actions.renderTaskAttachments;
   return typeof renderer === 'function' && json ? renderer(json) : '';
+}
+
+function renderDeliveryRounds(versions, rejectionRecords = []) {
+  const rounds = [];
+  [...versions].reverse().forEach(version => {
+    if (version.submissionType !== 'correction' || !rounds.length) rounds.push([]);
+    rounds[rounds.length - 1].push(version);
+  });
+  return rounds.length ? `<div style="margin-top:12px;"><div style="font-size:13px;font-weight:700;margin-bottom:6px;">交付记录 <span style="color:var(--gray-400);font-weight:400;">(${rounds.length} 轮)</span></div>${rounds.reverse().map((revisions, index) => {
+    const roundNo = rounds.length - index;
+    const current = revisions[revisions.length - 1];
+    const history = revisions.slice(0, -1).reverse();
+    const rejection = rejectionRecords.find(record => Number(record.attemptNo) === roundNo);
+    return `<details style="border:1px solid var(--gray-200);border-radius:8px;margin-bottom:5px;overflow:hidden;background:var(--gray-50);"><summary style="display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;list-style:none;font-size:12px;"><strong>第 ${roundNo} 轮交付</strong><span class="badge ${roundNo > 1 ? 'badge-rejected' : 'badge-completed'}">${roundNo > 1 ? '驳回后重交' : '首次交付'}</span>${history.length ? `<span class="badge badge-pending">已修订 ${history.length} 次</span>` : ''}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray-600);">${escHtml(current.changeSummary || '')}</span><span style="color:var(--gray-400);white-space:nowrap;">${current.submittedAt ? fmtDT(current.submittedAt) : ''}</span><span style="color:var(--gray-400);">⌄</span></summary><div style="padding:10px 12px;border-top:1px solid var(--gray-200);background:#fff;"><div style="font-size:12px;color:var(--gray-700);white-space:pre-wrap;">${escHtml(current.deliverables || '未填写文字交付内容')}</div>${rejection ? `<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#FFF8F8;color:#A32D2D;font-size:12px;"><strong>驳回意见：</strong>${escHtml(rejection.reason || '未填写驳回意见')}</div>` : ''}${taskDetailFiles(current.referenceImagesJson, true)}${taskDetailFiles(current.attachmentsJson, false)}${history.length ? `<details style="margin-top:10px;border-top:1px dashed var(--gray-200);padding-top:8px;"><summary style="cursor:pointer;color:var(--gray-500);font-size:12px;">查看修订留痕（${history.length}）</summary>${history.map(version => `<div style="margin-top:8px;padding:8px;background:var(--gray-50);border-radius:6px;"><div style="font-size:11px;color:var(--gray-500);">${escHtml(version.changeSummary || '原交付记录')} · ${version.submittedAt ? fmtDT(version.submittedAt) : ''}</div><div style="margin-top:5px;font-size:12px;white-space:pre-wrap;">${escHtml(version.deliverables || '未填写文字交付内容')}</div>${taskDetailFiles(version.referenceImagesJson, true)}${taskDetailFiles(version.attachmentsJson, false)}</div>`).join('')}</details>` : ''}</div></details>`;
+  }).join('')}</div>` : '';
+}
+
+function openDeliveryHistory(taskId) {
+  if (document.getElementById('deliveryHistoryModal')) return;
+  const task = (EMIE.dashboardState.designerTaskCache || []).find(item => Number(item.id) === Number(taskId))
+    || EMIE.projectState.currentProjectDetail?.tasks?.find(item => Number(item.id) === Number(taskId));
+  if (!task) return;
+  const versions = Array.isArray(task.deliveryVersions) ? task.deliveryVersions : [];
+  const records = Array.isArray(task.rejectionRecords) ? task.rejectionRecords : [];
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'deliveryHistoryModal';
+  modal.innerHTML = `<div class="modal" style="max-width:820px;"><div class="modal-header"><button class="modal-close" data-emie-action="click:designer-history-close">✕</button><div class="modal-header-left"><div class="modal-title">📚 提交历史 · ${escHtml(task.name || '-')}</div><div style="font-size:12px;color:var(--gray-400);margin-top:3px;">共 ${versions.filter(version => version.submissionType !== 'correction').length} 轮交付，主动更正记录收在对应轮次内</div></div></div><div class="modal-body">${renderDeliveryRounds(versions, records) || '<div class="empty"><p>暂无提交历史</p></div>'}</div><div class="modal-footer"><button class="btn btn-primary" data-emie-action="click:designer-history-close">关闭</button></div></div>`;
+  document.body.appendChild(modal);
 }
 
 function openPublishedSubTaskDetail(taskId) {
@@ -227,17 +259,6 @@ function openPublishedSubTaskDetail(taskId) {
         ${taskDetailFiles(task.attachmentsJson, false)}
         ${task.deliverables ? `<div class="detail-item" style="margin-top:12px;"><div class="detail-label">当前交付成果</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.deliverables)}</div></div>` : ''}
         <div style="margin-top:18px;">
-          <div style="font-size:14px;font-weight:700;margin-bottom:8px;">交付版本 <span style="color:var(--gray-400);font-weight:400;">(${deliveryVersions.length})</span></div>
-          ${deliveryVersions.length ? deliveryVersions.map(version => `
-            <details style="border:1px solid var(--gray-200);border-radius:9px;margin-bottom:8px;overflow:hidden;">
-              <summary style="padding:10px 12px;background:var(--gray-50);cursor:pointer;list-style:none;">
-                <strong>V${version.versionNo}</strong> · ${version.submissionType === 'correction' ? '主动修正' : version.submissionType === 'redelivery' ? '驳回后重交' : '首次交付'}
-                <span style="margin-left:8px;color:var(--gray-500);">${escHtml(version.changeSummary || '')}</span>
-              </summary>
-              <div style="padding:12px;"><div class="detail-value" style="white-space:pre-wrap;">${escHtml(version.deliverables || '未填写文字交付内容')}</div>${taskDetailFiles(version.referenceImagesJson, true)}${taskDetailFiles(version.attachmentsJson, false)}</div>
-            </details>`).join('') : '<div style="font-size:12px;color:var(--gray-400);">暂无交付版本记录</div>'}
-        </div>
-        <div style="margin-top:18px;">
           <div style="font-size:14px;font-weight:700;margin-bottom:8px;">修改要求记录 <span style="color:var(--gray-400);font-weight:400;">(${records.length})</span></div>
           ${records.length ? records.map(record => `
             <details style="border:1px solid #F3C1C1;border-radius:9px;margin-bottom:8px;overflow:hidden;">
@@ -266,6 +287,7 @@ function openPublishedSubTaskDetail(taskId) {
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" data-emie-action="click:designer-detail-project" data-project-id="${task.projectId}">查看所属项目</button>
+        ${deliveryVersions.length ? `<button class="btn btn-outline" data-emie-action="click:designer-history" data-task-id="${task.id}">📚 提交历史</button>` : ''}
         ${EMIE.state.currentRole === 'designer' && task.status === 'pending' ? `<button class="btn btn-primary" data-emie-action="click:designer-accept" data-project-id="${task.projectId}" data-task-id="${task.id}">✅ 接单</button>` : ''}
         ${EMIE.state.currentRole === 'planner' && task.status === 'delivered' ? `<button class="btn btn-primary" data-emie-action="click:designer-review" data-project-id="${task.projectId}" data-task-id="${task.id}">📤 送审</button>` : ''}
         ${EMIE.state.currentRole === 'planner' && task.status === 'submitted_for_review' ? `<button class="btn btn-success" data-emie-action="click:designer-approve" data-project-id="${task.projectId}" data-task-id="${task.id}" data-project-type="${escHtml(task.projectType || 'regular')}">✅ 通过并评分</button>` : ''}
@@ -323,6 +345,7 @@ EMIE.registerActions({
   resetDesignerTaskFilters,
   renderDesignerTaskCards,
   openPublishedSubTaskDetail,
+  openDeliveryHistory,
   renderScoringMini,
 });
 
@@ -333,6 +356,7 @@ EMIE.registerModule('dashboardDesigner', {
   resetDesignerTaskFilters,
   renderDesignerTaskCards,
   openPublishedSubTaskDetail,
+  openDeliveryHistory,
   renderScoringMini,
 });
 
@@ -351,6 +375,8 @@ if (registerEventAction) {
   registerEventAction('designer-revision', (_event, el) => taskConfirmRevision(Number(el.dataset.projectId), Number(el.dataset.taskId)));
   registerEventAction('designer-score', (_event, el) => openScoring(Number(el.dataset.projectId), Number(el.dataset.taskId)));
   registerEventAction('designer-detail-close', () => closeM('publishedSubTaskDetailModal'));
+  registerEventAction('designer-history-close', () => closeM('deliveryHistoryModal'));
+  registerEventAction('designer-history', (_event, el) => openDeliveryHistory(Number(el.dataset.taskId)));
   registerEventAction('designer-detail-project', (_event, el) => openProjectDetail(Number(el.dataset.projectId)));
   registerEventAction('designer-review', (_event, el) => submitTaskReview(Number(el.dataset.projectId), Number(el.dataset.taskId)));
   registerEventAction('designer-approve', (_event, el) =>

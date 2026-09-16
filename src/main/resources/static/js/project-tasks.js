@@ -902,8 +902,8 @@ async function taskCorrectDelivery(pid, tid) {
       <button class="modal-close-float" data-emie-action="click:task-correct-close">✕</button>
       <div class="modal modal-lg">
         <div class="modal-header"><div class="modal-header-left">
-          <div class="modal-title">📝 修正交付：${escHtml(task.name)}</div>
-          <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">将生成新的交付版本；已产生的审核结论会失效并重新进入审核。</div>
+          <div class="modal-title">📝 更正当前交付：${escHtml(task.name)}</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">产品企划送审前可以更正；记录会留底，但不会增加交付轮次。送审后将无法更改。</div>
         </div></div>
         <div class="modal-body">
           <form id="taskCorrectDeliveryForm">
@@ -923,7 +923,7 @@ async function taskCorrectDelivery(pid, tid) {
             <div class="file-list" id="deliverAttachmentList"></div>
           </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-correct-close">取消</button><button class="btn btn-warning" data-emie-action="click:task-submit-correct" data-project-id="${pid}" data-task-id="${tid}">生成新版本并重新送审</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-correct-close">取消</button><button class="btn btn-warning" data-emie-action="click:task-submit-correct" data-project-id="${pid}" data-task-id="${tid}">保存更正</button></div>
       </div>`;
     document.body.appendChild(modal);
     renderFileList(EMIE.projectState.deliverImages, '交付参考图');

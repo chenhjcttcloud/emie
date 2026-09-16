@@ -585,6 +585,7 @@ const NOTIFICATION_TEMPLATE_SCENARIOS = [
   ['TASK_DELIVERED', '首次交付', '负责人提交成果、等待审核时'],
   ['TASK_REJECTED', '驳回修改', '审核人驳回成果时'],
   ['TASK_REDELIVERED', '再次交付', '驳回后再次提交成果时'],
+  ['TASK_CORRECTED', '交付更正', '负责人在产品企划送审前更正成果时'],
   ['REVIEW_PENDING', '审核待办', '有审核任务等待处理时'],
   ['REVIEW_APPROVED', '审核通过', '审核通过时'],
   ['REVIEW_REJECTED', '审核驳回', '审核不通过时'],

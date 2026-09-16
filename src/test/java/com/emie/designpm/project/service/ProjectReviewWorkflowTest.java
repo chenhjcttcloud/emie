@@ -295,11 +295,10 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
-    void activeDeliveryCorrectionCreatesVersionAndInvalidatesPreviousApproval() {
-        Project project = projectWithTask("channel_custom", "planner_approved");
+    void correctionBeforeReviewCreatesVersionAndKeepsTaskReadyForSubmission() {
+        Project project = projectWithTask("channel_custom", "delivered");
         ScoringRecord planner = review(project.getTasks().get(0), "planner", "first");
-        planner.setReviewStatus("approved");
-        planner.setScore(90);
+        planner.setReviewStatus("pending");
         when(projects.findById(1L)).thenReturn(Optional.of(project));
         when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(scoring.findBySubTaskIdAndRole(11L, "planner")).thenReturn(Optional.of(planner));
@@ -319,6 +318,26 @@ class ProjectReviewWorkflowTest {
         assertEquals(2, version.getValue().getVersionNo());
         assertEquals("correction", version.getValue().getSubmissionType());
         assertEquals("补充源文件并移除错误附件", version.getValue().getChangeSummary());
+        verify(notifications)
+                .notifyUserAfterCommit(
+                        eq("TASK_CORRECTED"), eq("planner-1"), eq("sub_task"), eq(11L), eq("designer-1"), anyMap());
+        verify(notifications, never())
+                .notifyUserAfterCommit(
+                        eq("TASK_CORRECTED"), eq("sales-1"), eq("sub_task"), eq(11L), eq("designer-1"), anyMap());
+    }
+
+    @Test
+    void correctionIsBlockedAfterPlannerSubmitsForReview() {
+        Project project = projectWithTask("channel_custom", "submitted_for_review");
+        when(projects.findById(1L)).thenReturn(Optional.of(project));
+
+        Map<String, Object> body = new java.util.HashMap<>(deliveryBody());
+        body.put("changeSummary", "尝试替换文件");
+
+        RuntimeException error = assertThrows(RuntimeException.class, () -> service.taskCorrectDelivery(1L, 11L, body));
+
+        assertEquals("仅产品企划送审前可以更正交付", error.getMessage());
+        verify(deliveryVersions, never()).save(any());
     }
 
     @Test

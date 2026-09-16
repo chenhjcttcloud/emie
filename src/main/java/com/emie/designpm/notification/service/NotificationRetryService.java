@@ -160,6 +160,7 @@ public class NotificationRetryService implements NotificationRetryOperations {
             case "TASK_DELIVERED" -> "子任务负责人首次交付成果";
             case "TASK_REJECTED" -> "产品企划驳回子任务";
             case "TASK_REDELIVERED" -> "子任务负责人重新交付成果";
+            case "TASK_CORRECTED" -> "子任务负责人更正交付成果";
             case "TASK_SUBMITTED_FOR_REVIEW" -> "子任务送审";
             case "REVIEW_APPROVED" -> "子任务验收通过";
             default -> eventType == null ? "其他系统通知" : eventType;

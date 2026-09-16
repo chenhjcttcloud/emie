@@ -281,7 +281,7 @@ public class ProjectTaskController {
                         projectId, taskId, req.withSessionContext(body, request)));
     }
 
-    /** 审核完成前，负责人主动修正漏交或错交文件；生成新版本并使旧审核失效。 */
+    /** 产品企划送审前，负责人主动更正漏交或错交文件并保留修订记录。 */
     @PostMapping("/{projectId}/tasks/{taskId}/correct-delivery")
     public ResponseEntity<?> taskCorrectDelivery(
             @PathVariable Long projectId,

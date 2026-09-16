@@ -216,6 +216,18 @@ public class NotificationTemplateService {
                     deadline,
                     actor,
                     context);
+            case "TASK_CORRECTED" -> create(
+                    eventType,
+                    "子任务交付已更正",
+                    "{{actorName}}已更正子任务“{{taskName}}”的交付内容。请确认最新提交后再送审。",
+                    "high",
+                    true,
+                    taskLink(context),
+                    project,
+                    "交付已更正：" + task,
+                    deadline,
+                    actor,
+                    context);
             case "REVIEW_PENDING" -> create(
                     eventType,
                     "有审核待办",

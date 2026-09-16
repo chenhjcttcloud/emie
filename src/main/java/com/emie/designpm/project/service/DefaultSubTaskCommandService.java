@@ -941,9 +941,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (currentUserId.isBlank() || !currentUserId.equals(task.getDesignerId())) {
             throw new RuntimeException("仅当前子任务负责人可修正交付");
         }
-        if (!List.of("delivered", "planner_approved", "sales_approved", "admin_approved")
-                .contains(task.getStatus())) {
-            throw new RuntimeException("当前子任务状态不允许主动修正；已完成任务需由管理员重新开放");
+        if (!"delivered".equals(task.getStatus())) {
+            throw new RuntimeException("仅产品企划送审前可以更正交付");
         }
         String changeSummary = SecurityUtil.sanitizeText((String) body.get("changeSummary"), 500);
         if (changeSummary == null || changeSummary.isBlank()) {
@@ -975,24 +974,12 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
         notifier.safeNotifyAfterCommit(
-                "TASK_REDELIVERED",
+                "TASK_CORRECTED",
                 p.getPlannerId(),
                 "sub_task",
                 task.getId(),
                 currentUserId,
                 notifier.context(p, task, currentUser, changeSummary));
-        if ("channel_custom".equals(p.getType())
-                && p.getSalesId() != null
-                && !p.getSalesId().isBlank()
-                && !p.getSalesId().equals(currentUserId)) {
-            notifier.safeNotifyAfterCommit(
-                    "TASK_REDELIVERED",
-                    p.getSalesId(),
-                    "sub_task",
-                    task.getId(),
-                    currentUserId,
-                    notifier.context(p, task, currentUser, "销售关联项目已收到重新交付成果"));
-        }
         return saved;
     }
 

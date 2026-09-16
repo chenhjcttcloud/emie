@@ -86,9 +86,7 @@ public class AdminService {
         } catch (IOException e) {
             throw new RuntimeException("无法创建管理上传目录", e);
         }
-        // 初始化默认配置
         initDefaultConfigs();
-        // 初始化系统角色
         initDefaultRoles();
     }
 
@@ -556,6 +554,7 @@ public class AdminService {
                 "子任务再次交付待审核",
                 "{{actorName}}已第{{deliveryCount}}次交付“{{taskName}}”。上次驳回原因：{{reason}}。"
             },
+            {"TASK_CORRECTED", "子任务交付更正", "子任务交付已更正", "{{actorName}}已更正子任务“{{taskName}}”的交付内容。请确认最新提交后再送审。"},
             {"REVIEW_PENDING", "审核待办", "有审核待办", "项目“{{projectName}}”的子任务“{{taskName}}”等待{{reviewRole}}审核。"},
             {"REVIEW_APPROVED", "审核通过", "审核已通过", "“{{taskName}}”已由{{actorName}}审核通过。"},
             {"REVIEW_REJECTED", "审核驳回", "审核已驳回", "“{{taskName}}”审核未通过，原因：{{reason}}。"},

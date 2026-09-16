@@ -41,6 +41,16 @@ class NotificationTemplateServiceTest {
     }
 
     @Test
+    void correctionTemplateDoesNotPretendTheTaskWasRejected() {
+        var result =
+                service.render("TASK_CORRECTED", Map.of("taskName", "包装设计", "actorName", "小李", "reason", "替换错误图片"));
+
+        assertEquals("子任务交付已更正", result.title());
+        assertTrue(result.content().contains("确认最新提交后再送审"));
+        assertFalse(result.content().contains("驳回"));
+    }
+
+    @Test
     void mandatoryWorkflowEventsHaveConcreteTemplates() {
         for (String event : new String[] {
             "PROJECT_ASSIGNED",
@@ -49,6 +59,7 @@ class NotificationTemplateServiceTest {
             "TASK_DELIVERED",
             "TASK_REJECTED",
             "TASK_REDELIVERED",
+            "TASK_CORRECTED",
             "REVIEW_PENDING",
             "PROJECT_REMINDER",
             "TASK_OVERDUE",
