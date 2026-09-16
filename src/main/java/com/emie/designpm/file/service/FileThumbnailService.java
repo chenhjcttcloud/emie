@@ -32,8 +32,7 @@ public class FileThumbnailService {
      * 按可用核心数的一半动态设置上限（至少 2），并允许用环境变量按机器实际规格覆盖。
      */
     private static int resolveThumbnailConcurrency() {
-        String configured = System.getProperty(
-                "app.thumbnail.concurrency", System.getenv("APP_THUMBNAIL_CONCURRENCY"));
+        String configured = System.getProperty("app.thumbnail.concurrency", System.getenv("APP_THUMBNAIL_CONCURRENCY"));
         if (configured != null) {
             try {
                 int value = Integer.parseInt(configured.trim());
