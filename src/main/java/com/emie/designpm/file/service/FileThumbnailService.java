@@ -18,11 +18,31 @@ import org.springframework.stereotype.Service;
 public class FileThumbnailService {
     private static final int MAX_SIDE = 640;
     private static final int AI_MAX_SIDE = 1800;
-    private static final Semaphore THUMBNAIL_SLOTS = new Semaphore(4);
+    private static final int THUMBNAIL_CONCURRENCY = resolveThumbnailConcurrency();
+    private static final Semaphore THUMBNAIL_SLOTS = new Semaphore(THUMBNAIL_CONCURRENCY);
     private final FileArchiveService fileArchiveService;
 
     public FileThumbnailService(FileArchiveService fileArchiveService) {
         this.fileArchiveService = fileArchiveService;
+    }
+
+    /**
+     * 缩略图生成（含 AI 文件的 PDF 渲染）是 CPU 密集操作，并发数固定为 4 时，
+     * 核心数较少的生产机器会被这批任务占满 CPU，拖慢其余接口的响应（表现为"服务器卡"）。
+     * 按可用核心数的一半动态设置上限（至少 2），并允许用环境变量按机器实际规格覆盖。
+     */
+    private static int resolveThumbnailConcurrency() {
+        String configured = System.getProperty(
+                "app.thumbnail.concurrency", System.getenv("APP_THUMBNAIL_CONCURRENCY"));
+        if (configured != null) {
+            try {
+                int value = Integer.parseInt(configured.trim());
+                if (value > 0) return value;
+            } catch (NumberFormatException ignored) {
+                // 配置非法时回退到自动计算
+            }
+        }
+        return Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
     }
 
     public Path getOrCreate(String storedName, Path cacheRoot) throws IOException {
