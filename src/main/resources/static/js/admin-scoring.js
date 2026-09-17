@@ -184,7 +184,7 @@ async function saveWithdrawalGovernanceConfig() {
 }
 
 function renderDesignerTargetRows(rows) {
-  return rows.length ? rows.map((item, index) => `<tr><td><strong>${escHtml(item.userName || '-')}</strong></td><td>${escHtml(item.userId || '-')}</td><td><input class="form-input" type="number" min="0" id="dt_points_${index}" value="${Number(item.targetPoints || 0)}"></td><td>${item.configured ? '<span class="badge badge-completed">已配置</span>' : '<span class="badge badge-pending">待配置</span>'}</td><td><button class="btn btn-primary btn-sm" data-emie-action="click:scoring-save-target" data-target-index="${index}">保存</button></td></tr>`).join('') : '<tr><td colspan="5"><div class="empty-state">暂无在职设计师</div></td></tr>';
+  return rows.length ? rows.map((item, index) => `<tr><td><strong>${escHtml(item.userName || '-')}</strong></td><td>飞书ID：${escHtml(item.feishuUserId || '待登录补齐')}</td><td><input class="form-input" type="number" min="0" id="dt_points_${index}" value="${Number(item.targetPoints || 0)}"></td><td>${item.configured ? '<span class="badge badge-completed">已配置</span>' : '<span class="badge badge-pending">待配置</span>'}</td><td><button class="btn btn-primary btn-sm" data-emie-action="click:scoring-save-target" data-target-index="${index}">保存</button></td></tr>`).join('') : '<tr><td colspan="5"><div class="empty-state">暂无在职设计师</div></td></tr>';
 }
 
 function renderProposalDesignFiles(value) {
@@ -372,7 +372,7 @@ async function openManualAdjustmentModal() {
   modal.innerHTML = `<div class="modal" style="max-width:540px;">
     <div class="modal-header"><div class="modal-header-left"><div class="modal-title">手动调账</div><div class="modal-subtitle">管理员主动补分或扣分，必填备注并记入调账台账</div></div><button class="modal-close" data-emie-action="click:scoring-close-adjustment">✕</button></div>
     <div class="modal-body">
-      <div class="form-group"><label class="form-label">成员 <span style="color:var(--gray-400);">（仅设计师）</span></label><select class="form-input" id="manualAdjUser"><option value="">请选择成员</option>${eligibleUsers.map(u => `<option value="${escHtml(u.userId)}">${escHtml(u.name || u.userId)}（${escHtml(u.userId)}）</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">成员 <span style="color:var(--gray-400);">（仅设计师）</span></label><select class="form-input" id="manualAdjUser"><option value="">请选择成员</option>${eligibleUsers.map(u => `<option value="${escHtml(u.userId)}">${escHtml(u.name || '未命名')}（飞书ID：${escHtml(u.feishuUserId || '待登录补齐')}）</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">积分 <span style="color:var(--danger);">*</span></label><input class="form-input" type="number" step="1" id="manualAdjPoints" placeholder="例如：50 或 -30"><div style="font-size:12px;color:var(--gray-400);margin-top:4px;">非零整数，绝对值不超过 100000；增加填正数，扣减填负数。</div></div>
       <div class="form-group"><label class="form-label">备注 <span style="color:var(--danger);">*</span></label><textarea class="form-input" id="manualAdjReason" rows="3" maxlength="500" placeholder="必填，说明调账原因（500 字内）"></textarea></div>
       <div id="manualAdjError" style="display:none;color:var(--danger);font-size:13px;"></div>
@@ -491,7 +491,7 @@ async function configurePointSkills() {
 async function configureMarketEligibility() {
   const input = window.EMIE.actions.showSystemInput;
   let users; try { users = await apiGet('/admin/users'); } catch (e) { return window.EMIE.actions.showSystemAlert('读取成员列表失败：' + e.message); }
-  const options = (Array.isArray(users) ? users : []).filter(u => String(u.role || '').toLowerCase() === 'designer').map(u => ({ value: u.userId, label: `${u.name || u.userName || '未命名'}（${u.userId}）` }));
+  const options = (Array.isArray(users) ? users : []).filter(u => String(u.role || '').toLowerCase() === 'designer').map(u => ({ value: u.userId, label: `${u.name || u.userName || '未命名'}（飞书ID：${u.feishuUserId || '待登录补齐'}）` }));
   const userId = await window.EMIE.actions.showSystemSelect('选择需要管理接单资格的成员', options, '配置成员接单资格'); if (!userId) return;
   let current; try { current = await apiGet('/points/market-eligibility/' + encodeURIComponent(userId.trim())); } catch (e) { return window.EMIE.actions.showSystemAlert('读取失败：' + e.message); }
   const until = await input('暂停到期时间（YYYY-MM-DDTHH:mm，留空立即恢复）', current.suspendedUntil ? String(current.suspendedUntil).slice(0,16) : '', '设置暂停时间'); if (until === null) return;

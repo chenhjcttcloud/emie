@@ -177,12 +177,15 @@ class FrontendModuleLayoutTest {
         assertTrue(
                 adminUsers.contains("<th style=\"width:72px;\">系统ID</th>")
                         && adminUsers.contains("${u.id ?? '-'}")
-                        && adminUsers.contains("<th>账号ID</th>"),
-                "用户管理应显示后端系统主键，并把内部登录标识明确标注为账号ID");
+                        && adminUsers.contains("<th>飞书身份ID</th>")
+                        && adminUsers.contains("User ID：${escHtml(u.feishuUserId || '待登录补齐')}")
+                        && adminUsers.contains("Open ID：${escHtml(u.feishuOpenId || '未绑定')}")
+                        && !adminUsers.contains("<th>账号ID</th>"),
+                "用户管理应分别显示飞书 User ID 与 Open ID，不应继续展示内部账号ID列");
         assertTrue(
                 readResource("/static/js/core-identity.js")
-                        .contains("<div class=\"identity-user-id\">账号：${escHtml(u.userId)}</div>"),
-                "身份切换器应明确说明显示的是内部账号ID");
+                        .contains("飞书ID：${u.feishuUserId ? escHtml(u.feishuUserId) : '待登录补齐'}"),
+                "身份切换器只应显示飞书用户ID或待补齐状态");
         assertFalse(
                 adminUsers.matches("(?s).*role-\\$\\{(u\\.role|userData\\.role|existingRole)\\}.*"),
                 "角色徽章不应直接使用未规范化的角色键");

@@ -24,6 +24,8 @@ class UserControllerRoleGroupingTest {
         User promotion = User.builder()
                 .id(1L)
                 .userId("promotion_user")
+                .feishuUserId("promotion_feishu_id")
+                .feishuOpenId("ou_promotion_open_id")
                 .name("产品推广用户")
                 .role("Promotion")
                 .build();
@@ -47,6 +49,7 @@ class UserControllerRoleGroupingTest {
         assertTrue(result.containsKey("sales"));
         assertTrue(result.get("sales").isEmpty());
         assertEquals("产品推广用户", result.get("Promotion").get(0).get("name"));
+        assertEquals("promotion_feishu_id", result.get("Promotion").get(0).get("feishuUserId"));
         assertEquals("active", result.get("Promotion").get(0).get("status"));
         assertTrue(result.get("designer").isEmpty());
         assertFalse(result.containsKey("pending"));

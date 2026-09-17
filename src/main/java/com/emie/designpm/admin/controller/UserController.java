@@ -72,6 +72,7 @@ public class UserController {
         Map<String, String> result = new LinkedHashMap<>();
         result.put("id", String.valueOf(user.getId()));
         result.put("userId", user.getUserId());
+        result.put("feishuUserId", user.getFeishuUserId() != null ? user.getFeishuUserId() : "");
         result.put("name", TextEncodingUtil.repairUtf8Mojibake(user.getName()));
         result.put("role", user.getRole());
         result.put("title", user.getTitle());

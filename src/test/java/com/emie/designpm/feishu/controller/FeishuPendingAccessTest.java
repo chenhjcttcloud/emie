@@ -42,6 +42,7 @@ class FeishuPendingAccessTest {
         FeishuAuthController controller = new FeishuAuthController(mock(SystemConfigRepository.class), users);
         GetUserInfoRespBody identity = new GetUserInfoRespBody();
         identity.setOpenId("ou_new_employee");
+        identity.setUserId("f7b3a9c1");
         identity.setName("新员工");
         identity.setEnterpriseEmail("employee@emie.com");
 
@@ -52,6 +53,7 @@ class FeishuPendingAccessTest {
         assertEquals("pending", created.getStatus());
         assertEquals("待分配角色", created.getTitle());
         assertEquals("ou_new_employee", created.getFeishuOpenId());
+        assertEquals("f7b3a9c1", created.getFeishuUserId());
         assertEquals("employee@emie.com", created.getEmail());
         assertTrue(created.getUserId().startsWith("feishu_"));
     }
@@ -73,13 +75,36 @@ class FeishuPendingAccessTest {
         FeishuAuthController controller = new FeishuAuthController(mock(SystemConfigRepository.class), users);
         GetUserInfoRespBody identity = new GetUserInfoRespBody();
         identity.setOpenId("ou_existing");
+        identity.setUserId("existing_feishu_user_id");
         identity.setEnterpriseEmail("employee@emie.com");
 
         User resolved = controller.resolveFeishuUser(identity);
 
         assertSame(existing, resolved);
         assertEquals("ou_existing", existing.getFeishuOpenId());
+        assertEquals("existing_feishu_user_id", existing.getFeishuUserId());
         verify(users).save(existing);
+    }
+
+    @Test
+    void missingFeishuUserIdKeepsExistingOpenIdLoginCompatible() {
+        UserRepository users = mock(UserRepository.class);
+        User existing = User.builder()
+                .userId("designer_legacy")
+                .name("历史员工")
+                .role("designer")
+                .status("active")
+                .feishuOpenId("ou_legacy")
+                .build();
+        when(users.findByFeishuOpenId("ou_legacy")).thenReturn(Optional.of(existing));
+
+        FeishuAuthController controller = new FeishuAuthController(mock(SystemConfigRepository.class), users);
+        GetUserInfoRespBody identity = new GetUserInfoRespBody();
+        identity.setOpenId("ou_legacy");
+
+        assertSame(existing, controller.resolveFeishuUser(identity));
+        assertNull(existing.getFeishuUserId());
+        verify(users, never()).save(any());
     }
 
     @Test

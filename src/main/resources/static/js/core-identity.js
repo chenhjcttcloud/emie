@@ -71,6 +71,7 @@ async function renderRoleSwitcher() {
       seenUserIds.add(u.userId);
       allUsers.push({
         userId: u.userId,
+        feishuUserId: u.feishuUserId,
         name: u.name,
         role: normalizeIdentityRole(u.role || groupRole),
       });
@@ -158,7 +159,7 @@ function renderUserList(users) {
         <span class="identity-user-avatar ${uClass}">${avatarInitial}</span>
         <span class="identity-user-info">
           <div class="identity-user-name">${escHtml(u.name)}</div>
-          <div class="identity-user-id">账号：${escHtml(u.userId)}</div>
+          <div class="identity-user-id">飞书ID：${u.feishuUserId ? escHtml(u.feishuUserId) : '待登录补齐'}</div>
         </span>
         <span class="identity-user-role ${rClass}">${escHtml(label)}</span>
         <svg class="identity-user-check${isActive ? ' show' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>

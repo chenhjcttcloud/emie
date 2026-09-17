@@ -84,6 +84,31 @@ class PerformanceServiceTest {
     }
 
     @Test
+    void designerTargetsExposeFeishuUserIdForDisplay() {
+        PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
+        PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
+        UserRepository users = mock(UserRepository.class);
+        StandardPointConfigRepository standards = mock(StandardPointConfigRepository.class);
+        MonthlyPerformanceConfigRepository months = mock(MonthlyPerformanceConfigRepository.class);
+        SystemConfigRepository configs = mock(SystemConfigRepository.class);
+        MonthlyUserPointTargetRepository targets = mock(MonthlyUserPointTargetRepository.class);
+        User designer = User.builder()
+                .userId("designer-1")
+                .feishuUserId("feishu-user-1")
+                .name("设计师")
+                .role("designer")
+                .status("active")
+                .build();
+        when(targets.findAll()).thenReturn(List.of());
+        when(users.findByRole("designer")).thenReturn(List.of(designer));
+        PerformanceService service = new PerformanceService(ledgers, adjustments, users, standards, months, configs);
+        service.monthlyUserTargets(targets);
+
+        assertEquals(
+                "feishu-user-1", service.designerTargets("2026-09").getFirst().get("feishuUserId"));
+    }
+
+    @Test
     void leaderboardAttributesAdjustmentsByAccountingMonthNotCreatedAt() {
         PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
         PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);

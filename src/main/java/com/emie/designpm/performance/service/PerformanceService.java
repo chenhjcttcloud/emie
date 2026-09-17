@@ -233,6 +233,7 @@ public class PerformanceService {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("id", target == null ? null : target.getId());
                     row.put("userId", user.getUserId());
+                    row.put("feishuUserId", user.getFeishuUserId());
                     row.put("userName", TextEncodingUtil.repairUtf8Mojibake(user.getName()));
                     row.put("targetPoints", target == null ? 0 : target.getTargetPoints());
                     row.put("configured", target != null);

@@ -58,6 +58,10 @@ public class User {
     /** 飞书 OpenID（SSO 关联用） */
     private String feishuOpenId;
 
+    /** 飞书用户 ID（用于管理端识别用户，不作为系统业务关联键） */
+    @Column(unique = true)
+    private String feishuUserId;
+
     /** 所属部门 ID */
     private Long departmentId;
 

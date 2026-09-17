@@ -191,6 +191,7 @@ public class FeishuAuthController {
         }
 
         String openId = userInfo.getOpenId().trim();
+        String feishuUserId = firstNonBlank(userInfo.getUserId());
         String email = firstNonBlank(userInfo.getEnterpriseEmail(), userInfo.getEmail());
         User user = userRepository.findByFeishuOpenId(openId).orElse(null);
         if (user == null && email != null) {
@@ -206,12 +207,21 @@ public class FeishuAuthController {
                     .email(email)
                     .status("pending")
                     .feishuOpenId(openId)
+                    .feishuUserId(feishuUserId)
                     .build();
             user = userRepository.save(user);
             log.info("已创建飞书待授权账号: userId={}", user.getUserId());
-        } else if (user.getFeishuOpenId() == null || user.getFeishuOpenId().isBlank()) {
-            user.setFeishuOpenId(openId);
-            user = userRepository.save(user);
+        } else {
+            boolean changed = false;
+            if (user.getFeishuOpenId() == null || user.getFeishuOpenId().isBlank()) {
+                user.setFeishuOpenId(openId);
+                changed = true;
+            }
+            if (feishuUserId != null && !feishuUserId.equals(user.getFeishuUserId())) {
+                user.setFeishuUserId(feishuUserId);
+                changed = true;
+            }
+            if (changed) user = userRepository.save(user);
         }
 
         if ("disabled".equalsIgnoreCase(user.getStatus())) {
