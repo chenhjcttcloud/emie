@@ -753,27 +753,7 @@ public class AdminService {
 
     /** 获取所有用户（含详情） */
     public List<Map<String, Object>> getAllUsers() {
-        return userRepository.findAll().stream()
-                .map(u -> {
-                    Map<String, Object> m = new LinkedHashMap<>();
-                    m.put("id", u.getId());
-                    m.put("userId", u.getUserId());
-                    m.put("name", TextEncodingUtil.repairUtf8Mojibake(u.getName()));
-                    m.put("role", u.getRole());
-                    m.put("roleLevel", u.getRoleLevel());
-                    m.put("title", u.getTitle());
-                    m.put("phone", u.getPhone());
-                    m.put("email", u.getEmail());
-                    m.put("status", u.getStatus() != null ? u.getStatus() : "active");
-                    m.put(
-                            "feishuBound",
-                            u.getFeishuOpenId() != null && !u.getFeishuOpenId().isBlank());
-                    m.put(
-                            "createdAt",
-                            u.getCreatedAt() != null ? u.getCreatedAt().toString() : "");
-                    return m;
-                })
-                .collect(Collectors.toList());
+        return userRepository.findAll().stream().map(this::toUserMap).toList();
     }
 
     public PageResponse<Map<String, Object>> getUsersPage(
@@ -787,6 +767,8 @@ public class AdminService {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", u.getId());
         m.put("userId", u.getUserId());
+        m.put("feishuUserId", u.getFeishuUserId());
+        m.put("feishuOpenId", u.getFeishuOpenId());
         m.put("name", TextEncodingUtil.repairUtf8Mojibake(u.getName()));
         m.put("role", u.getRole());
         m.put("roleLevel", u.getRoleLevel());
