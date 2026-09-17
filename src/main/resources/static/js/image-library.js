@@ -86,14 +86,29 @@ function openItem(id) {
   overlay.addEventListener('click', e => { if (e.target === overlay) closeItemDetail(); }); document.body.appendChild(overlay);
 }
 function closeItemDetail() { document.getElementById('imageLibraryDetailDrawer')?.remove(); }
+function imageGallery(item) {
+  return (item?.images || []).filter(entry => !isAiFile(entry)).map(entry => ({
+    src: resourceUrl(entry.url || `/api/files/download/${entry.storedName}`),
+    name: entry.name || item.name,
+  }));
+}
 function previewCover(id) {
   const item = (EMIE.imageLibraryItems || []).find(entry => entry.id === id); if (!item?.images?.length) return;
   const file = item.images.find(entry => !isAiFile(entry)) || item.images[0];
   if (isAiFile(file)) return EMIE.actions.openFilePreview(file.url || `/api/files/download/${file.storedName}`, file.name || item.name, file.size || 0);
-  EMIE.actions.previewImage(resourceUrl(file.url || `/api/files/download/${file.storedName}`), file.name || item.name);
+  const gallery = imageGallery(item);
+  const source = resourceUrl(file.url || `/api/files/download/${file.storedName}`);
+  EMIE.actions.previewImage(source, file.name || item.name, gallery, gallery.findIndex(g => g.src === source));
 }
 function itemFile(id, index) { return (EMIE.imageLibraryItems || []).find(item => item.id === id)?.images?.[index]; }
-function previewItemFile(id, index) { const file = itemFile(id, index); if (!file) return; if (isAiFile(file)) return EMIE.actions.openFilePreview(file.url || `/api/files/download/${file.storedName}`, file.name || '图档预览', file.size || 0); EMIE.actions.previewImage(resourceUrl(file.url || `/api/files/download/${file.storedName}`), file.name || '图档预览'); }
+function previewItemFile(id, index) {
+  const item = (EMIE.imageLibraryItems || []).find(entry => entry.id === id);
+  const file = itemFile(id, index); if (!file) return;
+  if (isAiFile(file)) return EMIE.actions.openFilePreview(file.url || `/api/files/download/${file.storedName}`, file.name || '图档预览', file.size || 0);
+  const gallery = imageGallery(item);
+  const source = resourceUrl(file.url || `/api/files/download/${file.storedName}`);
+  EMIE.actions.previewImage(source, file.name || '图档预览', gallery, gallery.findIndex(g => g.src === source));
+}
 function downloadItemFile(id, index) { const file = itemFile(id, index); if (!file) return; EMIE.actions.doDirectDownload(resourceUrl(file.url || `/api/files/download/${file.storedName}`), file.name || '图档文件'); }
 async function downloadAllFiles(id, button) {
   button.disabled = true; const oldText = button.textContent; button.textContent = '正在打包…';

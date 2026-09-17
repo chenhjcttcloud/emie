@@ -125,10 +125,13 @@ function showImageCopyFeedback(image, text) {
 }
 
 // EMIE 项目域：上传、项目详情、子任务工作流、评分与分享
-// ==================== 图片预览（Lightbox + 滚轮缩放 + 拖拽平移）====================
-function previewImage(src, name) {
+// ==================== 图片预览（Lightbox + 滚轮缩放 + 拖拽平移 + 左右切换）====================
+// gallery：同组图片 [{src, name}]，传入时可在预览内用左右箭头/键盘切换；index 为 src 在其中的位置。
+function previewImage(src, name, gallery, index) {
   const focusOrigin = document.activeElement;
   let cleanedUp = false;
+  const items = Array.isArray(gallery) && gallery.length > 1 ? gallery : null;
+  let currentIndex = items ? ((Number(index) || 0) % items.length + items.length) % items.length : 0;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.setAttribute('role', 'dialog');
@@ -172,23 +175,83 @@ function previewImage(src, name) {
   img.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,.5);transition:transform .15s ease;transform:scale(1);pointer-events:auto;user-select:auto;';
   activePreviewImage = img;
 
-  fetch(src, { headers: protectedImageHeaders(), credentials: 'same-origin' })
-    .then(readImageBlob)
-    .then(blob => {
-      if (!overlay.isConnected) return;
-      previewBlobUrl = URL.createObjectURL(blob);
-      img.src = previewBlobUrl;
-    })
-    .catch(() => {
-      if (overlay.isConnected) img.alt = `${name || '图片'}（加载失败）`;
-    });
+  function loadImage(source, label) {
+    if (previewBlobUrl) { URL.revokeObjectURL(previewBlobUrl); previewBlobUrl = null; }
+    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+    img.dataset.fullSrc = source;
+    img.alt = label || '预览';
+    img._emiePresentationDragPayload = null;
+    overlay.setAttribute('aria-label', label ? `图片预览：${label}` : '图片预览');
+    fetch(source, { headers: protectedImageHeaders(), credentials: 'same-origin' })
+      .then(readImageBlob)
+      .then(blob => {
+        if (!overlay.isConnected || img.dataset.fullSrc !== source) return;
+        previewBlobUrl = URL.createObjectURL(blob);
+        img.src = previewBlobUrl;
+      })
+      .catch(() => {
+        if (overlay.isConnected && img.dataset.fullSrc === source) img.alt = `${label || '图片'}（加载失败）`;
+      });
+    preparePresentationImageDrag(img);
+  }
 
+  loadImage(src, name);
   imgWrap.appendChild(img);
 
   const zoomLabel = document.createElement('div');
   zoomLabel.className = 'ppt-copy-feedback';
   zoomLabel.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:#fff;padding:6px 16px;border-radius:20px;font-size:13px;z-index:310;pointer-events:none;user-select:none;';
   zoomLabel.textContent = '100%';
+
+  function resetZoom() {
+    scale = 1;
+    panX = 0;
+    panY = 0;
+    img.style.transform = 'scale(1)';
+    img.style.marginLeft = '0';
+    img.style.marginTop = '0';
+    imgWrap.style.cursor = 'default';
+    zoomLabel.textContent = '100%';
+  }
+
+  let counterLabel = null;
+  function updateCounter() {
+    if (counterLabel) counterLabel.textContent = (currentIndex + 1) + ' / ' + items.length;
+  }
+
+  function goTo(newIndex) {
+    if (!items) return;
+    currentIndex = ((newIndex % items.length) + items.length) % items.length;
+    resetZoom();
+    const item = items[currentIndex];
+    loadImage(item.src, item.name);
+    updateCounter();
+  }
+
+  if (items) {
+    const navBtnStyle = 'position:fixed;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:none;background:rgba(0,0,0,.45);color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:310;';
+    const prevBtn = document.createElement('button');
+    prevBtn.type = 'button';
+    prevBtn.setAttribute('aria-label', '上一张');
+    prevBtn.style.cssText = navBtnStyle + 'left:16px;';
+    prevBtn.textContent = '‹';
+    prevBtn.onclick = e => { e.stopPropagation(); goTo(currentIndex - 1); };
+
+    const nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
+    nextBtn.setAttribute('aria-label', '下一张');
+    nextBtn.style.cssText = navBtnStyle + 'right:16px;';
+    nextBtn.textContent = '›';
+    nextBtn.onclick = e => { e.stopPropagation(); goTo(currentIndex + 1); };
+
+    counterLabel = document.createElement('div');
+    counterLabel.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:#fff;padding:5px 14px;border-radius:20px;font-size:13px;z-index:310;pointer-events:none;user-select:none;';
+    updateCounter();
+
+    overlay.appendChild(prevBtn);
+    overlay.appendChild(nextBtn);
+    overlay.appendChild(counterLabel);
+  }
 
   overlay.onwheel = function(e) {
     e.preventDefault();
@@ -239,6 +302,12 @@ function previewImage(src, name) {
       overlay.focus();
       return;
     }
+    if (items && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      goTo(currentIndex + (e.key === 'ArrowRight' ? 1 : -1));
+      return;
+    }
     if (e.key !== 'Escape') return;
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -256,15 +325,18 @@ function previewImage(src, name) {
   document.body.appendChild(overlay);
   removalObserver.observe(document.body, { childList: true });
   requestAnimationFrame(() => overlay.focus({ preventScroll: true }));
-  preparePresentationImageDrag(img);
 }
 
-// 全局点击图片预览委托
+// 全局点击图片预览委托：同一个 .image-preview 分组内的图片可在预览里左右切换。
 document.addEventListener('click', function(e) {
   const img = e.target.closest('.img-clickable');
   if (img) {
+    const group = img.closest('.image-preview');
+    const siblings = group ? Array.from(group.querySelectorAll('.img-clickable')) : [img];
+    const gallery = siblings.map(el => ({ src: el.dataset.fullSrc || el.src, name: el.alt || el.title || '' }));
+    const index = siblings.indexOf(img);
     const source = img.dataset.fullSrc || img.src;
-    previewImage(source, img.alt || img.title || '');
+    previewImage(source, img.alt || img.title || '', gallery, index);
   }
 });
 
