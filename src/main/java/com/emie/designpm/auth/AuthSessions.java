@@ -82,4 +82,12 @@ public final class AuthSessions {
         TOKENS.values().removeIf(s -> s.userId().equals(userId));
         if (redisSessionStore != null) redisSessionStore.removeUserTokens(userId);
     }
+
+    /** 撤销全部用户的全部 token，强制所有人重新登录。 */
+    public static int clearAll() {
+        int removed = TOKENS.size();
+        TOKENS.clear();
+        if (redisSessionStore != null) redisSessionStore.clearAll();
+        return removed;
+    }
 }

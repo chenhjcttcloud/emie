@@ -76,6 +76,24 @@ public class RedisSessionStore {
         }
     }
 
+    /** 撤销全部会话，强制所有用户重新登录（例如登录逻辑变更后需要重新触发）。 */
+    public long clearAll() {
+        long removed = 0;
+        try {
+            var keys = redis.scan(
+                    ScanOptions.scanOptions().match(PREFIX + "*").count(256).build());
+            try (keys) {
+                while (keys.hasNext()) {
+                    redis.delete(keys.next());
+                    removed++;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Redis 全量会话撤销失败 reason={}", e.getClass().getSimpleName());
+        }
+        return removed;
+    }
+
     private String key(String token) {
         return PREFIX + token;
     }

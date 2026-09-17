@@ -331,6 +331,12 @@ async function renderAdminConfig(container) {
   }
 
   container.innerHTML = html;
+  if (EMIE.adminState.currentTab === 'config') {
+    container.insertAdjacentHTML('beforeend', `<div class="config-card" data-group="session-ops">
+      <div class="config-card-header"><h3>🔐 会话管理</h3><button class="btn btn-sm btn-danger" id="logoutAllSessionsButton" data-emie-action="click:admin-logout-all-sessions">🚪 强制全部用户重新登录</button></div>
+      <div class="config-card-body"><p style="margin:0;color:var(--gray-500);font-size:13px;">立即撤销所有用户当前的登录状态，下次访问系统需要重新登录。用于登录信息结构变更后（例如刚补齐飞书 User ID）需要全员重新触发的场景，请仅在必要时使用。</p></div>
+    </div>`);
+  }
   if (configs.notification && EMIE.adminState.currentTab === 'notificationCenter') {
     container.insertAdjacentHTML('beforeend', `<div class="config-card" data-group="temporary-broadcast">
       <div class="config-card-header"><h3>📣 系统更新通知</h3><button class="btn btn-primary" id="temporaryBroadcastSendButton" data-emie-action="click:admin-temp-broadcast">发送给全部用户</button></div>
@@ -509,6 +515,19 @@ async function sendTemporaryBroadcast() {
     showAdminToast('❌ ' + e.message, 'error');
   } finally {
     if (button) { button.disabled = false; button.textContent = '发送给全部用户'; }
+  }
+}
+
+async function logoutAllSessions() {
+  if (!await EMIE.actions.showSystemConfirm('确认强制全部用户重新登录？所有人（包括你自己）当前的登录状态会立即失效，下次访问需要重新登录。')) return;
+  const button = document.getElementById('logoutAllSessionsButton');
+  if (button) { button.disabled = true; button.textContent = '处理中…'; }
+  try {
+    await apiPost('/admin/sessions/logout-all', {});
+    showAdminToast('✅ 已强制全部用户重新登录', 'success');
+  } catch (e) {
+    showAdminToast('❌ ' + e.message, 'error');
+    if (button) { button.disabled = false; button.textContent = '🚪 强制全部用户重新登录'; }
   }
 }
 
@@ -829,6 +848,7 @@ if (registerEventAction) {
   registerEventAction('admin-diagnose-feishu-fields', () => diagnoseFeishuFields());
   registerEventAction('admin-retry-sync', (_event, el) => retrySyncQueue(Number(el.dataset.queueId)));
   registerEventAction('admin-temp-broadcast', () => sendTemporaryBroadcast());
+  registerEventAction('admin-logout-all-sessions', () => logoutAllSessions());
   registerEventAction('admin-notification-refresh', () => loadNotificationFailures());
   registerEventAction('admin-retry-notification', (_event, el) => retryNotificationDelivery(Number(el.dataset.deliveryId)));
   registerEventAction('admin-notification-page', (_event, el) => loadNotificationFailures(Number(el.dataset.page)));

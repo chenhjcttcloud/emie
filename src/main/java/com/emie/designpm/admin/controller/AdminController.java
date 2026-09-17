@@ -265,6 +265,16 @@ public class AdminController {
         }
     }
 
+    /** 强制全部用户重新登录（例如登录信息结构变更后，需要用户重新触发补齐逻辑）。仅管理员可操作。 */
+    @PostMapping("/sessions/logout-all")
+    public ResponseEntity<Map<String, Object>> logoutAllSessions(HttpServletRequest request) {
+        if (!AuthSessions.isAdmin(request)) {
+            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可操作"));
+        }
+        int removed = AuthSessions.clearAll();
+        return ResponseEntity.ok(Map.of("message", "已强制全部用户重新登录", "clearedLocalSessions", removed));
+    }
+
     // ==================== 角色管理 ====================
 
     /** 获取权限定义列表 */

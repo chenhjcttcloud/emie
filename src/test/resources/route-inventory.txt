@@ -114,6 +114,7 @@ POST /api/admin/notifications/deliveries/{id}/retry
 POST /api/admin/notifications/temporary-broadcast
 POST /api/admin/notifications/test
 POST /api/admin/roles
+POST /api/admin/sessions/logout-all
 POST /api/admin/sync/ensure-mirror-fields
 POST /api/admin/sync/ensure-review-fields
 POST /api/admin/sync/full-resync
