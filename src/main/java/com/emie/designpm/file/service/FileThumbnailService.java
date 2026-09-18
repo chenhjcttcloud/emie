@@ -28,7 +28,7 @@ import org.springframework.stereotype.Service;
 public class FileThumbnailService {
     private static final Logger log = LoggerFactory.getLogger(FileThumbnailService.class);
     private static final int MAX_SIDE = 640;
-    private static final int AI_MAX_SIDE = 800;
+    private static final int AI_MAX_SIDE = 560;
     private static final int THUMBNAIL_CONCURRENCY = resolveThumbnailConcurrency();
     private static final Semaphore THUMBNAIL_SLOTS = new Semaphore(THUMBNAIL_CONCURRENCY);
     private final FileArchiveService fileArchiveService;
@@ -160,6 +160,10 @@ public class FileThumbnailService {
         }
     }
 
+    public boolean isBusy() {
+        return !queued.isEmpty();
+    }
+
     private static Path thumbnailPath(String safeName, boolean aiFile, Path cacheRoot) {
         return cacheRoot
                 .resolve(safeName + (aiFile ? ".ai-preview-v4.png" : ".png"))
@@ -169,7 +173,7 @@ public class FileThumbnailService {
     private BufferedImage renderPdfCompatibleAi(Path source) throws IOException {
         try (PDDocument document = Loader.loadPDF(source.toFile())) {
             if (document.getNumberOfPages() == 0) throw new IOException("AI 文件没有可预览页面");
-            return new PDFRenderer(document).renderImageWithDPI(0, 96);
+            return new PDFRenderer(document).renderImageWithDPI(0, 72);
         } catch (IOException e) {
             throw new IOException("AI 文件未包含 PDF 兼容预览", e);
         }
