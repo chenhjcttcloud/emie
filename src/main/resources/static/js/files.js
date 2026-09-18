@@ -113,6 +113,7 @@ async function openFilePreview(fileUrl, fileName, fileSize, retry = false) {
 async function showFilePreviewFrame(previewUrl, fileName) {
   const body = document.getElementById('filePreviewBody');
   if (!body) return;
+  const newWindowUrl = authenticatedFileUrl(previewUrl);
   try {
     const token = localStorage.getItem('design_pm_token');
     const response = await fetch(previewUrl, {
@@ -136,7 +137,7 @@ async function showFilePreviewFrame(previewUrl, fileName) {
   iframe.src = authenticatedFileUrl(previewUrl);
   iframe.setAttribute('allowfullscreen', '');
   body.replaceChildren(iframe);
-  if (EMIE.fileState.currentPreview) EMIE.fileState.currentPreview.previewUrl = previewUrl;
+  if (EMIE.fileState.currentPreview) EMIE.fileState.currentPreview.previewUrl = newWindowUrl;
   const openButton = document.getElementById('openPreviewWindowBtn');
   if (openButton) openButton.disabled = false;
 }
@@ -150,7 +151,13 @@ function showFilePreviewError(message, canRetry) {
 function openPreviewInNewWindow() {
   const previewUrl = EMIE.fileState.currentPreview?.previewUrl;
   if (!previewUrl) return;
-  window.open(authenticatedFileUrl(previewUrl), '_blank', 'noopener');
+  const link = document.createElement('a');
+  link.href = previewUrl;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 // ==================== 文件下载选项 ====================

@@ -30,7 +30,7 @@ import './admin-audit.js?v=357';
 import './admin-storage.js?v=321';
 import './admin-workload.js?v=430';
 import './admin.js?v=147';
-import './files.js?v=280';
+import './files.js?v=281';
 
 const EMIE = window.EMIE;
 const requiredEmieModules = [
