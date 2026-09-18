@@ -165,7 +165,14 @@ public class FileController {
             }
             ResponseEntity<Object> authResult = checkDownloadAccess(null, fileName, request);
             if (authResult != null) return authResult;
-            Path thumbnail = fileThumbnailService.getOrCreate(fileName, uploadPath.resolve("thumbnail-cache"));
+            Path cacheRoot = uploadPath.resolve("thumbnail-cache");
+            Path thumbnail = fileThumbnailService.cached(fileName, cacheRoot).orElse(null);
+            if (thumbnail == null) {
+                fileThumbnailService.enqueue(fileName, cacheRoot);
+                return ResponseEntity.accepted()
+                        .header(HttpHeaders.RETRY_AFTER, "1")
+                        .body(Map.of("status", "generating"));
+            }
             return ResponseEntity.ok()
                     .contentType(MediaType.IMAGE_PNG)
                     .cacheControl(org.springframework.http.CacheControl.maxAge(java.time.Duration.ofDays(7))

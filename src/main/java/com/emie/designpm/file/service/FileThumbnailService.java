@@ -1,35 +1,62 @@
 package com.emie.designpm.file.service;
 
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import javax.imageio.ImageIO;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /** 生成并缓存图片缩略图，原图只在用户点击预览时读取。 */
 @Service
 public class FileThumbnailService {
+    private static final Logger log = LoggerFactory.getLogger(FileThumbnailService.class);
     private static final int MAX_SIDE = 640;
-    private static final int AI_MAX_SIDE = 1800;
+    private static final int AI_MAX_SIDE = 800;
     private static final int THUMBNAIL_CONCURRENCY = resolveThumbnailConcurrency();
     private static final Semaphore THUMBNAIL_SLOTS = new Semaphore(THUMBNAIL_CONCURRENCY);
     private final FileArchiveService fileArchiveService;
+    private final Set<String> queued = ConcurrentHashMap.newKeySet();
+    private ExecutorService executor;
 
     public FileThumbnailService(FileArchiveService fileArchiveService) {
         this.fileArchiveService = fileArchiveService;
     }
 
+    @PostConstruct
+    void init() {
+        executor = Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "thumbnail-generator");
+            thread.setDaemon(true);
+            thread.setPriority(Thread.MIN_PRIORITY);
+            return thread;
+        });
+    }
+
+    @PreDestroy
+    void shutdown() {
+        if (executor != null) executor.shutdownNow();
+    }
+
     /**
-     * 缩略图生成（含 AI 文件的 PDF 渲染）是 CPU 密集操作，并发数固定为 4 时，
-     * 核心数较少的生产机器会被这批任务占满 CPU，拖慢其余接口的响应（表现为"服务器卡"）。
-     * 按可用核心数的一半动态设置上限（至少 2），并允许用环境变量按机器实际规格覆盖。
+     * 缩略图生成（含 AI 文件的 PDF 渲染）是 CPU 密集操作。多个 AI 文件同时渲染会拖慢其余接口。
+     * 默认一次只生成 1 个缩略图，并允许用环境变量按机器实际规格覆盖。
      */
     private static int resolveThumbnailConcurrency() {
         String configured = System.getProperty("app.thumbnail.concurrency", System.getenv("APP_THUMBNAIL_CONCURRENCY"));
@@ -41,7 +68,7 @@ public class FileThumbnailService {
                 // 配置非法时回退到自动计算
             }
         }
-        return Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
+        return 1;
     }
 
     public Path getOrCreate(String storedName, Path cacheRoot) throws IOException {
@@ -54,10 +81,8 @@ public class FileThumbnailService {
         Files.createDirectories(cacheRoot);
         String safeName = storedName.replaceAll("[^a-zA-Z0-9._-]", "_");
         boolean aiFile = storedName.toLowerCase(java.util.Locale.ROOT).endsWith(".ai");
-        // AI 预览规格单独带版本，确保旧的 96 DPI / 640px 缓存自动失效。
-        Path target = cacheRoot
-                .resolve(safeName + (aiFile ? ".ai-preview-v2.png" : ".png"))
-                .normalize();
+        // AI 预览规格单独带版本，确保旧的高分辨率缓存自动失效。
+        Path target = thumbnailPath(safeName, aiFile, cacheRoot);
         if (Files.exists(target)
                 && Files.getLastModifiedTime(target).toMillis()
                         >= Files.getLastModifiedTime(source).toMillis()) {
@@ -110,10 +135,41 @@ public class FileThumbnailService {
         }
     }
 
+    public Optional<Path> cached(String storedName, Path cacheRoot) {
+        boolean aiFile = storedName.toLowerCase(java.util.Locale.ROOT).endsWith(".ai");
+        Path target = thumbnailPath(storedName.replaceAll("[^a-zA-Z0-9._-]", "_"), aiFile, cacheRoot);
+        return Files.isRegularFile(target) ? Optional.of(target) : Optional.empty();
+    }
+
+    public void enqueue(String storedName, Path cacheRoot) {
+        if (cached(storedName, cacheRoot).isPresent()) return;
+        String key = cacheRoot.toAbsolutePath().normalize() + ":" + storedName;
+        if (!queued.add(key)) return;
+        try {
+            executor.submit(() -> {
+                try {
+                    getOrCreate(storedName, cacheRoot);
+                } catch (IOException e) {
+                    log.warn("后台缩略图生成失败 storedName={}: {}", storedName, e.getMessage());
+                } finally {
+                    queued.remove(key);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            queued.remove(key);
+        }
+    }
+
+    private static Path thumbnailPath(String safeName, boolean aiFile, Path cacheRoot) {
+        return cacheRoot
+                .resolve(safeName + (aiFile ? ".ai-preview-v4.png" : ".png"))
+                .normalize();
+    }
+
     private BufferedImage renderPdfCompatibleAi(Path source) throws IOException {
         try (PDDocument document = Loader.loadPDF(source.toFile())) {
             if (document.getNumberOfPages() == 0) throw new IOException("AI 文件没有可预览页面");
-            return new PDFRenderer(document).renderImageWithDPI(0, 144);
+            return new PDFRenderer(document).renderImageWithDPI(0, 96);
         } catch (IOException e) {
             throw new IOException("AI 文件未包含 PDF 兼容预览", e);
         }

@@ -8,7 +8,7 @@ const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const getUserName = (...args) => EMIE.actions.getUserName(...args);
 let pendingImages = [];
 let editingItemId = null;
-const PAGE_SIZE = 24;
+const PAGE_SIZE = 10;
 
 function parseJson(raw, fallback = []) { try { return raw ? JSON.parse(raw) : fallback; } catch { return fallback; } }
 function resourceUrl(url) { const token = localStorage.getItem('design_pm_token'); return token ? `${url}${url.includes('?') ? '&' : '?'}authToken=${encodeURIComponent(token)}` : url; }

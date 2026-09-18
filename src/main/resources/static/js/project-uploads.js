@@ -375,8 +375,15 @@ function loadProtectedImage(img) {
   const token = localStorage.getItem('design_pm_token');
   const headers = token ? { 'X-Auth-Token': token } : {};
   fetch(source, { headers, credentials: 'same-origin' })
-    .then(readImageBlob)
+    .then(response => {
+      if (response.status === 202) {
+        setTimeout(() => { img.dataset.authLoading = 'false'; loadProtectedImage(img); }, 1000);
+        return null;
+      }
+      return readImageBlob(response);
+    })
     .then(blob => {
+      if (!blob) return;
       img.src = URL.createObjectURL(blob);
       img.dataset.authLoaded = 'true';
     })
