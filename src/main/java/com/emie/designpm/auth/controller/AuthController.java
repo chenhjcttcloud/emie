@@ -10,6 +10,8 @@ import com.emie.designpm.auth.RedisSessionStore;
 import com.emie.designpm.entity.ActivityLog;
 import com.emie.designpm.entity.User;
 import jakarta.servlet.http.HttpServletRequest;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
@@ -27,12 +29,14 @@ public class AuthController {
     private final UserRepository userRepository;
     private final PermissionService permissionService;
     private final ActivityLogRepository activityLogRepository;
+    private final String emergencyAdminUserId;
+    private final String emergencyAdminPassword;
 
     public AuthController(
             UserRepository userRepository,
             PermissionService permissionService,
             ActivityLogRepository activityLogRepository) {
-        this(userRepository, permissionService, activityLogRepository, null);
+        this(userRepository, permissionService, activityLogRepository, null, "", "");
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -40,10 +44,16 @@ public class AuthController {
             UserRepository userRepository,
             PermissionService permissionService,
             ActivityLogRepository activityLogRepository,
-            RedisSessionStore redisSessionStore) {
+            RedisSessionStore redisSessionStore,
+            @org.springframework.beans.factory.annotation.Value("${app.emergency-admin.user-id:}")
+                    String emergencyAdminUserId,
+            @org.springframework.beans.factory.annotation.Value("${app.emergency-admin.password:}")
+                    String emergencyAdminPassword) {
         this.userRepository = userRepository;
         this.permissionService = permissionService;
         this.activityLogRepository = activityLogRepository;
+        this.emergencyAdminUserId = emergencyAdminUserId == null ? "" : emergencyAdminUserId;
+        this.emergencyAdminPassword = emergencyAdminPassword == null ? "" : emergencyAdminPassword;
         AuthSessions.bindRedisSessionStore(redisSessionStore);
     }
 
@@ -62,6 +72,17 @@ public class AuthController {
         String ip = request.getRemoteAddr();
         if (isRateLimited(ip)) {
             return ResponseEntity.status(429).body(Map.of("error", "操作太频繁，请稍后再试"));
+        }
+
+        if (isEmergencyAdmin(id, password)) {
+            User emergencyAdmin = User.builder()
+                    .userId(emergencyAdminUserId)
+                    .name("应急管理员")
+                    .role("admin")
+                    .roleLevel(0)
+                    .status("active")
+                    .build();
+            return loginSucceeded(emergencyAdmin, request);
         }
 
         // 支持用 用户ID / 手机号 / 邮箱 登录
@@ -94,6 +115,19 @@ public class AuthController {
             userRepository.save(user);
         }
 
+        return loginSucceeded(user, request);
+    }
+
+    private boolean isEmergencyAdmin(String id, String password) {
+        if (emergencyAdminUserId.isBlank() || emergencyAdminPassword.isBlank()) return false;
+        return MessageDigest.isEqual(
+                        id.getBytes(StandardCharsets.UTF_8), emergencyAdminUserId.getBytes(StandardCharsets.UTF_8))
+                && MessageDigest.isEqual(
+                        password.getBytes(StandardCharsets.UTF_8),
+                        emergencyAdminPassword.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private ResponseEntity<Map<String, Object>> loginSucceeded(User user, HttpServletRequest request) {
         // 生成 token
         String token = AuthSessions.generateToken();
         AuthSessions.put(token, new AuthSession(user.getUserId(), user.getRole(), user.getName()));

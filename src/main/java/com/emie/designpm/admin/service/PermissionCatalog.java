@@ -24,7 +24,8 @@ public final class PermissionCatalog {
             "page.design_requirements.view",
             "page.subtasks.mine.view",
             "page.scoring.view",
-            "page.image_library.view");
+            "page.image_library.view",
+            "page.material_market.view");
 
     private static final Map<String, String> LEGACY_ALIASES;
 
@@ -74,6 +75,8 @@ public final class PermissionCatalog {
             case "admin" -> {
                 permissions.add("page.points.view");
                 permissions.add("page.subtasks.department.view");
+                permissions.add("page.subtasks.market.view");
+                permissions.add("page.workload.view");
                 permissions.add("page.admin.view");
                 // 身份切换是管理员验证各角色权限的恢复入口；兼容模式避免新测试库
                 // 尚未执行权限迁移时把管理员意外锁死，显式 deny 仍由 PermissionService 优先移除。
@@ -94,6 +97,7 @@ public final class PermissionCatalog {
             case "planner" -> {
                 permissions.add("page.points.view");
                 permissions.add("page.subtasks.department.view");
+                permissions.add("page.subtasks.market.view");
                 permissions.add("project.regular.create");
                 permissions.add("project.channel.edit");
                 permissions.add("project.regular.edit");
@@ -118,6 +122,7 @@ public final class PermissionCatalog {
             }
             case "designer" -> {
                 permissions.add("page.points.view");
+                permissions.add("page.subtasks.market.view");
                 permissions.add("subtask.accept");
                 permissions.add("subtask.deliver");
                 permissions.add("subtask.redeliver");

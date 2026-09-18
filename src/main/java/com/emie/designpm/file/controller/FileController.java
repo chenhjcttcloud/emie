@@ -91,7 +91,6 @@ public class FileController {
         this.materialMarketRepository = materialMarketRepository;
     }
 
-    /** 保留旧测试/嵌入式调用方的构造器兼容性。 */
     public FileController(
             FileArchiveService fileArchiveService,
             FileRecordRepository fileRecordRepository,
@@ -112,7 +111,6 @@ public class FileController {
                 null);
     }
 
-    /** 保留旧测试/嵌入式调用方的构造器兼容性。 */
     public FileController(
             FileArchiveService fileArchiveService,
             FileRecordRepository fileRecordRepository,
@@ -132,7 +130,6 @@ public class FileController {
                 null);
     }
 
-    /** 保留旧测试/嵌入式调用方的构造器兼容性。 */
     public FileController(
             FileArchiveService fileArchiveService,
             FileRecordRepository fileRecordRepository,
@@ -192,7 +189,6 @@ public class FileController {
         }
     }
 
-    /** 兼容历史记录：仅保存了原始文件名、未保存 storedName 的图片。 */
     @GetMapping("/thumbnail-by-original")
     public ResponseEntity<Object> thumbnailByOriginal(@RequestParam String name, HttpServletRequest request) {
         for (var record : fileRecordRepository.findByOriginalNameOrderByCreatedAtDesc(name)) {
@@ -338,7 +334,6 @@ public class FileController {
         return item;
     }
 
-    /** 下载文件，?download=true 强制浏览器下载（弹出保存对话框）*/
     @GetMapping("/download/{subDir}/{fileName}")
     public ResponseEntity<Object> downloadFileInSubDir(
             @PathVariable String subDir,
@@ -365,7 +360,6 @@ public class FileController {
         }
     }
 
-    /** 下载文件，?download=true 强制浏览器下载（弹出保存对话框）*/
     @GetMapping("/download/{fileName}")
     public ResponseEntity<Object> downloadFile(
             @PathVariable String fileName,
@@ -391,7 +385,6 @@ public class FileController {
         }
     }
 
-    /** 兼容历史记录：仅保存了原始文件名、未保存 storedName 的文件。 */
     @GetMapping("/download-by-original")
     public ResponseEntity<Object> downloadByOriginal(
             @RequestParam String name,
@@ -460,7 +453,6 @@ public class FileController {
         return ResponseEntity.ok(result);
     }
 
-    /** 返回统一的 PDF 预览内容。 */
     @GetMapping("/preview/{fileName}")
     public ResponseEntity<Object> previewFile(@PathVariable String fileName, HttpServletRequest request) {
         if (!SecurityUtil.isValidFileName(fileName) || !filePreviewService.isPreviewable(fileName)) {

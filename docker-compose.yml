@@ -6,6 +6,8 @@ services:
     network_mode: host
     environment:
       SERVER_ADDRESS: 0.0.0.0
+      EMIE_EMERGENCY_ADMIN_USER_ID: ${EMIE_EMERGENCY_ADMIN_USER_ID:-}
+      EMIE_EMERGENCY_ADMIN_PASSWORD: ${EMIE_EMERGENCY_ADMIN_PASSWORD:-}
       APP_DB_POOL_ISOLATION_ENABLED: ${APP_DB_POOL_ISOLATION_ENABLED:-true}
       APP_DB_BACKGROUND_JDBC_URL: jdbc:mysql://${DESIGNPM_DB_HOST:?Set DESIGNPM_DB_HOST}:3306/${DESIGNPM_DB_NAME:?Set DESIGNPM_DB_NAME}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       APP_DB_BACKGROUND_DB_USER: ${DESIGNPM_DB_USER:?Set DESIGNPM_DB_USER}

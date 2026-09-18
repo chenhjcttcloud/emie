@@ -137,6 +137,15 @@ class PermissionServiceTest {
     }
 
     @Test
+    void pagePermissionsKeepIndependentNavigationDefaults() {
+        assertTrue(PermissionCatalog.compatibilityPermissions("admin").contains("page.workload.view"));
+        assertTrue(PermissionCatalog.compatibilityPermissions("planner").contains("page.subtasks.market.view"));
+        assertTrue(PermissionCatalog.compatibilityPermissions("designer").contains("page.subtasks.market.view"));
+        assertTrue(PermissionCatalog.compatibilityPermissions("designer").contains("page.material_market.view"));
+        assertFalse(PermissionCatalog.compatibilityPermissions("sales").contains("page.subtasks.market.view"));
+    }
+
+    @Test
     void configuredDataScopeOverridesCompatibilityScopeAndIsReturnedToFrontend() {
         RoleRepository roles = mock(RoleRepository.class);
         RolePermissionRepository assignments = emptyAssignments();

@@ -377,6 +377,8 @@ function loadProtectedImage(img) {
   fetch(source, { headers, credentials: 'same-origin' })
     .then(response => {
       if (response.status === 202) {
+        if (img.dataset.thumbnailRetries === '30') throw new Error('缩略图生成超时');
+        img.dataset.thumbnailRetries = String(Number(img.dataset.thumbnailRetries || 0) + 1);
         setTimeout(() => { img.dataset.authLoading = 'false'; loadProtectedImage(img); }, 1000);
         return null;
       }

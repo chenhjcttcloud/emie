@@ -123,11 +123,19 @@ class FrontendModuleLayoutTest {
                 "上传必须保留用户选择的原文件字节，不得在客户端压缩图片");
         assertTrue(coreAuth.contains("apiGet('/auth/permissions')"), "登录后应加载后端统一能力清单");
         assertTrue(
+                html.contains("auth-reveal-internal-login") && coreAuth.contains("revealInternalLogin"),
+                "飞书登录不可用时应保留由 EMIE 标志连续点击开启的内部账号登录入口");
+        assertTrue(
                 readResource("/static/js/core-identity.js").contains("apiGet('/auth/permissions')"),
                 "管理员切换身份后应立即刷新目标角色能力清单");
         assertTrue(
                 coreShell.contains("page.design_requirements.view") && coreShell.contains("canNavigateTo(view)"),
                 "导航显示和页面进入应统一读取页面权限");
+        assertTrue(
+                coreShell.contains("page.workload.view")
+                        && coreShell.contains("page.subtasks.market.view")
+                        && coreShell.contains("page.material_market.view"),
+                "每个侧边栏页面应使用独立页面权限，不得复用其他页面的开关");
         assertTrue(
                 dashboardLists.contains("hasPermission('project.channel.create')")
                         && dashboardLists.contains("hasPermission('design_requirement.create')"),
@@ -144,12 +152,18 @@ class FrontendModuleLayoutTest {
                 projectUploads.contains("new IntersectionObserver")
                         && projectUploads.contains("protectedImageViewportObserver.observe(img)"),
                 "受保护缩略图应仅在接近视口时加载，避免图档库一次请求全部图片");
+        assertTrue(projectUploads.contains("img.dataset.thumbnailRetries === '30'"), "后台缩略图持续生成时必须限制浏览器重试次数");
         String imageLibrary = readResource("/static/js/image-library.js");
         assertTrue(
                 imageLibrary.contains("project-pagination image-library-pagination")
                         && imageLibrary.contains("image-library-page-controls")
                         && imageLibrary.contains("共 ${filteredItems.length} 项"),
                 "图档库分页应使用居中的紧凑分页条并清楚显示结果范围");
+        assertTrue(
+                imageLibrary.contains("const PAGE_SIZE = 10;")
+                        && imageLibrary.contains(
+                                "image-library-ai-cover\"><b>Ai</b><small>Adobe Illustrator</small><img"),
+                "图档库应保留 AI 缩略预览，并限制每页数量避免批量渲染");
         assertTrue(
                 projectUploads.contains("const originalBlob = payload.blob")
                         && projectUploads.contains("return { type: originalType, blob: originalBlob }"),

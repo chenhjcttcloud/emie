@@ -50,6 +50,10 @@ spring:
     time-zone: Asia/Shanghai
 
 app:
+  emergency-admin:
+    # 仅在两个环境变量都配置时启用；不得将凭据写入配置文件或源码。
+    user-id: ${EMIE_EMERGENCY_ADMIN_USER_ID:}
+    password: ${EMIE_EMERGENCY_ADMIN_PASSWORD:}
   notification:
     # 仅 dev/local profile 读取；prod profile 即使设置该变量也不会改写业务收件人。
     test-recipient-user-id: ${APP_NOTIFICATION_TEST_RECIPIENT_USER_ID:}

@@ -138,6 +138,9 @@ function showLogin() {
   document.getElementById('loginPage').style.display = '';
   document.getElementById('appContainer').style.display = 'none';
   document.getElementById('loginError').style.display = 'none';
+  const internalLogin = document.getElementById('internalLoginForm');
+  if (internalLogin) internalLogin.hidden = true;
+  internalLoginClickCount = 0;
   document.documentElement.dataset.appReady = 'login';
   // 加载公开配置（如登录页背景）
   loadPublicConfig();
@@ -422,6 +425,22 @@ async function handleLogin(event) {
   }
 }
 
+let internalLoginClickCount = 0;
+
+function revealInternalLogin() {
+  if (++internalLoginClickCount === 5) {
+    internalLoginClickCount = 0;
+    toggleInternalLogin();
+  }
+}
+
+function toggleInternalLogin() {
+  const form = document.getElementById('internalLoginForm');
+  if (!form) return;
+  form.hidden = !form.hidden;
+  if (!form.hidden) document.getElementById('loginId')?.focus();
+}
+
 // ==================== 飞书 SSO 登录 ====================
 function handleFeishuLogin() {
   fetch('/api/auth/feishu/config').then(r => r.json()).then(cfg => {
@@ -592,6 +611,8 @@ EMIE.registerActions({
   refreshPendingAccess,
   togglePassword,
   handleLogin,
+  revealInternalLogin,
+  toggleInternalLogin,
   handleFeishuLogin,
   checkFeishuCallback,
   handleLogout,
@@ -609,6 +630,8 @@ const registerEventAction = EMIE.actions.registerEventAction;
 if (registerEventAction) {
   registerEventAction('auth-logout', () => handleLogout());
   registerEventAction('auth-feishu-login', () => handleFeishuLogin());
+  registerEventAction('auth-reveal-internal-login', () => revealInternalLogin());
+  registerEventAction('auth-internal-login', event => handleLogin(event));
   registerEventAction('auth-refresh-access', () => EMIE.actions.refreshPendingAccess());
   registerEventAction('auth-close-idle', () => EMIE.actions.closeIdleLogoutModal());
   registerEventAction('auth-force-refresh', () => forceRefreshForVersion());

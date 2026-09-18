@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletRequest;
 
 class AuthControllerImpersonationTest {
     private static final String ADMIN_ID = "admin-impersonation-test";
@@ -42,5 +43,24 @@ class AuthControllerImpersonationTest {
         assertEquals(400, response.getStatusCode().value());
         assertEquals("停用用户不能切换视角", response.getBody().get("error"));
         assertEquals(ADMIN_ID, AuthSessions.validateToken(token).userId());
+    }
+
+    @Test
+    void configuredEmergencyAdminCanLogInWithoutDatabaseUser() {
+        UserRepository users = mock(UserRepository.class);
+        AuthController controller = new AuthController(
+                users,
+                mock(PermissionService.class),
+                mock(ActivityLogRepository.class),
+                null,
+                "break-glass",
+                "test-only-password");
+
+        var response = controller.login(
+                Map.of("id", "break-glass", "password", "test-only-password"), new MockHttpServletRequest());
+
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals("admin", response.getBody().get("role"));
+        AuthSessions.clearUserTokens("break-glass");
     }
 }

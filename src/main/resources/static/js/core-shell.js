@@ -4,15 +4,15 @@ const hasPermission = (...args) => EMIE.actions.hasPermission(...args);
 
 const NAV_DEFINITIONS = [
   { view: 'dashboard', icon: '📊', label: '工作台', permission: 'page.dashboard.view' },
-  { view: 'workload', icon: '📈', label: '工作量', permission: 'page.admin.view' },
+  { view: 'workload', icon: '📈', label: '工作量', permission: 'page.workload.view' },
   { view: 'orders', icon: '📋', label: '全部项目', permission: 'page.projects.view' },
   { view: 'channel', icon: '📦', label: '渠道定制单', permission: 'page.projects.channel.view' },
   { view: 'regular', icon: '🏭', label: '公司常规品', permission: 'page.projects.regular.view' },
   { view: 'design-needs', icon: '🎨', label: '设计/送审需求', permission: 'page.design_requirements.view' },
   { view: 'tasks', icon: '📌', label: '我的子任务', permission: 'page.subtasks.mine.view' },
   { view: 'other-tasks', icon: '🧭', label: '其他子任务', permission: 'page.subtasks.department.view' },
-  { view: 'task-market', icon: '⚡', label: '接单市场', permission: 'page.subtasks.mine.view' },
-  { view: 'materials', icon: '🧺', label: '素材广场', permission: 'page.dashboard.view' },
+  { view: 'task-market', icon: '⚡', label: '接单市场', permission: 'page.subtasks.market.view' },
+  { view: 'materials', icon: '🧺', label: '素材广场', permission: 'page.material_market.view' },
   { view: 'image-library', icon: '🖼️', label: '图档库', permission: 'page.image_library.view' },
   { view: 'scoring', icon: '⭐', label: '评分', permission: 'page.scoring.view' },
   { view: 'points', icon: '🏅', label: '积分', permission: 'page.points.view' },
@@ -23,8 +23,6 @@ function canNavigateTo(view) {
   const nav = NAV_DEFINITIONS.find(item => item.view === view);
   if (!nav || !hasPermission(nav.permission)) return false;
   if (view === 'points' && !['planner', 'designer', 'admin'].includes(EMIE.state.currentRole)) return false;
-  if (view === 'task-market' && !['designer', 'planner', 'admin'].includes(EMIE.state.currentRole)) return false;
-  if (view === 'workload' && EMIE.state.currentRole !== 'admin') return false;
   if (view === 'image-library' && !['admin', 'planner', 'designer'].includes(EMIE.state.currentRole)) return false;
   return view !== 'other-tasks' || canViewOtherTasksNav();
 }
