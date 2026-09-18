@@ -225,14 +225,9 @@ function closeDownloadOptions() {
 }
 
 /** 直接下载：使用带认证参数的同源链接，保留服务端文件字节和 Content-Disposition。 */
-function doDirectDownload(url, fileName = '') {
+function doDirectDownload(url) {
   const downloadUrl = appendDownloadParam(authenticatedFileUrl(url));
-  const link = document.createElement('a');
-  link.href = downloadUrl;
-  link.download = fileName || url.split('/').pop()?.split('?')[0] || 'download';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+  window.location.assign(downloadUrl);
 }
 
 /** 给 URL 追加 ?download=true 参数 */
