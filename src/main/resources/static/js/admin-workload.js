@@ -109,8 +109,8 @@ async function renderAdminWorkload(container) {
       const roleUsers = (r.users || []).filter(u => !workloadQuery || String(u.name || '').toLowerCase().includes(workloadQuery.toLowerCase()));
       roleUsers.sort((a, b) => {
         if (workloadSort === 'total') return (Number(b.created || b.assigned || 0) + Number(b.designRequirements || 0)) - (Number(a.created || a.assigned || 0) + Number(a.designRequirements || 0));
-        if (workloadSort === 'pending') return (Number(b.created || b.assigned || 0) - Number(b.completed || 0)) - (Number(a.created || a.assigned || 0) - Number(a.completed || 0));
-        if (workloadSort === 'rate') return (Number(b.completed || 0) / Math.max(1, Number(b.created || b.assigned || 0))) - (Number(a.completed || 0) / Math.max(1, Number(a.created || a.assigned || 0)));
+        if (workloadSort === 'pending') return ((Number(b.created || b.assigned || 0) + Number(b.designRequirements || 0)) - Number(b.completed || 0) - Number(b.completedDesignRequirements || 0)) - ((Number(a.created || a.assigned || 0) + Number(a.designRequirements || 0)) - Number(a.completed || 0) - Number(a.completedDesignRequirements || 0));
+        if (workloadSort === 'rate') return ((Number(b.completed || 0) + Number(b.completedDesignRequirements || 0)) / Math.max(1, Number(b.created || b.assigned || 0) + Number(b.designRequirements || 0))) - ((Number(a.completed || 0) + Number(a.completedDesignRequirements || 0)) / Math.max(1, Number(a.created || a.assigned || 0) + Number(a.designRequirements || 0)));
         return 0;
       });
       if (!roleUsers.length) continue;
@@ -161,9 +161,11 @@ async function renderAdminWorkload(container) {
       for (const u of roleUsers) {
         const created = u.created || u.assigned || 0;
         const completed = Number(u.completed || 0) + Number(u.completedDesignRequirements || 0);
+        const workloadTotal = Number(created) + Number(u.designRequirements || 0);
         const createdDisplay = role === 'promotion' ? '—' : created;
         const completedDisplay = role === 'promotion' ? '—' : completed;
-        const rate = created > 0 ? Math.round((completed / created) * 100) + '%' : '-';
+        const completionPercent = workloadTotal > 0 ? Math.min(100, (completed / workloadTotal) * 100) : 0;
+        const rate = workloadTotal > 0 ? Math.round(completionPercent) + '%' : '-';
         const categoryValues = (role === 'planner' || role === 'sales') ? `
             <span style="flex:1;font-size:13px;font-weight:700;color:#6D28D9;background:#F5F3FF;border-radius:6px;padding:3px 8px;text-align:center;">${u.channelCustomProjects || 0}</span>
             <span style="flex:1;font-size:13px;font-weight:700;color:#B45309;background:#FFFBEB;border-radius:6px;padding:3px 8px;text-align:center;">${u.regularProjects || 0}</span>` : (role === 'designer' || role === 'supplychain') ? `
@@ -183,7 +185,7 @@ async function renderAdminWorkload(container) {
           </div>
           <!-- 进度条 -->
           <div style="background:var(--gray-200);border-radius:6px;height:8px;overflow:hidden;">
-            <div style="background:${created > 0 ? '#639922' : '#e5e7eb'};width:${created > 0 ? Math.min(100, (completed / created) * 100) : 0}%;height:100%;border-radius:6px;transition:width 0.3s;"></div>
+            <div style="background:${workloadTotal > 0 ? '#639922' : '#e5e7eb'};width:${completionPercent}%;height:100%;border-radius:6px;transition:width 0.3s;"></div>
           </div>
         </div>`;
       }
