@@ -42,9 +42,10 @@ async function renderAdminUsers(container, page = 0, filters = {}) {
     const params = new URLSearchParams({ page: String(page), size: '30' });
     Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); });
     pageResult = await apiGet('/admin/users/page?' + params);
+    if (pageResult.totalPages && page >= pageResult.totalPages) return renderAdminUsers(container, pageResult.totalPages - 1, filters);
     users = pageResult.items || [];
     EMIE.state.adminUsers = users;
-    EMIE.adminUserPage = { ...pageResult, container, page, filters };
+    EMIE.adminUserPage = { ...pageResult, container, page: pageResult.page ?? page, filters };
     [roles] = await Promise.all([
       apiGet('/admin/roles'),
     ]);

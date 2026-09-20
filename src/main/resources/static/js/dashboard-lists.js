@@ -256,9 +256,13 @@ async function renderOrderList(main, type, role, uid, titleOverride = '', endpoi
   const participating = role === 'designer' || role === 'supplychain';
   const preset = endpoint === '/projects/page' ? (EMIE.projectListPreset || {}) : {};
   EMIE.projectListPreset = null;
-  const state = EMIE.projectListState = { type, role, uid, endpoint, renderId, page: 0, total: 0, totalPages: 0, filters: { ...preset }, loading: false };
+  const previous = EMIE.projectListState;
+  const keepPage = !Object.keys(preset).length && previous?.type === type && previous?.role === role && previous?.uid === uid && previous?.endpoint === endpoint;
+  const state = EMIE.projectListState = { type, role, uid, endpoint, renderId, page: keepPage ? previous.page : 0, total: 0, totalPages: 0, filters: keepPage ? { ...previous.filters } : { ...preset }, loading: false };
   main.innerHTML = `<div class="project-query-loading"><span class="project-query-spinner"></span>正在查询项目…</div>`;
-  const result = await loadProjectListPage(0);
+  let result = await loadProjectListPage(state.page);
+  if (state.totalPages && state.page >= state.totalPages) result = await loadProjectListPage(state.totalPages - 1);
+  state.page = result.page ?? Math.min(state.page, Math.max(state.totalPages - 1, 0));
   if (EMIE.state.renderId !== renderId) return;
 
   main.innerHTML = `
@@ -311,6 +315,10 @@ async function renderOrderList(main, type, role, uid, titleOverride = '', endpoi
     const statusEl = document.getElementById('projectStatusFilter');
     if (statusEl) statusEl.value = state.filters.status;
   }
+  ['category', 'market', 'keyword', 'deadlineStart', 'deadlineEnd'].forEach(key => {
+    const element = document.getElementById({ category: 'projectCategoryFilter', market: 'projectMarketFilter', keyword: 'searchInput', deadlineStart: 'filterDateStart', deadlineEnd: 'filterDateEnd' }[key]);
+    if (element && state.filters[key]) element.value = state.filters[key];
+  });
   if (state.filters.ownerRole && state.filters.ownerId) {
     const ownerRoleEl = document.getElementById('projectOwnerRoleFilter');
     if (ownerRoleEl) {
@@ -470,8 +478,10 @@ async function renderMyTasks(main, role, uid, bucket = 'all') {
   }
 
   // 其他角色: 展示项目列表，方便查看和添加子任务
-  EMIE.taskProjectListState = { page: 0, total: 0, totalPages: 0, filters: {} };
-  const initialPage = await loadTaskProjectPage(0);
+  const previous = EMIE.taskProjectListState;
+  EMIE.taskProjectListState = { page: previous?.page || 0, total: 0, totalPages: 0, filters: { ...previous?.filters } };
+  let initialPage = await loadTaskProjectPage(EMIE.taskProjectListState.page);
+  if (EMIE.taskProjectListState.totalPages && EMIE.taskProjectListState.page >= EMIE.taskProjectListState.totalPages) initialPage = await loadTaskProjectPage(EMIE.taskProjectListState.totalPages - 1);
   const orders = initialPage.items || [];
 
   main.innerHTML = `
@@ -504,6 +514,12 @@ async function renderMyTasks(main, role, uid, bucket = 'all') {
     <div id="taskProjectContainer">${renderTaskProjectTable(orders)}</div>
   `;
   EMIE.dashboardState.taskProjectsCache = orders;
+  const filters = EMIE.taskProjectListState.filters;
+  if (filters.status) document.getElementById('taskProjectFilter').value = filters.status;
+  if (filters.type) document.getElementById('taskProjectTypeFilter').value = filters.type;
+  if (filters.keyword) document.getElementById('taskProjectSearch').value = filters.keyword;
+  if (filters.deadlineStart) document.getElementById('taskProjectDateStart').value = filters.deadlineStart;
+  if (filters.deadlineEnd) document.getElementById('taskProjectDateEnd').value = filters.deadlineEnd;
 }
 
 async function loadTaskProjectPage(page) {

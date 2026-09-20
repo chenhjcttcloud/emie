@@ -8,21 +8,23 @@ const openProjectDetail = (...args) => EMIE.actions.openProjectDetail(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
 
 async function renderAdminLogs(container) {
+  const filters = EMIE.adminState.logFilters || {};
   container.innerHTML = `
     <div class="admin-log-filter-panel"><div class="admin-log-filter-title"><span>⌕</span><div><strong>日志筛选</strong><small>选择日期范围查询系统操作记录</small></div></div><div class="admin-log-filter-fields">
-      <label><span>开始日期</span><input type="date" class="form-input" id="logStartDate" title="开始日期"></label>
+      <label><span>开始日期</span><input type="date" class="form-input" id="logStartDate" value="${escHtml(filters.startDate || '')}" title="开始日期"></label>
       <i>至</i>
-      <label><span>结束日期</span><input type="date" class="form-input" id="logEndDate" title="结束日期"></label>
+      <label><span>结束日期</span><input type="date" class="form-input" id="logEndDate" value="${escHtml(filters.endDate || '')}" title="结束日期"></label>
       <button class="btn btn-primary btn-sm" data-emie-action="click:audit-query-logs">查询日志</button>
       <button class="btn btn-outline btn-sm" data-emie-action="click:audit-reset-logs">重置</button>
     </div></div>
     <div id="logContainer"><div class="loading">加载中</div></div>
   `;
-  EMIE.adminState.logPage = 0;
+  EMIE.adminState.logPage ??= 0;
   await loadAdminLogs();
 }
 
 async function queryAdminLogs() {
+  EMIE.adminState.logFilters = { startDate: document.getElementById('logStartDate')?.value || '', endDate: document.getElementById('logEndDate')?.value || '' };
   EMIE.adminState.logPage = 0;
   await loadAdminLogs();
 }
@@ -32,6 +34,7 @@ async function resetAdminLogs() {
   const end = document.getElementById('logEndDate');
   if (start) start.value = '';
   if (end) end.value = '';
+  EMIE.adminState.logFilters = {};
   await queryAdminLogs();
 }
 
@@ -54,6 +57,10 @@ async function loadAdminLogs() {
     if (params.length) url += '?' + params.join('&');
     const pageResult = await apiGet(url);
     if (requestId !== EMIE.adminState.logRequestId) return;
+    if (pageResult.totalPages && EMIE.adminState.logPage >= pageResult.totalPages) {
+      EMIE.adminState.logPage = pageResult.totalPages - 1;
+      return loadAdminLogs();
+    }
     const logs = pageResult.items || [];
     if (!logs.length) {
       container.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><p>暂无日志记录</p></div>';

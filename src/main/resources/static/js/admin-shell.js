@@ -77,7 +77,7 @@ async function renderAdminContent() {
     } else if (EMIE.adminState.currentTab === 'appearance') {
       await renderAdminAppearance(container);
     } else if (EMIE.adminState.currentTab === 'users') {
-      await renderAdminUsers(container);
+      await renderAdminUsers(container, EMIE.adminUserPage?.page || 0, EMIE.adminUserPage?.filters || {});
     } else if (EMIE.adminState.currentTab === 'roles') {
       await renderAdminRoles(container);
     } else if (EMIE.adminState.currentTab === 'categories') {

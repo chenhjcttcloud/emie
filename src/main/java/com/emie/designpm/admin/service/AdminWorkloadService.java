@@ -2,11 +2,13 @@ package com.emie.designpm.admin.service;
 
 import com.emie.designpm.admin.repository.UserRepository;
 import com.emie.designpm.entity.User;
+import com.emie.designpm.performance.service.PerformanceService;
 import com.emie.designpm.util.TextEncodingUtil;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -25,12 +27,14 @@ import org.springframework.stereotype.Service;
 public class AdminWorkloadService {
 
     private final UserRepository userRepository;
+    private final PerformanceService performanceService;
 
     @PersistenceContext
     private EntityManager entityManager;
 
-    public AdminWorkloadService(UserRepository userRepository) {
+    public AdminWorkloadService(UserRepository userRepository, PerformanceService performanceService) {
         this.userRepository = userRepository;
+        this.performanceService = performanceService;
     }
 
     private List<User> workloadUsers() {
@@ -201,6 +205,13 @@ public class AdminWorkloadService {
                 ? endDate.plusDays(1).atStartOfDay()
                 : LocalDate.now().plusDays(1).atStartOfDay();
         if (custom) range = "custom";
+        String performanceMonth = performanceMonth(range, startDate, endDate, cutoff);
+        Map<String, Double> performancePoints = performanceMonth == null
+                ? Map.of()
+                : performanceService.leaderboard(performanceMonth).stream()
+                        .collect(Collectors.toMap(
+                                row -> String.valueOf(row.get("userId")),
+                                row -> ((Number) row.get("points")).doubleValue()));
 
         Map<String, Object> result = new LinkedHashMap<>();
         List<User> allUsers = workloadUsers();
@@ -226,14 +237,18 @@ public class AdminWorkloadService {
                         + ", SUM(CASE WHEN created_at < ?2 AND (completed_at IS NULL OR completed_at >= ?2) THEN 1 ELSE 0 END) FROM projects WHERE created_at < ?2 GROUP BY sales_id",
                 cutoff,
                 endExclusive);
-        Map<String, long[]> projectTimelineByPlanner = workloadTimelineCounts(
-                "SELECT planner_id, SUM(CASE WHEN created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END), "
-                        + "SUM(CASE WHEN completed_at >= ?1 AND completed_at < ?2 THEN 1 ELSE 0 END) "
-                        + ", SUM(CASE WHEN type = 'channel_custom' AND created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END) "
-                        + ", SUM(CASE WHEN type <> 'channel_custom' AND created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END) "
-                        + ", SUM(CASE WHEN completed_at >= ?1 AND completed_at < ?2 AND type = 'channel_custom' THEN 1 ELSE 0 END) "
-                        + ", SUM(CASE WHEN completed_at >= ?1 AND completed_at < ?2 AND (type <> 'channel_custom' OR type IS NULL) THEN 1 ELSE 0 END) "
-                        + ", SUM(CASE WHEN created_at < ?2 AND (completed_at IS NULL OR completed_at >= ?2) THEN 1 ELSE 0 END) FROM projects WHERE created_at < ?2 GROUP BY planner_id",
+        Map<String, long[]> taskTimelineByPlanner = workloadTimelineCounts(
+                "SELECT s.publisher_id, SUM(CASE WHEN s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), "
+                        + "SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN p.type = 'channel_custom' AND s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN (p.type <> 'channel_custom' OR p.type IS NULL) AND s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 AND p.type = 'channel_custom' THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 AND (p.type <> 'channel_custom' OR p.type IS NULL) THEN 1 ELSE 0 END) "
+                        + "FROM sub_tasks s LEFT JOIN projects p ON p.id = s.project_id WHERE s.created_at < ?2 AND s.publisher_role = 'planner' GROUP BY s.publisher_id",
+                cutoff,
+                endExclusive);
+        Map<String, Long> projectsCreatedByPlanner = workloadCountByUser(
+                "SELECT planner_id, COUNT(*) FROM projects WHERE created_at >= ?1 AND created_at < ?2 GROUP BY planner_id",
                 cutoff,
                 endExclusive);
         Map<String, long[]> taskTimelineByDesigner = workloadTimelineCounts(
@@ -279,6 +294,7 @@ public class AdminWorkloadService {
                 us.put("userId", u.getUserId());
                 us.put("name", TextEncodingUtil.repairUtf8Mojibake(u.getName()));
                 us.put("title", u.getTitle() != null ? u.getTitle() : "");
+                us.put("performancePoints", performancePoints.getOrDefault(u.getUserId(), 0d));
 
                 switch (role) {
                     case "sales" -> {
@@ -301,7 +317,7 @@ public class AdminWorkloadService {
                         us.put("designRequirements", designRequirementsByOwner.getOrDefault(u.getUserId(), 0L));
                     }
                     case "planner" -> {
-                        long[] counts = projectTimelineByPlanner.getOrDefault(u.getUserId(), new long[6]);
+                        long[] counts = taskTimelineByPlanner.getOrDefault(u.getUserId(), new long[6]);
                         long created = counts[0];
                         long completed = counts[1];
                         us.put("created", created);
@@ -310,6 +326,7 @@ public class AdminWorkloadService {
                         us.put("regularProjects", counts[3]);
                         us.put("completedChannelProjects", counts[4]);
                         us.put("completedRegularProjects", counts[5]);
+                        us.put("createdProjects", projectsCreatedByPlanner.getOrDefault(u.getUserId(), 0L));
                         us.put("outstanding", counts.length > 6 ? counts[6] : 0);
                         us.put("designRequirements", designRequirementsByPlanner.getOrDefault(u.getUserId(), 0L));
                     }
@@ -413,9 +430,24 @@ public class AdminWorkloadService {
         summary.put("totalProjectsOutstanding", totalProjectsOutstanding);
         summary.put("totalTasksOutstanding", totalTasksOutstanding);
         summary.put("totalDesignRequirements", totalDesignRequirements);
+        summary.put("performanceMonth", performanceMonth);
+        summary.put(
+                "performanceSource",
+                performanceMonth == null
+                        ? "绩效积分仅按完整自然月归属；请选择“本月”或完整自然月自定义日期。"
+                        : performanceMonth + " 绩效积分：积分流水与调账流水按归属月汇总。");
         result.put("_summary", summary);
 
         return result;
+    }
+
+    private String performanceMonth(String range, LocalDate startDate, LocalDate endDate, LocalDateTime cutoff) {
+        if ("month".equals(range)) return YearMonth.from(cutoff).toString();
+        if ("custom".equals(range)
+                && startDate.getDayOfMonth() == 1
+                && endDate.equals(YearMonth.from(startDate).atEndOfMonth()))
+            return YearMonth.from(startDate).toString();
+        return null;
     }
 
     private long numberOrZero(Object value) {

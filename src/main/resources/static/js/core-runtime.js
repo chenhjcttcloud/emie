@@ -93,7 +93,7 @@ EMIE.projectState = Object.assign({
 }, EMIE.projectState || {});
 EMIE.adminState = Object.assign({
   currentTab: 'dashboard',
-  workloadRange: 'day',
+  workloadRange: 'month',
   scoringWeights: null,
 }, EMIE.adminState || {});
 EMIE.fileState = Object.assign({ previewSequence: 0, currentPreview: null }, EMIE.fileState || {});
