@@ -71,6 +71,10 @@ async function renderAdminWorkload(container) {
           <div class="admin-stat-label">完成任务</div>
         </div>
         <div class="admin-stat-card">
+          <div class="admin-stat-value">${summary.totalDesignRequirements || 0}</div>
+          <div class="admin-stat-label">设计/选审需求</div>
+        </div>
+        <div class="admin-stat-card">
           <div class="admin-stat-value">${summary.totalProjectsOutstanding || 0}</div>
           <div class="admin-stat-label">截至范围结束未完成项目</div>
         </div>
@@ -80,26 +84,31 @@ async function renderAdminWorkload(container) {
         </div>
       </div>`;
 
-    const roleOrder = ['sales', 'planner', 'designer', 'supplychain'];
+    const roleOrder = ['sales', 'promotion', 'planner', 'designer', 'supplychain'];
 
     for (const role of roleOrder) {
       const r = data[role];
       if (!r || !r.users || r.users.length === 0) continue;
 
       let html = '<div class="card workload-role-card" style="margin-bottom:16px;">';
-      const roleTone = { sales: ['#2563EB', '#EFF6FF'], planner: ['#D97706', '#FFFBEB'], designer: ['#7C3AED', '#F5F3FF'], supplychain: ['#0F766E', '#F0FDFA'] }[role] || ['#475569', '#F8FAFC'];
-      const roleTotal = r.users.reduce((sum, u) => sum + Number(u.created || u.assigned || 0), 0);
-      const roleDone = r.users.reduce((sum, u) => sum + Number(u.completed || 0), 0);
+      const roleTone = { sales: ['#2563EB', '#EFF6FF'], promotion: ['#DB2777', '#FDF2F8'], planner: ['#D97706', '#FFFBEB'], designer: ['#7C3AED', '#F5F3FF'], supplychain: ['#0F766E', '#F0FDFA'] }[role] || ['#475569', '#F8FAFC'];
+      const roleTotal = r.users.reduce((sum, u) => sum + Number(u.created || u.assigned || 0) + Number(u.designRequirements || 0), 0);
+      const roleDone = r.users.reduce((sum, u) => sum + Number(u.completed || 0) + Number(u.completedDesignRequirements || 0), 0);
       const roleChannel = r.users.reduce((sum, u) => sum + Number(u.channelCustomProjects || 0), 0);
       const roleRegular = r.users.reduce((sum, u) => sum + Number(u.regularProjects || 0), 0);
       const completedRoleChannel = r.users.reduce((sum, u) => sum + Number(u.completedChannelProjects || 0), 0);
       const completedRoleRegular = r.users.reduce((sum, u) => sum + Number(u.completedRegularProjects || 0), 0);
+      const completedRoleDesignRequirements = r.users.reduce((sum, u) => sum + Number(u.completedDesignRequirements || 0), 0);
+      const roleDesignRequirements = r.users.reduce((sum, u) => sum + Number(u.designRequirements || 0), 0);
       const isWorker = (role === 'designer' || role === 'supplychain');
-      html += `<div style="display:grid;grid-template-columns:120px repeat(5,minmax(0,1fr)) 184px;gap:16px;align-items:center;padding:14px 16px;border-top:3px solid ${roleTone[0]};border-bottom:1px solid var(--gray-200);background:linear-gradient(90deg,${roleTone[1]},#fff 55%);">
-        <div style="display:flex;align-items:center;gap:10px;"><div><strong style="font-size:15px;color:#1f2937;">${r.label || role}</strong><div style="font-size:11px;color:#94a3b8;margin-top:2px;">成员工作量分布 · ${r.totalUsers}人</div></div></div><div style="grid-column:2 / span 5;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;align-items:center;font-size:12px;color:#64748B;text-align:center;"><span>总量 <strong style="color:#2563EB;font-size:15px;">${roleTotal}</strong></span><span>${isWorker ? '渠道定制任务' : '渠道定制项目'} <strong style="color:#7C3AED;font-size:15px;">${roleChannel}</strong></span><span>${isWorker ? '常规品任务' : '公司常规品项目'} <strong style="color:#B45309;font-size:15px;">${roleRegular}</strong></span><span style="white-space:nowrap;">完成 <strong style="color:#047857;font-size:15px;">${roleDone}</strong><small style="font-size:11px;color:#64748B;">（${isWorker ? '渠道定制任务' : '渠道定制项目'}：${completedRoleChannel}个、${isWorker ? '常规品任务' : '公司常规品项目'}：${completedRoleRegular}个）</small></span><span></span></div></div>`;
+      const hasDesignRequirementColumn = role !== 'supplychain';
+      const metricColumns = hasDesignRequirementColumn ? 6 : 5;
+      const gridColumns = `120px repeat(${metricColumns},minmax(0,1fr)) 184px`;
+      html += `<div style="display:grid;grid-template-columns:${gridColumns};gap:16px;align-items:center;padding:14px 16px;border-top:3px solid ${roleTone[0]};border-bottom:1px solid var(--gray-200);background:linear-gradient(90deg,${roleTone[1]},#fff 55%);">
+        <div style="display:flex;align-items:center;gap:10px;"><div><strong style="font-size:15px;color:#1f2937;">${r.label || role}</strong><div style="font-size:11px;color:#94a3b8;margin-top:2px;">成员工作量分布 · ${r.totalUsers}人</div></div></div><div style="grid-column:2 / span ${metricColumns};display:grid;grid-template-columns:repeat(${metricColumns},minmax(0,1fr));gap:16px;align-items:center;font-size:12px;color:#64748B;text-align:center;"><span>总量 <strong style="color:#2563EB;font-size:15px;">${roleTotal}</strong></span><span>${isWorker ? '渠道定制任务' : '渠道定制项目'} <strong style="color:#7C3AED;font-size:15px;">${roleChannel}</strong></span><span>${isWorker ? '常规品任务' : '公司常规品项目'} <strong style="color:#B45309;font-size:15px;">${roleRegular}</strong></span>${hasDesignRequirementColumn ? `<span>设计/选审需求 <strong style="color:#DB2777;font-size:15px;">${roleDesignRequirements}</strong></span>` : ''}<span style="white-space:nowrap;">完成 <strong style="color:#047857;font-size:15px;">${roleDone}</strong><small style="font-size:11px;color:#64748B;">（${isWorker ? '渠道定制任务' : '渠道定制项目'}：${completedRoleChannel}个、${isWorker ? '常规品任务' : '公司常规品项目'}：${completedRoleRegular}个${role === 'designer' ? `、设计/选审需求：${completedRoleDesignRequirements}个` : ''}）</small></span><span></span></div></div>`;
       const roleUsers = (r.users || []).filter(u => !workloadQuery || String(u.name || '').toLowerCase().includes(workloadQuery.toLowerCase()));
       roleUsers.sort((a, b) => {
-        if (workloadSort === 'total') return Number(b.created || b.assigned || 0) - Number(a.created || a.assigned || 0);
+        if (workloadSort === 'total') return (Number(b.created || b.assigned || 0) + Number(b.designRequirements || 0)) - (Number(a.created || a.assigned || 0) + Number(a.designRequirements || 0));
         if (workloadSort === 'pending') return (Number(b.created || b.assigned || 0) - Number(b.completed || 0)) - (Number(a.created || a.assigned || 0) - Number(a.completed || 0));
         if (workloadSort === 'rate') return (Number(b.completed || 0) / Math.max(1, Number(b.created || b.assigned || 0))) - (Number(a.completed || 0) / Math.max(1, Number(a.created || a.assigned || 0)));
         return 0;
@@ -107,11 +116,12 @@ async function renderAdminWorkload(container) {
       if (!roleUsers.length) continue;
       const roleSummary = roleUsers.reduce((sum, u) => ({
         created: sum.created + Number(u.created || u.assigned || 0),
-        completed: sum.completed + Number(u.completed || 0),
+        completed: sum.completed + Number(u.completed || 0) + Number(u.completedDesignRequirements || 0),
         channel: sum.channel + Number(u.channelCustomProjects || 0),
         regular: sum.regular + Number(u.regularProjects || 0),
+        designRequirements: sum.designRequirements + Number(u.designRequirements || 0),
         outstanding: sum.outstanding + Number(u.outstanding || 0),
-      }), { created: 0, completed: 0, channel: 0, regular: 0, outstanding: 0 });
+      }), { created: 0, completed: 0, channel: 0, regular: 0, designRequirements: 0, outstanding: 0 });
       html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;padding:12px 16px;background:#fafbff;border-bottom:1px solid var(--gray-100);">
         ${[
           [isWorker ? '分配子任务' : '新建项目', roleSummary.created, '#2563EB'],
@@ -119,25 +129,28 @@ async function renderAdminWorkload(container) {
           [isWorker ? '截至结束日未完成子任务' : '截至结束日未完成项目', roleSummary.outstanding, '#D97706'],
           ['渠道定制', roleSummary.channel, '#7C3AED'],
           ['公司常规品', roleSummary.regular, '#B45309'],
+          ...(hasDesignRequirementColumn ? [['设计/选审需求', roleSummary.designRequirements, '#DB2777']] : []),
         ].map(([label, value, color]) => `<div style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:8px;background:#fff;">
           <div style="font-size:11px;color:var(--gray-500);">${label}</div><div style="font-size:18px;font-weight:700;color:${color};margin-top:2px;">${value}</div>
         </div>`).join('')}
       </div>`;
 
       // 表头
-      const createdLabel = isWorker ? '分配子任务' : '新建项目';
-      const completedLabel = isWorker ? '完成子任务' : '完成项目';
+      const createdLabel = role === 'promotion' ? '—' : (isWorker ? '分配子任务' : '新建项目');
+      const completedLabel = role === 'promotion' ? '—' : (isWorker ? '完成子任务' : '完成项目');
       const projectColumns = (role === 'planner' || role === 'sales') ? `
           <span style="flex:1;color:#7C3AED;font-weight:600;">渠道定制</span>
           <span style="flex:1;color:#B45309;font-weight:600;">公司常规品</span>` : '';
       const taskColumns = (role === 'designer' || role === 'supplychain') ? `
           <span style="flex:1;color:#7C3AED;font-weight:600;">渠道定制任务</span>
           <span style="flex:1;color:#B45309;font-weight:600;">常规品任务</span>` : '';
-      html += `<div class="workload-table-scroll"><div style="display:grid;grid-template-columns:120px repeat(5,minmax(0,1fr)) 184px;gap:16px;padding:8px 16px;font-size:11px;color:var(--gray-500);border-bottom:1px solid var(--gray-100);min-width:1000px;">
+      const categoryHeaders = projectColumns || taskColumns || '<span>—</span><span>—</span>';
+      html += `<div class="workload-table-scroll"><div style="display:grid;grid-template-columns:${gridColumns};gap:16px;padding:8px 16px;font-size:11px;color:var(--gray-500);border-bottom:1px solid var(--gray-100);min-width:${hasDesignRequirementColumn ? 1120 : 1000}px;">
         <div>姓名</div>
-        <div style="grid-column:2 / span 5;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;text-align:center;">
+        <div style="grid-column:2 / span ${metricColumns};display:grid;grid-template-columns:repeat(${metricColumns},minmax(0,1fr));gap:16px;text-align:center;">
           <span style="color:#2563EB;font-weight:600;">${createdLabel}</span>
-          ${projectColumns || taskColumns}
+          ${categoryHeaders}
+          ${hasDesignRequirementColumn ? '<span style="color:#DB2777;font-weight:600;">设计/选审需求</span>' : ''}
           <span style="color:#047857;font-weight:600;">${completedLabel}</span>
           <span style="color:#475569;font-weight:600;">完成率</span>
         </div>
@@ -147,22 +160,25 @@ async function renderAdminWorkload(container) {
 
       for (const u of roleUsers) {
         const created = u.created || u.assigned || 0;
-        const completed = u.completed || 0;
+        const completed = Number(u.completed || 0) + Number(u.completedDesignRequirements || 0);
+        const createdDisplay = role === 'promotion' ? '—' : created;
+        const completedDisplay = role === 'promotion' ? '—' : completed;
         const rate = created > 0 ? Math.round((completed / created) * 100) + '%' : '-';
         const categoryValues = (role === 'planner' || role === 'sales') ? `
             <span style="flex:1;font-size:13px;font-weight:700;color:#6D28D9;background:#F5F3FF;border-radius:6px;padding:3px 8px;text-align:center;">${u.channelCustomProjects || 0}</span>
             <span style="flex:1;font-size:13px;font-weight:700;color:#B45309;background:#FFFBEB;border-radius:6px;padding:3px 8px;text-align:center;">${u.regularProjects || 0}</span>` : (role === 'designer' || role === 'supplychain') ? `
             <span style="flex:1;font-size:13px;font-weight:700;color:#6D28D9;background:#F5F3FF;border-radius:6px;padding:3px 8px;text-align:center;">${u.channelCustomProjects || 0}</span>
-            <span style="flex:1;font-size:13px;font-weight:700;color:#B45309;background:#FFFBEB;border-radius:6px;padding:3px 8px;text-align:center;">${u.regularProjects || 0}</span>` : '';
+            <span style="flex:1;font-size:13px;font-weight:700;color:#B45309;background:#FFFBEB;border-radius:6px;padding:3px 8px;text-align:center;">${u.regularProjects || 0}</span>` : '<span style="flex:1;">—</span><span style="flex:1;">—</span>';
 
-        html += `<div style="display:grid;grid-template-columns:120px repeat(5,minmax(0,1fr)) 184px;gap:16px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--gray-100);min-width:1000px;">
+        html += `<div style="display:grid;grid-template-columns:${gridColumns};gap:16px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--gray-100);min-width:${hasDesignRequirementColumn ? 1120 : 1000}px;">
           <div>
             <div style="font-size:13px;font-weight:500;color:#1f2937;">${escHtml(u.name)}</div>
           </div>
-          <div style="grid-column:2 / span 5;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;align-items:center;text-align:center;">
-            <span style="font-size:13px;font-weight:700;color:#2563EB;background:#EFF6FF;border-radius:6px;padding:3px 8px;">${created}</span>
+          <div style="grid-column:2 / span ${metricColumns};display:grid;grid-template-columns:repeat(${metricColumns},minmax(0,1fr));gap:16px;align-items:center;text-align:center;">
+            <span style="font-size:13px;font-weight:700;color:${role === 'promotion' ? 'var(--gray-400)' : '#2563EB'};background:${role === 'promotion' ? 'transparent' : '#EFF6FF'};border-radius:6px;padding:3px 8px;">${createdDisplay}</span>
             ${categoryValues}
-            <span style="font-size:13px;font-weight:700;color:#047857;background:#ECFDF5;border-radius:6px;padding:3px 8px;white-space:nowrap;">${completed}<small style="font-size:10px;font-weight:500;color:#64748B;margin-left:4px;">（${isWorker ? '渠道定制任务' : '渠道定制项目'}：${u.completedChannelProjects || 0}个、${isWorker ? '常规品任务' : '公司常规品项目'}：${u.completedRegularProjects || 0}个）</small></span>
+            ${hasDesignRequirementColumn ? `<span style="font-size:13px;font-weight:700;color:#BE185D;background:#FDF2F8;border-radius:6px;padding:3px 8px;">${u.designRequirements || 0}</span>` : ''}
+            <span style="font-size:13px;font-weight:700;color:${role === 'promotion' ? 'var(--gray-400)' : '#047857'};background:${role === 'promotion' ? 'transparent' : '#ECFDF5'};border-radius:6px;padding:3px 8px;white-space:nowrap;">${completedDisplay}${role === 'promotion' ? '' : `<small style="font-size:10px;font-weight:500;color:#64748B;margin-left:4px;">（${isWorker ? '渠道定制任务' : '渠道定制项目'}：${u.completedChannelProjects || 0}个、${isWorker ? '常规品任务' : '公司常规品项目'}：${u.completedRegularProjects || 0}个${role === 'designer' ? `、设计/选审需求：${u.completedDesignRequirements || 0}个` : ''}）</small>`}</span>
             <span style="font-size:12px;font-weight:600;color:${rate === '-' ? 'var(--gray-400)' : '#475569'};">${rate}</span>
           </div>
           <!-- 进度条 -->

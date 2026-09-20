@@ -28,7 +28,7 @@ import './admin-org.js?v=292';
 import './admin-scoring.js?v=568';
 import './admin-audit.js?v=357';
 import './admin-storage.js?v=321';
-import './admin-workload.js?v=430';
+import './admin-workload.js?v=438';
 import './admin.js?v=147';
 import './files.js?v=282';
 

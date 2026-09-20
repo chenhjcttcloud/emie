@@ -34,7 +34,7 @@ public class AdminWorkloadService {
     }
 
     private List<User> workloadUsers() {
-        return Stream.of("sales", "planner", "designer", "supplychain")
+        return Stream.of("sales", "promotion", "planner", "designer", "supplychain")
                 .flatMap(role -> userRepository.findByRole(role).stream())
                 // 冒烟测试账号只用于回归，不应进入管理工作量统计。
                 .filter(u -> u.getUserId() == null || !u.getUserId().startsWith("smoke_"))
@@ -45,7 +45,9 @@ public class AdminWorkloadService {
     /** 获取各角色各员工的工作量统计 */
     public Map<String, Object> getWorkloadStats() {
         Map<String, Object> result = new LinkedHashMap<>();
-        List<User> allUsers = workloadUsers();
+        List<User> allUsers = workloadUsers().stream()
+                .filter(u -> !"promotion".equals(u.getRole()))
+                .toList();
 
         // 按角色分组
         Map<String, List<User>> byRole = allUsers.stream()
@@ -204,14 +206,15 @@ public class AdminWorkloadService {
         List<User> allUsers = workloadUsers();
 
         Map<String, List<User>> byRole = allUsers.stream()
-                .filter(u ->
-                        Set.of("sales", "planner", "designer", "supplychain").contains(u.getRole()))
+                .filter(u -> Set.of("sales", "promotion", "planner", "designer", "supplychain")
+                        .contains(u.getRole()))
                 .filter(u -> u.getStatus() == null || "active".equalsIgnoreCase(u.getStatus()))
                 .collect(Collectors.groupingBy(User::getRole));
 
         Map<String, String> roleLabels =
-                Map.of("sales", "销售", "planner", "产品企划", "designer", "设计师", "supplychain", "供应链");
-        Map<String, String> roleIcons = Map.of("sales", "📊", "planner", "📋", "designer", "🎨", "supplychain", "📦");
+                Map.of("sales", "销售", "promotion", "产品推广", "planner", "产品企划", "designer", "设计师", "supplychain", "供应链");
+        Map<String, String> roleIcons =
+                Map.of("sales", "📊", "promotion", "📣", "planner", "📋", "designer", "🎨", "supplychain", "📦");
 
         Map<String, long[]> projectTimelineBySales = workloadTimelineCounts(
                 "SELECT sales_id, SUM(CASE WHEN created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END), "
@@ -249,6 +252,22 @@ public class AdminWorkloadService {
                         + "FROM sub_tasks s LEFT JOIN projects p ON p.id = s.project_id WHERE s.created_at < ?2 AND s.assignee_role = 'supplychain' GROUP BY s.designer_id",
                 cutoff,
                 endExclusive);
+        Map<String, Long> designRequirementsByOwner = workloadCountByUser(
+                "SELECT owner_id, COUNT(*) FROM design_requirements WHERE created_at >= ?1 AND created_at < ?2 GROUP BY owner_id",
+                cutoff,
+                endExclusive);
+        Map<String, Long> designRequirementsByPlanner = workloadCountByUser(
+                "SELECT planner_id, COUNT(*) FROM design_requirements WHERE created_at >= ?1 AND created_at < ?2 GROUP BY planner_id",
+                cutoff,
+                endExclusive);
+        Map<String, Long> outstandingDesignRequirementsByDesigner = workloadCountByUserAtEnd(
+                "SELECT designer_id, COUNT(*) FROM design_requirements WHERE created_at < ?1 AND status NOT IN ('completed', 'terminated') GROUP BY designer_id",
+                endExclusive);
+        // 设计/送审需求没有 completed_at；完成时会更新需求状态，因此用该状态变更时间作为完成时间。
+        Map<String, Long> completedDesignRequirementsByDesigner = workloadCountByUser(
+                "SELECT designer_id, COUNT(*) FROM design_requirements WHERE status = 'completed' AND updated_at >= ?1 AND updated_at < ?2 GROUP BY designer_id",
+                cutoff,
+                endExclusive);
 
         for (Map.Entry<String, List<User>> entry : byRole.entrySet()) {
             String role = entry.getKey();
@@ -273,6 +292,13 @@ public class AdminWorkloadService {
                         us.put("completedChannelProjects", counts[4]);
                         us.put("completedRegularProjects", counts[5]);
                         us.put("outstanding", counts.length > 6 ? counts[6] : 0);
+                        us.put("designRequirements", designRequirementsByOwner.getOrDefault(u.getUserId(), 0L));
+                    }
+                    case "promotion" -> {
+                        us.put("created", 0L);
+                        us.put("completed", 0L);
+                        us.put("outstanding", 0L);
+                        us.put("designRequirements", designRequirementsByOwner.getOrDefault(u.getUserId(), 0L));
                     }
                     case "planner" -> {
                         long[] counts = projectTimelineByPlanner.getOrDefault(u.getUserId(), new long[6]);
@@ -285,6 +311,7 @@ public class AdminWorkloadService {
                         us.put("completedChannelProjects", counts[4]);
                         us.put("completedRegularProjects", counts[5]);
                         us.put("outstanding", counts.length > 6 ? counts[6] : 0);
+                        us.put("designRequirements", designRequirementsByPlanner.getOrDefault(u.getUserId(), 0L));
                     }
                     case "designer", "supplychain" -> {
                         long[] counts = ("supplychain".equals(role)
@@ -300,6 +327,14 @@ public class AdminWorkloadService {
                         us.put("completedChannelProjects", counts[4]);
                         us.put("completedRegularProjects", counts[5]);
                         us.put("outstanding", counts.length > 6 ? counts[6] : 0);
+                        if ("designer".equals(role)) {
+                            us.put(
+                                    "designRequirements",
+                                    outstandingDesignRequirementsByDesigner.getOrDefault(u.getUserId(), 0L));
+                            us.put(
+                                    "completedDesignRequirements",
+                                    completedDesignRequirementsByDesigner.getOrDefault(u.getUserId(), 0L));
+                        }
                     }
                 }
                 userStats.add(us);
@@ -346,6 +381,13 @@ public class AdminWorkloadService {
                         .setParameter(1, endExclusive)
                         .getSingleResult())
                 .longValue();
+        long totalDesignRequirements = ((Number) entityManager
+                        .createNativeQuery(
+                                "SELECT COUNT(*) FROM design_requirements WHERE created_at >= ?1 AND created_at < ?2")
+                        .setParameter(1, cutoff)
+                        .setParameter(2, endExclusive)
+                        .getSingleResult())
+                .longValue();
 
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("range", range);
@@ -370,6 +412,7 @@ public class AdminWorkloadService {
         summary.put("totalTasksCompleted", totalTasksCompleted);
         summary.put("totalProjectsOutstanding", totalProjectsOutstanding);
         summary.put("totalTasksOutstanding", totalTasksOutstanding);
+        summary.put("totalDesignRequirements", totalDesignRequirements);
         result.put("_summary", summary);
 
         return result;
@@ -377,6 +420,31 @@ public class AdminWorkloadService {
 
     private long numberOrZero(Object value) {
         return value instanceof Number number ? number.longValue() : 0L;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Long> workloadCountByUser(String sql, LocalDateTime cutoff, LocalDateTime endExclusive) {
+        Map<String, Long> result = new HashMap<>();
+        for (Object[] row : (List<Object[]>) entityManager
+                .createNativeQuery(sql)
+                .setParameter(1, cutoff)
+                .setParameter(2, endExclusive)
+                .getResultList()) {
+            if (row[0] != null) result.put(String.valueOf(row[0]), numberOrZero(row[1]));
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Long> workloadCountByUserAtEnd(String sql, LocalDateTime endExclusive) {
+        Map<String, Long> result = new HashMap<>();
+        for (Object[] row : (List<Object[]>) entityManager
+                .createNativeQuery(sql)
+                .setParameter(1, endExclusive)
+                .getResultList()) {
+            if (row[0] != null) result.put(String.valueOf(row[0]), numberOrZero(row[1]));
+        }
+        return result;
     }
 
     @SuppressWarnings("unchecked")
