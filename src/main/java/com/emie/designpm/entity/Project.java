@@ -160,6 +160,9 @@ public class Project {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    /** 最近一次完成时刻；工作量报表不能用任意编辑的 updatedAt 代替。 */
+    private LocalDateTime completedAt;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

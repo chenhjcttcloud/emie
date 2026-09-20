@@ -71,12 +71,12 @@ async function renderAdminWorkload(container) {
           <div class="admin-stat-label">完成任务</div>
         </div>
         <div class="admin-stat-card">
-          <div class="admin-stat-value">${Math.max(0, (summary.totalProjectsCreated || 0) - (summary.totalProjectsCompleted || 0))}</div>
-          <div class="admin-stat-label">未完成项目</div>
+          <div class="admin-stat-value">${summary.totalProjectsOutstanding || 0}</div>
+          <div class="admin-stat-label">截至范围结束未完成项目</div>
         </div>
         <div class="admin-stat-card">
-          <div class="admin-stat-value">${Math.max(0, (summary.totalTasksAssigned || 0) - (summary.totalTasksCompleted || 0))}</div>
-          <div class="admin-stat-label">未完成子任务</div>
+          <div class="admin-stat-value">${summary.totalTasksOutstanding || 0}</div>
+          <div class="admin-stat-label">截至范围结束未完成子任务</div>
         </div>
       </div>`;
 
@@ -110,15 +110,13 @@ async function renderAdminWorkload(container) {
         completed: sum.completed + Number(u.completed || 0),
         channel: sum.channel + Number(u.channelCustomProjects || 0),
         regular: sum.regular + Number(u.regularProjects || 0),
-      }), { created: 0, completed: 0, channel: 0, regular: 0 });
-      const roleRate = roleSummary.created > 0 ? Math.round(roleSummary.completed / roleSummary.created * 100) + '%' : '-';
-      const rolePending = Math.max(0, roleSummary.created - roleSummary.completed);
+        outstanding: sum.outstanding + Number(u.outstanding || 0),
+      }), { created: 0, completed: 0, channel: 0, regular: 0, outstanding: 0 });
       html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;padding:12px 16px;background:#fafbff;border-bottom:1px solid var(--gray-100);">
         ${[
           [isWorker ? '分配子任务' : '新建项目', roleSummary.created, '#2563EB'],
           [isWorker ? '完成子任务' : '完成项目', roleSummary.completed, '#047857'],
-          [isWorker ? '未完成子任务' : '未完成项目', rolePending, '#D97706'],
-          ['完成率', roleRate, '#374151'],
+          [isWorker ? '截至结束日未完成子任务' : '截至结束日未完成项目', roleSummary.outstanding, '#D97706'],
           ['渠道定制', roleSummary.channel, '#7C3AED'],
           ['公司常规品', roleSummary.regular, '#B45309'],
         ].map(([label, value, color]) => `<div style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:8px;background:#fff;">
@@ -147,7 +145,7 @@ async function renderAdminWorkload(container) {
 
       html += '<div class="workload-user-list">';
 
-      for (const u of r.users) {
+      for (const u of roleUsers) {
         const created = u.created || u.assigned || 0;
         const completed = u.completed || 0;
         const rate = created > 0 ? Math.round((completed / created) * 100) + '%' : '-';

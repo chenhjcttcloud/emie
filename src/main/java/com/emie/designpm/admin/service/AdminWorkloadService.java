@@ -178,18 +178,26 @@ public class AdminWorkloadService {
         LocalDateTime cutoff = custom
                 ? startDate.atStartOfDay()
                 : switch (range) {
-                    case "day" -> LocalDateTime.now().minusDays(1);
-                    case "week" -> LocalDateTime.now().minusDays(7);
-                    case "month" -> LocalDateTime.now().minusDays(30);
-                    case "quarter" -> LocalDateTime.now().minusDays(90);
-                    case "half-year" -> LocalDateTime.now().minusDays(180);
-                    case "year" -> LocalDateTime.now().minusDays(365);
+                    case "day" -> LocalDate.now().atStartOfDay();
+                    case "week" -> LocalDate.now()
+                            .with(java.time.DayOfWeek.MONDAY)
+                            .atStartOfDay();
+                    case "month" -> LocalDate.now().withDayOfMonth(1).atStartOfDay();
+                    case "quarter" -> LocalDate.now()
+                            .withMonth((LocalDate.now().getMonthValue() - 1) / 3 * 3 + 1)
+                            .withDayOfMonth(1)
+                            .atStartOfDay();
+                    case "half-year" -> LocalDate.now()
+                            .withMonth(LocalDate.now().getMonthValue() <= 6 ? 1 : 7)
+                            .withDayOfMonth(1)
+                            .atStartOfDay();
+                    case "year" -> LocalDate.now().withDayOfYear(1).atStartOfDay();
                     case "all" -> LocalDateTime.of(1970, 1, 1, 0, 0);
                     default -> LocalDateTime.now().minusDays(30);
                 };
         LocalDateTime endExclusive = custom
                 ? endDate.plusDays(1).atStartOfDay()
-                : LocalDateTime.now().plusSeconds(1);
+                : LocalDate.now().plusDays(1).atStartOfDay();
         if (custom) range = "custom";
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -207,38 +215,38 @@ public class AdminWorkloadService {
 
         Map<String, long[]> projectTimelineBySales = workloadTimelineCounts(
                 "SELECT sales_id, SUM(CASE WHEN created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END), "
-                        + "SUM(CASE WHEN status = 'completed' AND updated_at >= ?1 AND updated_at < ?2 THEN 1 ELSE 0 END) "
+                        + "SUM(CASE WHEN completed_at >= ?1 AND completed_at < ?2 THEN 1 ELSE 0 END) "
                         + ", SUM(CASE WHEN type = 'channel_custom' AND created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END) "
                         + ", SUM(CASE WHEN type <> 'channel_custom' AND created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END) "
-                        + ", SUM(CASE WHEN status = 'completed' AND type = 'channel_custom' AND updated_at >= ?1 AND updated_at < ?2 THEN 1 ELSE 0 END) "
-                        + ", SUM(CASE WHEN status = 'completed' AND type <> 'channel_custom' AND updated_at >= ?1 AND updated_at < ?2 THEN 1 ELSE 0 END) "
-                        + "FROM projects WHERE (created_at >= ?1 AND created_at < ?2) OR (updated_at >= ?1 AND updated_at < ?2) GROUP BY sales_id",
+                        + ", SUM(CASE WHEN completed_at >= ?1 AND completed_at < ?2 AND type = 'channel_custom' THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN completed_at >= ?1 AND completed_at < ?2 AND (type <> 'channel_custom' OR type IS NULL) THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN created_at < ?2 AND (completed_at IS NULL OR completed_at >= ?2) THEN 1 ELSE 0 END) FROM projects WHERE created_at < ?2 GROUP BY sales_id",
                 cutoff,
                 endExclusive);
         Map<String, long[]> projectTimelineByPlanner = workloadTimelineCounts(
                 "SELECT planner_id, SUM(CASE WHEN created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END), "
-                        + "SUM(CASE WHEN status = 'completed' AND updated_at >= ?1 AND updated_at < ?2 THEN 1 ELSE 0 END) "
+                        + "SUM(CASE WHEN completed_at >= ?1 AND completed_at < ?2 THEN 1 ELSE 0 END) "
                         + ", SUM(CASE WHEN type = 'channel_custom' AND created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END) "
                         + ", SUM(CASE WHEN type <> 'channel_custom' AND created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END) "
-                        + ", SUM(CASE WHEN status = 'completed' AND type = 'channel_custom' AND updated_at >= ?1 AND updated_at < ?2 THEN 1 ELSE 0 END) "
-                        + ", SUM(CASE WHEN status = 'completed' AND type <> 'channel_custom' AND updated_at >= ?1 AND updated_at < ?2 THEN 1 ELSE 0 END) "
-                        + "FROM projects WHERE (created_at >= ?1 AND created_at < ?2) OR (updated_at >= ?1 AND updated_at < ?2) GROUP BY planner_id",
+                        + ", SUM(CASE WHEN completed_at >= ?1 AND completed_at < ?2 AND type = 'channel_custom' THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN completed_at >= ?1 AND completed_at < ?2 AND (type <> 'channel_custom' OR type IS NULL) THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN created_at < ?2 AND (completed_at IS NULL OR completed_at >= ?2) THEN 1 ELSE 0 END) FROM projects WHERE created_at < ?2 GROUP BY planner_id",
                 cutoff,
                 endExclusive);
         Map<String, long[]> taskTimelineByDesigner = workloadTimelineCounts(
-                "SELECT s.designer_id, SUM(CASE WHEN s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), SUM(CASE WHEN s.status = 'approved' AND s.updated_at >= ?1 AND s.updated_at < ?2 THEN 1 ELSE 0 END), "
+                "SELECT s.designer_id, SUM(CASE WHEN s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 THEN 1 ELSE 0 END), "
                         + "SUM(CASE WHEN p.type = 'channel_custom' AND s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), "
-                        + "SUM(CASE WHEN (p.type <> 'channel_custom' OR p.type IS NULL) AND s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), SUM(CASE WHEN s.status = 'approved' AND p.type = 'channel_custom' AND s.updated_at >= ?1 AND s.updated_at < ?2 THEN 1 ELSE 0 END), SUM(CASE WHEN s.status = 'approved' AND (p.type <> 'channel_custom' OR p.type IS NULL) AND s.updated_at >= ?1 AND s.updated_at < ?2 THEN 1 ELSE 0 END) "
-                        + "FROM sub_tasks s LEFT JOIN projects p ON p.id = s.project_id "
-                        + "WHERE ((s.created_at >= ?1 AND s.created_at < ?2) OR (s.updated_at >= ?1 AND s.updated_at < ?2)) AND (s.assignee_role = 'designer' OR s.assignee_role IS NULL) GROUP BY s.designer_id",
+                        + "SUM(CASE WHEN (p.type <> 'channel_custom' OR p.type IS NULL) AND s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 AND p.type = 'channel_custom' THEN 1 ELSE 0 END), SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 AND (p.type <> 'channel_custom' OR p.type IS NULL) THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN s.created_at < ?2 AND (s.completed_at IS NULL OR s.completed_at >= ?2) THEN 1 ELSE 0 END) "
+                        + "FROM sub_tasks s LEFT JOIN projects p ON p.id = s.project_id WHERE s.created_at < ?2 AND (s.assignee_role = 'designer' OR s.assignee_role IS NULL) GROUP BY s.designer_id",
                 cutoff,
                 endExclusive);
         Map<String, long[]> taskTimelineBySupplychain = workloadTimelineCounts(
-                "SELECT s.designer_id, SUM(CASE WHEN s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), SUM(CASE WHEN s.status = 'approved' AND s.updated_at >= ?1 AND s.updated_at < ?2 THEN 1 ELSE 0 END), "
+                "SELECT s.designer_id, SUM(CASE WHEN s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 THEN 1 ELSE 0 END), "
                         + "SUM(CASE WHEN p.type = 'channel_custom' AND s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), "
-                        + "SUM(CASE WHEN (p.type <> 'channel_custom' OR p.type IS NULL) AND s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), SUM(CASE WHEN s.status = 'approved' AND p.type = 'channel_custom' AND s.updated_at >= ?1 AND s.updated_at < ?2 THEN 1 ELSE 0 END), SUM(CASE WHEN s.status = 'approved' AND (p.type <> 'channel_custom' OR p.type IS NULL) AND s.updated_at >= ?1 AND s.updated_at < ?2 THEN 1 ELSE 0 END) "
-                        + "FROM sub_tasks s LEFT JOIN projects p ON p.id = s.project_id "
-                        + "WHERE ((s.created_at >= ?1 AND s.created_at < ?2) OR (s.updated_at >= ?1 AND s.updated_at < ?2)) AND s.assignee_role = 'supplychain' GROUP BY s.designer_id",
+                        + "SUM(CASE WHEN (p.type <> 'channel_custom' OR p.type IS NULL) AND s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 AND p.type = 'channel_custom' THEN 1 ELSE 0 END), SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 AND (p.type <> 'channel_custom' OR p.type IS NULL) THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN s.created_at < ?2 AND (s.completed_at IS NULL OR s.completed_at >= ?2) THEN 1 ELSE 0 END) "
+                        + "FROM sub_tasks s LEFT JOIN projects p ON p.id = s.project_id WHERE s.created_at < ?2 AND s.assignee_role = 'supplychain' GROUP BY s.designer_id",
                 cutoff,
                 endExclusive);
 
@@ -264,6 +272,7 @@ public class AdminWorkloadService {
                         us.put("regularProjects", counts[3]);
                         us.put("completedChannelProjects", counts[4]);
                         us.put("completedRegularProjects", counts[5]);
+                        us.put("outstanding", counts.length > 6 ? counts[6] : 0);
                     }
                     case "planner" -> {
                         long[] counts = projectTimelineByPlanner.getOrDefault(u.getUserId(), new long[6]);
@@ -275,6 +284,7 @@ public class AdminWorkloadService {
                         us.put("regularProjects", counts[3]);
                         us.put("completedChannelProjects", counts[4]);
                         us.put("completedRegularProjects", counts[5]);
+                        us.put("outstanding", counts.length > 6 ? counts[6] : 0);
                     }
                     case "designer", "supplychain" -> {
                         long[] counts = ("supplychain".equals(role)
@@ -289,6 +299,7 @@ public class AdminWorkloadService {
                         us.put("regularProjects", counts[3]);
                         us.put("completedChannelProjects", counts[4]);
                         us.put("completedRegularProjects", counts[5]);
+                        us.put("outstanding", counts.length > 6 ? counts[6] : 0);
                     }
                 }
                 userStats.add(us);
@@ -306,7 +317,7 @@ public class AdminWorkloadService {
         Object[] projectSummary = (Object[]) entityManager
                 .createNativeQuery("SELECT "
                         + "SUM(CASE WHEN created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END), "
-                        + "SUM(CASE WHEN status = 'completed' AND updated_at >= ?1 AND updated_at < ?2 THEN 1 ELSE 0 END) "
+                        + "SUM(CASE WHEN completed_at >= ?1 AND completed_at < ?2 THEN 1 ELSE 0 END) "
                         + "FROM projects")
                 .setParameter(1, cutoff)
                 .setParameter(2, endExclusive)
@@ -314,7 +325,7 @@ public class AdminWorkloadService {
         Object[] taskSummary = (Object[]) entityManager
                 .createNativeQuery("SELECT "
                         + "SUM(CASE WHEN created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END), "
-                        + "SUM(CASE WHEN status = 'approved' AND updated_at >= ?1 AND updated_at < ?2 THEN 1 ELSE 0 END) "
+                        + "SUM(CASE WHEN completed_at >= ?1 AND completed_at < ?2 THEN 1 ELSE 0 END) "
                         + "FROM sub_tasks")
                 .setParameter(1, cutoff)
                 .setParameter(2, endExclusive)
@@ -323,6 +334,18 @@ public class AdminWorkloadService {
         long totalCompleted = numberOrZero(projectSummary[1]);
         long totalTasksAssigned = numberOrZero(taskSummary[0]);
         long totalTasksCompleted = numberOrZero(taskSummary[1]);
+        long totalProjectsOutstanding = ((Number) entityManager
+                        .createNativeQuery(
+                                "SELECT COUNT(*) FROM projects WHERE created_at < ?1 AND (completed_at IS NULL OR completed_at >= ?1)")
+                        .setParameter(1, endExclusive)
+                        .getSingleResult())
+                .longValue();
+        long totalTasksOutstanding = ((Number) entityManager
+                        .createNativeQuery(
+                                "SELECT COUNT(*) FROM sub_tasks WHERE created_at < ?1 AND (completed_at IS NULL OR completed_at >= ?1)")
+                        .setParameter(1, endExclusive)
+                        .getSingleResult())
+                .longValue();
 
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("range", range);
@@ -345,6 +368,8 @@ public class AdminWorkloadService {
         summary.put("totalProjectsCompleted", totalCompleted);
         summary.put("totalTasksAssigned", totalTasksAssigned);
         summary.put("totalTasksCompleted", totalTasksCompleted);
+        summary.put("totalProjectsOutstanding", totalProjectsOutstanding);
+        summary.put("totalTasksOutstanding", totalTasksOutstanding);
         result.put("_summary", summary);
 
         return result;

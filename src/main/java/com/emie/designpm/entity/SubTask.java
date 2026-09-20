@@ -126,6 +126,9 @@ public class SubTask {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    /** 最终验收完成时刻。 */
+    private LocalDateTime completedAt;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "project_id", nullable = false)
     private Project project;

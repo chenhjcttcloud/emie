@@ -394,7 +394,6 @@ public class AdminController {
     public ResponseEntity<Map<String, Object>> getWorkload(@RequestHeader("X-Auth-Token") String token) {
         AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
-        if (!"admin".equals(session.role())) return ResponseEntity.status(403).build();
         return ResponseEntity.ok(adminWorkloadService.getWorkloadStats());
     }
 
@@ -406,7 +405,6 @@ public class AdminController {
             @RequestHeader("X-Auth-Token") String token) {
         AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
-        if (!"admin".equals(session.role())) return ResponseEntity.status(403).build();
         if ((startDate == null) != (endDate == null)) {
             return ResponseEntity.badRequest().body(Map.of("error", "开始日期和结束日期必须同时填写"));
         }

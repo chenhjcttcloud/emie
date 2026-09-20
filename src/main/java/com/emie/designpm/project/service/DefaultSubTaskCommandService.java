@@ -280,6 +280,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         // 已完结项目添加子任务时重新激活
         if ("completed".equals(p.getStatus())) {
             p.setStatus("in_progress");
+            p.setCompletedAt(null);
         }
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
@@ -1257,12 +1258,14 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             // 渠道：企划评分 + 销售评分 → completed
             if ("sales_approved".equals(task.getStatus())) {
                 task.setStatus("completed");
+                task.setCompletedAt(java.time.LocalDateTime.now());
                 task.setActualDate(java.time.LocalDate.now().toString());
             }
         } else {
             // 常规品：企划评分 + 管理评分 → completed
             if ("admin_approved".equals(task.getStatus())) {
                 task.setStatus("completed");
+                task.setCompletedAt(java.time.LocalDateTime.now());
                 task.setActualDate(java.time.LocalDate.now().toString());
             }
         }
@@ -1278,6 +1281,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                             .allMatch(t -> "completed".equals(t.getStatus()));
             if (allDone && bulkStageDone) {
                 project.setStatus("completed");
+                project.setCompletedAt(java.time.LocalDateTime.now());
             }
         }
     }
