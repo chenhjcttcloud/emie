@@ -32,6 +32,7 @@ GET /api/admin/users
 GET /api/admin/users/page
 GET /api/admin/version/stream
 GET /api/admin/workload
+GET /api/admin/workload/details
 GET /api/admin/workload/timeline
 GET /api/auth/feishu/callback
 GET /api/auth/feishu/config

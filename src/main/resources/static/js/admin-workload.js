@@ -34,7 +34,7 @@ async function renderAdminWorkload(container) {
     const attention = filtered.filter(user => user.statusKey === 'risk' || user.statusKey === 'watch').length;
 
     container.innerHTML = `
-      <section class="workload-page-head"><div><p class="workload-kicker">TEAM WORKLOAD</p><h2>员工工作量</h2><p>${escHtml(summary.rangeLabel || '当前范围')} · 团队概览与员工明细</p></div><div class="workload-range"><span>时间范围</span>${WORKLOAD_RANGES.map(option => `<button class="workload-range-btn ${option.key === state.workloadRange ? 'active' : ''}" data-emie-action="click:workload-range" data-range="${option.key}">${option.label}</button>`).join('')}</div></section>
+      <section class="workload-page-head"><div><p class="workload-kicker">工作量概览</p><h2>员工工作量</h2><p>${escHtml(summary.rangeLabel || '当前范围')} · 团队概览与员工明细</p></div><div class="workload-range"><span>时间范围</span>${WORKLOAD_RANGES.map(option => `<button class="workload-range-btn ${option.key === state.workloadRange ? 'active' : ''}" data-emie-action="click:workload-range" data-range="${option.key}">${option.label}</button>`).join('')}</div></section>
       <div class="workload-custom-range" style="display:${state.workloadRange === 'custom' ? 'flex' : 'none'};"><input type="date" class="form-input" value="${escHtml(state.workloadStartDate || '')}" data-emie-action="change:workload-start-date" aria-label="开始日期"><span>至</span><input type="date" class="form-input" value="${escHtml(state.workloadEndDate || '')}" data-emie-action="change:workload-end-date" aria-label="结束日期"><button class="btn btn-primary btn-sm" data-emie-action="click:workload-apply-dates">查询</button></div>
       <div class="workload-toolbar"><input class="form-input" placeholder="搜索员工姓名" value="${escHtml(state.workloadQuery || '')}" data-emie-action="input:workload-query"><select class="form-select" data-emie-action="change:workload-sort"><option value="attention" ${(state.workloadSort || 'attention') === 'attention' ? 'selected' : ''}>优先关注</option><option value="total" ${state.workloadSort === 'total' ? 'selected' : ''}>按总量排序</option><option value="pending" ${state.workloadSort === 'pending' ? 'selected' : ''}>按未完成排序</option><option value="rate" ${state.workloadSort === 'rate' ? 'selected' : ''}>按完成率排序</option></select></div>
       <div class="workload-role-filter"><span>员工角色</span><button class="${roleFilter === 'all' ? 'active' : ''}" data-emie-action="click:workload-role" data-role="all">全部</button>${Object.entries(WORKLOAD_ROLES).map(([role, label]) => `<button class="${roleFilter === role ? 'active' : ''}" data-emie-action="click:workload-role" data-role="${role}">${label}<small>${(data[role]?.users || []).length}</small></button>`).join('')}</div>
@@ -163,8 +163,8 @@ function workloadMemberTable(users, roleFilter) {
       <td class="num"><strong class="wl-total">${user.workloadTotal || '—'}</strong></td>
       <td class="num">${user.completedInRange || '—'}</td>
       <td class="wl-rate">${rate == null ? '<span class="muted">—</span>' : `<i><em style="width:${rate}%"></em></i><b>${rate}%</b>`}</td>
-      <td class="num strong-own"><strong class="wl-number own">${user.pending || '—'}</strong></td>
-      <td class="num strong-wait"><strong class="wl-number wait">${user.waiting || '—'}</strong></td>
+      <td class="num strong-own"><button class="wl-number own" data-emie-action="click:workload-details" data-user-id="${escHtml(user.userId)}" data-bucket="own">${user.pending || '—'}</button></td>
+      <td class="num strong-wait"><button class="wl-number wait" data-emie-action="click:workload-details" data-user-id="${escHtml(user.userId)}" data-bucket="waiting">${user.waiting || '—'}</button></td>
       <td class="num"><strong class="wl-number total">${user.outstandingAll || '—'}</strong></td>
     </tr>`;
   };
@@ -177,6 +177,31 @@ function workloadMemberTable(users, roleFilter) {
         return `<tr class="wl-group"><td colspan="11">${label} <span>${group.length} 人${attention ? ` · ${attention} 人需关注` : ''}</span></td></tr>` + group.map(row).join('');
       }).join('');
   return `<div class="table-wrap wl-table"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+
+async function openWorkloadDetails(userId, bucket) {
+  const user = document.getElementById('wl-row-' + userId)?.querySelector('td b')?.textContent || '员工';
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay workload-detail-overlay';
+  overlay.innerHTML = `<aside class="workload-detail-drawer"><header><div><small>工作量明细</small><h3>${escHtml(user)} · ${bucket === 'own' ? '待本人处理' : '待他人处理'}</h3></div><button class="modal-close" data-emie-action="click:workload-details-close">✕</button></header><div class="workload-detail-body"><div class="loading">加载中</div></div></aside>`;
+  overlay.addEventListener('click', event => { if (event.target === overlay) closeWorkloadDetails(); });
+  document.body.appendChild(overlay);
+  try {
+    const items = await apiGet(`/admin/workload/details?userId=${encodeURIComponent(userId)}&bucket=${bucket}`);
+    const body = overlay.querySelector('.workload-detail-body');
+    body.innerHTML = items.length ? items.map(item => `<article class="workload-detail-item" data-emie-action="click:workload-detail-open" data-project-id="${escHtml(item.projectId || '')}"><div><strong>${escHtml(item.name || '未命名事项')}</strong><small>项目编号：${escHtml(item.projectCode || '未设置')}</small><small>${escHtml(item.project || '未命名项目')}</small></div><span class="workload-detail-status">${escHtml(item.statusLabel || item.status || '')}</span><small class="workload-detail-stage">${escHtml(item.stage || '未设置阶段')} · 点击查看项目</small></article>`).join('') : '<div class="empty">暂无明细</div>';
+  } catch (error) {
+    overlay.querySelector('.workload-detail-body').innerHTML = `<div class="empty">加载失败：${escHtml(error.message)}</div>`;
+  }
+}
+
+function closeWorkloadDetails() {
+  document.querySelector('.workload-detail-overlay')?.remove();
+}
+
+function openWorkloadDetailProject(projectId) {
+  closeWorkloadDetails();
+  if (projectId && EMIE.actions.openProjectDetail) EMIE.actions.openProjectDetail(Number(projectId));
 }
 
 /** 图表撳落去 → 定位并高亮对应表格行 */
@@ -206,7 +231,7 @@ function setWorkloadRole(role) { EMIE.adminState.workloadRole = role || 'all'; r
 function toggleWorkloadChart() { EMIE.adminState.workloadChartExpanded = !EMIE.adminState.workloadChartExpanded; renderWorkload(); }
 function renderWorkload() { const container = EMIE.workloadContainer || document.getElementById('adminContent'); if (container) renderAdminWorkload(container); }
 
-EMIE.registerActions({ renderAdminWorkload, toggleWorkloadChart, switchWorkloadRange, setWorkloadQuery, setWorkloadSort, setWorkloadRole, setWorkloadDate, applyWorkloadDates, focusWorkloadMember });
+EMIE.registerActions({ renderAdminWorkload, toggleWorkloadChart, switchWorkloadRange, setWorkloadQuery, setWorkloadSort, setWorkloadRole, setWorkloadDate, applyWorkloadDates, focusWorkloadMember, openWorkloadDetails, closeWorkloadDetails, openWorkloadDetailProject });
 const registerEventAction = EMIE.actions.registerEventAction;
 if (registerEventAction) {
   registerEventAction('workload-range', (_event, element) => switchWorkloadRange(element.dataset.range));
@@ -218,5 +243,8 @@ if (registerEventAction) {
   registerEventAction('workload-apply-dates', () => applyWorkloadDates());
   registerEventAction('workload-member', (_event, element) => focusWorkloadMember(element.dataset.userId));
   registerEventAction('workload-expand-chart', () => toggleWorkloadChart());
+  registerEventAction('workload-details', (_event, element) => openWorkloadDetails(element.dataset.userId, element.dataset.bucket));
+  registerEventAction('workload-details-close', () => closeWorkloadDetails());
+  registerEventAction('workload-detail-open', (_event, element) => openWorkloadDetailProject(element.dataset.projectId));
 }
-EMIE.registerModule('adminWorkload', { renderAdminWorkload, toggleWorkloadChart, switchWorkloadRange, setWorkloadQuery, setWorkloadSort, setWorkloadRole, setWorkloadDate, applyWorkloadDates, focusWorkloadMember });
+EMIE.registerModule('adminWorkload', { renderAdminWorkload, toggleWorkloadChart, switchWorkloadRange, setWorkloadQuery, setWorkloadSort, setWorkloadRole, setWorkloadDate, applyWorkloadDates, focusWorkloadMember, openWorkloadDetails, closeWorkloadDetails, openWorkloadDetailProject });

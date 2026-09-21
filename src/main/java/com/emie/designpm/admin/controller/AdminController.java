@@ -431,6 +431,19 @@ public class AdminController {
         }
     }
 
+    @GetMapping("/workload/details")
+    public ResponseEntity<?> getWorkloadDetails(
+            @RequestParam String userId,
+            @RequestParam(defaultValue = "own") String bucket,
+            @RequestHeader("X-Auth-Token") String token) {
+        AuthSession session = AuthSessions.validateToken(token);
+        if (session == null) return ResponseEntity.status(401).build();
+        if (!Set.of("own", "waiting").contains(bucket)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "无效的工作量类型"));
+        }
+        return ResponseEntity.ok(adminWorkloadService.getWorkloadDetails(userId, bucket));
+    }
+
     // ==================== 辅助方法 ====================
 
     private String getUserFromToken(String token) {
