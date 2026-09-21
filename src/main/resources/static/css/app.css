@@ -961,7 +961,7 @@ select.form-select:disabled::-ms-expand { display: none; }
 .admin-log-table-wrap thead th { position:sticky; top:0; z-index:2; background:var(--gray-50); box-shadow:0 1px 0 var(--gray-200); }
 .admin-log-table-wrap tbody td { padding:8px 10px; border-bottom:1px solid var(--gray-100); vertical-align:top; }
 .admin-layout { display:grid; grid-template-columns:clamp(220px,19vw,250px) minmax(0,1fr); gap:20px; align-items:start; width:100%; height:auto; min-height:0; max-height:none; min-width:0; overflow:visible; }
-.admin-layout .admin-tabs { display:flex; flex-direction:column; flex-wrap:nowrap; align-items:stretch; gap:3px; width:100%; height:auto; min-height:0; max-height:calc(100dvh - 150px); box-sizing:border-box; border:1px solid #E4E7F0; border-radius:18px; background:linear-gradient(180deg,#FFFFFF 0%,#FAFBFF 100%); box-shadow:0 8px 24px rgba(30,41,59,.06); padding:11px 10px; margin:0; position:static; min-width:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#C7CBD6 #F4F5F8; scrollbar-gutter:stable; }
+.admin-layout .admin-tabs { display:flex; flex-direction:column; flex-wrap:nowrap; align-items:stretch; gap:5px; width:100%; height:auto; min-height:0; max-height:calc(100dvh - 150px); box-sizing:border-box; border:1px solid #E4E7F0; border-radius:18px; background:linear-gradient(180deg,#FFFFFF 0%,#FAFBFF 100%); box-shadow:0 8px 24px rgba(30,41,59,.06); padding:11px 10px; margin:0; position:static; min-width:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#C7CBD6 #F4F5F8; scrollbar-gutter:stable; }
 /* 滚动阴影：只有真係仲有内容喺上／下面先出现，滚到尽头会自动消失。
    local 层係「跟内容滚」嘅遮罩，scroll 层係固定阴影，两者叠埋就係经典 scroll-shadow。
    唔用 mask-image，因为嗰个会连最后一项都遮暗。 */
@@ -977,12 +977,21 @@ select.form-select:disabled::-ms-expand { display: none; }
 .admin-layout .admin-tabs::-webkit-scrollbar-track { border-radius:99px; background:#F4F5F8; }
 .admin-layout .admin-tabs::-webkit-scrollbar-thumb { border:1px solid transparent; border-radius:99px; background:#BFC4D4; background-clip:padding-box; }
 .admin-layout .admin-tabs::-webkit-scrollbar-thumb:hover { background:#B9BDCA; background-clip:padding-box; }
-.admin-layout .admin-tab-group { display:flex; flex-direction:column; flex-wrap:nowrap; align-items:stretch; align-self:stretch; width:100%; gap:0; min-width:0; padding:0 0 4px; border-right:0; border-bottom:1px solid #EEF0F5; }
+.admin-layout .admin-tab-group { display:flex; flex-direction:column; flex-wrap:nowrap; align-items:stretch; align-self:stretch; width:100%; gap:2px; min-width:0; padding:0 0 7px; border-right:0; border-bottom:1px solid #EEF0F5; }
 .admin-layout .admin-tab-group:last-child { border-bottom:0; padding-bottom:0; }
-.admin-layout .admin-tab-group-title { width:auto; margin:0 4px 0; padding:1px 8px 2px; color:#98A1B2; font-size:10px; font-weight:750; letter-spacing:.1em; border-left:2px solid #D9D6FF; }
-.admin-layout .admin-tab { position:relative; width:100%; min-width:0; justify-content:flex-start; border:0; border-radius:9px; padding:6px 10px; line-height:1.25; color:#5E687A; background:transparent; text-align:left; white-space:normal; overflow-wrap:anywhere; transition:background .16s,color .16s,transform .16s; }
+.admin-layout .admin-tab-group-title { width:auto; margin:0 4px 2px; padding:3px 8px 5px; color:#98A1B2; font-size:10px; font-weight:750; letter-spacing:.1em; border-left:2px solid #D9D6FF; }
+.admin-layout .admin-tab { position:relative; width:100%; min-width:0; justify-content:flex-start; border:0; border-radius:9px; padding:8px 10px; line-height:1.35; color:#5E687A; background:transparent; text-align:left; white-space:normal; overflow-wrap:anywhere; transition:background .16s,color .16s,transform .16s; }
 .admin-layout .admin-tab:hover { transform:translateX(2px); background:#F6F5FF; color:var(--primary); }
 .admin-layout .admin-tab.active { background:linear-gradient(90deg,#EEECFF,#F7F6FF); color:#4F46E5; font-weight:650; box-shadow:inset 3px 0 #5B50E6,0 3px 8px rgba(91,80,230,.08); }
+/* 阔屏双栏：19 个项目单栏喺 900px 高嘅屏摆唔落，与其迫细字体，不如用返阔度 */
+@media (min-width:1140px) {
+  .admin-layout { grid-template-columns:clamp(276px,20vw,312px) minmax(0,1fr); gap:16px; }
+  .admin-layout .admin-tabs { display:block; columns:2; column-gap:8px; max-height:none; overflow:visible; scrollbar-gutter:auto; padding:10px 8px; }
+  .admin-layout .admin-tab { padding:7px 8px; }
+  .admin-layout .admin-tab-group { break-inside:avoid; margin-bottom:7px; }
+  .admin-layout .admin-tab-group:last-child { margin-bottom:0; }
+}
+
 #adminContent { min-width:0; max-height:calc(100dvh - 350px); overflow-y:auto; overflow-x:hidden; padding:8px 8px 18px 0; scrollbar-width:thin; scrollbar-color:#C7CBD6 transparent; }
 #adminContent::-webkit-scrollbar { width:7px; }
 #adminContent::-webkit-scrollbar-thumb { border-radius:99px; background:#C7CBD6; }
@@ -1018,7 +1027,7 @@ html:has(.admin-page)::-webkit-scrollbar,body:has(.admin-page)::-webkit-scrollba
   .admin-layout .admin-tabs { gap:6px; padding:8px; }
   .admin-layout .admin-tab-group { padding-bottom:5px; }
   .admin-layout .admin-tab-group-title { padding:1px 8px 3px; font-size:10px; }
-  .admin-layout .admin-tab { padding:6px 8px; font-size:12px; line-height:1.2; }
+  .admin-layout .admin-tab { padding:7px 9px; font-size:13px; line-height:1.3; }
 }
 @media (max-height:820px) and (min-width:801px) {
   .admin-layout { min-height:340px; }
