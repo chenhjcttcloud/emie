@@ -27,72 +27,37 @@ function adminUserRoleClass(role) {
   return adminUserRoleKey(role);
 }
 
+// 表头排序状态：默认按系统 ID 升序
+const adminUserSort = { field: 'id', dir: 'asc' };
+
+function adminUserSortParams(params) {
+  params.set('sort', adminUserSort.field);
+  params.set('dir', adminUserSort.dir);
+  return params;
+}
+
+function adminUserSortHead(label, field, extra = '') {
+  const active = adminUserSort.field === field;
+  const arrow = active ? (adminUserSort.dir === 'asc' ? ' ▲' : ' ▼') : ' ⇅';
+  return `<th ${extra} class="admin-user-sortable${active ? ' active' : ''}" data-emie-action="click:users-sort" data-sort-field="${field}" title="点击切换排序">${label}<span class="admin-user-sort-arrow">${arrow}</span></th>`;
+}
+
+function sortAdminUsers(field) {
+  if (adminUserSort.field === field) adminUserSort.dir = adminUserSort.dir === 'asc' ? 'desc' : 'asc';
+  else { adminUserSort.field = field; adminUserSort.dir = 'asc'; }
+  const state = EMIE.adminUserPage;
+  if (state?.container) renderAdminUsers(state.container, 0, state.filters || {});
+}
+
 function adminUserStatusLabel(status) {
   if (status === 'pending') return '⏳ 待分配';
   if (status === 'disabled') return '❌ 停用';
   return '✅ 启用';
 }
 
-// ===== Admin: 用户管理 =====
-async function renderAdminUsers(container, page = 0, filters = {}) {
-  container.innerHTML = `<div class="loading">加载中</div>`;
-  let users = [], roles = [];
-  let pageResult = { items: [], page, size: 30, total: 0, totalPages: 0 };
-  try {
-    const params = new URLSearchParams({ page: String(page), size: '30' });
-    Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); });
-    pageResult = await apiGet('/admin/users/page?' + params);
-    if (pageResult.totalPages && page >= pageResult.totalPages) return renderAdminUsers(container, pageResult.totalPages - 1, filters);
-    users = pageResult.items || [];
-    EMIE.state.adminUsers = users;
-    EMIE.adminUserPage = { ...pageResult, container, page: pageResult.page ?? page, filters };
-    [roles] = await Promise.all([
-      apiGet('/admin/roles'),
-    ]);
-  } catch(e) { /* ignore */ }
-  roles.forEach(r => { if (!adminUserRoleLabels[adminUserRoleKey(r.name)]) adminUserRoleLabels[adminUserRoleKey(r.name)] = r.displayName || r.name; });
-  const assignableRoles = roles.filter(r => r.name !== 'pending');
-
-  container.innerHTML = `
-    <div class="config-card">
-      <div class="config-card-header">
-        <h3>👥 用户管理 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">共 ${EMIE.adminUserPage?.total ?? users.length} 人</span></h3>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-sm btn-outline" data-emie-action="click:users-refresh">🔄 刷新</button>
-        </div>
-      </div>
-      <div class="config-card-body">
-        <div class="admin-user-filters">
-          <input type="text" id="userSearchInput" placeholder="🔍 搜索姓名/User ID/Open ID..." data-emie-action="input:users-filter" style="flex:1;max-width:320px;">
-          <select id="userRoleFilter" data-emie-action="change:users-filter">
-            <option value="">全部角色</option>
-            <option value="pending">待分配</option>
-            ${assignableRoles.map(r => `<option value="${escHtml(r.name)}">${escHtml(r.displayName || r.name)}</option>`).join('')}
-          </select>
-          <select id="userStatusFilter" data-emie-action="change:users-filter">
-            <option value="">全部状态</option>
-            <option value="pending">待分配</option>
-            <option value="active">启用</option>
-            <option value="disabled">停用</option>
-          </select>
-          <span class="admin-user-count" id="userCountDisplay">当前页 ${users.length} 人</span>
-        </div>
-        <div class="table-wrap">
-          <table class="admin-user-table">
-            <thead>
-              <tr>
-                <th style="width:72px;">系统ID</th>
-                <th>飞书身份ID</th>
-                <th>姓名</th>
-                <th>角色</th>
-                <th>状态</th>
-                <th>手机号</th>
-                <th>邮箱</th>
-                <th style="width:280px;">操作</th>
-              </tr>
-            </thead>
-            <tbody id="adminUserTableBody">
-              ${users.map(u => `
+// 行模板独立出嚟：筛选时只换 tbody，唔会郁到工具栏同输入框
+function adminUserRowsMarkup(users) {
+  return users.map(u => `
                 <tr data-user-id="${escHtml(u.userId)}" data-role="${adminUserRoleKey(u.role)}" data-name="${escHtml(u.name)}" data-status="${u.status || 'active'}">
                   <td style="color:var(--gray-400);">${u.id ?? '-'}</td>
                   <td style="word-break:break-all;">
@@ -116,19 +81,116 @@ async function renderAdminUsers(container, page = 0, filters = {}) {
                     </div>
                   </td>
                 </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-          ${users.length === 0 ? '<div class="empty"><div class="empty-icon">📭</div><p>暂无用户数据</p></div>' : ''}
-          ${pageResult.totalPages > 1 ? `<div class="project-pagination"><span>显示第 ${pageResult.page + 1} / ${pageResult.totalPages} 页，共 ${pageResult.total} 人</span><div><button class="btn btn-outline btn-sm" ${page <= 0 ? 'disabled' : ''} data-emie-action="click:users-page" data-page="${page - 1}">上一页</button><button class="btn btn-outline btn-sm" ${page >= pageResult.totalPages - 1 ? 'disabled' : ''} data-emie-action="click:users-page" data-page="${page + 1}">下一页</button></div></div>` : ''}
-      </div>
-    </div>`;
+              `).join('');
 }
 
-function filterAdminUsers() {
+// ===== Admin: 用户管理 =====
+async function renderAdminUsers(container, page = 0, filters = {}) {
+  container.innerHTML = `<div class="loading">加载中</div>`;
+  let users = [], roles = [];
+  let pageResult = { items: [], page, size: 30, total: 0, totalPages: 0 };
+  try {
+    const params = adminUserSortParams(new URLSearchParams({ page: String(page), size: '30' }));
+    Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); });
+    pageResult = await apiGet('/admin/users/page?' + params);
+    if (pageResult.totalPages && page >= pageResult.totalPages) return renderAdminUsers(container, pageResult.totalPages - 1, filters);
+    users = pageResult.items || [];
+    EMIE.state.adminUsers = users;
+    EMIE.adminUserPage = { ...pageResult, container, page: pageResult.page ?? page, filters };
+    [roles] = await Promise.all([
+      apiGet('/admin/roles'),
+    ]);
+  } catch(e) { /* ignore */ }
+  roles.forEach(r => { if (!adminUserRoleLabels[adminUserRoleKey(r.name)]) adminUserRoleLabels[adminUserRoleKey(r.name)] = r.displayName || r.name; });
+  const assignableRoles = roles.filter(r => r.name !== 'pending');
+
+  container.innerHTML = `
+    <div class="config-card">
+      <div class="config-card-header">
+        <h3>👥 用户管理 <span id="adminUserTotal" style="font-size:13px;color:var(--gray-400);font-weight:400;">共 ${EMIE.adminUserPage?.total ?? users.length} 人</span></h3>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm btn-outline" data-emie-action="click:users-refresh">🔄 刷新</button>
+        </div>
+      </div>
+      <div class="config-card-body">
+        <div class="admin-user-filters">
+          <input type="text" id="userSearchInput" placeholder="🔍 搜索姓名/User ID/Open ID..." value="${escHtml(filters.keyword || '')}" data-emie-action="input:users-filter" style="flex:1;max-width:320px;">
+          <select id="userRoleFilter" data-emie-action="change:users-filter">
+            <option value="" ${filters.role ? '' : 'selected'}>全部角色</option>
+            <option value="pending" ${filters.role === 'pending' ? 'selected' : ''}>待分配</option>
+            ${assignableRoles.map(r => `<option value="${escHtml(r.name)}" ${filters.role === r.name ? 'selected' : ''}>${escHtml(r.displayName || r.name)}</option>`).join('')}
+          </select>
+          <select id="userStatusFilter" data-emie-action="change:users-filter">
+            <option value="" ${filters.status ? '' : 'selected'}>全部状态</option>
+            <option value="pending" ${filters.status === 'pending' ? 'selected' : ''}>待分配</option>
+            <option value="active" ${filters.status === 'active' ? 'selected' : ''}>启用</option>
+            <option value="disabled" ${filters.status === 'disabled' ? 'selected' : ''}>停用</option>
+          </select>
+          <span class="admin-user-count" id="userCountDisplay">当前页 ${users.length} 人</span>
+        </div>
+        <div class="table-wrap">
+          <table class="admin-user-table">
+            <thead>
+              <tr>
+                ${adminUserSortHead('系统ID', 'id', 'style="width:96px;"')}
+                <th>飞书身份ID</th>
+                ${adminUserSortHead('姓名', 'name')}
+                ${adminUserSortHead('角色', 'role')}
+                ${adminUserSortHead('状态', 'status')}
+                <th>手机号</th>
+                <th>邮箱</th>
+                <th style="width:280px;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="adminUserTableBody">${adminUserRowsMarkup(users)}</tbody>
+          </table>
+        </div>
+          <div id="adminUserEmpty">${users.length === 0 ? '<div class="empty"><div class="empty-icon">📭</div><p>暂无用户数据</p></div>' : ''}</div>
+          <div id="adminUserPagination">${pageResult.totalPages > 1 ? `<div class="project-pagination"><span>显示第 ${pageResult.page + 1} / ${pageResult.totalPages} 页，共 ${pageResult.total} 人</span><div><button class="btn btn-outline btn-sm" ${page <= 0 ? 'disabled' : ''} data-emie-action="click:users-page" data-page="${page - 1}">上一页</button><button class="btn btn-outline btn-sm" ${page >= pageResult.totalPages - 1 ? 'disabled' : ''} data-emie-action="click:users-page" data-page="${page + 1}">下一页</button></div></div>` : ''}</div>
+      </div>
+    </div>`;
+
+  // 输入框由呢刻起唔会再被重建，所以可以直接绑：中文输入法组字完成先查询
+  const searchInput = document.getElementById('userSearchInput');
+  if (searchInput) searchInput.addEventListener('compositionend', () => filterAdminUsers());
+}
+
+/** 只换表格内容，唔郁工具栏 —— 保住焦点同输入法组字状态 */
+async function refreshAdminUserRows(page = 0, filters = {}) {
+  const state = EMIE.adminUserPage;
+  if (!state?.container) return;
+  let users = [];
+  let pageResult = { items: [], page, size: 30, total: 0, totalPages: 0 };
+  try {
+    const params = adminUserSortParams(new URLSearchParams({ page: String(page), size: '30' }));
+    Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value); });
+    pageResult = await apiGet('/admin/users/page?' + params);
+    users = pageResult.items || [];
+    EMIE.state.adminUsers = users;
+    EMIE.adminUserPage = { ...pageResult, container: state.container, page: pageResult.page ?? page, filters };
+  } catch (error) { /* 保持现有内容 */ }
+
+  const body = document.getElementById('adminUserTableBody');
+  if (body) body.innerHTML = adminUserRowsMarkup(users);
+  const total = document.getElementById('adminUserTotal');
+  if (total) total.textContent = `共 ${pageResult.total ?? users.length} 人`;
+  const count = document.getElementById('userCountDisplay');
+  if (count) count.textContent = `当前页 ${users.length} 人`;
+  const empty = document.getElementById('adminUserEmpty');
+  if (empty) empty.innerHTML = users.length === 0 ? '<div class="empty"><div class="empty-icon">📭</div><p>暂无用户数据</p></div>' : '';
+  const pagination = document.getElementById('adminUserPagination');
+  if (pagination) {
+    pagination.innerHTML = pageResult.totalPages > 1
+      ? `<div class="project-pagination"><span>显示第 ${pageResult.page + 1} / ${pageResult.totalPages} 页，共 ${pageResult.total} 人</span><div><button class="btn btn-outline btn-sm" ${pageResult.page <= 0 ? 'disabled' : ''} data-emie-action="click:users-page" data-page="${pageResult.page - 1}">上一页</button><button class="btn btn-outline btn-sm" ${pageResult.page >= pageResult.totalPages - 1 ? 'disabled' : ''} data-emie-action="click:users-page" data-page="${pageResult.page + 1}">下一页</button></div></div>`
+      : '';
+  }
+}
+
+function filterAdminUsers(event) {
+  // 中文输入法组字途中唔好查询，否则会打断组字
+  if (event?.isComposing) return;
   clearTimeout(filterAdminUsers._timer);
-  filterAdminUsers._timer = setTimeout(applyFilterAdminUsers, 250);
+  filterAdminUsers._timer = setTimeout(applyFilterAdminUsers, 300);
 }
 
 async function applyFilterAdminUsers() {
@@ -137,13 +199,13 @@ async function applyFilterAdminUsers() {
   const statusFilter = document.getElementById('userStatusFilter').value;
   const state = EMIE.adminUserPage;
   if (!state?.container) return;
-  await renderAdminUsers(state.container, 0, { keyword: search, role: roleFilter, status: statusFilter });
+  await refreshAdminUserRows(0, { keyword: search, role: roleFilter, status: statusFilter });
 }
 
 async function changeAdminUserPage(page) {
   const state = EMIE.adminUserPage;
   if (!state?.container || page < 0 || page >= state.totalPages) return;
-  await renderAdminUsers(state.container, page, state.filters || {});
+  await refreshAdminUserRows(page, state.filters || {});
 }
 
 // ===== Admin: 编辑用户弹窗 =====
@@ -399,6 +461,8 @@ function showAdminToast(message, type = 'success') {
 
 
 EMIE.registerActions({
+  sortAdminUsers,
+  refreshAdminUserRows,
   renderAdminUsers,
   filterAdminUsers,
   applyFilterAdminUsers,
@@ -419,7 +483,8 @@ EMIE.registerActions({
 const registerEventAction = EMIE.actions.registerEventAction;
 if (registerEventAction) {
   registerEventAction('users-refresh', () => refreshUserList());
-  registerEventAction('users-filter', () => filterAdminUsers());
+  registerEventAction('users-filter', (event) => filterAdminUsers(event));
+  registerEventAction('users-sort', (_event, element) => sortAdminUsers(element.dataset.sortField));
   registerEventAction('users-edit', (_event, el) => openEditUserModal(EMIE.state.adminUsers?.find?.(u => Number(u.id) === Number(el.dataset.userId))));
   registerEventAction('users-change-role', (_event, el) => openChangeRoleModal(Number(el.dataset.userId), el.dataset.userRole || '', el.dataset.userName || ''));
   registerEventAction('users-reset-password', (_event, el) => openResetPwdModal(Number(el.dataset.userId), el.dataset.userName || ''));
@@ -435,6 +500,8 @@ if (registerEventAction) {
 }
 
 EMIE.registerModule('adminUsers', {
+  sortAdminUsers,
+  refreshAdminUserRows,
   renderAdminUsers,
   filterAdminUsers,
   changeAdminUserPage,

@@ -12,11 +12,12 @@ import org.springframework.data.repository.query.Param;
 
 public interface UserRepository extends JpaRepository<User, Long> {
 
-    @Query("SELECT u FROM User u WHERE "
-            + "(:keyword IS NULL OR LOWER(u.userId) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(u.feishuUserId) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(u.feishuOpenId) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(u.name) LIKE LOWER(CONCAT('%', :keyword, '%'))) "
-            + "AND (:role IS NULL OR u.role = :role) "
-            + "AND (:status IS NULL OR u.status = :status OR (:status = 'active' AND (u.status IS NULL OR u.status = 'active'))) "
-            + "ORDER BY u.createdAt DESC, u.id DESC")
+    @Query(
+            "SELECT u FROM User u WHERE "
+                    + "(:keyword IS NULL OR LOWER(u.userId) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(u.feishuUserId) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(u.feishuOpenId) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(u.name) LIKE LOWER(CONCAT('%', :keyword, '%'))) "
+                    + "AND (:role IS NULL OR u.role = :role) "
+                    + "AND (:status IS NULL OR u.status = :status OR (:status = 'active' AND (u.status IS NULL OR u.status = 'active')))")
+    // 排序唔再写死：由 Pageable 带 Sort 入嚟，畀前端撳表头切换
     Page<User> searchPage(
             @Param("keyword") String keyword,
             @Param("role") String role,

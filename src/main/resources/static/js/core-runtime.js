@@ -60,8 +60,16 @@ EMIE.state = Object.assign({
   idleMonitorInited: false,
 }, EMIE.state || {});
 
+// 工作量时间范围：记住用户上次嘅选择，默认本月（今日通常冇新增，入去会似冇数据）
+EMIE.savedWorkloadRange = (key, fallback = 'month') => {
+  try { return localStorage.getItem(key) || fallback; } catch (error) { return fallback; }
+};
+EMIE.rememberWorkloadRange = (key, value) => {
+  try { localStorage.setItem(key, value); } catch (error) { /* 无痕模式等场景忽略 */ }
+};
+
 EMIE.dashboardState = Object.assign({
-  workloadRange: 'day',
+  workloadRange: EMIE.savedWorkloadRange('emie_dash_workload_range'),
   scoringCache: [],
   designerTaskCache: [],
   taskProjectsCache: [],
@@ -93,7 +101,7 @@ EMIE.projectState = Object.assign({
 }, EMIE.projectState || {});
 EMIE.adminState = Object.assign({
   currentTab: 'dashboard',
-  workloadRange: 'month',
+  workloadRange: EMIE.savedWorkloadRange('emie_admin_workload_range'),
   scoringWeights: null,
 }, EMIE.adminState || {});
 EMIE.fileState = Object.assign({ previewSequence: 0, currentPreview: null }, EMIE.fileState || {});

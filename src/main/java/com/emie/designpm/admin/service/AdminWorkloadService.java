@@ -10,7 +10,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,13 +64,15 @@ public class AdminWorkloadService {
                 Map.of("sales", "销售", "planner", "产品企划", "designer", "设计师", "supplychain", "供应链");
         Map<String, String> roleIcons = Map.of("sales", "📊", "planner", "📋", "designer", "🎨", "supplychain", "📦");
 
-        Map<String, Map<String, Long>> projectCountsBySales =
-                workloadCounts("SELECT sales_id, status, COUNT(*) FROM projects GROUP BY sales_id, status");
-        Map<String, Map<String, Long>> projectCountsByPlanner =
-                workloadCounts("SELECT planner_id, status, COUNT(*) FROM projects GROUP BY planner_id, status");
-        Map<String, Map<String, Long>> taskCountsByDesigner = workloadCounts(
+        Map<String, Map<String, Long>> projectCountsBySales = AdminWorkloadQueries.workloadCounts(
+                entityManager, "SELECT sales_id, status, COUNT(*) FROM projects GROUP BY sales_id, status");
+        Map<String, Map<String, Long>> projectCountsByPlanner = AdminWorkloadQueries.workloadCounts(
+                entityManager, "SELECT planner_id, status, COUNT(*) FROM projects GROUP BY planner_id, status");
+        Map<String, Map<String, Long>> taskCountsByDesigner = AdminWorkloadQueries.workloadCounts(
+                entityManager,
                 "SELECT designer_id, status, COUNT(*) FROM sub_tasks WHERE assignee_role = 'designer' OR assignee_role IS NULL GROUP BY designer_id, status");
-        Map<String, Map<String, Long>> taskCountsBySupplychain = workloadCounts(
+        Map<String, Map<String, Long>> taskCountsBySupplychain = AdminWorkloadQueries.workloadCounts(
+                entityManager,
                 "SELECT designer_id, status, COUNT(*) FROM sub_tasks WHERE assignee_role = 'supplychain' GROUP BY designer_id, status");
 
         for (Map.Entry<String, List<User>> entry : byRole.entrySet()) {
@@ -159,18 +160,6 @@ public class AdminWorkloadService {
         return result;
     }
 
-    @SuppressWarnings("unchecked")
-    private Map<String, Map<String, Long>> workloadCounts(String sql) {
-        Map<String, Map<String, Long>> result = new HashMap<>();
-        List<Object[]> rows = entityManager.createNativeQuery(sql).getResultList();
-        for (Object[] row : rows) {
-            if (row[0] == null || row[1] == null) continue;
-            result.computeIfAbsent(String.valueOf(row[0]), ignored -> new LinkedHashMap<>())
-                    .put(String.valueOf(row[1]), ((Number) row[2]).longValue());
-        }
-        return result;
-    }
-
     /** 获取指定时间范围内各角色的工作量统计 */
     public Map<String, Object> getWorkloadTimeline(String range) {
         return getWorkloadTimeline(range, null, null);
@@ -217,7 +206,9 @@ public class AdminWorkloadService {
         List<User> allUsers = workloadUsers();
 
         Map<String, List<User>> byRole = allUsers.stream()
-                .filter(u -> Set.of("sales", "promotion", "planner", "designer", "supplychain")
+                // 销售唔计入工作量统计（佢哋嘅项目由对应企划承担），但仍然留喺 allUsers，
+                // 免得指派畀销售嘅任务被当成「离职遗留」。
+                .filter(u -> Set.of("promotion", "planner", "designer", "supplychain")
                         .contains(u.getRole()))
                 .filter(u -> u.getStatus() == null || "active".equalsIgnoreCase(u.getStatus()))
                 .collect(Collectors.groupingBy(User::getRole));
@@ -227,59 +218,83 @@ public class AdminWorkloadService {
         Map<String, String> roleIcons =
                 Map.of("sales", "📊", "promotion", "📣", "planner", "📋", "designer", "🎨", "supplychain", "📦");
 
-        Map<String, long[]> projectTimelineBySales = workloadTimelineCounts(
+        Map<String, long[]> projectTimelineBySales = AdminWorkloadQueries.workloadTimelineCounts(
+                entityManager,
                 "SELECT sales_id, SUM(CASE WHEN created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END), "
                         + "SUM(CASE WHEN completed_at >= ?1 AND completed_at < ?2 THEN 1 ELSE 0 END) "
                         + ", SUM(CASE WHEN type = 'channel_custom' AND created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END) "
                         + ", SUM(CASE WHEN type <> 'channel_custom' AND created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END) "
                         + ", SUM(CASE WHEN completed_at >= ?1 AND completed_at < ?2 AND type = 'channel_custom' THEN 1 ELSE 0 END) "
                         + ", SUM(CASE WHEN completed_at >= ?1 AND completed_at < ?2 AND (type <> 'channel_custom' OR type IS NULL) THEN 1 ELSE 0 END) "
-                        + ", SUM(CASE WHEN created_at < ?2 AND (completed_at IS NULL OR completed_at >= ?2) THEN 1 ELSE 0 END) FROM projects WHERE created_at < ?2 GROUP BY sales_id",
+                        + ", SUM(CASE WHEN created_at < ?2 AND (completed_at IS NULL OR completed_at >= ?2) THEN 1 ELSE 0 END) "
+                        // 同批口径：本期新增当中已完成的数量（分子分母同一批，用于完成率）
+                        + ", SUM(CASE WHEN created_at >= ?1 AND created_at < ?2 AND completed_at IS NOT NULL AND completed_at < ?2 THEN 1 ELSE 0 END) "
+                        + "FROM projects WHERE created_at < ?2 GROUP BY sales_id",
                 cutoff,
                 endExclusive);
-        Map<String, long[]> taskTimelineByPlanner = workloadTimelineCounts(
-                "SELECT s.publisher_id, SUM(CASE WHEN s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), "
-                        + "SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 THEN 1 ELSE 0 END) "
-                        + ", SUM(CASE WHEN p.type = 'channel_custom' AND s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END) "
-                        + ", SUM(CASE WHEN (p.type <> 'channel_custom' OR p.type IS NULL) AND s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END) "
-                        + ", SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 AND p.type = 'channel_custom' THEN 1 ELSE 0 END) "
-                        + ", SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 AND (p.type <> 'channel_custom' OR p.type IS NULL) THEN 1 ELSE 0 END) "
-                        + "FROM sub_tasks s LEFT JOIN projects p ON p.id = s.project_id WHERE s.created_at < ?2 AND s.publisher_role = 'planner' GROUP BY s.publisher_id",
+        // 子任务改为逐件归户（见 AdminWorkloadTaskLedger）：同一个人同一件任务只计一次；
+        // 按承接／发布视角分「自己要做」同「等他人」；亦唔再漏掉非设计／供应链承接嘅任务。
+        AdminWorkloadTaskLedger.Result taskLedger = AdminWorkloadTaskLedger.aggregate(
+                AdminWorkloadQueries.loadTaskRows(entityManager, endExclusive), cutoff, endExclusive);
+        Map<String, long[]> projectTimelineByPlanner = AdminWorkloadQueries.workloadTimelineCounts(
+                entityManager,
+                "SELECT planner_id, SUM(CASE WHEN created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END), "
+                        + "SUM(CASE WHEN completed_at >= ?1 AND completed_at < ?2 THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN type = 'channel_custom' AND created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN type <> 'channel_custom' AND created_at >= ?1 AND created_at < ?2 THEN 1 ELSE 0 END) "
+                        + ", SUM(CASE WHEN created_at >= ?1 AND created_at < ?2 AND completed_at IS NOT NULL AND completed_at < ?2 THEN 1 ELSE 0 END) "
+                        + "FROM projects WHERE created_at < ?2 GROUP BY planner_id",
                 cutoff,
                 endExclusive);
-        Map<String, Long> projectsCreatedByPlanner = workloadCountByUser(
-                "SELECT planner_id, COUNT(*) FROM projects WHERE created_at >= ?1 AND created_at < ?2 GROUP BY planner_id",
+        // 期末未完结项目按状态分组，交由 WorkloadStatusBoundary 判自己／等人
+        Map<String, Map<String, Long>> outstandingProjectsBySales = AdminWorkloadQueries.workloadCountsAtEnd(
+                entityManager,
+                "SELECT sales_id, status, COUNT(*) FROM projects WHERE created_at < ?1 "
+                        + "AND (completed_at IS NULL OR completed_at >= ?1) GROUP BY sales_id, status",
+                endExclusive);
+        // 在手项目嘅分类构成（渠道／常规），同「在手」同一批
+        Map<String, Map<String, Long>> outstandingProjectTypeBySales = AdminWorkloadQueries.workloadCountsAtEnd(
+                entityManager,
+                "SELECT sales_id, type, COUNT(*) FROM projects WHERE created_at < ?1 "
+                        + "AND (completed_at IS NULL OR completed_at >= ?1) "
+                        + "AND status NOT IN ('completed','terminated') GROUP BY sales_id, type",
+                endExclusive);
+        Map<String, Map<String, Long>> outstandingProjectTypeByPlanner = AdminWorkloadQueries.workloadCountsAtEnd(
+                entityManager,
+                "SELECT planner_id, type, COUNT(*) FROM projects WHERE created_at < ?1 "
+                        + "AND (completed_at IS NULL OR completed_at >= ?1) "
+                        + "AND status NOT IN ('completed','terminated') GROUP BY planner_id, type",
+                endExclusive);
+        Map<String, Map<String, Long>> outstandingProjectsByPlanner = AdminWorkloadQueries.workloadCountsAtEnd(
+                entityManager,
+                "SELECT planner_id, status, COUNT(*) FROM projects WHERE created_at < ?1 "
+                        + "AND (completed_at IS NULL OR completed_at >= ?1) GROUP BY planner_id, status",
+                endExclusive);
+        Map<String, long[]> designRequirementCohortByOwner = AdminWorkloadQueries.workloadTimelineCounts(
+                entityManager,
+                "SELECT owner_id, COUNT(*), SUM(CASE WHEN status = 'completed' AND updated_at < ?2 THEN 1 ELSE 0 END) "
+                        + "FROM design_requirements WHERE created_at >= ?1 AND created_at < ?2 GROUP BY owner_id",
                 cutoff,
                 endExclusive);
-        Map<String, long[]> taskTimelineByDesigner = workloadTimelineCounts(
-                "SELECT s.designer_id, SUM(CASE WHEN s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 THEN 1 ELSE 0 END), "
-                        + "SUM(CASE WHEN p.type = 'channel_custom' AND s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), "
-                        + "SUM(CASE WHEN (p.type <> 'channel_custom' OR p.type IS NULL) AND s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 AND p.type = 'channel_custom' THEN 1 ELSE 0 END), SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 AND (p.type <> 'channel_custom' OR p.type IS NULL) THEN 1 ELSE 0 END) "
-                        + ", SUM(CASE WHEN s.created_at < ?2 AND (s.completed_at IS NULL OR s.completed_at >= ?2) THEN 1 ELSE 0 END) "
-                        + "FROM sub_tasks s LEFT JOIN projects p ON p.id = s.project_id WHERE s.created_at < ?2 AND (s.assignee_role = 'designer' OR s.assignee_role IS NULL) GROUP BY s.designer_id",
+        Map<String, long[]> designRequirementCohortByPlanner = AdminWorkloadQueries.workloadTimelineCounts(
+                entityManager,
+                "SELECT planner_id, COUNT(*), SUM(CASE WHEN status = 'completed' AND updated_at < ?2 THEN 1 ELSE 0 END) "
+                        + "FROM design_requirements WHERE created_at >= ?1 AND created_at < ?2 GROUP BY planner_id",
                 cutoff,
                 endExclusive);
-        Map<String, long[]> taskTimelineBySupplychain = workloadTimelineCounts(
-                "SELECT s.designer_id, SUM(CASE WHEN s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 THEN 1 ELSE 0 END), "
-                        + "SUM(CASE WHEN p.type = 'channel_custom' AND s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), "
-                        + "SUM(CASE WHEN (p.type <> 'channel_custom' OR p.type IS NULL) AND s.created_at >= ?1 AND s.created_at < ?2 THEN 1 ELSE 0 END), SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 AND p.type = 'channel_custom' THEN 1 ELSE 0 END), SUM(CASE WHEN s.completed_at >= ?1 AND s.completed_at < ?2 AND (p.type <> 'channel_custom' OR p.type IS NULL) THEN 1 ELSE 0 END) "
-                        + ", SUM(CASE WHEN s.created_at < ?2 AND (s.completed_at IS NULL OR s.completed_at >= ?2) THEN 1 ELSE 0 END) "
-                        + "FROM sub_tasks s LEFT JOIN projects p ON p.id = s.project_id WHERE s.created_at < ?2 AND s.assignee_role = 'supplychain' GROUP BY s.designer_id",
+        Map<String, long[]> designRequirementCohortByDesigner = AdminWorkloadQueries.workloadTimelineCounts(
+                entityManager,
+                "SELECT designer_id, COUNT(*), SUM(CASE WHEN status = 'completed' AND updated_at < ?2 THEN 1 ELSE 0 END) "
+                        + "FROM design_requirements WHERE created_at >= ?1 AND created_at < ?2 GROUP BY designer_id",
                 cutoff,
                 endExclusive);
-        Map<String, Long> designRequirementsByOwner = workloadCountByUser(
-                "SELECT owner_id, COUNT(*) FROM design_requirements WHERE created_at >= ?1 AND created_at < ?2 GROUP BY owner_id",
-                cutoff,
-                endExclusive);
-        Map<String, Long> designRequirementsByPlanner = workloadCountByUser(
-                "SELECT planner_id, COUNT(*) FROM design_requirements WHERE created_at >= ?1 AND created_at < ?2 GROUP BY planner_id",
-                cutoff,
-                endExclusive);
-        Map<String, Long> outstandingDesignRequirementsByDesigner = workloadCountByUserAtEnd(
+        Map<String, Long> outstandingDesignRequirementsByDesigner = AdminWorkloadQueries.workloadCountByUserAtEnd(
+                entityManager,
                 "SELECT designer_id, COUNT(*) FROM design_requirements WHERE created_at < ?1 AND status NOT IN ('completed', 'terminated') GROUP BY designer_id",
                 endExclusive);
         // 设计/送审需求没有 completed_at；完成时会更新需求状态，因此用该状态变更时间作为完成时间。
-        Map<String, Long> completedDesignRequirementsByDesigner = workloadCountByUser(
+        Map<String, Long> completedDesignRequirementsByDesigner = AdminWorkloadQueries.workloadCountByUser(
+                entityManager,
                 "SELECT designer_id, COUNT(*) FROM design_requirements WHERE status = 'completed' AND updated_at >= ?1 AND updated_at < ?2 GROUP BY designer_id",
                 cutoff,
                 endExclusive);
@@ -307,46 +322,60 @@ public class AdminWorkloadService {
                         us.put("regularProjects", counts[3]);
                         us.put("completedChannelProjects", counts[4]);
                         us.put("completedRegularProjects", counts[5]);
-                        us.put("outstanding", counts.length > 6 ? counts[6] : 0);
-                        us.put("designRequirements", designRequirementsByOwner.getOrDefault(u.getUserId(), 0L));
+                        us.put("createdCompleted", at(counts, 7));
+                        us.put("projectsCreated", created);
+                        us.put("projectsChannel", at(counts, 2));
+                        us.put("projectsRegular", at(counts, 3));
+                        us.put("projectsCompletedFromCreated", at(counts, 7));
+                        AdminWorkloadMetrics.putProjectTypeMix(us, outstandingProjectTypeBySales.get(u.getUserId()));
+                        AdminWorkloadMetrics.putTaskLedger(
+                                us, taskLedger.byUser().get(u.getUserId()));
+                        AdminWorkloadMetrics.addProjectOutstanding(
+                                us, outstandingProjectsBySales.get(u.getUserId()), false);
+                        AdminWorkloadMetrics.putDesignRequirementCohort(
+                                us, designRequirementCohortByOwner.get(u.getUserId()));
+                        us.put("designRequirements", us.get("designRequirementsCreated"));
                     }
                     case "promotion" -> {
                         us.put("created", 0L);
                         us.put("completed", 0L);
                         us.put("outstanding", 0L);
-                        us.put("designRequirements", designRequirementsByOwner.getOrDefault(u.getUserId(), 0L));
+                        us.put("createdCompleted", 0L);
+                        AdminWorkloadMetrics.putTaskLedger(
+                                us, taskLedger.byUser().get(u.getUserId()));
+                        AdminWorkloadMetrics.putDesignRequirementCohort(
+                                us, designRequirementCohortByOwner.get(u.getUserId()));
+                        us.put("designRequirements", us.get("designRequirementsCreated"));
                     }
                     case "planner" -> {
-                        long[] counts = taskTimelineByPlanner.getOrDefault(u.getUserId(), new long[6]);
-                        long created = counts[0];
-                        long completed = counts[1];
-                        us.put("created", created);
-                        us.put("completed", completed);
-                        us.put("channelCustomProjects", counts[2]);
-                        us.put("regularProjects", counts[3]);
-                        us.put("completedChannelProjects", counts[4]);
-                        us.put("completedRegularProjects", counts[5]);
-                        us.put("createdProjects", projectsCreatedByPlanner.getOrDefault(u.getUserId(), 0L));
-                        us.put("outstanding", counts.length > 6 ? counts[6] : 0);
-                        us.put("designRequirements", designRequirementsByPlanner.getOrDefault(u.getUserId(), 0L));
+                        AdminWorkloadMetrics.putTaskLedger(
+                                us, taskLedger.byUser().get(u.getUserId()));
+                        long[] plannerProjects = projectTimelineByPlanner.getOrDefault(u.getUserId(), new long[5]);
+                        us.put("createdProjects", at(plannerProjects, 0));
+                        us.put("projectsCreated", at(plannerProjects, 0));
+                        us.put("projectsChannel", at(plannerProjects, 2));
+                        us.put("projectsRegular", at(plannerProjects, 3));
+                        us.put("projectsCompletedFromCreated", at(plannerProjects, 4));
+                        AdminWorkloadMetrics.putProjectTypeMix(us, outstandingProjectTypeByPlanner.get(u.getUserId()));
+                        AdminWorkloadMetrics.addProjectOutstanding(
+                                us, outstandingProjectsByPlanner.get(u.getUserId()), true);
+                        AdminWorkloadMetrics.putDesignRequirementCohort(
+                                us, designRequirementCohortByPlanner.get(u.getUserId()));
+                        us.put("designRequirements", us.get("designRequirementsCreated"));
                     }
                     case "designer", "supplychain" -> {
-                        long[] counts = ("supplychain".equals(role)
-                                        ? taskTimelineBySupplychain
-                                        : taskTimelineByDesigner)
-                                .getOrDefault(u.getUserId(), new long[6]);
-                        long assigned = counts[0];
-                        long completed = counts[1];
-                        us.put("assigned", assigned);
-                        us.put("completed", completed);
-                        us.put("channelCustomProjects", counts[2]);
-                        us.put("regularProjects", counts[3]);
-                        us.put("completedChannelProjects", counts[4]);
-                        us.put("completedRegularProjects", counts[5]);
-                        us.put("outstanding", counts.length > 6 ? counts[6] : 0);
+                        AdminWorkloadMetrics.putTaskLedger(
+                                us, taskLedger.byUser().get(u.getUserId()));
+                        us.put("assigned", us.get("created"));
                         if ("designer".equals(role)) {
+                            AdminWorkloadMetrics.putDesignRequirementCohort(
+                                    us, designRequirementCohortByDesigner.get(u.getUserId()));
+                            // 历来嘅字段：designRequirements = 期末仍未完成嘅需求（同上面「本期新增」唔同口径）
                             us.put(
                                     "designRequirements",
+                                    outstandingDesignRequirementsByDesigner.getOrDefault(u.getUserId(), 0L));
+                            us.put(
+                                    "designRequirementsOutstanding",
                                     outstandingDesignRequirementsByDesigner.getOrDefault(u.getUserId(), 0L));
                             us.put(
                                     "completedDesignRequirements",
@@ -354,13 +383,21 @@ public class AdminWorkloadService {
                         }
                     }
                 }
+                AdminWorkloadMetrics.putWorkloadTotals(us);
                 userStats.add(us);
             }
+
+            AdminWorkloadMetrics.applyWorkloadStatus(userStats);
 
             Map<String, Object> roleEntry = new LinkedHashMap<>();
             roleEntry.put("label", roleLabels.getOrDefault(role, role));
             roleEntry.put("icon", roleIcons.getOrDefault(role, "👤"));
             roleEntry.put("totalUsers", users.size());
+            roleEntry.put(
+                    "attentionUsers",
+                    userStats.stream()
+                            .filter(us -> "risk".equals(us.get("statusKey")) || "watch".equals(us.get("statusKey")))
+                            .count());
             roleEntry.put("users", userStats);
             result.put(role, roleEntry);
         }
@@ -382,10 +419,10 @@ public class AdminWorkloadService {
                 .setParameter(1, cutoff)
                 .setParameter(2, endExclusive)
                 .getSingleResult();
-        long totalCreated = numberOrZero(projectSummary[0]);
-        long totalCompleted = numberOrZero(projectSummary[1]);
-        long totalTasksAssigned = numberOrZero(taskSummary[0]);
-        long totalTasksCompleted = numberOrZero(taskSummary[1]);
+        long totalCreated = AdminWorkloadQueries.numberOrZero(projectSummary[0]);
+        long totalCompleted = AdminWorkloadQueries.numberOrZero(projectSummary[1]);
+        long totalTasksAssigned = AdminWorkloadQueries.numberOrZero(taskSummary[0]);
+        long totalTasksCompleted = AdminWorkloadQueries.numberOrZero(taskSummary[1]);
         long totalProjectsOutstanding = ((Number) entityManager
                         .createNativeQuery(
                                 "SELECT COUNT(*) FROM projects WHERE created_at < ?1 AND (completed_at IS NULL OR completed_at >= ?1)")
@@ -431,6 +468,51 @@ public class AdminWorkloadService {
         summary.put("totalTasksOutstanding", totalTasksOutstanding);
         summary.put("totalDesignRequirements", totalDesignRequirements);
         summary.put("performanceMonth", performanceMonth);
+        summary.put("completionRateRule", "完成率 = 本期新增的工作量当中已完成的比例（分子分母同一批）；「本期完成」另计，包含往期遗留。");
+        summary.put("attentionRule", "需关注 / 留意只按「自己要做」的量判定（各角色 P75，下限 5），等他人处理的不计入；再结合本期新增完成率。");
+
+        Set<String> countedUsers = allUsers.stream().map(User::getUserId).collect(Collectors.toSet());
+        Map<String, Object> unassigned = new LinkedHashMap<>();
+        unassigned.put("created", taskLedger.unassigned().created);
+        unassigned.put("outstanding", taskLedger.unassigned().outstandingTotal());
+        // 未指派企划嘅项目（等人接单）同样冇人托住：按 planner_id 分组时会跌咗出去，要单独数返
+        unassigned.put(
+                "projectsOutstanding",
+                ((Number) entityManager
+                                .createNativeQuery("SELECT COUNT(*) FROM projects WHERE created_at < ?1 "
+                                        + "AND (completed_at IS NULL OR completed_at >= ?1) "
+                                        + "AND status NOT IN ('completed','terminated') "
+                                        + "AND (planner_id IS NULL OR planner_id = '')")
+                                .setParameter(1, endExclusive)
+                                .getSingleResult())
+                        .longValue());
+        summary.put("unassignedTasks", unassigned);
+
+        // 负责人已停用／离职／唔喺统计角色之列：呢啲活仲喺度，唔可以静静鸡消失
+        long orphanOutstanding = 0;
+        long orphanCreated = 0;
+        List<String> orphanOwners = new ArrayList<>();
+        for (Map.Entry<String, AdminWorkloadTaskLedger.Tally> entry :
+                taskLedger.byUser().entrySet()) {
+            if (countedUsers.contains(entry.getKey())) continue;
+            orphanCreated += entry.getValue().created;
+            orphanOutstanding += entry.getValue().outstandingTotal();
+            if (entry.getValue().outstandingTotal() > 0) {
+                orphanOwners.add(userRepository
+                        .findByUserId(entry.getKey())
+                        .map(User::getName)
+                        .map(TextEncodingUtil::repairUtf8Mojibake)
+                        .orElse(entry.getKey()));
+            }
+        }
+        Map<String, Object> orphan = new LinkedHashMap<>();
+        orphan.put("created", orphanCreated);
+        orphan.put("outstanding", orphanOutstanding);
+        orphan.put("owners", orphanOwners);
+        summary.put("inactiveOwnerTasks", orphan);
+
+        // 在手拆分用嘅系「当前状态」，只有区间包到今日先精确；查历史区间就唔拆
+        summary.put("outstandingSplitAvailable", endExclusive.isAfter(LocalDateTime.now()));
         summary.put(
                 "performanceSource",
                 performanceMonth == null
@@ -441,6 +523,15 @@ public class AdminWorkloadService {
         return result;
     }
 
+    /** 读取时间线数组的第 i 列，缺列当 0（唔同角色嘅 SQL 列数唔一样）。 */
+    private long at(long[] counts, int index) {
+        return counts != null && counts.length > index ? counts[index] : 0L;
+    }
+
+    private long longValue(Object value) {
+        return value instanceof Number number ? number.longValue() : 0L;
+    }
+
     private String performanceMonth(String range, LocalDate startDate, LocalDate endDate, LocalDateTime cutoff) {
         if ("month".equals(range)) return YearMonth.from(cutoff).toString();
         if ("custom".equals(range)
@@ -448,50 +539,5 @@ public class AdminWorkloadService {
                 && endDate.equals(YearMonth.from(startDate).atEndOfMonth()))
             return YearMonth.from(startDate).toString();
         return null;
-    }
-
-    private long numberOrZero(Object value) {
-        return value instanceof Number number ? number.longValue() : 0L;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Long> workloadCountByUser(String sql, LocalDateTime cutoff, LocalDateTime endExclusive) {
-        Map<String, Long> result = new HashMap<>();
-        for (Object[] row : (List<Object[]>) entityManager
-                .createNativeQuery(sql)
-                .setParameter(1, cutoff)
-                .setParameter(2, endExclusive)
-                .getResultList()) {
-            if (row[0] != null) result.put(String.valueOf(row[0]), numberOrZero(row[1]));
-        }
-        return result;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Long> workloadCountByUserAtEnd(String sql, LocalDateTime endExclusive) {
-        Map<String, Long> result = new HashMap<>();
-        for (Object[] row : (List<Object[]>) entityManager
-                .createNativeQuery(sql)
-                .setParameter(1, endExclusive)
-                .getResultList()) {
-            if (row[0] != null) result.put(String.valueOf(row[0]), numberOrZero(row[1]));
-        }
-        return result;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, long[]> workloadTimelineCounts(String sql, LocalDateTime cutoff, LocalDateTime endExclusive) {
-        Map<String, long[]> result = new HashMap<>();
-        for (Object[] row : (List<Object[]>) entityManager
-                .createNativeQuery(sql)
-                .setParameter(1, cutoff)
-                .setParameter(2, endExclusive)
-                .getResultList()) {
-            if (row[0] == null) continue;
-            long[] counts = new long[Math.max(2, row.length - 1)];
-            for (int i = 1; i < row.length; i++) counts[i - 1] = numberOrZero(row[i]);
-            result.put(String.valueOf(row[0]), counts);
-        }
-        return result;
     }
 }

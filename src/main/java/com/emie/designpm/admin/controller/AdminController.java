@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.util.*;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -187,8 +188,23 @@ public class AdminController {
             @RequestParam(required = false) String role,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "30") int size) {
-        Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100));
+            @RequestParam(defaultValue = "30") int size,
+            @RequestParam(defaultValue = "id") String sort,
+            @RequestParam(defaultValue = "asc") String dir) {
+        // 白名单：只容许按呢几个栏位排，避免任意字段注入
+        String sortField =
+                switch (sort) {
+                    case "name" -> "name";
+                    case "role" -> "role";
+                    case "status" -> "status";
+                    case "createdAt" -> "createdAt";
+                    default -> "id";
+                };
+        Sort.Direction direction = "desc".equalsIgnoreCase(dir) ? Sort.Direction.DESC : Sort.Direction.ASC;
+        Pageable pageable = PageRequest.of(
+                Math.max(0, page),
+                Math.min(Math.max(1, size), 100),
+                Sort.by(direction, sortField).and(Sort.by(Sort.Direction.ASC, "id")));
         return ResponseEntity.ok(adminService.getUsersPage(keyword, role, status, pageable));
     }
 

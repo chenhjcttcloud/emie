@@ -391,6 +391,7 @@ async function loadDashboardWorkloadSection() {
 
 function switchDashWorkload(range) {
   EMIE.dashboardState.workloadRange = range;
+  EMIE.rememberWorkloadRange('emie_dash_workload_range', range);
   loadDashboardWorkloadSection();
 }
 

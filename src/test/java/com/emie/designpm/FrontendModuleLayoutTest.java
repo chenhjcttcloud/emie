@@ -189,7 +189,8 @@ class FrontendModuleLayoutTest {
         assertTrue(adminUsers.contains("function adminUserRoleClass(role)"));
         assertTrue(adminUsers.contains(".trim().toLowerCase()"), "角色徽章 CSS 类名应忽略角色键大小写");
         assertTrue(
-                adminUsers.contains("<th style=\"width:72px;\">系统ID</th>")
+                // 系统ID 表头改成可撳排序（adminUserSortHead），但列本身要仍然在
+                adminUsers.contains("adminUserSortHead('系统ID', 'id'")
                         && adminUsers.contains("${u.id ?? '-'}")
                         && adminUsers.contains("<th>飞书身份ID</th>")
                         && adminUsers.contains("User ID：${escHtml(u.feishuUserId || '待登录补齐')}")

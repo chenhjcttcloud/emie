@@ -142,4 +142,6 @@ else
   echo '未找到 npm，无法执行弹窗交互浏览器回归' >&2
   exit 1
 fi
-printf 'test_update=ok url=http://127.0.0.1:8080\n'
+# 健康检查走 127.0.0.1（本机回环），但畀人开嘅地址係局域网 IP —— 打印后者，免得照住 127 去开
+APP_URL="${EMIE_TEST_APP_URL:-http://192.168.200.118:8080}"
+printf 'test_update=ok url=%s\n' "$APP_URL"

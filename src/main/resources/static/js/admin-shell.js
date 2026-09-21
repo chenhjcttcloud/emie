@@ -49,7 +49,8 @@ async function switchAdminTab(tab) {
   localStorage.setItem('design_pm_lastAdminTab', tab);
   const tabs = document.querySelectorAll('.admin-tab');
   tabs.forEach(t => t.classList.remove('active'));
-  const activeTab = document.querySelector(`.admin-tab[data-emie-action*="admin-tab"]`);
+  // 之前冇按 tab 过滤，querySelector 永远抓到第一个掣（概览），所以高亮唔会跟住走
+  const activeTab = document.querySelector(`.admin-tab[data-tab="${CSS.escape(tab)}"]`);
   if (activeTab) activeTab.classList.add('active');
   await renderAdminContent();
   if (adminNav) adminNav.scrollTop = navScrollTop;
