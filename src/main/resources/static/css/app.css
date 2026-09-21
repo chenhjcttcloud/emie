@@ -982,7 +982,7 @@ select.form-select:disabled::-ms-expand { display: none; }
 .admin-layout .admin-tab-group-title { width:auto; margin:0 4px 1px; padding:2px 8px 3px; color:#98A1B2; font-size:10px; font-weight:750; letter-spacing:.1em; border-left:2px solid #D9D6FF; }
 .admin-layout .admin-tab { position:relative; width:100%; min-width:0; justify-content:flex-start; border:0; border-radius:9px; padding:6px 10px; line-height:1.25; color:#5E687A; background:transparent; text-align:left; white-space:normal; overflow-wrap:anywhere; transition:background .16s,color .16s,transform .16s; }
 .admin-layout .admin-tab:hover { transform:translateX(2px); background:#F6F5FF; color:var(--primary); }
-.admin-layout .admin-tab.active { background:linear-gradient(90deg,#EEECFF,#F7F6FF); color:#4F46E5; font-weight:650; box-shadow:inset 3px 0 #5B50E6,0 3px 8px rgba(91,80,230,.08); }
+.admin-layout .admin-tab.active { border-radius:0 9px 9px 0; background:linear-gradient(90deg,#EEECFF,#F7F6FF); color:#4F46E5; font-weight:650; box-shadow:inset 3px 0 #5B50E6,0 3px 8px rgba(91,80,230,.08); }
 #adminContent { min-width:0; max-height:calc(100dvh - 350px); overflow-y:auto; overflow-x:hidden; padding:8px 8px 18px 0; scrollbar-width:thin; scrollbar-color:#C7CBD6 transparent; }
 #adminContent::-webkit-scrollbar { width:7px; }
 #adminContent::-webkit-scrollbar-thumb { border-radius:99px; background:#C7CBD6; }
