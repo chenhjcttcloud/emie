@@ -79,8 +79,22 @@ async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.
       <button class="btn btn-outline btn-sm" data-emie-action="click:designer-reset">↺ 重置</button>
     </div>
     <div id="designerTaskContainer">${renderDesignerTaskCards(myTasks, readOnly)}</div>
+    ${endpoint === '/projects/department-subtasks' ? '<div id="designerTaskPagination" class="project-pagination"></div>' : ''}
   `;
   EMIE.dashboardState.designerTaskCache = myTasks;
+  EMIE.dashboardState.designerTaskPage = 0;
+  if (endpoint === '/projects/department-subtasks') renderDesignerTaskPage();
+}
+
+function renderDesignerTaskPage(list = EMIE.dashboardState.designerTaskCache || []) {
+  const pageSize = 10;
+  const pages = Math.max(1, Math.ceil(list.length / pageSize));
+  const page = Math.min(Math.max(EMIE.dashboardState.designerTaskPage || 0, 0), pages - 1);
+  EMIE.dashboardState.designerTaskPage = page;
+  const container = document.getElementById('designerTaskContainer');
+  if (container) container.innerHTML = renderDesignerTaskCards(list.slice(page * pageSize, (page + 1) * pageSize), EMIE.dashboardState.designerTasksReadOnly === true);
+  const pagination = document.getElementById('designerTaskPagination');
+  if (pagination) pagination.innerHTML = list.length > pageSize ? `<span>共 ${list.length} 个子任务 · ${page + 1} / ${pages} 页</span><div><button class="btn btn-outline btn-sm" ${page <= 0 ? 'disabled' : ''} data-emie-action="click:designer-page" data-page="${page - 1}">上一页</button><button class="btn btn-outline btn-sm" ${page >= pages - 1 ? 'disabled' : ''} data-emie-action="click:designer-page" data-page="${page + 1}">下一页</button></div>` : '';
 }
 
 async function renderTaskMarket(main, role, uid) {
@@ -111,7 +125,10 @@ function applyFilterDesignerTasks() {
   list = list.filter(t => isDateInRange(t.plannedDate, dateStart, dateEnd));
 
   const c = document.getElementById('designerTaskContainer');
-  if (c) c.innerHTML = renderDesignerTaskCards(list, EMIE.dashboardState.designerTasksReadOnly === true);
+  if (EMIE.dashboardState.designerTasksReadOnly && document.getElementById('designerTaskPagination')) {
+    EMIE.dashboardState.designerTaskPage = 0;
+    renderDesignerTaskPage(list);
+  } else if (c) c.innerHTML = renderDesignerTaskCards(list, EMIE.dashboardState.designerTasksReadOnly === true);
 }
 
 function resetDesignerTaskFilters() {
@@ -344,6 +361,8 @@ EMIE.registerActions({
   applyFilterDesignerTasks,
   resetDesignerTaskFilters,
   renderDesignerTaskCards,
+  renderDesignerTaskPage,
+  renderDesignerTaskPage,
   openPublishedSubTaskDetail,
   openDeliveryHistory,
   renderScoringMini,
@@ -388,4 +407,5 @@ if (registerEventAction) {
   });
   registerEventAction('designer-correct', (_event, el) => taskCorrectDelivery(Number(el.dataset.projectId), Number(el.dataset.taskId)));
   registerEventAction('designer-detail', (_event, el) => openPublishedSubTaskDetail(Number(el.dataset.taskId)));
+  registerEventAction('designer-page', (_event, el) => { EMIE.dashboardState.designerTaskPage = Number(el.dataset.page); renderDesignerTaskPage(); });
 }

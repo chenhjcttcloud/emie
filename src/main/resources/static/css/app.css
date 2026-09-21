@@ -332,7 +332,9 @@ tr:hover td { background:var(--gray-50); }
 .project-list-table .project-muted { color:var(--gray-500); font-size:11px; overflow:hidden; text-overflow:ellipsis; }
 .project-list-table .badge { padding:2px 7px; font-size:10px; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
 .project-list-table .project-action-cell { overflow:visible; }
+@keyframes page-list-enter{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:translateX(0)}}
 .project-pagination { min-height:48px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px 12px; border-top:1px solid var(--gray-100); color:var(--gray-500); font-size:12px; }
+.project-pagination + * { animation: page-list-enter .22s ease-out; }
 .project-pagination > div { display:flex; align-items:center; gap:8px; }
 .project-page-indicator { min-width:42px; text-align:center; color:var(--gray-600); }
 .project-page-jump { display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
@@ -1334,6 +1336,7 @@ html:has(.admin-page)::-webkit-scrollbar,body:has(.admin-page)::-webkit-scrollba
 .points-rules-scroll thead { position:sticky; top:0; z-index:2; box-shadow:0 1px 0 var(--gray-200); }
 .points-rules-scroll thead th { background:var(--gray-50); }
 .points-pagination { min-height:58px; padding:10px 16px; border-top:1px solid #ECEEF5; background:linear-gradient(180deg,#FCFCFF,#F8F8FD); display:flex; align-items:center; justify-content:space-between; gap:14px; }
+.points-pagination ~ .table-wrap, .points-pagination ~ .points-rules-scroll { animation: page-list-enter .22s ease-out; }
 .points-pagination-centered { justify-content:center; }
 .points-pagination-meta { color:#989EAC; font-size:11px; }
 .points-pagination-controls { display:flex; align-items:center; gap:8px; }
@@ -1451,8 +1454,9 @@ html:has(.admin-page)::-webkit-scrollbar,body:has(.admin-page)::-webkit-scrollba
 .workload-orphan-strip span:last-child{color:#a16207;opacity:.85}
 
 /* 工作量图表：两系列堆叠条（自己要做 / 等他人） */
-.wl-charts{display:grid;grid-template-columns:1.35fr 1fr;gap:14px;margin-bottom:16px}
-.wl-chart{padding:16px 18px;border:1px solid #e6eaf2;border-radius:14px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.04)}
+.wl-charts{display:grid;grid-template-columns:1.35fr 1fr;gap:14px;margin-bottom:16px;align-items:stretch}
+.wl-chart{height:100%;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;padding:16px 18px;border:1px solid #e6eaf2;border-radius:14px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.04)}
+.wl-charts .wl-chart:first-child{height:560px;min-height:560px}
 .wl-chart-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:12px}
 .wl-chart-head h3{margin:0;color:#172554;font-size:14px}
 .wl-legend{display:flex;align-items:center;color:#64748b;font-size:11px}
@@ -1471,12 +1475,16 @@ html:has(.admin-page)::-webkit-scrollbar,body:has(.admin-page)::-webkit-scrollba
 .wl-bar-value b{color:#4f46e5;font-size:13px}
 .wl-bar-value small{margin-left:3px;color:#0d9488;font-size:10px}
 .wl-more{margin-top:8px;padding:5px 10px;border:1px solid #dbe2ef;border-radius:7px;background:#fff;color:#475569;font-size:11px;cursor:pointer}
+.wl-more:disabled{cursor:default;opacity:.45}.wl-pagination{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:auto;padding-top:12px;color:#64748b;font-size:11px}
+@keyframes wl-page-next{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:translateX(0)}}
+@keyframes wl-page-prev{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:translateX(0)}}
+.wl-page-next{animation:wl-page-next .22s ease-out}.wl-page-prev{animation:wl-page-prev .22s ease-out}
 details.workload-provenance{display:block;margin-bottom:16px}
 details.workload-provenance summary{cursor:pointer;color:#334155;font-weight:600;list-style:none}
 details.workload-provenance summary::before{content:'ⓘ 口径说明 ';font-weight:400;color:#64748b}
 details.workload-provenance summary::-webkit-details-marker{display:none}
 details.workload-provenance span{display:block;margin-top:6px}
-@media(max-width:900px){.wl-charts{grid-template-columns:1fr}.wl-bar-row{grid-template-columns:88px 1fr 48px}}
+@media(max-width:900px){.wl-charts{grid-template-columns:1fr}.wl-charts .wl-chart:first-child{height:auto;min-height:0}.wl-chart{overflow:visible}.wl-bar-row{grid-template-columns:88px 1fr 48px}}
 
 /* 工作量明细表：一眼睇晒，唔使展开 */
 .wl-table{padding:4px 6px 10px}

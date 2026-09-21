@@ -93,7 +93,7 @@ function renderProjectRelatedRoles(detail) {
 }
 
 // ==================== 项目详情 ====================
-async function openProjectDetail(pid) {
+async function openProjectDetail(pid, taskId) {
   if (!tryOpenModal('projectDetailModal')) return;
   try {
     const detail = await apiGet(`/projects/${pid}`);
@@ -112,6 +112,7 @@ async function openProjectDetail(pid) {
       </div>`;
     document.body.appendChild(modal);
     doneOpenModal('projectDetailModal');
+    if (taskId) setTimeout(() => openProjectSubTaskDetail(null, taskId), 0);
   } catch (e) {
     doneOpenModal('projectDetailModal');
     window.EMIE.actions.showSystemAlert('加载失败: ' + e.message);
