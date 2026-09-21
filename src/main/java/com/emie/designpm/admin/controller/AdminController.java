@@ -1,6 +1,7 @@
 package com.emie.designpm.admin.controller;
 
 import com.emie.designpm.admin.service.AdminService;
+import com.emie.designpm.admin.service.AdminWorkloadDetailsService;
 import com.emie.designpm.admin.service.AdminWorkloadService;
 import com.emie.designpm.admin.service.PermissionManagementService;
 import com.emie.designpm.auth.AuthSession;
@@ -30,6 +31,7 @@ public class AdminController {
 
     private final AdminService adminService;
     private final AdminWorkloadService adminWorkloadService;
+    private final AdminWorkloadDetailsService adminWorkloadDetailsService;
     private final NotificationTestService notificationTestService;
     private final NotificationBroadcastJobService notificationBroadcastJobService;
     private final NotificationRetryOperations notificationRetryService;
@@ -38,12 +40,14 @@ public class AdminController {
     public AdminController(
             AdminService adminService,
             AdminWorkloadService adminWorkloadService,
+            AdminWorkloadDetailsService adminWorkloadDetailsService,
             NotificationTestService notificationTestService,
             NotificationBroadcastJobService notificationBroadcastJobService,
             NotificationRetryOperations notificationRetryService,
             PermissionManagementService permissionManagementService) {
         this.adminService = adminService;
         this.adminWorkloadService = adminWorkloadService;
+        this.adminWorkloadDetailsService = adminWorkloadDetailsService;
         this.notificationTestService = notificationTestService;
         this.notificationBroadcastJobService = notificationBroadcastJobService;
         this.notificationRetryService = notificationRetryService;
@@ -441,7 +445,7 @@ public class AdminController {
         if (!Set.of("own", "waiting").contains(bucket)) {
             return ResponseEntity.badRequest().body(Map.of("error", "无效的工作量类型"));
         }
-        return ResponseEntity.ok(adminWorkloadService.getWorkloadDetails(userId, bucket));
+        return ResponseEntity.ok(adminWorkloadDetailsService.getWorkloadDetails(userId, bucket));
     }
 
     // ==================== 辅助方法 ====================
