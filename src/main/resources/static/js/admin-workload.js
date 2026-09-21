@@ -2,7 +2,7 @@ const EMIE = window.EMIE;
 const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
 
-// 销售唔计入工作量（佢哋发起嘅项目由企划承担执行）
+// 销售不计入工作量（销售发起的项目由产品企划承担执行）
 const WORKLOAD_ROLES = { promotion: '产品推广', planner: '产品企划', designer: '设计师', supplychain: '供应链' };
 const WORKLOAD_RANGES = [
   { key: 'day', label: '今日' }, { key: 'week', label: '本周' }, { key: 'month', label: '本月' }, { key: 'quarter', label: '本季度' },
@@ -34,35 +34,32 @@ async function renderAdminWorkload(container) {
     const unassigned = summary.unassignedTasks || {};
     const completedInRange = filtered.reduce((sum, user) => sum + user.completedInRange, 0);
     const attention = filtered.filter(user => user.statusKey === 'risk' || user.statusKey === 'watch').length;
-    const points = filtered.reduce((sum, user) => sum + Number(user.performancePoints || 0), 0);
-    const performanceMonth = summary.performanceMonth;
-    state.workloadPerformanceMonth = performanceMonth;
 
     container.innerHTML = `
-      <section class="workload-page-head"><div><p class="workload-kicker">TEAM WORKLOAD</p><h2>员工工作量</h2><p>${escHtml(summary.rangeLabel || '当前范围')} · 先判断团队，再查看员工明细</p></div><div class="workload-range"><span>时间范围</span>${WORKLOAD_RANGES.map(option => `<button class="workload-range-btn ${option.key === state.workloadRange ? 'active' : ''}" data-emie-action="click:workload-range" data-range="${option.key}">${option.label}</button>`).join('')}</div></section>
+      <section class="workload-page-head"><div><p class="workload-kicker">TEAM WORKLOAD</p><h2>员工工作量</h2><p>${escHtml(summary.rangeLabel || '当前范围')} · 团队概览与员工明细</p></div><div class="workload-range"><span>时间范围</span>${WORKLOAD_RANGES.map(option => `<button class="workload-range-btn ${option.key === state.workloadRange ? 'active' : ''}" data-emie-action="click:workload-range" data-range="${option.key}">${option.label}</button>`).join('')}</div></section>
       <div class="workload-custom-range" style="display:${state.workloadRange === 'custom' ? 'flex' : 'none'};"><input type="date" class="form-input" value="${escHtml(state.workloadStartDate || '')}" data-emie-action="change:workload-start-date" aria-label="开始日期"><span>至</span><input type="date" class="form-input" value="${escHtml(state.workloadEndDate || '')}" data-emie-action="change:workload-end-date" aria-label="结束日期"><button class="btn btn-primary btn-sm" data-emie-action="click:workload-apply-dates">查询</button></div>
       <div class="workload-toolbar"><input class="form-input" placeholder="搜索员工姓名" value="${escHtml(state.workloadQuery || '')}" data-emie-action="input:workload-query"><select class="form-select" data-emie-action="change:workload-sort"><option value="attention" ${(state.workloadSort || 'attention') === 'attention' ? 'selected' : ''}>优先关注</option><option value="total" ${state.workloadSort === 'total' ? 'selected' : ''}>按总量排序</option><option value="pending" ${state.workloadSort === 'pending' ? 'selected' : ''}>按未完成排序</option><option value="rate" ${state.workloadSort === 'rate' ? 'selected' : ''}>按完成率排序</option></select></div>
       <div class="workload-role-filter"><span>员工角色</span><button class="${roleFilter === 'all' ? 'active' : ''}" data-emie-action="click:workload-role" data-role="all">全部</button>${Object.entries(WORKLOAD_ROLES).map(([role, label]) => `<button class="${roleFilter === role ? 'active' : ''}" data-emie-action="click:workload-role" data-role="${role}">${label}<small>${(data[role]?.users || []).length}</small></button>`).join('')}</div>
       <section class="workload-summary-grid"><div><small>统计员工</small><strong>${filtered.length}</strong><span>${attention ? `其中 ${attention} 人需关注` : '当前筛选范围'}</span></div><div><small>本期新增工作量</small><strong>${workload}</strong><span>项目、任务及需求</span></div><div><small>本期新增完成率</small><strong>${workload ? Math.round(completed / workload * 100) + '%' : '—'}</strong><span>新增 ${workload} 项，已完成 ${completed} 项</span></div>${splitAvailable
-        ? `<div><small>自己要做</small><strong>${outstanding}</strong><span>等接单 / 做紧 / 要返工</span></div><div><small>等他人处理</small><strong>${waiting}</strong><span>已交付，等验收或评分</span></div>`
-        : `<div><small>在手未完成</small><strong>${outstanding + waiting}</strong><span>历史区间不拆分责任</span></div>`}<div><small>本期完成</small><strong>${completedInRange}</strong><span>含往期遗留，不做分子</span></div><div><small>绩效积分</small><strong>${performanceMonth ? points : '—'}</strong><span>${performanceMonth ? `${performanceMonth} 归属月` : '仅完整自然月展示'}</span></div></section>
+        ? `<div><small>待本人处理</small><strong>${outstanding}</strong><span>待接单 / 处理中 / 待返工</span></div><div><small>待他人处理</small><strong>${waiting}</strong><span>已交付，待验收或评分</span></div>`
+        : `<div><small>在手未完成</small><strong>${outstanding + waiting}</strong><span>历史区间不拆分责任</span></div>`}<div><small>本期完成</small><strong>${completedInRange}</strong><span>含往期遗留，不做分子</span></div></section>
       ${workloadCharts(filtered, data, state.workloadChartExpanded)}
-      <details class="workload-provenance"><summary>口径说明</summary><span>${escHtml(summary.completionRateRule || '')}</span><span>${escHtml(summary.attentionRule || '')}</span><span>汇总为各成员数字相加：同一件子任务会分别计入派发的产品企划与承接的设计师，属「人次」口径。</span><span>${escHtml(summary.performanceSource || '')}</span></details>
+      <details class="workload-provenance"><summary>口径说明</summary><span>${escHtml(summary.completionRateRule || '')}</span><span>${escHtml(summary.attentionRule || '')}</span><span>汇总为各成员数字相加：同一件子任务会分别计入派发的产品企划与承接的设计师，属「人次」口径。</span></details>
       ${Number(unassigned.outstanding || 0) || Number(unassigned.projectsOutstanding || 0) || Number(orphan.outstanding || 0) ? `<div class="workload-orphan-strip">
         ${Number(unassigned.outstanding || 0) ? `<span>⚠️ 子任务未分配负责人：<b>${unassigned.outstanding}</b> 项未完成</span>` : ''}
-        ${Number(unassigned.projectsOutstanding || 0) ? `<span>📋 项目未指派企划：<b>${unassigned.projectsOutstanding}</b> 个等接单</span>` : ''}
+        ${Number(unassigned.projectsOutstanding || 0) ? `<span>📋 项目未分配负责人：<b>${unassigned.projectsOutstanding}</b> 个待接单</span>` : ''}
         ${Number(orphan.outstanding || 0) ? `<span>👤 已停用 / 离职遗留：<b>${orphan.outstanding}</b> 项未完成${(orphan.owners || []).length ? ` · ${escHtml((orphan.owners || []).join('、'))}` : ''}</span>` : ''}
         <span>这些工作不属于任何在册成员，不计入上方人头统计。</span>
       </div>` : ''}
       <section class="workload-member-panel"><div class="workload-member-head"><div><h3>员工工作量明细</h3><p>${escHtml(summary.rangeLabel || '')} · 全部数据一览，点击图表可定位员工。</p></div><span>${filtered.length} 位员工</span></div>
-      ${workloadMemberTable(filtered, roleFilter, performanceMonth)}</section>`;
+      ${workloadMemberTable(filtered, roleFilter)}</section>`;
   } catch (error) {
     container.innerHTML = `<div class="empty"><p>加载失败: ${escHtml(error.message)}</p></div>`;
   }
 }
 
-// 口径全部由后端计好：workloadCreated / workloadCompletedFromCreated 系同一批嘢，
-// completedInRange（本期完成，含往期遗留）同 outstandingTotal（期末在手）系另外两个指标。
+// 统计口径全部由后端计算：workloadCreated / workloadCompletedFromCreated 属于同一批工作量，
+// completedInRange（本期完成，含往期遗留）与 outstandingTotal（期末在手）是另外两个指标。
 function workloadMemberMetrics(user) {
   return {
     workloadTotal: Number(user.workloadCreated || 0),
@@ -79,8 +76,8 @@ function workloadMemberMetrics(user) {
   };
 }
 
-// 图表：两个系列 —— 自己要做（靛蓝）/ 等他人（青绿）。已过 dataviz 调色校验：
-// CVD ΔE 22.1、正常视觉 ΔE 27.1、对比度达标；红/橙留畀状态标签，唔做数据系列。
+// 图表：两个系列 —— 待本人处理（靛蓝）/ 待他人处理（青绿）。已通过可视化配色校验：
+// CVD ΔE 22.1、正常视觉 ΔE 27.1、对比度达标；红/橙保留给状态标签，不用于数据系列。
 const WL_OWN = '#4f46e5';
 const WL_WAIT = '#0d9488';
 
@@ -89,7 +86,7 @@ function workloadBar(label, sub, own, waiting, max, onclick) {
   const pct = v => (max ? Math.max(v / max * 100, v > 0 ? 1.5 : 0) : 0);
   return `<div class="wl-bar-row"${onclick ? ` data-emie-action="click:workload-member" data-user-id="${escHtml(onclick)}" role="button" tabindex="0"` : ''}>
     <span class="wl-bar-label"><b>${escHtml(label)}</b>${sub ? `<small>${escHtml(sub)}</small>` : ''}</span>
-    <span class="wl-bar-track" title="自己要做 ${own} 项 · 等他人 ${waiting} 项 · 合计 ${total} 项">
+    <span class="wl-bar-track" title="待本人处理 ${own} 项 · 待他人处理 ${waiting} 项 · 合计 ${total} 项">
       <i class="wl-seg wl-seg-own" style="width:${pct(own)}%"></i>
       <i class="wl-seg wl-seg-wait" style="width:${pct(waiting)}%"></i>
     </span>
@@ -109,16 +106,16 @@ function workloadCharts(members, data, expanded) {
   }).filter(r => r.count);
   const maxRole = Math.max(...roles.map(r => r.own + r.waiting), 1);
 
-  const legend = `<span class="wl-legend"><i style="background:${WL_OWN}"></i>自己要做<i style="background:${WL_WAIT};margin-left:12px"></i>等他人</span>`;
+  const legend = `<span class="wl-legend"><i style="background:${WL_OWN}"></i>待本人处理<i style="background:${WL_WAIT};margin-left:12px"></i>待他人处理</span>`;
 
   return `<section class="wl-charts">
     <div class="wl-chart">
-      <div class="wl-chart-head"><h3>谁手上积压最多</h3>${legend}</div>
+      <div class="wl-chart-head"><h3>人员待处理工作量</h3>${legend}</div>
       ${shown.map(m => workloadBar(m.name, m.roleLabel, m.pending, m.waiting, maxMember, m.userId)).join('')}
       ${ranked.length > 10 ? `<button class="wl-more" data-emie-action="click:workload-expand-chart">${expanded ? '收起' : `展开全部 ${ranked.length} 人`}</button>` : ''}
     </div>
     <div class="wl-chart">
-      <div class="wl-chart-head"><h3>按角色分布</h3>${legend}</div>
+      <div class="wl-chart-head"><h3>角色工作量分布</h3>${legend}</div>
       ${roles.map(r => workloadBar(r.label, r.count + ' 人', r.own, r.waiting, maxRole, null)).join('')}
     </div>
   </section>`;
@@ -130,13 +127,13 @@ const rateText = user => (user.completionRate == null ? '—' : Math.round(user.
 function workloadMemberComparator(a, b, sort) {
   if (sort === 'total') return b.workloadTotal - a.workloadTotal;
   if (sort === 'pending') return b.pending - a.pending;
-  // 本期无新增（完成率 null）排最后，唔好当 0% 顶上去
+  // 本期无新增（完成率为 null）排最后，不按 0% 参与排序
   if (sort === 'rate') return (a.completionRate ?? 101) - (b.completionRate ?? 101);
   return a.statusOrder - b.statusOrder || b.pending - a.pending;
 }
 
-/** 渠道 / 常规 一格搞掂，细字标同批完成数 */
-/** 在手：渠道 / 常规；细字补返本期新增同完成，两个口径分开讲清楚 */
+/** 渠道 / 常规合并展示，辅助文字标注同批完成数。 */
+/** 在手：渠道 / 常规；辅助文字补充本期新增与完成，区分两个统计口径。 */
 function workloadPair(channel, regular, created, completed) {
   const c = Number(channel || 0), r = Number(regular || 0), n = Number(created || 0);
   if (!c && !r && !n) return '<span class="muted">—</span>';
@@ -160,9 +157,9 @@ function workloadDifficulty(user) {
   </span>`;
 }
 
-function workloadMemberTable(users, roleFilter, performanceMonth) {
+function workloadMemberTable(users, roleFilter) {
   if (!users.length) return '<div class="empty">未找到员工</div>';
-  const head = `<tr><th>成员</th><th>状态</th><th>在手项目 渠/常</th><th>在手子任务 渠/常</th><th>在手难度占比</th><th class="num">本期新增</th><th class="num">已完成</th><th>完成率</th><th class="num">自己要做</th><th class="num">等他人</th><th class="num">在手合计</th><th class="num">积分</th></tr>`;
+  const head = `<tr><th>成员</th><th>状态</th><th>在手项目（渠道/常规）</th><th>在手子任务（渠道/常规）</th><th>未完成任务难度</th><th>本期新增</th><th>已完成</th><th>完成率</th><th>待本人处理</th><th>待他人处理</th><th>在手合计</th></tr>`;
   const row = user => {
     const statusClass = WORKLOAD_STATUS_CLASS[user.statusKey] || 'normal';
     const rate = user.completionRate == null ? null : Math.round(user.completionRate);
@@ -172,13 +169,12 @@ function workloadMemberTable(users, roleFilter, performanceMonth) {
       <td class="wl-mix">${workloadPair(user.projectsOutstandingChannel, user.projectsOutstandingRegular, user.projectsCreated, user.projectsCompletedFromCreated)}</td>
       <td class="wl-mix">${workloadPair(user.tasksOutstandingChannel, user.tasksOutstandingRegular, user.tasksCreated, user.tasksCompletedFromCreated)}</td>
       <td>${workloadDifficulty(user)}</td>
-      <td class="num">${user.workloadTotal || '—'}</td>
+      <td class="num"><strong class="wl-total">${user.workloadTotal || '—'}</strong></td>
       <td class="num">${user.completedInRange || '—'}</td>
       <td class="wl-rate">${rate == null ? '<span class="muted">—</span>' : `<i><em style="width:${rate}%"></em></i><b>${rate}%</b>`}</td>
-      <td class="num strong-own">${user.pending || '—'}</td>
-      <td class="num strong-wait">${user.waiting || '—'}</td>
-      <td class="num">${user.outstandingAll || '—'}</td>
-      <td class="num">${performanceMonth ? Number(user.performancePoints || 0) : '—'}</td>
+      <td class="num strong-own"><strong class="wl-number own">${user.pending || '—'}</strong></td>
+      <td class="num strong-wait"><strong class="wl-number wait">${user.waiting || '—'}</strong></td>
+      <td class="num"><strong class="wl-number total">${user.outstandingAll || '—'}</strong></td>
     </tr>`;
   };
   const body = roleFilter !== 'all'
@@ -187,7 +183,7 @@ function workloadMemberTable(users, roleFilter, performanceMonth) {
         const group = users.filter(user => user.role === role);
         if (!group.length) return '';
         const attention = group.filter(user => user.statusKey === 'risk' || user.statusKey === 'watch').length;
-        return `<tr class="wl-group"><td colspan="12">${label} <span>${group.length} 人${attention ? ` · ${attention} 人需关注` : ''}</span></td></tr>` + group.map(row).join('');
+        return `<tr class="wl-group"><td colspan="11">${label} <span>${group.length} 人${attention ? ` · ${attention} 人需关注` : ''}</span></td></tr>` + group.map(row).join('');
       }).join('');
   return `<div class="table-wrap wl-table"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }

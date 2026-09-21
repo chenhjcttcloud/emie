@@ -469,7 +469,7 @@ public class AdminWorkloadService {
         summary.put("totalDesignRequirements", totalDesignRequirements);
         summary.put("performanceMonth", performanceMonth);
         summary.put("completionRateRule", "完成率 = 本期新增的工作量当中已完成的比例（分子分母同一批）；「本期完成」另计，包含往期遗留。");
-        summary.put("attentionRule", "需关注 / 留意只按「自己要做」的量判定（各角色 P75，下限 5），等他人处理的不计入；再结合本期新增完成率。");
+        summary.put("attentionRule", "“需关注 / 留意”仅按待本人处理的工作量判定（各角色 P75，下限 5），待他人处理的工作不计入；再结合本期新增完成率。");
 
         Set<String> countedUsers = allUsers.stream().map(User::getUserId).collect(Collectors.toSet());
         Map<String, Object> unassigned = new LinkedHashMap<>();
