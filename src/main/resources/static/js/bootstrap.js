@@ -1,4 +1,4 @@
-import './core-runtime.js?v=299';
+import './core-runtime.js?v=300';
 import './event-runtime.js?v=269';
 import './core-auth.js?v=398';
 import './core-identity.js?v=496';
@@ -28,7 +28,7 @@ import './admin-org.js?v=292';
 import './admin-scoring.js?v=568';
 import './admin-audit.js?v=384';
 import './admin-storage.js?v=321';
-import './admin-workload.js?v=481';
+import './admin-workload.js?v=482';
 import './admin.js?v=147';
 import './files.js?v=282';
 

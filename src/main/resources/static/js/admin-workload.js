@@ -69,8 +69,8 @@ function workloadMemberMetrics(user) {
 
 // 图表：两个系列 —— 待本人处理（靛蓝）/ 待他人处理（青绿）。已通过可视化配色校验：
 // CVD ΔE 22.1、正常视觉 ΔE 27.1、对比度达标；红/橙保留给状态标签，不用于数据系列。
-const WL_OWN = '#4f46e5';
-const WL_WAIT = '#0d9488';
+const WL_OWN = '#1e3a8a';
+const WL_WAIT = '#0f766e';
 
 function workloadBar(label, sub, own, waiting, max, onclick) {
   const total = own + waiting;

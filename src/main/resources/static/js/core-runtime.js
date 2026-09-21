@@ -60,8 +60,8 @@ EMIE.state = Object.assign({
   idleMonitorInited: false,
 }, EMIE.state || {});
 
-// 工作量时间范围：记住用户上次嘅选择，默认本月（今日通常冇新增，入去会似冇数据）
-EMIE.savedWorkloadRange = (key, fallback = 'month') => {
+// 工作量时间范围：记住用户上次选择，默认今日。
+EMIE.savedWorkloadRange = (key, fallback = 'day') => {
   try { return localStorage.getItem(key) || fallback; } catch (error) { return fallback; }
 };
 EMIE.rememberWorkloadRange = (key, value) => {
