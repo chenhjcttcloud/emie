@@ -30,8 +30,6 @@ async function renderAdminWorkload(container) {
     const outstanding = filtered.reduce((sum, user) => sum + user.pending, 0);
     const waiting = filtered.reduce((sum, user) => sum + user.waiting, 0);
     const splitAvailable = summary.outstandingSplitAvailable !== false;
-    const orphan = summary.inactiveOwnerTasks || {};
-    const unassigned = summary.unassignedTasks || {};
     const completedInRange = filtered.reduce((sum, user) => sum + user.completedInRange, 0);
     const attention = filtered.filter(user => user.statusKey === 'risk' || user.statusKey === 'watch').length;
 
@@ -44,13 +42,6 @@ async function renderAdminWorkload(container) {
         ? `<div><small>待本人处理</small><strong>${outstanding}</strong><span>待接单 / 处理中 / 待返工</span></div><div><small>待他人处理</small><strong>${waiting}</strong><span>已交付，待验收或评分</span></div>`
         : `<div><small>在手未完成</small><strong>${outstanding + waiting}</strong><span>历史区间不拆分责任</span></div>`}<div><small>本期完成</small><strong>${completedInRange}</strong><span>含往期遗留，不做分子</span></div></section>
       ${workloadCharts(filtered, data, state.workloadChartExpanded)}
-      <details class="workload-provenance"><summary>口径说明</summary><span>${escHtml(summary.completionRateRule || '')}</span><span>${escHtml(summary.attentionRule || '')}</span><span>汇总为各成员数字相加：同一件子任务会分别计入派发的产品企划与承接的设计师，属「人次」口径。</span></details>
-      ${Number(unassigned.outstanding || 0) || Number(unassigned.projectsOutstanding || 0) || Number(orphan.outstanding || 0) ? `<div class="workload-orphan-strip">
-        ${Number(unassigned.outstanding || 0) ? `<span>⚠️ 子任务未分配负责人：<b>${unassigned.outstanding}</b> 项未完成</span>` : ''}
-        ${Number(unassigned.projectsOutstanding || 0) ? `<span>📋 项目未分配负责人：<b>${unassigned.projectsOutstanding}</b> 个待接单</span>` : ''}
-        ${Number(orphan.outstanding || 0) ? `<span>👤 已停用 / 离职遗留：<b>${orphan.outstanding}</b> 项未完成${(orphan.owners || []).length ? ` · ${escHtml((orphan.owners || []).join('、'))}` : ''}</span>` : ''}
-        <span>这些工作不属于任何在册成员，不计入上方人头统计。</span>
-      </div>` : ''}
       <section class="workload-member-panel"><div class="workload-member-head"><div><h3>员工工作量明细</h3><p>${escHtml(summary.rangeLabel || '')} · 全部数据一览，点击图表可定位员工。</p></div><span>${filtered.length} 位员工</span></div>
       ${workloadMemberTable(filtered, roleFilter)}</section>`;
   } catch (error) {
