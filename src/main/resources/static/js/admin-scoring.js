@@ -17,6 +17,13 @@ function compareRuleCodes(left, right) {
 
 function displayPointRuleCode(code) { return ({ MATERIAL_MARKET_LAUNCH: 'M3', TASK_APPROVED: 'T1' }[String(code || '').toUpperCase()] || String(code || '')); }
 function displayDifficultyCode(code) { return ({ STANDARD: 'D1', COMPLEX: 'D2', MAJOR: 'D3' }[String(code || '').toUpperCase()] || String(code || '')); }
+function localMonth() { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; }
+function renderDesignerMonthlyReport(report) {
+  const rows = report?.designers || [];
+  const mix = (counts, total) => Object.entries(counts || {}).map(([label, count]) => `${escHtml(label)} ${count} (${total ? Math.round(count * 100 / total) : 0}%)`).join('、') || '—';
+  const typeLabel = type => ({ channel_custom: '渠道定制', regular: '公司常规品' }[type] || type || '未设置');
+  return `<div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>设计师月度绩效表</h3><p class="admin-section-hint">完成时间：${escHtml(report.from.replace('T', ' '))} 至 ${escHtml(report.to.replace('T', ' '))}（含起点，不含终点）；分数为已入账绩效积分合计，暂未套用权重。</p></div><div style="display:flex;align-items:end;gap:6px;"><label class="form-label">月份 <input class="form-input" type="month" id="designerPerformanceMonth" value="${escHtml(report.month)}" data-emie-action="change:scoring-performance-month"></label><button type="button" aria-label="导出当前月份 Excel" title="导出当前月份 Excel" style="height:38px;padding:0 6px;border:0;background:transparent;color:var(--gray-500);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;" data-emie-action="click:scoring-export-performance">↓ 导出 Excel</button></div></div><div class="table-wrap"><table><thead><tr><th>设计师</th><th>月份</th><th>完成子任务</th><th>难度数量占比</th><th>类别数量占比</th><th>分数（积分）</th><th>完成任务明细</th></tr></thead><tbody>${rows.map(row => `<tr><td><strong>${escHtml(row.designer)}</strong></td><td>${escHtml(row.month)}</td><td>${row.completedCount}</td><td>${mix(row.difficultyCounts, row.completedCount)}</td><td>${mix(row.categoryCounts, row.completedCount)}</td><td>${Number(row.score || 0).toFixed(2)}</td><td><details><summary>查看 ${row.tasks.length} 项</summary><div style="min-width:480px;padding:8px 0;">${row.tasks.map(task => `<div style="padding:7px 0;border-bottom:1px solid var(--gray-100);"><strong>${escHtml(task.name)}</strong> · ${escHtml(task.project)}（${escHtml(typeLabel(task.projectType))}）<br><span style="color:var(--gray-500);font-size:12px;">${escHtml(task.completedAt.replace('T', ' '))} · ${escHtml(task.difficulty)} · ${escHtml(task.category)} · ${escHtml(task.ruleCode || '无规则')} · ${Number(task.score || 0).toFixed(2)} 分</span></div>`).join('') || '本月暂无完成任务'}</div></details></td></tr>`).join('') || '<tr><td colspan="7">暂无在职设计师</td></tr>'}</tbody></table></div></div>`;
+}
 
 // ==================== 评分权重管理 ====================
 async function renderAdminScoring(container) {
@@ -114,12 +121,13 @@ async function renderAdminPoints(container) {
   if (!container) return;
   container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--gray-400);">加载积分规则…</div>';
   try {
-    const targetMonth = new Date().toISOString().slice(0, 7);
-    const [rules, difficulties, appeals, poProgress, systemConfigs] = await Promise.all([
+    const targetMonth = localMonth();
+    const [rules, difficulties, appeals, poProgress, systemConfigs, performanceReport] = await Promise.all([
       apiGet('/points/rules'),
       apiGet('/points/difficulties'),
       apiGet('/point-governance/appeals'),
       apiGet('/point-governance/po/progress'), apiGet('/admin/configs'),
+      apiGet('/performance/designer-monthly-report?month=' + encodeURIComponent(targetMonth)),
     ]);
     const ruleList = (Array.isArray(rules) ? rules : []).slice().sort(compareRuleCodes);
     const difficultyList = Array.isArray(difficulties) ? difficulties : [];
@@ -129,6 +137,7 @@ async function renderAdminPoints(container) {
     const governanceConfig = Object.fromEntries((systemConfigs?.business || []).filter(x => String(x.configKey || '').startsWith('points.withdrawal.')).map(x => [x.configKey, x.configValue || '']));
     container.innerHTML = `<div class="admin-points-config" style="max-width:1100px;margin:0 auto;">
       <div class="admin-points-page-head" style="margin-bottom:18px;"><div><h2 style="font-size:18px;margin:0 0 4px;">🏅 积分与绩效配置</h2><p style="color:var(--gray-500);font-size:13px;margin:0;">规则修改只影响后续入账，历史积分台账不会重算。</p></div></div>
+      ${renderDesignerMonthlyReport(performanceReport)}
       <div class="card admin-point-rules-card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>积分规则</h3><p class="admin-section-hint">共 ${ruleList.length} 条，列表显示 5 条，可滚动查看</p></div><button class="btn btn-primary btn-sm" data-emie-action="click:scoring-create-rule">＋ 新增规则</button></div>
         <div class="admin-point-rule-filters"><div class="admin-filter-card"><span class="admin-filter-title">筛选规则</span><input class="form-input" id="adminPointRuleSearch" placeholder="搜索规则编号或说明"><select class="form-select" id="adminPointRuleCategory"><option value="">全部类别</option>${[...new Set(ruleList.map(rule => String(rule.category || '').trim()).filter(Boolean))].sort().map(category => `<option value="${escHtml(category)}">${escHtml(category)}</option>`).join('')}</select><select class="form-select" id="adminPointRuleStatus"><option value="">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select><button class="btn btn-primary btn-sm" data-emie-action="click:scoring-filter-rules">查询</button><button class="btn btn-outline btn-sm" data-emie-action="click:scoring-reset-rules">重置</button></div></div>
         ${ruleList.length ? `<div class="admin-point-rules-scroll">${ruleList.map((rule, index) => `<div class="admin-point-rule-item" data-rule-code="${escHtml(String(rule.ruleCode || '').toLowerCase())}" data-rule-description="${escHtml(String(rule.description || '').toLowerCase())}" data-rule-category="${escHtml(String(rule.category || ''))}" data-rule-enabled="${rule.enabled === false ? 'disabled' : 'enabled'}" style="${index ? 'border-top:1px solid var(--gray-200);' : ''}">
@@ -156,6 +165,24 @@ async function renderAdminPoints(container) {
     const appealRows = appealCard ? appealCard.querySelectorAll('tbody tr') : [];
     appealList.forEach((item, index) => { const descriptionCell = appealRows[index]?.children?.[3]; if (descriptionCell && item.attachmentsJson) descriptionCell.insertAdjacentHTML('beforeend', renderAppealImages(item.attachmentsJson)); });
   } catch (e) { container.innerHTML = `<div class="empty">积分规则加载失败：${escHtml(e.message || '')}</div>`; }
+}
+
+async function reloadDesignerMonthlyReport() {
+  const month = document.getElementById('designerPerformanceMonth')?.value;
+  if (!month) return;
+  const card = document.getElementById('designerPerformanceMonth')?.closest('.card');
+  try {
+    const report = await apiGet('/performance/designer-monthly-report?month=' + encodeURIComponent(month));
+    card?.outerHTML && (card.outerHTML = renderDesignerMonthlyReport(report));
+  } catch (error) { window.EMIE.actions.showSystemAlert('月度绩效表加载失败：' + (error.message || '')); }
+}
+
+function exportDesignerMonthlyReport() {
+  const month = document.getElementById('designerPerformanceMonth')?.value;
+  if (!month) return;
+  const link = document.createElement('a');
+  link.href = '/api/performance/designer-monthly-report.xlsx?month=' + encodeURIComponent(month);
+  link.click();
 }
 
 function filterAdminPointRules() {
@@ -564,6 +591,8 @@ if (registerEventAction) {
   registerEventAction('scoring-delete-rule', (_event, el) => deletePointRule(el.dataset.ruleCode));
   registerEventAction('scoring-save-difficulty', (_event, el) => savePointDifficulty(el.dataset.difficultyCode, Number(el.dataset.difficultyIndex)));
   registerEventAction('scoring-save-target', (_event, el) => saveDesignerTarget(Number(el.dataset.targetIndex)));
+  registerEventAction('scoring-performance-month', () => reloadDesignerMonthlyReport());
+  registerEventAction('scoring-export-performance', () => exportDesignerMonthlyReport());
   registerEventAction('scoring-create-rule', () => createPointRule());
   registerEventAction('scoring-close-adjustment', () => closeM('manualAdjustmentModal'));
   registerEventAction('scoring-submit-adjustment', (_event, el) => submitManualAdjustment(el));

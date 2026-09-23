@@ -10,12 +10,75 @@ import com.emie.designpm.performance.repository.MonthlyPerformanceConfigReposito
 import com.emie.designpm.performance.repository.MonthlyUserPointTargetRepository;
 import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
 import com.emie.designpm.points.repository.PointLedgerRepository;
+import com.emie.designpm.points.repository.PointRuleRepository;
 import com.emie.designpm.points.repository.StandardPointConfigRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
 import java.time.LocalDateTime;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 
 class PerformanceServiceTest {
+    @Test
+    void monthlyDesignerReportUsesCompletionMonthAndTaskSnapshots() {
+        PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
+        PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
+        UserRepository users = mock(UserRepository.class);
+        SubTaskRepository subTasks = mock(SubTaskRepository.class);
+        PointRuleRepository rules = mock(PointRuleRepository.class);
+        User designer = User.builder()
+                .userId("d1")
+                .name("设计师")
+                .role("designer")
+                .status("active")
+                .build();
+        when(users.findByRole("designer")).thenReturn(List.of(designer));
+        Project project = new Project();
+        project.setProductName("项目 A");
+        project.setType("regular");
+        SubTask task = new SubTask();
+        task.setId(10L);
+        task.setName("包装设计");
+        task.setDesignerId("d1");
+        task.setDifficultyCode("COMPLEX");
+        task.setPointRuleCode("A1");
+        task.setCompletedAt(LocalDateTime.of(2026, 1, 31, 23, 59));
+        task.setProject(project);
+        when(subTasks.findDesignerTasksCompletedBetween(
+                        LocalDateTime.of(2026, 1, 1, 0, 0), LocalDateTime.of(2026, 2, 1, 0, 0)))
+                .thenReturn(List.of(task));
+        PointLedger ledger = new PointLedger();
+        ledger.setUserId("d1");
+        ledger.setSubTaskId(10L);
+        ledger.setPoints(12d);
+        ledger.setCountInPerformance(true);
+        when(ledgers.findBySubTaskIdIn(List.of(10L))).thenReturn(List.of(ledger));
+        PointRule rule = new PointRule();
+        rule.setRuleCode("A1");
+        rule.setCategory("A");
+        when(rules.findAll()).thenReturn(List.of(rule));
+
+        PerformanceService service = new PerformanceService(
+                ledgers,
+                adjustments,
+                users,
+                mock(StandardPointConfigRepository.class),
+                mock(MonthlyPerformanceConfigRepository.class),
+                mock(SystemConfigRepository.class),
+                subTasks,
+                rules);
+        Map<String, Object> report = service.designerMonthlyReport("2026-01");
+        Map<String, Object> row = ((List<Map<String, Object>>) report.get("designers")).getFirst();
+
+        assertEquals(1, row.get("completedCount"));
+        assertEquals(12d, row.get("score"));
+        assertEquals(1, ((Map<?, ?>) row.get("difficultyCounts")).get("COMPLEX"));
+        assertEquals(1, ((Map<?, ?>) row.get("categoryCounts")).get("A"));
+        assertEquals("regular", ((Map<?, ?>) ((List<?>) row.get("tasks")).getFirst()).get("projectType"));
+        byte[] workbook = service.designerMonthlyReportExcel("2026-01");
+        assertEquals('P', workbook[0]);
+        assertEquals('K', workbook[1]);
+    }
+
     @Test
     void appliesSalesBracketButKeepsTrialSalaryAsSimulation() {
         PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
@@ -46,7 +109,15 @@ class PerformanceServiceTest {
         month.setMultiplier(1d);
         when(months.findByMonthKey("2026-08")).thenReturn(Optional.of(month));
         when(configs.findByConfigKey(anyString())).thenReturn(Optional.empty());
-        Map<String, Object> preview = new PerformanceService(ledgers, adjustments, users, standards, months, configs)
+        Map<String, Object> preview = new PerformanceService(
+                        ledgers,
+                        adjustments,
+                        users,
+                        standards,
+                        months,
+                        configs,
+                        mock(SubTaskRepository.class),
+                        mock(PointRuleRepository.class))
                 .preview("u1", "2026-08");
         assertEquals(1d, (Double) preview.get("companyCoefficient"), .001);
         assertEquals(1100d, (Double) preview.get("simulatedPerformanceSalary"), .001);
@@ -78,7 +149,15 @@ class PerformanceServiceTest {
         target.setTargetPoints(160);
         when(targets.findByUserId("designer-1")).thenReturn(Optional.of(target));
         when(configs.findByConfigKey(anyString())).thenReturn(Optional.empty());
-        PerformanceService service = new PerformanceService(ledgers, adjustments, users, standards, months, configs);
+        PerformanceService service = new PerformanceService(
+                ledgers,
+                adjustments,
+                users,
+                standards,
+                months,
+                configs,
+                mock(SubTaskRepository.class),
+                mock(PointRuleRepository.class));
         service.monthlyUserTargets(targets);
         assertEquals(160, service.preview("designer-1", "2026-08").get("targetPoints"));
     }
@@ -101,7 +180,15 @@ class PerformanceServiceTest {
                 .build();
         when(targets.findAll()).thenReturn(List.of());
         when(users.findByRole("designer")).thenReturn(List.of(designer));
-        PerformanceService service = new PerformanceService(ledgers, adjustments, users, standards, months, configs);
+        PerformanceService service = new PerformanceService(
+                ledgers,
+                adjustments,
+                users,
+                standards,
+                months,
+                configs,
+                mock(SubTaskRepository.class),
+                mock(PointRuleRepository.class));
         service.monthlyUserTargets(targets);
 
         assertEquals(
@@ -120,8 +207,16 @@ class PerformanceServiceTest {
         Object[] row = {"u1", 30d};
         when(adjustments.sumPointsByMonth(eq("2026-07"), any(), any())).thenReturn(List.<Object[]>of(row));
         when(ledgers.sumPerformancePointsByMonth(eq("2026-07"), any(), any())).thenReturn(List.of());
-        List<Map<String, Object>> board =
-                new PerformanceService(ledgers, adjustments, users, standards, months, configs).leaderboard("2026-07");
+        List<Map<String, Object>> board = new PerformanceService(
+                        ledgers,
+                        adjustments,
+                        users,
+                        standards,
+                        months,
+                        configs,
+                        mock(SubTaskRepository.class),
+                        mock(PointRuleRepository.class))
+                .leaderboard("2026-07");
         assertEquals(1, board.size());
         assertEquals("u1", board.get(0).get("userId"));
         assertEquals(30d, ((Number) board.get(0).get("points")).doubleValue(), .001);
@@ -148,7 +243,15 @@ class PerformanceServiceTest {
         august.setCreatedAt(LocalDateTime.of(2026, 8, 6, 10, 0));
         when(adjustments.findAll()).thenReturn(List.of(july, august));
         when(ledgers.findAll()).thenReturn(List.of());
-        PerformanceService service = new PerformanceService(ledgers, adjustments, users, standards, months, configs);
+        PerformanceService service = new PerformanceService(
+                ledgers,
+                adjustments,
+                users,
+                standards,
+                months,
+                configs,
+                mock(SubTaskRepository.class),
+                mock(PointRuleRepository.class));
         double julyPoints = service.leaderboard("2026-07").stream()
                 .filter(r -> "u1".equals(r.get("userId")))
                 .mapToDouble(r -> ((Number) r.get("points")).doubleValue())

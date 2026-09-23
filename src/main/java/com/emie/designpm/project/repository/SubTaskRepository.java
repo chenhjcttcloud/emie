@@ -59,6 +59,10 @@ public interface SubTaskRepository extends JpaRepository<SubTask, Long> {
 
     List<SubTask> findByDesignerIdOrderByCreatedAtDesc(String designerId);
 
+    @Query("SELECT t FROM SubTask t JOIN FETCH t.project WHERE t.completedAt >= :from AND t.completedAt < :to "
+            + "AND (t.assigneeRole = 'designer' OR t.assigneeRole IS NULL) ORDER BY t.completedAt, t.id")
+    List<SubTask> findDesignerTasksCompletedBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
     List<SubTask> findByProjectIdOrderByCreatedAtAsc(Long projectId);
 
     @Query("SELECT t FROM SubTask t JOIN FETCH t.project p "

@@ -22,6 +22,37 @@ public class PerformanceController {
         return service.leaderboard(month);
     }
 
+    @GetMapping("/designer-monthly-report")
+    public ResponseEntity<?> designerMonthlyReport(@RequestParam String month, HttpServletRequest r) {
+        if (!admin(r)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可查看设计师月度绩效表"));
+        try {
+            java.time.YearMonth.parse(month);
+            return ResponseEntity.ok(service.designerMonthlyReport(month));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "月份格式应为 YYYY-MM"));
+        }
+    }
+
+    @GetMapping("/designer-monthly-report.xlsx")
+    public ResponseEntity<?> exportDesignerMonthlyReport(@RequestParam String month, HttpServletRequest r) {
+        if (!admin(r)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可导出设计师月度绩效表"));
+        try {
+            java.time.YearMonth.parse(month);
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .header(
+                            HttpHeaders.CONTENT_DISPOSITION,
+                            ContentDisposition.attachment()
+                                    .filename("designer-performance-" + month + ".xlsx")
+                                    .build()
+                                    .toString())
+                    .body(service.designerMonthlyReportExcel(month));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "月份格式应为 YYYY-MM"));
+        }
+    }
+
     @GetMapping("/preview")
     public ResponseEntity<?> preview(
             @RequestParam(required = false) String userId,

@@ -7,11 +7,15 @@ import com.emie.designpm.performance.repository.MonthlyPerformanceConfigReposito
 import com.emie.designpm.performance.repository.MonthlyUserPointTargetRepository;
 import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
 import com.emie.designpm.points.repository.PointLedgerRepository;
+import com.emie.designpm.points.repository.PointRuleRepository;
 import com.emie.designpm.points.repository.StandardPointConfigRepository;
+import com.emie.designpm.project.repository.SubTaskRepository;
 import com.emie.designpm.util.TextEncodingUtil;
 import java.time.*;
 import java.util.*;
 import java.util.stream.Collectors;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +28,8 @@ public class PerformanceService {
     private final StandardPointConfigRepository standards;
     private final MonthlyPerformanceConfigRepository months;
     private final SystemConfigRepository configs;
+    private final SubTaskRepository subTasks;
+    private final PointRuleRepository rules;
     private MonthlyUserPointTargetRepository userTargets;
 
     public PerformanceService(
@@ -32,13 +38,17 @@ public class PerformanceService {
             UserRepository users,
             StandardPointConfigRepository standards,
             MonthlyPerformanceConfigRepository months,
-            SystemConfigRepository configs) {
+            SystemConfigRepository configs,
+            SubTaskRepository subTasks,
+            PointRuleRepository rules) {
         this.ledgers = ledgers;
         this.adjustments = adjustments;
         this.users = users;
         this.standards = standards;
         this.months = months;
         this.configs = configs;
+        this.subTasks = subTasks;
+        this.rules = rules;
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -89,6 +99,162 @@ public class PerformanceService {
                     return row;
                 })
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> designerMonthlyReport(String month) {
+        YearMonth selected = YearMonth.parse(month);
+        LocalDateTime from = selected.atDay(1).atStartOfDay();
+        LocalDateTime to = selected.plusMonths(1).atDay(1).atStartOfDay();
+        List<User> designers = users.findByRole("designer").stream()
+                .filter(user -> user.getStatus() == null || "active".equalsIgnoreCase(user.getStatus()))
+                .toList();
+        Map<String, Map<String, Object>> reports = new LinkedHashMap<>();
+        designers.forEach(user -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("userId", user.getUserId());
+            row.put("designer", TextEncodingUtil.repairUtf8Mojibake(user.getName()));
+            row.put("month", month);
+            row.put("completedCount", 0);
+            row.put("score", 0d);
+            row.put("difficultyCounts", new LinkedHashMap<String, Integer>());
+            row.put("categoryCounts", new LinkedHashMap<String, Integer>());
+            row.put("tasks", new ArrayList<Map<String, Object>>());
+            reports.put(user.getUserId(), row);
+        });
+        List<SubTask> completed = subTasks.findDesignerTasksCompletedBetween(from, to).stream()
+                .filter(task -> task.getDesignerId() != null && reports.containsKey(task.getDesignerId()))
+                .toList();
+        if (!completed.isEmpty()) {
+            Map<Long, Map<String, Double>> taskPoints = new HashMap<>();
+            ledgers.findBySubTaskIdIn(completed.stream().map(SubTask::getId).toList()).stream()
+                    .filter(PointLedger::isCountInPerformance)
+                    .forEach(ledger -> taskPoints
+                            .computeIfAbsent(ledger.getSubTaskId(), ignored -> new HashMap<>())
+                            .merge(
+                                    ledger.getUserId(),
+                                    Optional.ofNullable(ledger.getPoints()).orElse(0d),
+                                    Double::sum));
+            Map<String, String> categories = rules.findAll().stream()
+                    .collect(Collectors.toMap(
+                            rule -> rule.getRuleCode().toUpperCase(Locale.ROOT),
+                            rule -> Optional.ofNullable(rule.getCategory())
+                                    .filter(value -> !value.isBlank())
+                                    .orElse("未分类"),
+                            (first, ignored) -> first));
+            for (SubTask task : completed) {
+                Map<String, Object> report = reports.get(task.getDesignerId());
+                String difficulty = Optional.ofNullable(task.getDifficultyCode())
+                        .filter(value -> !value.isBlank())
+                        .orElse("未设置");
+                String category = categories.getOrDefault(
+                        Optional.ofNullable(task.getPointRuleCode()).orElse("").toUpperCase(Locale.ROOT), "未分类");
+                Map<String, Integer> difficultyCounts = (Map<String, Integer>) report.get("difficultyCounts");
+                Map<String, Integer> categoryCounts = (Map<String, Integer>) report.get("categoryCounts");
+                difficultyCounts.merge(difficulty, 1, Integer::sum);
+                categoryCounts.merge(category, 1, Integer::sum);
+                double score = taskPoints.getOrDefault(task.getId(), Map.of()).getOrDefault(task.getDesignerId(), 0d);
+                report.put("completedCount", (Integer) report.get("completedCount") + 1);
+                report.put("score", (Double) report.get("score") + score);
+                ((List<Map<String, Object>>) report.get("tasks"))
+                        .add(Map.of(
+                                "id",
+                                task.getId(),
+                                "name",
+                                task.getName(),
+                                "completedAt",
+                                task.getCompletedAt(),
+                                "difficulty",
+                                difficulty,
+                                "category",
+                                category,
+                                "ruleCode",
+                                Optional.ofNullable(task.getPointRuleCode()).orElse(""),
+                                "project",
+                                Optional.ofNullable(task.getProject().getProductName())
+                                        .orElse(""),
+                                "projectType",
+                                Optional.ofNullable(task.getProject().getType()).orElse(""),
+                                "score",
+                                score));
+            }
+        }
+        return Map.of("month", month, "from", from, "to", to, "designers", new ArrayList<>(reports.values()));
+    }
+
+    public byte[] designerMonthlyReportExcel(String month) {
+        Map<String, Object> report = designerMonthlyReport(month);
+        List<Map<String, Object>> designers = (List<Map<String, Object>>) report.get("designers");
+        try (Workbook workbook = new XSSFWorkbook();
+                java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
+            CellStyle header = workbook.createCellStyle();
+            Font bold = workbook.createFont();
+            bold.setBold(true);
+            header.setFont(bold);
+            Sheet summary = workbook.createSheet("设计师月度绩效");
+            String[] summaryHeaders = {"设计师", "月份", "完成子任务数", "难度数量占比", "类别数量占比", "分数（积分）", "完成子任务"};
+            Row headerRow = summary.createRow(0);
+            for (int i = 0; i < summaryHeaders.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(summaryHeaders[i]);
+                cell.setCellStyle(header);
+            }
+            Sheet details = workbook.createSheet("完成子任务明细");
+            String[] detailHeaders = {"设计师", "月份", "完成时间", "子任务", "项目", "项目类型", "难度", "类别", "规则编号", "分数（积分）"};
+            Row detailHeader = details.createRow(0);
+            for (int i = 0; i < detailHeaders.length; i++) {
+                Cell cell = detailHeader.createCell(i);
+                cell.setCellValue(detailHeaders[i]);
+                cell.setCellStyle(header);
+            }
+            int detailRow = 1;
+            for (int i = 0; i < designers.size(); i++) {
+                Map<String, Object> designer = designers.get(i);
+                List<Map<String, Object>> tasks = (List<Map<String, Object>>) designer.get("tasks");
+                Row row = summary.createRow(i + 1);
+                row.createCell(0).setCellValue(String.valueOf(designer.get("designer")));
+                row.createCell(1).setCellValue(month);
+                row.createCell(2).setCellValue(((Number) designer.get("completedCount")).intValue());
+                row.createCell(3)
+                        .setCellValue(
+                                reportRatio((Map<String, Integer>) designer.get("difficultyCounts"), tasks.size()));
+                row.createCell(4)
+                        .setCellValue(reportRatio((Map<String, Integer>) designer.get("categoryCounts"), tasks.size()));
+                row.createCell(5).setCellValue(((Number) designer.get("score")).doubleValue());
+                row.createCell(6)
+                        .setCellValue(tasks.stream()
+                                .map(task -> String.valueOf(task.get("name")))
+                                .collect(Collectors.joining("、")));
+                for (Map<String, Object> task : tasks) {
+                    Row item = details.createRow(detailRow++);
+                    item.createCell(0).setCellValue(String.valueOf(designer.get("designer")));
+                    item.createCell(1).setCellValue(month);
+                    item.createCell(2)
+                            .setCellValue(
+                                    String.valueOf(task.get("completedAt")).replace('T', ' '));
+                    item.createCell(3).setCellValue(String.valueOf(task.get("name")));
+                    item.createCell(4).setCellValue(String.valueOf(task.get("project")));
+                    item.createCell(5).setCellValue(String.valueOf(task.get("projectType")));
+                    item.createCell(6).setCellValue(String.valueOf(task.get("difficulty")));
+                    item.createCell(7).setCellValue(String.valueOf(task.get("category")));
+                    item.createCell(8).setCellValue(String.valueOf(task.get("ruleCode")));
+                    item.createCell(9).setCellValue(((Number) task.get("score")).doubleValue());
+                }
+            }
+            for (int i = 0; i < summaryHeaders.length; i++) summary.autoSizeColumn(i);
+            for (int i = 0; i < detailHeaders.length; i++) details.autoSizeColumn(i);
+            workbook.write(output);
+            return output.toByteArray();
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("生成月度绩效 Excel 失败", e);
+        }
+    }
+
+    private String reportRatio(Map<String, Integer> counts, int total) {
+        return counts.entrySet().stream()
+                .map(entry -> entry.getKey() + " " + entry.getValue() + " ("
+                        + (total == 0 ? 0 : Math.round(entry.getValue() * 100f / total)) + "%)")
+                .collect(Collectors.joining("、"));
     }
 
     private boolean within(LocalDateTime created, LocalDateTime from, LocalDateTime to) {
