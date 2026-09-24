@@ -19,8 +19,6 @@ public class TaskDetailDTO {
     private String designerId;
     private String designerName;
     private String pointRuleCode;
-    private String difficultyCode;
-    private Double difficultyMultiplierSnapshot;
     private Integer basePointSnapshot;
     private Integer qualityBonusThresholdSnapshot;
     private Double qualityBonusRatioSnapshot;

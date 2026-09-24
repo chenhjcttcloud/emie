@@ -44,6 +44,17 @@ public class DesignRequirement {
     private String designerName;
     private String deadline;
 
+    @Column(length = 80)
+    private String pointRuleCode;
+
+    private Integer basePointSnapshot;
+
+    @Column(nullable = false)
+    private boolean ownerAccepted;
+
+    @Column(nullable = false)
+    private boolean plannerAccepted;
+
     @Column(length = 120)
     private String feishuChatId;
 

@@ -371,8 +371,6 @@ public class ProjectController {
                     item.put("designerId", task.getDesignerId());
                     item.put("pointRuleCode", task.getPointRuleCode());
                     item.put("basePointSnapshot", task.getBasePointSnapshot());
-                    item.put("difficultyCode", task.getDifficultyCode());
-                    item.put("difficultyMultiplierSnapshot", task.getDifficultyMultiplierSnapshot());
                     item.put("designerName", task.getDesignerName());
                     item.put("publisherId", task.getPublisherId());
                     item.put("publisherName", task.getPublisherName());

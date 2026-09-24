@@ -2,25 +2,20 @@ package com.emie.designpm.points.service;
 
 import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.entity.PointAdjustmentLedger;
-import com.emie.designpm.entity.PointDifficultyConfig;
 import com.emie.designpm.entity.PointLedger;
 import com.emie.designpm.entity.PointRule;
 import com.emie.designpm.entity.ScoringRecord;
 import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.entity.SystemConfig;
 import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
-import com.emie.designpm.points.repository.PointDifficultyConfigRepository;
 import com.emie.designpm.points.repository.PointLedgerRepository;
 import com.emie.designpm.points.repository.PointRuleRepository;
 import com.emie.designpm.scoring.repository.ScoringRepository;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
-import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,9 +32,7 @@ public class PointsService {
     private final PointLedgerRepository ledgers;
     private final ScoringRepository scoring;
     private final PointAdjustmentLedgerRepository adjustments;
-    private final PointDifficultyConfigRepository difficulties;
     private final SystemConfigRepository configs;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
     public PointsService(
@@ -47,13 +40,11 @@ public class PointsService {
             PointLedgerRepository ledgers,
             ScoringRepository scoring,
             PointAdjustmentLedgerRepository adjustments,
-            PointDifficultyConfigRepository difficulties,
             SystemConfigRepository configs) {
         this.rules = rules;
         this.ledgers = ledgers;
         this.scoring = scoring;
         this.adjustments = adjustments;
-        this.difficulties = difficulties;
         this.configs = configs;
     }
 
@@ -63,25 +54,10 @@ public class PointsService {
         this.ledgers = ledgers;
         this.scoring = scoring;
         this.adjustments = null;
-        this.difficulties = null;
         this.configs = null;
     }
 
-    /** Focused-test constructor for configurable difficulty behavior. */
-    public PointsService(
-            PointRuleRepository rules,
-            PointLedgerRepository ledgers,
-            ScoringRepository scoring,
-            PointDifficultyConfigRepository difficulties) {
-        this.rules = rules;
-        this.ledgers = ledgers;
-        this.scoring = scoring;
-        this.adjustments = null;
-        this.difficulties = difficulties;
-        this.configs = null;
-    }
-
-    /** 企划确认送审时立即发放基础积分。 */
+    /** 设计师提交交付成果时立即发放基础积分。 */
     public void awardBaseSubmission(SubTask task) {
         if (!eligibleForPoints(task)) return;
         String ruleCode = normalizedRuleCode(task.getPointRuleCode());
@@ -131,18 +107,6 @@ public class PointsService {
                 || task.getDesignerId().isBlank()) return false;
         // 未配置积分规则的子任务不参与积分发放。
         if (task.getPointRuleCode() == null || task.getPointRuleCode().isBlank()) return false;
-        // 积分制度从配置的起算日开始；起算日前创建的历史子任务不补发积分。
-        LocalDate earningStart = LocalDate.of(2026, 8, 25);
-        if (configs != null) {
-            String configured = configs.findByConfigKey("points.program.earning_start")
-                    .map(c -> c.getConfigValue())
-                    .orElse(null);
-            try {
-                if (configured != null && !configured.isBlank()) earningStart = LocalDate.parse(configured.trim());
-            } catch (Exception ignored) {
-            }
-        }
-        if (task.getCreatedAt() != null && task.getCreatedAt().toLocalDate().isBefore(earningStart)) return false;
         // 积分仅面向设计师任务（产品确认：供应链等其它负责人类型不参与积分）。
         // 写入端（addSubTask/updateSubTask）已把 null/''、别名归一化为 designer；历史 NULL/别名数据按不发分处理。
         if (!"designer".equals(task.getAssigneeRole())) return false;
@@ -174,7 +138,7 @@ public class PointsService {
                 || task.getQualityTopRatioSnapshot() == null
                 || task.getMaxTotalMultiplierSnapshot() == null
                 || task.getCountInPerformanceSnapshot() == null) {
-            bindRuleSnapshot(task, ruleCode, task.getDifficultyCode());
+            bindRuleSnapshot(task, ruleCode);
         }
         if (task.getBasePointSnapshot() == null
                 || task.getBasePointSnapshot() <= 0
@@ -185,18 +149,7 @@ public class PointsService {
     }
 
     private void saveAward(SubTask task, String ledgerCode, double rawPoints) {
-        List<Map<String, Object>> collaborators = collaboratorAllocations(task.getCollaboratorAllocationsJson());
-        int collaboratorRatio = collaborators.stream()
-                .mapToInt(item -> ((Number) item.get("ratio")).intValue())
-                .sum();
-        double total = roundedPoints(rawPoints);
-        double collaboratorTotal = 0d;
-        for (Map<String, Object> collaborator : collaborators) {
-            double share = roundedPoints(total * ((Number) collaborator.get("ratio")).intValue() / 100d);
-            collaboratorTotal += share;
-            saveRecipientAward(task, ledgerCode, String.valueOf(collaborator.get("userId")), share);
-        }
-        saveRecipientAward(task, ledgerCode, task.getDesignerId(), roundedPoints(total - collaboratorTotal));
+        saveRecipientAward(task, ledgerCode, task.getDesignerId(), rawPoints);
     }
 
     private void saveRecipientAward(SubTask task, String ledgerCode, String userId, double rawPoints) {
@@ -227,40 +180,19 @@ public class PointsService {
         return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).doubleValue();
     }
 
-    private List<Map<String, Object>> collaboratorAllocations(String json) {
-        if (json == null || json.isBlank()) return List.of();
-        try {
-            return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {});
-        } catch (Exception e) {
-            throw new IllegalStateException("合作积分比例快照无效");
-        }
-    }
-
     /** Validate an enabled rule and freeze its point/multiplier values onto a task. */
-    public void bindRuleSnapshot(SubTask task, String requestedRuleCode, String difficultyCode) {
+    public void bindRuleSnapshot(SubTask task, String requestedRuleCode) {
         if (task == null) throw new IllegalArgumentException("子任务不能为空");
         if (requestedRuleCode == null || requestedRuleCode.isBlank()) {
             throw new IllegalArgumentException("请选择积分规则");
-        }
-        if (difficultyCode == null || difficultyCode.isBlank()) {
-            throw new IllegalArgumentException("请选择难度档位");
         }
         String ruleCode = normalizedRuleCode(requestedRuleCode);
         PointRule rule = rules.findByRuleCode(ruleCode).orElseThrow(() -> new IllegalArgumentException("积分规则不存在或已删除"));
         if (!rule.isEnabled()) throw new IllegalArgumentException("积分规则已停用，请重新选择");
         if (rule.getPoints() == null || rule.getPoints() < 0) throw new IllegalArgumentException("积分规则基础分无效");
-        String normalizedDifficulty = "B1".equals(ruleCode) ? "COMPLEX" : normalizeDifficultyCode(difficultyCode);
-        if (difficulties == null) throw new IllegalStateException("难度配置服务暂不可用");
-        PointDifficultyConfig difficulty = difficulties
-                .findByDifficultyCode(normalizedDifficulty)
-                .orElseThrow(() -> new IllegalArgumentException("难度配置不存在或已删除"));
-        if (!difficulty.isEnabled()) throw new IllegalArgumentException("难度配置已停用，请重新选择");
-        double multiplier = difficulty.getMultiplier() == null ? 0d : difficulty.getMultiplier();
-        if (!Double.isFinite(multiplier) || multiplier <= 0) throw new IllegalArgumentException("积分规则难度系数无效");
         task.setPointRuleCode(ruleCode);
-        task.setDifficultyCode(normalizedDifficulty);
         task.setBasePointSnapshot(rule.getPoints());
-        task.setDifficultyMultiplierSnapshot(multiplier);
+        task.setDifficultyMultiplierSnapshot(1d);
         task.setQualityBonusThresholdSnapshot(
                 rule.getQualityBonusThreshold() == null ? 0 : rule.getQualityBonusThreshold());
         task.setQualityBonusRatioSnapshot(rule.getQualityBonusRatio() == null ? 0d : rule.getQualityBonusRatio());
@@ -293,12 +225,6 @@ public class PointsService {
         return ruleCode == null ? "" : ruleCode.trim().toUpperCase();
     }
 
-    private String normalizeDifficultyCode(String difficultyCode) {
-        return difficultyCode == null || difficultyCode.isBlank()
-                ? "STANDARD"
-                : difficultyCode.trim().toUpperCase();
-    }
-
     @Transactional(readOnly = true)
     public double balance(String userId) {
         return ledgers.sumPointsByUserId(userId) + (adjustments == null ? 0 : adjustments.sumPointsByUserId(userId));
@@ -323,38 +249,12 @@ public class PointsService {
         return rules.findAllByOrderByRuleCodeAsc();
     }
 
-    @Transactional(readOnly = true)
-    public List<PointDifficultyConfig> difficulties() {
-        return difficulties == null ? List.of() : difficulties.findAllByOrderByMultiplierAscDifficultyCodeAsc();
-    }
-
-    public PointDifficultyConfig updateDifficulty(
-            String difficultyCode, Double multiplier, Boolean enabled, String description) {
-        if (difficulties == null) throw new IllegalStateException("难度配置服务暂不可用");
-        String code = normalizeDifficultyCode(difficultyCode);
-        PointDifficultyConfig difficulty =
-                difficulties.findByDifficultyCode(code).orElseThrow(() -> new IllegalArgumentException("难度配置不存在"));
-        if (multiplier != null) {
-            if (!Double.isFinite(multiplier) || multiplier <= 0 || multiplier > 10) {
-                throw new IllegalArgumentException("难度系数必须大于0且不超过10");
-            }
-            difficulty.setMultiplier(multiplier);
-        }
-        if (enabled != null) difficulty.setEnabled(enabled);
-        if (description != null) {
-            String value = description.trim();
-            difficulty.setDescription(value.substring(0, Math.min(value.length(), 255)));
-        }
-        return difficulties.save(difficulty);
-    }
-
     public PointRule updateRule(
             String ruleCode,
             Integer points,
             Boolean enabled,
             String description,
             String category,
-            Double difficultyMultiplier,
             Integer qualityThreshold,
             Double qualityRatio,
             Integer qualityTopThreshold,
@@ -371,10 +271,6 @@ public class PointsService {
             rule.setDescription(
                     description.trim().substring(0, Math.min(description.trim().length(), 255)));
         if (category != null) rule.setCategory(category.trim());
-        if (difficultyMultiplier != null) {
-            if (difficultyMultiplier < 0) throw new IllegalArgumentException("难度系数不能小于 0");
-            rule.setDifficultyMultiplier(difficultyMultiplier);
-        }
         if (qualityThreshold != null) {
             if (qualityThreshold < 0) throw new IllegalArgumentException("质量阈值不能小于 0");
             rule.setQualityBonusThreshold(qualityThreshold);

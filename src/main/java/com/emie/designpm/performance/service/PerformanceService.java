@@ -117,7 +117,6 @@ public class PerformanceService {
             row.put("month", month);
             row.put("completedCount", 0);
             row.put("score", 0d);
-            row.put("difficultyCounts", new LinkedHashMap<String, Integer>());
             row.put("categoryCounts", new LinkedHashMap<String, Integer>());
             row.put("tasks", new ArrayList<Map<String, Object>>());
             reports.put(user.getUserId(), row);
@@ -144,14 +143,9 @@ public class PerformanceService {
                             (first, ignored) -> first));
             for (SubTask task : completed) {
                 Map<String, Object> report = reports.get(task.getDesignerId());
-                String difficulty = Optional.ofNullable(task.getDifficultyCode())
-                        .filter(value -> !value.isBlank())
-                        .orElse("未设置");
                 String category = categories.getOrDefault(
                         Optional.ofNullable(task.getPointRuleCode()).orElse("").toUpperCase(Locale.ROOT), "未分类");
-                Map<String, Integer> difficultyCounts = (Map<String, Integer>) report.get("difficultyCounts");
                 Map<String, Integer> categoryCounts = (Map<String, Integer>) report.get("categoryCounts");
-                difficultyCounts.merge(difficulty, 1, Integer::sum);
                 categoryCounts.merge(category, 1, Integer::sum);
                 double score = taskPoints.getOrDefault(task.getId(), Map.of()).getOrDefault(task.getDesignerId(), 0d);
                 report.put("completedCount", (Integer) report.get("completedCount") + 1);
@@ -164,8 +158,6 @@ public class PerformanceService {
                                 task.getName(),
                                 "completedAt",
                                 task.getCompletedAt(),
-                                "difficulty",
-                                difficulty,
                                 "category",
                                 category,
                                 "ruleCode",
@@ -192,7 +184,7 @@ public class PerformanceService {
             bold.setBold(true);
             header.setFont(bold);
             Sheet summary = workbook.createSheet("设计师月度绩效");
-            String[] summaryHeaders = {"设计师", "月份", "完成子任务数", "难度数量占比", "类别数量占比", "分数（积分）", "完成子任务"};
+            String[] summaryHeaders = {"设计师", "月份", "完成子任务数", "类别数量占比", "分数（积分）", "完成子任务"};
             Row headerRow = summary.createRow(0);
             for (int i = 0; i < summaryHeaders.length; i++) {
                 Cell cell = headerRow.createCell(i);
@@ -200,7 +192,7 @@ public class PerformanceService {
                 cell.setCellStyle(header);
             }
             Sheet details = workbook.createSheet("完成子任务明细");
-            String[] detailHeaders = {"设计师", "月份", "完成时间", "子任务", "项目", "项目类型", "难度", "类别", "规则编号", "分数（积分）"};
+            String[] detailHeaders = {"设计师", "月份", "完成时间", "子任务", "项目", "项目类型", "类别", "规则编号", "分数（积分）"};
             Row detailHeader = details.createRow(0);
             for (int i = 0; i < detailHeaders.length; i++) {
                 Cell cell = detailHeader.createCell(i);
@@ -216,12 +208,9 @@ public class PerformanceService {
                 row.createCell(1).setCellValue(month);
                 row.createCell(2).setCellValue(((Number) designer.get("completedCount")).intValue());
                 row.createCell(3)
-                        .setCellValue(
-                                reportRatio((Map<String, Integer>) designer.get("difficultyCounts"), tasks.size()));
-                row.createCell(4)
                         .setCellValue(reportRatio((Map<String, Integer>) designer.get("categoryCounts"), tasks.size()));
-                row.createCell(5).setCellValue(((Number) designer.get("score")).doubleValue());
-                row.createCell(6)
+                row.createCell(4).setCellValue(((Number) designer.get("score")).doubleValue());
+                row.createCell(5)
                         .setCellValue(tasks.stream()
                                 .map(task -> String.valueOf(task.get("name")))
                                 .collect(Collectors.joining("、")));
@@ -235,10 +224,9 @@ public class PerformanceService {
                     item.createCell(3).setCellValue(String.valueOf(task.get("name")));
                     item.createCell(4).setCellValue(String.valueOf(task.get("project")));
                     item.createCell(5).setCellValue(String.valueOf(task.get("projectType")));
-                    item.createCell(6).setCellValue(String.valueOf(task.get("difficulty")));
-                    item.createCell(7).setCellValue(String.valueOf(task.get("category")));
-                    item.createCell(8).setCellValue(String.valueOf(task.get("ruleCode")));
-                    item.createCell(9).setCellValue(((Number) task.get("score")).doubleValue());
+                    item.createCell(6).setCellValue(String.valueOf(task.get("category")));
+                    item.createCell(7).setCellValue(String.valueOf(task.get("ruleCode")));
+                    item.createCell(8).setCellValue(((Number) task.get("score")).doubleValue());
                 }
             }
             for (int i = 0; i < summaryHeaders.length; i++) summary.autoSizeColumn(i);

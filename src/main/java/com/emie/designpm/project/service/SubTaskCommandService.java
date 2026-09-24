@@ -23,8 +23,6 @@ public interface SubTaskCommandService {
 
     Project taskDeliver(Long projectId, Long taskId, Map<String, Object> body);
 
-    Project taskSubmitReview(Long projectId, Long taskId, Map<String, Object> body);
-
     Project taskRedeliver(Long projectId, Long taskId, Map<String, Object> body);
 
     Project taskConfirmRevision(Long projectId, Long taskId, Map<String, Object> body);

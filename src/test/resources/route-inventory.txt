@@ -68,6 +68,8 @@ GET /api/material-market
 GET /api/material-market/{id}
 GET /api/materials
 GET /api/materials/{id}
+GET /api/performance/designer-monthly-report
+GET /api/performance/designer-monthly-report.xlsx
 GET /api/performance/designer-targets
 GET /api/performance/leaderboard
 GET /api/performance/monthly
@@ -79,7 +81,6 @@ GET /api/point-governance/po/me
 GET /api/point-governance/po/progress
 GET /api/point-program/forecasts
 GET /api/points/categories
-GET /api/points/difficulties
 GET /api/points/market-eligibility/{userId}
 GET /api/points/me
 GET /api/points/rules
@@ -136,13 +137,12 @@ POST /api/categories
 POST /api/compliance
 POST /api/departments
 POST /api/design-requirements
+POST /api/design-requirements/{id}/accept
 POST /api/design-requirements/{id}/confirm-revision
 POST /api/design-requirements/{id}/deliver
 POST /api/design-requirements/{id}/feishu-chat/create
 POST /api/design-requirements/{id}/feishu-chat/dissolve
 POST /api/design-requirements/{id}/reject
-POST /api/design-requirements/{id}/score
-POST /api/design-requirements/{id}/self-score
 POST /api/design-requirements/{id}/terminate
 POST /api/files/library/upload
 POST /api/files/upload
@@ -196,7 +196,6 @@ POST /api/projects/{projectId}/tasks/{taskId}/redeliver
 POST /api/projects/{projectId}/tasks/{taskId}/reject
 POST /api/projects/{projectId}/tasks/{taskId}/rejections/{cycleId}/cancel
 POST /api/projects/{projectId}/tasks/{taskId}/score
-POST /api/projects/{projectId}/tasks/{taskId}/submit-review
 POST /api/projects/{projectId}/tasks/{taskId}/withdraw
 POST /api/projects/{projectId}/tasks/{taskId}/withdraw-market
 POST /api/share
@@ -222,7 +221,6 @@ PUT /api/performance/designer-targets/{userId}
 PUT /api/performance/monthly/{month}
 PUT /api/performance/standard
 PUT /api/point-governance/archives/{month}/{userId}
-PUT /api/points/difficulties/{difficultyCode}
 PUT /api/points/market-eligibility/{userId}
 PUT /api/points/rules/{ruleCode}
 PUT /api/points/skills/{userId}

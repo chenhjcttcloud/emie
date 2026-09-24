@@ -46,7 +46,7 @@ class NotificationTemplateServiceTest {
                 service.render("TASK_CORRECTED", Map.of("taskName", "包装设计", "actorName", "小李", "reason", "替换错误图片"));
 
         assertEquals("子任务交付已更正", result.title());
-        assertTrue(result.content().contains("确认最新提交后再送审"));
+        assertTrue(result.content().contains("请验收最新成果"));
         assertFalse(result.content().contains("驳回"));
     }
 
@@ -66,7 +66,6 @@ class NotificationTemplateServiceTest {
             "DESIGN_REQUIREMENT_ASSIGNED",
             "DESIGN_REQUIREMENT_DESIGNER_ASSIGNED",
             "DESIGN_REQUIREMENT_DELIVERED",
-            "DESIGN_REQUIREMENT_REVIEW_PENDING",
             "DESIGN_REQUIREMENT_REJECTED",
             "DESIGN_REQUIREMENT_TERMINATED"
         }) {

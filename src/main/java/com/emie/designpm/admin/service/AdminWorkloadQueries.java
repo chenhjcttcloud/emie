@@ -17,11 +17,11 @@ final class AdminWorkloadQueries {
 
     private AdminWorkloadQueries() {}
 
-    /** 逐件子任务（期末之前建立嘅）拉返嚟，交畀台账归户。只取六个必要栏位。 */
+    /** 逐件子任务（期末之前建立嘅）拉返嚟，交畀台账归户。 */
     @SuppressWarnings("unchecked")
     static List<AdminWorkloadTaskLedger.TaskRow> loadTaskRows(EntityManager em, LocalDateTime endExclusive) {
         List<Object[]> rows = em.createNativeQuery(
-                        "SELECT s.designer_id, s.publisher_id, s.status, s.created_at, s.completed_at, p.type, s.difficulty_code "
+                        "SELECT s.designer_id, s.publisher_id, s.status, s.created_at, s.completed_at, p.type "
                                 + "FROM sub_tasks s LEFT JOIN projects p ON p.id = s.project_id WHERE s.created_at < ?1")
                 .setParameter(1, endExclusive)
                 .getResultList();
@@ -33,8 +33,7 @@ final class AdminWorkloadQueries {
                     row[2] == null ? null : String.valueOf(row[2]),
                     toLocalDateTime(row[3]),
                     toLocalDateTime(row[4]),
-                    row[5] == null ? null : String.valueOf(row[5]),
-                    row[6] == null ? null : String.valueOf(row[6])));
+                    row[5] == null ? null : String.valueOf(row[5])));
         }
         return result;
     }

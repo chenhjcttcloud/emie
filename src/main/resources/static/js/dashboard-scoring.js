@@ -1,5 +1,4 @@
 const EMIE = window.EMIE;
-const roleLabel = (...args) => EMIE.actions.roleLabel(...args);
 const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const swrFetch = (...args) => EMIE.actions.swrFetch(...args);
 const formatDate = (...args) => EMIE.actions.formatDate(...args);
@@ -35,10 +34,7 @@ async function renderScoringView(main, role, uid) {
       selfScore: item.selfScore,
       selfAesthetics: item.selfAesthetics,
       selfInnovation: item.selfInnovation,
-      scoringRecords: item.scoringRecords || [],
       isPending: !!item.isPending,
-      itemKind: item.itemKind || 'project_task',
-      requirementId: item.requirementId,
     };
     pendingTasks.push(t);
   }
@@ -71,7 +67,6 @@ async function renderScoringView(main, role, uid) {
         <option value="all">全部项目类型</option>
         <option value="channel_custom">渠道定制单</option>
         <option value="regular">公司常规品</option>
-        <option value="design_requirement">设计/送审需求</option>
       </select>
       <select class="form-select" data-emie-action="change:scoring-filter" style="min-width:120px;" id="scoringStageFilter">
         <option value="all">全部审核阶段</option>
@@ -120,7 +115,6 @@ function applyFilterScoringView() {
   if (filter === 'pending') list = list.filter(t => t.isPending);
   else if (filter === 'done') list = list.filter(t => !t.isPending);
   if (projectType !== 'all') list = list.filter(t => t.projectType === projectType);
-  if (stage !== 'all') list = list.filter(t => t.scoringRecords?.some(r => r.reviewStage === stage));
   if (plannerId !== 'all') list = list.filter(t => t.plannerId === plannerId);
 
   if (q) list = list.filter(t => matchesSearchText(q, t.id, t.projectId, t.name, t.projectName, t.plannerName, t.designerName));
@@ -179,7 +173,6 @@ function renderScoringCards(tasks) {
       const statusIcon = isPending ? '⏳' : '✅';
       const statusText = isPending ? '待评分' : '已评分';
       const statusCls = isPending ? 'badge-pending' : 'badge-completed';
-      const allRoles = t.scoringRecords;
       return `<div class="subtask-card" style="border-left:3px solid ${isPending ? 'var(--warning)' : 'var(--success)'};">
         <div class="subtask-header">
           <div class="subtask-name">
@@ -189,24 +182,13 @@ function renderScoringCards(tasks) {
           <span class="badge ${statusCls}">${statusText}</span>
         </div>
         <div style="font-size:12px;color:var(--gray-400);margin-bottom:6px;">
-          📁 ${t.projectType === 'design_requirement' ? '需求' : '项目'} #${t.projectId} ${t.projectType === 'channel_custom' ? '📦 渠道定制' : t.projectType === 'design_requirement' ? '🎨 设计/送审' : '🏭 常规品'} — ${escHtml(t.projectName || '')}
+          📁 项目 #${t.projectId} ${t.projectType === 'channel_custom' ? '📦 渠道定制' : '🏭 常规品'} — ${escHtml(t.projectName || '')}
           ${t.plannerName ? ` · 👤 产品企划：${escHtml(t.plannerName)}` : ''}
           ${t.plannedDate ? ` · 📅 ${formatDate(t.plannedDate)}` : ''}
         </div>
-        <div style="margin-top:8px;">
-          <div style="font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:6px;">评分状态</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            ${allRoles.map(r => {
-              const scored = r.score != null;
-              return `<span style="padding:4px 10px;border-radius:6px;font-size:12px;background:${scored ? 'var(--success-light)' : 'var(--warning-light)'};color:${scored ? 'var(--success)' : 'var(--warning)'};">
-                ${r.stage === 'self' ? '设计师自评' : roleLabel(r.role)}: ${scored ? `✅ ${r.score}分` : r.status === 'waiting' ? '等待中' : '⏳ 待评分'}
-              </span>`;
-            }).join('')}
-          </div>
-        </div>
         <div class="subtask-actions" style="margin-top:10px;">
-          ${t.isAdminView || t.isDesignerView ? '' : (isPending ? `<button class="btn btn-primary btn-sm" data-emie-action="click:scoring-open" data-item-kind="${escHtml(t.itemKind)}" data-requirement-id="${t.requirementId || ''}" data-project-id="${t.projectId || ''}" data-task-id="${t.id || ''}">⭐ 立即评分</button>` : '')}
-          <button class="btn btn-outline btn-sm" data-emie-action="click:scoring-detail" data-item-kind="${escHtml(t.itemKind)}" data-requirement-id="${t.requirementId || ''}" data-project-id="${t.projectId || ''}">查看${t.itemKind === 'design_requirement' ? '需求' : '项目'}</button>
+          ${t.isAdminView || t.isDesignerView ? '' : (isPending ? `<button class="btn btn-primary btn-sm" data-emie-action="click:scoring-open" data-project-id="${t.projectId || ''}" data-task-id="${t.id || ''}">⭐ 立即评分</button>` : '')}
+          <button class="btn btn-outline btn-sm" data-emie-action="click:scoring-detail" data-project-id="${t.projectId || ''}">查看项目</button>
         </div>
       </div>`;
     }).join('')}
@@ -229,12 +211,8 @@ if (registerEventAction) {
   registerEventAction('scoring-filter', () => filterScoringView());
   registerEventAction('scoring-reset', () => resetScoringFilters());
   registerEventAction('scoring-page', (_event, element) => changeScoringPage(Number(element.dataset.page)));
-  registerEventAction('scoring-open', (_event, el) => el.dataset.itemKind === 'design_requirement'
-    ? openDesignRequirementScore(Number(el.dataset.requirementId), EMIE.state.currentRole === 'designer')
-    : openScoring(Number(el.dataset.projectId), Number(el.dataset.taskId)));
-  registerEventAction('scoring-detail', (_event, el) => el.dataset.itemKind === 'design_requirement'
-    ? openDesignRequirementDetail(Number(el.dataset.requirementId))
-    : openProjectDetail(Number(el.dataset.projectId)));
+  registerEventAction('scoring-open', (_event, el) => openScoring(Number(el.dataset.projectId), Number(el.dataset.taskId)));
+  registerEventAction('scoring-detail', (_event, el) => openProjectDetail(Number(el.dataset.projectId)));
 }
 
 EMIE.registerModule('dashboardScoring', {

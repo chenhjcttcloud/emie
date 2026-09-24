@@ -15,8 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PointAppealService {
-    private static final Set<String> TYPES =
-            Set.of("CATEGORY", "BASE_POINTS", "DIFFICULTY", "QUALITY_BONUS", "ELIGIBILITY", "OTHER");
+    private static final Set<String> TYPES = Set.of("CATEGORY", "BASE_POINTS", "QUALITY_BONUS", "ELIGIBILITY", "OTHER");
     private final PointAppealRepository appeals;
     private final PointLedgerRepository ledgers;
     private final PointAdjustmentLedgerRepository adjustments;

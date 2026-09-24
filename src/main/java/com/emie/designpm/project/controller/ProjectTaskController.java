@@ -85,10 +85,6 @@ public class ProjectTaskController {
                 throw unsupported();
             }
 
-            public Project taskSubmitReview(Long id, Long taskId, Map<String, Object> body) {
-                throw unsupported();
-            }
-
             public Project taskRedeliver(Long id, Long taskId, Map<String, Object> body) {
                 throw unsupported();
             }
@@ -239,19 +235,6 @@ public class ProjectTaskController {
                 request,
                 "subtask.deliver",
                 () -> subTaskCommandService.taskDeliver(projectId, taskId, req.withSessionContext(body, request)));
-    }
-
-    /** 设计师/供应链提交已交付成果进入企划送审。 */
-    @PostMapping("/{projectId}/tasks/{taskId}/submit-review")
-    public ResponseEntity<?> taskSubmitReview(
-            @PathVariable Long projectId,
-            @PathVariable Long taskId,
-            @RequestBody Map<String, Object> body,
-            HttpServletRequest request) {
-        return command(
-                request,
-                "subtask.review.first.submit",
-                () -> subTaskCommandService.taskSubmitReview(projectId, taskId, req.withSessionContext(body, request)));
     }
 
     /** 设计师重新交付 */

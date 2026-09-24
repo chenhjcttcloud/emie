@@ -3,7 +3,6 @@ package com.emie.designpm.project.service;
 import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.admin.service.PermissionCatalog;
 import com.emie.designpm.admin.service.UserService;
-import com.emie.designpm.designrequirement.service.DesignRequirementScoringService;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.file.repository.FileRecordRepository;
 import com.emie.designpm.file.service.FileArchiveService;
@@ -24,8 +23,6 @@ import com.emie.designpm.reference.repository.ProductCategoryRepository;
 import com.emie.designpm.scoring.repository.ScoringRepository;
 import com.emie.designpm.sync.service.SyncQueueService;
 import com.emie.designpm.util.SecurityUtil;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -62,9 +59,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
     private PointAppealRepository pointAppealRepository;
     private NotificationRepository notificationRepository;
     private FileRecordRepository fileRecordRepository;
-    private DesignRequirementScoringService designRequirementScoringService;
     private SubTaskRejectionCycleRepository rejectionCycleRepository;
-    private final ObjectMapper objectMapper = new ObjectMapper();
     private final ProjectNotifier notifier;
     private final ScoringWeightConfig scoringWeights;
 
@@ -172,11 +167,6 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         this.fileRecordRepository = repository;
     }
 
-    @Autowired(required = false)
-    void setDesignRequirementScoringService(DesignRequirementScoringService service) {
-        this.designRequirementScoringService = service;
-    }
-
     @Autowired
     void setRejectionCycleRepository(SubTaskRejectionCycleRepository repository) {
         this.rejectionCycleRepository = repository;
@@ -208,12 +198,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             throw new RuntimeException("请选择有效的子任务所属阶段");
         }
         String pointRuleCode = (String) body.get("pointRuleCode");
-        String difficultyCode = (String) body.get("difficultyCode");
         if (pointRuleCode == null || pointRuleCode.isBlank()) {
             throw new IllegalArgumentException("请选择积分规则");
-        }
-        if (difficultyCode == null || difficultyCode.isBlank()) {
-            throw new IllegalArgumentException("请选择难度档位");
         }
 
         SubTask task = new SubTask();
@@ -227,7 +213,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         task.setPublisherName((String) body.getOrDefault("currentUser", ""));
         task.setPublisherRole(role);
         if (pointsService != null) {
-            pointsService.bindRuleSnapshot(task, pointRuleCode, difficultyCode);
+            pointsService.bindRuleSnapshot(task, pointRuleCode);
         }
         task.setRequiredSkillTagsJson(inputValidator.skillTags(body.get("requiredSkillTags")));
         task.setCollaboratorAllocationsJson(
@@ -361,21 +347,16 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                             ? assigneeRole
                             : "designer");
         }
-        if (body.containsKey("pointRuleCode") || body.containsKey("difficultyCode")) {
+        if (body.containsKey("pointRuleCode")) {
             if (!"pending".equals(task.getStatus())) {
-                throw new RuntimeException("子任务开始执行后不能修改积分规则或难度");
+                throw new RuntimeException("子任务开始执行后不能修改积分规则");
             }
             if (pointsService == null) throw new RuntimeException("积分规则服务暂不可用，请稍后重试");
             String ruleCode =
                     body.containsKey("pointRuleCode") ? (String) body.get("pointRuleCode") : task.getPointRuleCode();
-            String difficultyCode =
-                    body.containsKey("difficultyCode") ? (String) body.get("difficultyCode") : task.getDifficultyCode();
             if (ruleCode == null || ruleCode.isBlank()) {
                 task.setPointRuleCode(null);
-                task.setDifficultyCode(
-                        difficultyCode == null || difficultyCode.isBlank()
-                                ? null
-                                : difficultyCode.trim().toUpperCase(Locale.ROOT));
+                task.setDifficultyMultiplierSnapshot(null);
                 task.setBasePointSnapshot(null);
                 task.setDifficultyMultiplierSnapshot(null);
                 task.setQualityBonusThresholdSnapshot(null);
@@ -385,7 +366,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                 task.setMaxTotalMultiplierSnapshot(null);
                 task.setCountInPerformanceSnapshot(null);
             } else {
-                pointsService.bindRuleSnapshot(task, ruleCode, difficultyCode);
+                pointsService.bindRuleSnapshot(task, ruleCode);
             }
         }
         if (body.containsKey("requiredSkillTags")) {
@@ -450,8 +431,6 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         data.put("designerName", task.getDesignerName());
         data.put("allocationStatus", task.getAllocationStatus());
         data.put("pointRuleCode", task.getPointRuleCode());
-        data.put("difficultyCode", task.getDifficultyCode());
-        data.put("difficultyMultiplierSnapshot", task.getDifficultyMultiplierSnapshot());
         data.put("basePointSnapshot", task.getBasePointSnapshot());
         data.put("qualityBonusThresholdSnapshot", task.getQualityBonusThresholdSnapshot());
         data.put("qualityBonusRatioSnapshot", task.getQualityBonusRatioSnapshot());
@@ -778,29 +757,24 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         }
 
         String submittedActualDate = (String) body.get("actualDate");
-        task.setStatus("delivered");
+        task.setStatus("submitted_for_review");
         task.setActualDate(null);
+        task.setSubmittedForReviewAt(LocalDateTime.now());
         task.setDeliverables(SecurityUtil.sanitizeText((String) body.get("deliverables"), 5000));
         task.setReferenceImagesJson(
                 inputValidator.validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true));
         task.setAttachmentsJson(
                 inputValidator.validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
-        // 设计师自评分（总分100分，整数）
-        Integer selfScore = body.containsKey("selfScore") ? ((Number) body.get("selfScore")).intValue() : null;
-        if (selfScore != null && (selfScore < 1 || selfScore > 100)) {
-            selfScore = null;
-        }
-        task.setSelfScore(selfScore != null ? selfScore.doubleValue() : null);
+        task.setSelfScore(null);
         resetReviewWorkflow(task);
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
         saveDeliveryVersion(task, "initial", "首次交付", submittedActualDate, currentUserId, currentUser, currentRole);
-        String selfScoreStr = selfScore != null ? selfScore.toString() : "—";
-        p.getLogs()
-                .add(new ActivityLog("子任务交付（自评" + selfScoreStr + "）：" + task.getName(), currentUser, currentRole, p));
+        p.getLogs().add(new ActivityLog("子任务交付：" + task.getName(), currentUser, currentRole, p));
 
         Project saved = projectRepository.saveAndFlush(p);
+        if (pointsService != null) pointsService.awardBaseSubmission(task);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
         notifier.safeNotifyAfterCommit(
@@ -825,33 +799,6 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         return saved;
     }
 
-    /** 负责人将已交付成果正式送审；仅设计师和供应链任务需要此一步。 */
-    public Project taskSubmitReview(Long projectId, Long taskId, Map<String, Object> body) {
-        Project p = lockProject(projectId);
-        SubTask task = lockSubTask(projectId, taskId);
-        String currentUserId = (String) body.getOrDefault("currentUserId", "");
-        String role = (String) body.getOrDefault("currentRole", "");
-        if (!"planner".equals(role)) throw new RuntimeException("仅产品企划可送审");
-        if (!Objects.equals(currentUserId, p.getPlannerId())) throw new RuntimeException("当前用户不是该项目负责人企划，无法送审");
-        if (!List.of("designer", "supplychain").contains(task.getAssigneeRole()))
-            throw new RuntimeException("仅设计师和供应链子任务需要送审");
-        if (!"delivered".equals(task.getStatus())) throw new RuntimeException("当前子任务不在待送审状态");
-        task.setStatus("submitted_for_review");
-        task.setSubmittedForReviewAt(LocalDateTime.now());
-        if (pointsService != null) pointsService.awardBaseSubmission(task);
-        String user = (String) body.getOrDefault("currentUser", "");
-        p.getLogs().add(new ActivityLog("子任务送审：" + task.getName(), user, role, p));
-        Project saved = projectRepository.saveAndFlush(p);
-        notifier.safeNotifyAfterCommit(
-                "TASK_SUBMITTED_FOR_REVIEW",
-                p.getPlannerId(),
-                "sub_task",
-                task.getId(),
-                currentUserId,
-                notifier.context(p, task, user, ""));
-        return saved;
-    }
-
     public Project taskRedeliver(Long projectId, Long taskId, Map<String, Object> body) {
         Project p = lockProject(projectId);
 
@@ -867,8 +814,9 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         }
 
         String submittedActualDate = (String) body.get("actualDate");
-        task.setStatus("delivered");
+        task.setStatus("submitted_for_review");
         task.setActualDate(null);
+        task.setSubmittedForReviewAt(LocalDateTime.now());
         task.setDeliverables(SecurityUtil.sanitizeText((String) body.get("deliverables"), 5000));
         task.setReferenceImagesJson(
                 inputValidator.validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true));
@@ -876,14 +824,10 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                 inputValidator.validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
         String previousReviewComments = task.getReviewComments();
         task.setReviewComments(null);
-        // 设计师自评分（总分100分，整数）
-        Integer reScore = body.containsKey("selfScore") ? ((Number) body.get("selfScore")).intValue() : null;
-        if (reScore != null && (reScore < 1 || reScore > 100)) {
-            reScore = null;
-        }
-        task.setSelfScore(reScore != null ? reScore.doubleValue() : null);
+        task.setSubmittedForReviewAt(LocalDateTime.now());
+        task.setSelfScore(null);
 
-        // 重新交付后，两级审核都回到待审核状态；操作日志继续保留历史过程。
+        // 重新交付后直接回到验收队列；操作日志继续保留历史过程。
         resetReviewWorkflow(task);
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
@@ -895,6 +839,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         p.getLogs().add(new ActivityLog("子任务重新交付：" + task.getName(), currentUser, currentRole, p));
 
         Project saved = projectRepository.save(p);
+        if (pointsService != null) pointsService.awardBaseSubmission(task);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
         notifier.safeNotifyAfterCommit(
@@ -943,25 +888,22 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             throw new RuntimeException("仅当前子任务负责人可修正交付");
         }
         if (!"delivered".equals(task.getStatus())) {
-            throw new RuntimeException("仅产品企划送审前可以更正交付");
+            throw new RuntimeException("仅尚未进入验收的已交付任务可以更正");
         }
         String changeSummary = SecurityUtil.sanitizeText((String) body.get("changeSummary"), 500);
         if (changeSummary == null || changeSummary.isBlank()) {
             throw new RuntimeException("请填写本次修正说明");
         }
         String submittedActualDate = (String) body.get("actualDate");
-        task.setStatus("delivered");
+        task.setStatus("submitted_for_review");
         task.setActualDate(null);
+        task.setSubmittedForReviewAt(LocalDateTime.now());
         task.setDeliverables(SecurityUtil.sanitizeText((String) body.get("deliverables"), 5000));
         task.setReferenceImagesJson(
                 inputValidator.validateAndCleanFiles((String) body.getOrDefault("referenceImagesJson", "[]"), true));
         task.setAttachmentsJson(
                 inputValidator.validateAndCleanFiles((String) body.getOrDefault("attachmentsJson", "[]"), false));
-        Integer selfScore = body.containsKey("selfScore") ? ((Number) body.get("selfScore")).intValue() : null;
-        if (selfScore == null || selfScore < 1 || selfScore > 100) {
-            throw new RuntimeException("请输入有效的自评分（1-100分）");
-        }
-        task.setSelfScore(selfScore.doubleValue());
+        task.setSelfScore(null);
         task.setReviewComments(null);
         resetReviewWorkflow(task);
         String currentUser = (String) body.getOrDefault("currentUser", "");
@@ -972,6 +914,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                 .add(new ActivityLog(
                         "子任务主动修正交付：" + task.getName() + "（" + changeSummary + "）", currentUser, currentRole, p));
         Project saved = projectRepository.saveAndFlush(p);
+        if (pointsService != null) pointsService.awardBaseSubmission(task);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
         notifier.safeNotifyAfterCommit(
@@ -1058,7 +1001,6 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         String currentUserId = (String) body.getOrDefault("currentUserId", "");
         String comments = SecurityUtil.sanitizeText((String) body.getOrDefault("comments", ""), 500);
         boolean isChannel = "channel_custom".equals(p.getType());
-        Integer score = parseOptionalScore(body.get("score"));
 
         if (!canReviewTask(p, task, currentRole, currentUserId)) {
             throw new RuntimeException("当前用户无权验收该子任务");
@@ -1072,32 +1014,19 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             return p;
         }
 
-        if ("submitted_for_review".equals(task.getStatus()) && "planner".equals(currentRole)) {
-            // Step 1: 企划验收 → 企划评分
-            validateScoreRequired(score, "企划");
+        if (List.of("delivered", "submitted_for_review").contains(task.getStatus()) && "planner".equals(currentRole)) {
             task.setStatus("planner_approved");
             task.setReviewComments(comments);
-            completeReviewRecord(task, "planner", currentUserId, currentUser, comments, score);
-            p.getLogs().add(new ActivityLog("企划验收通过并评分：" + task.getName(), currentUser, currentRole, p));
+            p.getLogs().add(new ActivityLog("产品企划验收通过：" + task.getName(), currentUser, currentRole, p));
+            activateSecondReview(task);
         } else if ("planner_approved".equals(task.getStatus()) && "sales".equals(currentRole) && isChannel) {
-            // 渠道：销售验收 → 销售评分
-            validateScoreRequired(score, "销售");
             task.setStatus("sales_approved");
             task.setReviewComments(comments);
-            completeReviewRecord(task, "sales", currentUserId, currentUser, comments, score);
-            p.getLogs().add(new ActivityLog("销售验收通过并评分：" + task.getName(), currentUser, currentRole, p));
-        } else if ("planner_approved".equals(task.getStatus()) && "admin".equals(currentRole) && !isChannel) {
-            // 常规品：管理验收 → 管理评分
-            validateScoreRequired(score, "管理员");
-            task.setStatus("admin_approved");
-            task.setReviewComments(comments);
-            completeReviewRecord(task, "admin", currentUserId, currentUser, comments, score);
-            p.getLogs().add(new ActivityLog("管理验收通过并评分：" + task.getName(), currentUser, currentRole, p));
+            p.getLogs().add(new ActivityLog("销售验收通过：" + task.getName(), currentUser, currentRole, p));
         } else {
             throw new RuntimeException("当前状态无法执行验收操作");
         }
 
-        // 检查是否所有评分已完成；最终验收通过时发放质量加分（与评分中心 submitScoring 共用同一发分路径）
         finalizeTaskApproval(task, p);
         Project saved = projectRepository.save(p);
         Map<String, String> notifyContext = notifier.context(saved, task, currentUser, comments);
@@ -1108,104 +1037,18 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         return saved;
     }
 
-    /** 子任务交付或重新交付时，建立两级待审核记录。 */
+    /** 子任务验收不再创建评分记录。 */
     private void resetReviewWorkflow(SubTask task) {
-        List<String> roles = expectedReviewRoles(task);
-        for (int index = 0; index < roles.size(); index++) {
-            String role = roles.get(index);
-            ScoringRecord record =
-                    scoringRepository.findBySubTaskIdAndRole(task.getId(), role).orElseGet(ScoringRecord::new);
-            record.setRole(role);
-            record.setScoreType(role);
-            record.setReviewStage(index == 0 ? "first" : "second");
-            record.setReviewStatus(index == 0 ? "pending" : "waiting");
-            record.setReviewerId(null);
-            record.setReviewerName(null);
-            record.setReviewedAt(null);
-            record.setComment(null);
-            record.setScore(null);
-            record.setAesthetics(null);
-            record.setInnovation(null);
-            record.setWeight(scoringWeights.pct(projectType(task), role) / 100.0);
-            record.setSubTask(task);
-            scoringRepository.save(record);
-        }
-        // 设计师自评分纳入统一评分链路，使用系统设置中的设计师权重参与综合分。
-        if ("designer".equalsIgnoreCase(task.getAssigneeRole())) {
-            ScoringRecord self = scoringRepository
-                    .findBySubTaskIdAndRole(task.getId(), "designer")
-                    .orElseGet(ScoringRecord::new);
-            self.setRole("designer");
-            self.setScoreType("self");
-            self.setReviewStage("self");
-            self.setReviewStatus(task.getSelfScore() == null ? "pending" : "approved");
-            self.setReviewerId(task.getDesignerId());
-            self.setReviewerName(task.getDesignerName());
-            self.setReviewedAt(task.getSelfScore() == null ? null : LocalDateTime.now());
-            self.setScore(
-                    task.getSelfScore() == null ? null : task.getSelfScore().intValue());
-            self.setWeight(scoringWeights.pct(projectType(task), "designer") / 100.0);
-            self.setSubTask(task);
-            scoringRepository.save(self);
-        }
-    }
-
-    /** 审核通过时更新对应阶段记录（单维度：总分100分）。 */
-    private void completeReviewRecord(
-            SubTask task, String role, String reviewerId, String reviewerName, String comment, Integer score) {
-        ScoringRecord sr =
-                scoringRepository.findBySubTaskIdAndRole(task.getId(), role).orElseGet(ScoringRecord::new);
-        sr.setRole(role);
-        sr.setScoreType(role);
-        sr.setReviewStage(reviewStage(task, role));
-        sr.setReviewStatus("approved");
-        sr.setReviewerId(reviewerId);
-        sr.setReviewerName(reviewerName);
-        sr.setReviewedAt(LocalDateTime.now());
-        sr.setComment(comment);
-        sr.setScore(score);
-        // 兼容保留旧字段
-        if (score != null) {
-            // 将百分制映射到10分制作为兼容值
-            double mapped = score / 10.0;
-            sr.setAesthetics(mapped);
-            sr.setInnovation(mapped);
-        } else {
-            sr.setAesthetics(null);
-            sr.setInnovation(null);
-        }
-        // 读取对应项目类型的角色权重百分比，转为小数
-        sr.setWeight(scoringWeights.pct(projectType(task), role) / 100.0);
-        sr.setSubTask(task);
-        scoringRepository.save(sr);
-        if ("planner".equals(role)) {
-            activateSecondReview(task);
-        }
+        task.setSelfScore(null);
     }
 
     private void activateSecondReview(SubTask task) {
-        String secondRole = expectedReviewRoles(task).get(1);
-        ScoringRecord secondReview = scoringRepository
-                .findBySubTaskIdAndRole(task.getId(), secondRole)
-                .orElseGet(ScoringRecord::new);
-        boolean newlyActivated = !"pending".equals(secondReview.getReviewStatus());
-        secondReview.setRole(secondRole);
-        secondReview.setScoreType(secondRole);
-        secondReview.setReviewStage("second");
-        secondReview.setReviewStatus("pending");
-        secondReview.setWeight(scoringWeights.pct(projectType(task), secondRole) / 100.0);
-        secondReview.setSubTask(task);
-        scoringRepository.save(secondReview);
-        if (newlyActivated && task.getProject() != null) {
-            Project project = task.getProject();
-            Map<String, String> context = notifier.context(project, task, "产品企划", null);
-            context.put("reviewRole", "admin".equals(secondRole) ? "管理员" : "销售");
-            if ("admin".equals(secondRole)) {
-                safeNotifyRoleAfterCommit("REVIEW_PENDING", "admin", "sub_task", task.getId(), "system", context);
-            } else if (project.getSalesId() != null && !project.getSalesId().isBlank()) {
-                notifier.safeNotify(
-                        "REVIEW_PENDING", project.getSalesId(), "sub_task", task.getId(), "system", context);
-            }
+        Project project = task.getProject();
+        if (project == null || !"channel_custom".equals(project.getType())) return;
+        Map<String, String> context = notifier.context(project, task, "产品企划", null);
+        context.put("reviewRole", "销售");
+        if (project.getSalesId() != null && !project.getSalesId().isBlank()) {
+            notifier.safeNotify("REVIEW_PENDING", project.getSalesId(), "sub_task", task.getId(), "system", context);
         }
     }
 
@@ -1231,7 +1074,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
     }
 
     private List<String> expectedReviewRoles(SubTask task) {
-        return "channel_custom".equals(projectType(task)) ? List.of("planner", "sales") : List.of("planner", "admin");
+        return "channel_custom".equals(projectType(task)) ? List.of("planner", "sales") : List.of("planner");
     }
 
     private String reviewStage(SubTask task, String role) {
@@ -1261,13 +1104,11 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                 task.setCompletedAt(java.time.LocalDateTime.now());
                 task.setActualDate(java.time.LocalDate.now().toString());
             }
-        } else {
-            // 常规品：企划评分 + 管理评分 → completed
-            if ("admin_approved".equals(task.getStatus())) {
-                task.setStatus("completed");
-                task.setCompletedAt(java.time.LocalDateTime.now());
-                task.setActualDate(java.time.LocalDate.now().toString());
-            }
+        } else if ("planner_approved".equals(task.getStatus())) {
+            // 常规品由企划验收完成；管理员不再参与子任务二次验收。
+            task.setStatus("completed");
+            task.setCompletedAt(java.time.LocalDateTime.now());
+            task.setActualDate(java.time.LocalDate.now().toString());
         }
         // 检查项目是否所有子任务都已完成
         if ("completed".equals(task.getStatus())) {
@@ -1294,9 +1135,6 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
      */
     private void finalizeTaskApproval(SubTask task, Project project) {
         checkTaskCompletion(task, project);
-        if ("completed".equals(task.getStatus()) && pointsService != null) {
-            pointsService.awardQualityCompletion(task);
-        }
     }
 
     public Project taskReject(Long projectId, Long taskId, Map<String, Object> body) {
@@ -1332,9 +1170,6 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (!canReject || !canReviewTask(p, task, currentRole, currentUserId)) {
             throw new RuntimeException("当前角色或任务状态无法驳回");
         }
-        ScoringRecord priorReview = scoringRepository
-                .findBySubTaskIdAndRole(task.getId(), currentRole)
-                .orElse(null);
         SubTaskRejectionCycle latestCycle = rejectionCycleRepository
                 .findFirstBySubTaskIdOrderBySequenceNoDesc(task.getId())
                 .orElse(null);
@@ -1348,13 +1183,12 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         cycle.setPriorTaskStatus(task.getStatus());
         cycle.setPriorPlannedDate(task.getPlannedDate());
         cycle.setPriorReviewComments(task.getReviewComments());
-        cycle.setPriorReviewSnapshotJson(AuditJson.toJson(reviewSnapshot(priorReview)));
+        cycle.setPriorReviewSnapshotJson("{}");
         cycle.setReason(comments);
         cycle.setRequiredCompletionDate(requiredCompletionDate);
         cycle.setReferenceImagesJson(rejectionReferenceImagesJson);
         cycle.setAttachmentsJson(rejectionAttachmentsJson);
         rejectionCycleRepository.save(cycle);
-        rejectReviewRecord(task, currentRole, currentUserId, currentUser, comments);
         task.setStatus("rejected");
         task.setReviewComments(comments);
         task.setPlannedDate(requiredCompletionDate);
@@ -1425,7 +1259,6 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         task.setStatus(cycle.getPriorTaskStatus());
         task.setPlannedDate(cycle.getPriorPlannedDate());
         task.setReviewComments(cycle.getPriorReviewComments());
-        restoreReviewSnapshot(task, cycle.getRejectionRole(), cycle.getPriorReviewSnapshotJson());
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         cycle.setStatus("CANCELLED");
@@ -1449,167 +1282,10 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         return projectRepository.saveAndFlush(p);
     }
 
-    private Map<String, Object> reviewSnapshot(ScoringRecord record) {
-        Map<String, Object> snapshot = new LinkedHashMap<>();
-        snapshot.put("existed", record != null);
-        if (record == null) return snapshot;
-        snapshot.put("role", record.getRole());
-        snapshot.put("scoreType", record.getScoreType());
-        snapshot.put("reviewStage", record.getReviewStage());
-        snapshot.put("reviewStatus", record.getReviewStatus());
-        snapshot.put("reviewerId", record.getReviewerId());
-        snapshot.put("reviewerName", record.getReviewerName());
-        snapshot.put(
-                "reviewedAt",
-                record.getReviewedAt() == null ? null : record.getReviewedAt().toString());
-        snapshot.put("comment", record.getComment());
-        snapshot.put("score", record.getScore());
-        snapshot.put("aesthetics", record.getAesthetics());
-        snapshot.put("innovation", record.getInnovation());
-        snapshot.put("weight", record.getWeight());
-        return snapshot;
-    }
-
-    private void restoreReviewSnapshot(SubTask task, String role, String json) {
-        Map<String, Object> snapshot;
-        try {
-            snapshot = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
-        } catch (Exception e) {
-            throw new RuntimeException("驳回前审核快照损坏，无法安全恢复");
-        }
-        ScoringRecord current =
-                scoringRepository.findBySubTaskIdAndRole(task.getId(), role).orElse(null);
-        if (!Boolean.TRUE.equals(snapshot.get("existed"))) {
-            if (current != null) scoringRepository.delete(current);
-            return;
-        }
-        ScoringRecord record = current == null ? new ScoringRecord() : current;
-        record.setSubTask(task);
-        record.setRole((String) snapshot.get("role"));
-        record.setScoreType((String) snapshot.get("scoreType"));
-        record.setReviewStage((String) snapshot.get("reviewStage"));
-        record.setReviewStatus((String) snapshot.get("reviewStatus"));
-        record.setReviewerId((String) snapshot.get("reviewerId"));
-        record.setReviewerName((String) snapshot.get("reviewerName"));
-        Object reviewedAt = snapshot.get("reviewedAt");
-        record.setReviewedAt(reviewedAt == null ? null : LocalDateTime.parse(String.valueOf(reviewedAt)));
-        record.setComment((String) snapshot.get("comment"));
-        record.setScore(integerNumber(snapshot.get("score")));
-        record.setAesthetics(doubleNumber(snapshot.get("aesthetics")));
-        record.setInnovation(doubleNumber(snapshot.get("innovation")));
-        record.setWeight(doubleNumber(snapshot.get("weight")));
-        scoringRepository.save(record);
-    }
-
-    private Integer integerNumber(Object value) {
-        return value instanceof Number n ? n.intValue() : null;
-    }
-
-    private Double doubleNumber(Object value) {
-        return value instanceof Number n ? n.doubleValue() : null;
-    }
-
-    private void rejectReviewRecord(SubTask task, String role, String reviewerId, String reviewerName, String comment) {
-        ScoringRecord record =
-                scoringRepository.findBySubTaskIdAndRole(task.getId(), role).orElseGet(ScoringRecord::new);
-        record.setRole(role);
-        record.setScoreType(role);
-        record.setReviewStage(reviewStage(task, role));
-        record.setReviewStatus("rejected");
-        record.setReviewerId(reviewerId);
-        record.setReviewerName(reviewerName);
-        record.setReviewedAt(LocalDateTime.now());
-        record.setComment(comment);
-        record.setScore(null);
-        record.setAesthetics(null);
-        record.setInnovation(null);
-        record.setWeight(scoringWeights.pct(projectType(task), role) / 100.0);
-        record.setSubTask(task);
-        scoringRepository.save(record);
-    }
-
     // ==================== Scoring ====================
 
     public Project submitScoring(Long projectId, Long taskId, Map<String, Object> body) {
-        Project p = lockProject(projectId);
-
-        if (List.of("terminated", "paused", "pending_terminate").contains(p.getStatus())) {
-            throw new RuntimeException("项目已" + ("terminated".equals(p.getStatus()) ? "终止" : "暂停") + "，无法操作");
-        }
-
-        SubTask task = lockSubTask(projectId, taskId);
-
-        String role = (String) body.get("role");
-        String currentRole = (String) body.getOrDefault("currentRole", "");
-        String currentUserId = (String) body.getOrDefault("currentUserId", "");
-        if (!List.of("planner", "sales", "admin").contains(role)
-                || !role.equals(currentRole)
-                || ("sales".equals(role) && !"channel_custom".equals(p.getType()))
-                || ("admin".equals(role) && "channel_custom".equals(p.getType()))) {
-            throw new RuntimeException("当前角色不能提交该项目评分");
-        }
-        if (!canReviewTask(p, task, currentRole, currentUserId)) {
-            throw new RuntimeException("当前用户无权提交该项目评分");
-        }
-        boolean validStage = ("planner".equals(role) && "submitted_for_review".equals(task.getStatus()))
-                || ("sales".equals(role)
-                        && "channel_custom".equals(p.getType())
-                        && "planner_approved".equals(task.getStatus()))
-                || ("admin".equals(role)
-                        && !"channel_custom".equals(p.getType())
-                        && "planner_approved".equals(task.getStatus()));
-        if (!validStage) {
-            throw new RuntimeException("当前审核阶段不能提交该评分");
-        }
-        Integer score = parseOptionalScore(body.get("score"));
-        validateScoreRequired(score, "评分");
-
-        ScoringRecord sr = scoringRepository
-                .findBySubTaskIdAndRole(taskId, role)
-                .orElseGet(() -> {
-                    ScoringRecord newSr = new ScoringRecord();
-                    newSr.setRole(role);
-                    newSr.setSubTask(task);
-                    newSr.setWeight(scoringWeights.pct(
-                                    task.getProject() != null
-                                            ? task.getProject().getType()
-                                            : "regular",
-                                    role)
-                            / 100.0);
-                    return newSr;
-                });
-        sr.setScore(score);
-        double mapped = score / 10.0;
-        sr.setAesthetics(mapped);
-        sr.setInnovation(mapped);
-        sr.setScoreType(role);
-        sr.setReviewStage(reviewStage(task, role));
-        sr.setReviewStatus("approved");
-        sr.setReviewerId(currentUserId);
-        sr.setReviewerName((String) body.getOrDefault("currentUser", ""));
-        sr.setReviewedAt(LocalDateTime.now());
-        if (body.containsKey("comment")) {
-            sr.setComment(SecurityUtil.sanitizeText((String) body.get("comment"), 500));
-        }
-        scoringRepository.save(sr);
-
-        if ("planner".equals(role)) {
-            task.setStatus("planner_approved");
-            activateSecondReview(task);
-        } else if ("sales".equals(role)) {
-            task.setStatus("sales_approved");
-        } else {
-            task.setStatus("admin_approved");
-        }
-
-        String currentUser = (String) body.getOrDefault("currentUser", "");
-        p.getLogs()
-                .add(new ActivityLog(
-                        "子任务评分（" + role + "：" + score + "分）：" + task.getName(), currentUser, currentRole, p));
-
-        // 最终验收通过时发放质量加分（与任务详情 taskApprove 共用同一发分路径）
-        finalizeTaskApproval(task, p);
-        return projectRepository.save(p);
+        throw new RuntimeException("子任务已改为验收流程，无需评分");
     }
 
     private boolean isProjectPlanner(Project project, Map<String, Object> body) {
@@ -1627,68 +1303,5 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         return "sales".equals(role)
                 && "channel_custom".equals(project.getType())
                 && Objects.equals(userId, project.getSalesId());
-    }
-
-    private Integer parseOptionalScore(Object rawScore) {
-        if (rawScore == null) {
-            return null;
-        }
-        Integer score;
-        if (rawScore instanceof Number number) {
-            score = number.intValue();
-        } else {
-            try {
-                score = Integer.parseInt(String.valueOf(rawScore));
-            } catch (NumberFormatException e) {
-                throw new RuntimeException("评分必须为数字");
-            }
-        }
-        if (score < 1 || score > 100) {
-            throw new RuntimeException("评分必须在 1-100 之间");
-        }
-        return score;
-    }
-
-    private void validateScoreRequired(Integer score, String actorLabel) {
-        if (score == null) {
-            throw new RuntimeException(actorLabel + "评分不能为空");
-        }
-    }
-
-    private List<String> getRequiredScoringRoles(String projectType) {
-        return "channel_custom".equals(projectType) ? List.of("planner", "sales") : List.of("planner", "admin");
-    }
-
-    private List<String> getRequiredScoringRoles(SubTask task) {
-        List<String> roles = new ArrayList<>(getRequiredScoringRoles(
-                task.getProject() != null ? task.getProject().getType() : "regular"));
-        if ("designer".equalsIgnoreCase(task.getAssigneeRole()) && task.getSelfScore() != null) {
-            roles.add("designer");
-        }
-        return roles;
-    }
-
-    private boolean isScoringRecordCompleted(ScoringRecord record) {
-        if (record.getReviewStatus() != null) {
-            return "approved".equals(record.getReviewStatus());
-        }
-        return record.getScore() != null || (record.getAesthetics() != null && record.getInnovation() != null);
-    }
-
-    private boolean isScoringRecordPending(ScoringRecord record) {
-        if (record.getReviewStatus() != null) {
-            return "pending".equals(record.getReviewStatus());
-        }
-        return !isScoringRecordCompleted(record);
-    }
-
-    private Double toHundredPointScore(ScoringRecord record) {
-        if (record.getScore() != null) {
-            return record.getScore().doubleValue();
-        }
-        if (record.getAesthetics() != null && record.getInnovation() != null) {
-            return ((record.getAesthetics() + record.getInnovation()) / 2.0) * 10.0;
-        }
-        return null;
     }
 }

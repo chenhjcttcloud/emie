@@ -89,9 +89,8 @@ class WorkloadBoundaryTest {
     void completion_respects_range_end() {
         var result = AdminWorkloadTaskLedger.aggregate(
                 List.of(
-                        new TaskRow(
-                                "d1", "p1", "completed", CUTOFF.plusDays(1), CUTOFF.plusDays(2), "regular", "STANDARD"),
-                        new TaskRow("d1", "p1", "completed", CUTOFF.plusDays(1), END, "regular", "STANDARD")),
+                        new TaskRow("d1", "p1", "completed", CUTOFF.plusDays(1), CUTOFF.plusDays(2), "regular"),
+                        new TaskRow("d1", "p1", "completed", CUTOFF.plusDays(1), END, "regular")),
                 CUTOFF,
                 END);
         var tally = result.byUser().get("d1");
@@ -105,8 +104,7 @@ class WorkloadBoundaryTest {
     @DisplayName("同批完成率：往期开、本期完成嘅唔可以做分子")
     void completed_in_range_is_not_cohort_numerator() {
         var result = AdminWorkloadTaskLedger.aggregate(
-                List.of(new TaskRow(
-                        "d1", "p1", "completed", CUTOFF.minusDays(5), CUTOFF.plusDays(1), "regular", "STANDARD")),
+                List.of(new TaskRow("d1", "p1", "completed", CUTOFF.minusDays(5), CUTOFF.plusDays(1), "regular")),
                 CUTOFF,
                 END);
         var tally = result.byUser().get("d1");
@@ -121,8 +119,7 @@ class WorkloadBoundaryTest {
     @DisplayName("交付待验收：承接人算等他人，发布人算自己要做")
     void delivered_task_splits_by_perspective() {
         var result = AdminWorkloadTaskLedger.aggregate(
-                List.of(new TaskRow(
-                        "designer", "planner", "delivered", CUTOFF.plusDays(1), null, "channel_custom", "STANDARD")),
+                List.of(new TaskRow("designer", "planner", "delivered", CUTOFF.plusDays(1), null, "channel_custom")),
                 CUTOFF,
                 END);
         assertEquals(0, result.byUser().get("designer").outstandingOwn);
@@ -135,9 +132,7 @@ class WorkloadBoundaryTest {
     @DisplayName("企划自己派自己做：同一件任务只计一次，唔会双重计数")
     void self_assigned_task_counted_once() {
         var result = AdminWorkloadTaskLedger.aggregate(
-                List.of(new TaskRow("p1", "p1", "accepted", CUTOFF.plusDays(1), null, "regular", "STANDARD")),
-                CUTOFF,
-                END);
+                List.of(new TaskRow("p1", "p1", "accepted", CUTOFF.plusDays(1), null, "regular")), CUTOFF, END);
         assertEquals(1, result.byUser().size());
         var tally = result.byUser().get("p1");
         assertEquals(1, tally.created);
@@ -150,8 +145,8 @@ class WorkloadBoundaryTest {
     void unassigned_tasks_are_visible() {
         var result = AdminWorkloadTaskLedger.aggregate(
                 List.of(
-                        new TaskRow(null, "planner", "pending", CUTOFF.plusDays(1), null, "regular", "STANDARD"),
-                        new TaskRow("", null, "pending", CUTOFF.plusDays(1), null, "regular", "STANDARD")),
+                        new TaskRow(null, "planner", "pending", CUTOFF.plusDays(1), null, "regular"),
+                        new TaskRow("", null, "pending", CUTOFF.plusDays(1), null, "regular")),
                 CUTOFF,
                 END);
         assertEquals(2, result.unassigned().created);
@@ -162,8 +157,7 @@ class WorkloadBoundaryTest {
     @DisplayName("承接角色唔系设计师／供应链嘅任务照计（销售、推广、企划承接都算）")
     void non_designer_assignees_are_counted() {
         var result = AdminWorkloadTaskLedger.aggregate(
-                List.of(new TaskRow(
-                        "sales_1", "planner_1", "pending", CUTOFF.plusDays(1), null, "regular", "STANDARD")),
+                List.of(new TaskRow("sales_1", "planner_1", "pending", CUTOFF.plusDays(1), null, "regular")),
                 CUTOFF,
                 END);
         assertEquals(1, result.byUser().get("sales_1").created);
@@ -171,44 +165,22 @@ class WorkloadBoundaryTest {
     }
 
     @Test
-    @DisplayName("难度占比只统计本期新增嘅任务，未设置难度亦要睇得见")
-    void difficulty_mix_counts_created_only() {
-        var result = AdminWorkloadTaskLedger.aggregate(
-                List.of(
-                        new TaskRow("d1", "p1", "accepted", CUTOFF.plusDays(1), null, "regular", "standard"),
-                        new TaskRow("d1", "p1", "accepted", CUTOFF.plusDays(1), null, "regular", "COMPLEX"),
-                        new TaskRow("d1", "p1", "accepted", CUTOFF.plusDays(1), null, "regular", "MAJOR"),
-                        new TaskRow("d1", "p1", "accepted", CUTOFF.plusDays(1), null, "regular", null),
-                        new TaskRow("d1", "p1", "accepted", CUTOFF.minusDays(1), null, "regular", "MAJOR")),
-                CUTOFF,
-                END);
-        var tally = result.byUser().get("d1");
-        assertEquals(1, tally.difficultyStandard, "大小写唔应该影响归类");
-        assertEquals(1, tally.difficultyComplex);
-        assertEquals(1, tally.difficultyMajor, "区间前建立嘅唔计入难度占比");
-        assertEquals(1, tally.difficultyUnset);
-    }
-
-    @Test
-    @DisplayName("在手构成同「在手」系同一批：已完成嘅唔计入分类同难度占比")
+    @DisplayName("在手构成同「在手」系同一批：已完成嘅唔计入渠道／常规占比")
     void outstanding_mix_matches_outstanding() {
         var result = AdminWorkloadTaskLedger.aggregate(
                 List.of(
-                        new TaskRow("d1", "p1", "accepted", CUTOFF.plusDays(1), null, "channel_custom", "MAJOR"),
-                        new TaskRow("d1", "p1", "delivered", CUTOFF.plusDays(1), null, "regular", "STANDARD"),
-                        new TaskRow(
-                                "d1", "p1", "completed", CUTOFF.plusDays(1), CUTOFF.plusDays(2), "regular", "MAJOR")),
+                        new TaskRow("d1", "p1", "accepted", CUTOFF.plusDays(1), null, "channel_custom"),
+                        new TaskRow("d1", "p1", "delivered", CUTOFF.plusDays(1), null, "regular"),
+                        new TaskRow("d1", "p1", "completed", CUTOFF.plusDays(1), CUTOFF.plusDays(2), "regular")),
                 CUTOFF,
                 END);
         var tally = result.byUser().get("d1");
         assertEquals(2, tally.outstandingTotal());
         assertEquals(1, tally.outstandingChannel);
         assertEquals(1, tally.outstandingRegular);
-        assertEquals(1, tally.outstandingMajor, "已完成嗰件唔可以计入在手难度");
-        assertEquals(1, tally.outstandingStandard);
     }
 
     private static TaskRow row(String assignee, LocalDateTime createdAt) {
-        return new TaskRow(assignee, "planner", "accepted", createdAt, null, "regular", "STANDARD");
+        return new TaskRow(assignee, "planner", "accepted", createdAt, null, "regular");
     }
 }

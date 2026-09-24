@@ -5,15 +5,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-import com.emie.designpm.entity.PointDifficultyConfig;
+import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.entity.PointLedger;
 import com.emie.designpm.entity.PointRule;
 import com.emie.designpm.entity.ScoringRecord;
 import com.emie.designpm.entity.SubTask;
-import com.emie.designpm.points.repository.PointDifficultyConfigRepository;
 import com.emie.designpm.points.repository.PointLedgerRepository;
 import com.emie.designpm.points.repository.PointRuleRepository;
 import com.emie.designpm.scoring.repository.ScoringRepository;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -26,57 +26,48 @@ class PointsServiceSnapshotTest {
         PointRuleRepository rules = mock(PointRuleRepository.class);
         PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
         ScoringRepository scoring = mock(ScoringRepository.class);
-        PointDifficultyConfigRepository difficulties = mock(PointDifficultyConfigRepository.class);
-        PointRule rule = rule("B1", 20, 1.5, true);
+        PointRule rule = rule("B1", 20, true);
         when(rules.findByRuleCode("B1")).thenReturn(Optional.of(rule));
-        PointDifficultyConfig complex = difficulty("COMPLEX", 1.5, true);
-        when(difficulties.findByDifficultyCode("COMPLEX")).thenReturn(Optional.of(complex));
         ScoringRecord score = new ScoringRecord();
         score.setScore(96);
         when(scoring.findBySubTaskId(9L)).thenReturn(List.of(score));
         rule.setQualityBonusThreshold(95);
         rule.setQualityBonusRatio(0.5);
         rule.setCountInPerformance(false);
-        PointsService service = new PointsService(rules, ledgers, scoring, difficulties);
+        PointsService service = new PointsService(rules, ledgers, scoring);
         SubTask task = new SubTask();
         task.setId(9L);
         task.setDesignerId("designer-1");
         task.setAssigneeRole("designer");
 
-        service.bindRuleSnapshot(task, "b1", "standard");
+        service.bindRuleSnapshot(task, "b1");
         rule.setPoints(100);
-        rule.setDifficultyMultiplier(2d);
         rule.setQualityBonusThreshold(100);
         rule.setQualityBonusRatio(0d);
         rule.setCountInPerformance(true);
-        complex.setMultiplier(3d);
         service.awardTaskApproval(task);
 
         assertEquals("B1", task.getPointRuleCode());
-        assertEquals("COMPLEX", task.getDifficultyCode());
         assertEquals(20, task.getBasePointSnapshot());
-        assertEquals(1.5, task.getDifficultyMultiplierSnapshot());
+        assertEquals(1d, task.getDifficultyMultiplierSnapshot());
         assertEquals(95, task.getQualityBonusThresholdSnapshot());
         assertEquals(0.5, task.getQualityBonusRatioSnapshot());
         assertEquals(false, task.getCountInPerformanceSnapshot());
         verify(ledgers)
-                .save(argThat(ledger -> ledger.getPoints() == 30
+                .save(argThat(ledger -> ledger.getPoints() == 20
                         && ledger.isCountInPerformance()
                         && "B1:BASE".equals(ledger.getRuleCode())));
         verify(ledgers)
-                .save(argThat(ledger -> ledger.getPoints() == 15
+                .save(argThat(ledger -> ledger.getPoints() == 10
                         && ledger.isCountInPerformance()
                         && "B1:QUALITY".equals(ledger.getRuleCode())));
     }
 
     @Test
-    void collaborationKeepsDecimalTotalAndMilestoneMonth() {
+    void legacyCollaborationSnapshotNoLongerSplitsDesignerPoints() {
         PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
-        PointsService service = new PointsService(
-                mock(PointRuleRepository.class),
-                ledgers,
-                mock(ScoringRepository.class),
-                mock(PointDifficultyConfigRepository.class));
+        PointsService service =
+                new PointsService(mock(PointRuleRepository.class), ledgers, mock(ScoringRepository.class));
         SubTask task = new SubTask();
         task.setId(10L);
         task.setDesignerId("main");
@@ -96,30 +87,17 @@ class PointsServiceSnapshotTest {
         service.awardBaseSubmission(task);
 
         ArgumentCaptor<PointLedger> captor = ArgumentCaptor.forClass(PointLedger.class);
-        verify(ledgers, times(2)).save(captor.capture());
-        assertEquals(
-                37.5,
-                captor.getAllValues().stream()
-                        .mapToDouble(PointLedger::getPoints)
-                        .sum(),
-                .001);
-        assertEquals(
-                11.3,
-                captor.getAllValues().stream()
-                        .filter(item -> "partner".equals(item.getUserId()))
-                        .findFirst()
-                        .orElseThrow()
-                        .getPoints(),
-                .001);
-        captor.getAllValues().forEach(item -> assertEquals("2026-09", item.getAccountingMonth()));
+        verify(ledgers).save(captor.capture());
+        assertEquals(37.5, captor.getValue().getPoints(), .001);
+        assertEquals("main", captor.getValue().getUserId());
+        assertEquals("2026-09", captor.getValue().getAccountingMonth());
     }
 
     @Test
     void taskWithoutPointRuleDoesNotAwardPoints() {
         PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
         ScoringRepository scoring = mock(ScoringRepository.class);
-        PointsService service = new PointsService(
-                mock(PointRuleRepository.class), ledgers, scoring, mock(PointDifficultyConfigRepository.class));
+        PointsService service = new PointsService(mock(PointRuleRepository.class), ledgers, scoring);
         SubTask task = new SubTask();
         task.setId(10L);
         task.setDesignerId("designer-1");
@@ -132,36 +110,48 @@ class PointsServiceSnapshotTest {
     }
 
     @Test
+    void designerSubmissionAwardsBasePointsEvenForTaskCreatedBeforeFormerStartDate() {
+        PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
+        PointsService service = new PointsService(
+                mock(PointRuleRepository.class),
+                ledgers,
+                mock(ScoringRepository.class),
+                mock(com.emie.designpm.points.repository.PointAdjustmentLedgerRepository.class),
+                mock(SystemConfigRepository.class));
+        SubTask task = taskWithRole("designer");
+        task.setCreatedAt(LocalDateTime.parse("2026-08-01T10:00:00"));
+
+        service.awardBaseSubmission(task);
+
+        verify(ledgers).save(argThat(ledger -> "B1:BASE".equals(ledger.getRuleCode()) && ledger.getPoints() == 30));
+    }
+
+    @Test
     void disabledRuleCannotBeBound() {
         PointRuleRepository rules = mock(PointRuleRepository.class);
-        PointRule rule = rule("A1", 10, 1d, false);
+        PointRule rule = rule("A1", 10, false);
         when(rules.findByRuleCode("A1")).thenReturn(Optional.of(rule));
-        PointsService service = new PointsService(
-                rules,
-                mock(PointLedgerRepository.class),
-                mock(ScoringRepository.class),
-                mock(PointDifficultyConfigRepository.class));
+        PointsService service =
+                new PointsService(rules, mock(PointLedgerRepository.class), mock(ScoringRepository.class));
 
-        IllegalArgumentException error = assertThrows(
-                IllegalArgumentException.class, () -> service.bindRuleSnapshot(new SubTask(), "A1", "STANDARD"));
+        IllegalArgumentException error =
+                assertThrows(IllegalArgumentException.class, () -> service.bindRuleSnapshot(new SubTask(), "A1"));
 
         assertEquals("积分规则已停用，请重新选择", error.getMessage());
         verify(rules, never()).save(any());
     }
 
     @Test
-    void disabledDifficultyCannotBeBound() {
+    void newRuleSnapshotDoesNotBindDifficultyTier() {
         PointRuleRepository rules = mock(PointRuleRepository.class);
-        PointDifficultyConfigRepository difficulties = mock(PointDifficultyConfigRepository.class);
-        when(rules.findByRuleCode("A1")).thenReturn(Optional.of(rule("A1", 10, 1d, true)));
-        when(difficulties.findByDifficultyCode("MAJOR")).thenReturn(Optional.of(difficulty("MAJOR", 2d, false)));
-        PointsService service = new PointsService(
-                rules, mock(PointLedgerRepository.class), mock(ScoringRepository.class), difficulties);
+        when(rules.findByRuleCode("A1")).thenReturn(Optional.of(rule("A1", 10, true)));
+        PointsService service =
+                new PointsService(rules, mock(PointLedgerRepository.class), mock(ScoringRepository.class));
 
-        IllegalArgumentException error = assertThrows(
-                IllegalArgumentException.class, () -> service.bindRuleSnapshot(new SubTask(), "A1", "MAJOR"));
+        SubTask task = new SubTask();
+        service.bindRuleSnapshot(task, "A1");
 
-        assertEquals("难度配置已停用，请重新选择", error.getMessage());
+        assertEquals(1d, task.getDifficultyMultiplierSnapshot());
     }
 
     @Test
@@ -169,7 +159,7 @@ class PointsServiceSnapshotTest {
         PointRuleRepository rules = mock(PointRuleRepository.class);
         PointsService service =
                 new PointsService(rules, mock(PointLedgerRepository.class), mock(ScoringRepository.class));
-        PointRule input = rule("custom_1", 12, 1d, true);
+        PointRule input = rule("custom_1", 12, true);
         when(rules.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         PointRule saved = service.createRule(input);
@@ -185,12 +175,10 @@ class PointsServiceSnapshotTest {
         PointRuleRepository rules = mock(PointRuleRepository.class);
         PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
         ScoringRepository scoring = mock(ScoringRepository.class);
-        PointDifficultyConfigRepository difficulties = mock(PointDifficultyConfigRepository.class);
-        PointRule rule = rule("A1", 20, 1d, true);
+        PointRule rule = rule("A1", 20, true);
         rule.setQualityBonusThreshold(89);
         rule.setQualityBonusRatio(0.5);
         when(rules.findByRuleCode("A1")).thenReturn(Optional.of(rule));
-        when(difficulties.findByDifficultyCode("STANDARD")).thenReturn(Optional.of(difficulty("STANDARD", 1d, true)));
 
         // 加权综合 = (80×0.6 + 100×0.4) / (0.6+0.4) = 88；简单平均 = 90。
         // 阈值 89：按页面展示的加权算法不应发质量加分（简单平均则会误发）。
@@ -202,12 +190,12 @@ class PointsServiceSnapshotTest {
         admin.setWeight(0.4);
         when(scoring.findBySubTaskId(9L)).thenReturn(List.of(planner, admin));
 
-        PointsService service = new PointsService(rules, ledgers, scoring, difficulties);
+        PointsService service = new PointsService(rules, ledgers, scoring);
         SubTask task = new SubTask();
         task.setId(9L);
         task.setDesignerId("designer-1");
         task.setAssigneeRole("designer");
-        service.bindRuleSnapshot(task, "A1", "standard");
+        service.bindRuleSnapshot(task, "A1");
 
         service.awardTaskApproval(task);
 
@@ -220,12 +208,10 @@ class PointsServiceSnapshotTest {
         PointRuleRepository rules = mock(PointRuleRepository.class);
         PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
         ScoringRepository scoring = mock(ScoringRepository.class);
-        PointDifficultyConfigRepository difficulties = mock(PointDifficultyConfigRepository.class);
-        PointRule rule = rule("A1", 20, 1d, true);
+        PointRule rule = rule("A1", 20, true);
         rule.setQualityBonusThreshold(88);
         rule.setQualityBonusRatio(0.5);
         when(rules.findByRuleCode("A1")).thenReturn(Optional.of(rule));
-        when(difficulties.findByDifficultyCode("STANDARD")).thenReturn(Optional.of(difficulty("STANDARD", 1d, true)));
 
         // 加权综合 = 88，阈值 88：达到阈值应发质量加分（基础分 20 × 比例 0.5 = 10）。
         ScoringRecord planner = new ScoringRecord();
@@ -236,12 +222,12 @@ class PointsServiceSnapshotTest {
         admin.setWeight(0.4);
         when(scoring.findBySubTaskId(9L)).thenReturn(List.of(planner, admin));
 
-        PointsService service = new PointsService(rules, ledgers, scoring, difficulties);
+        PointsService service = new PointsService(rules, ledgers, scoring);
         SubTask task = new SubTask();
         task.setId(9L);
         task.setDesignerId("designer-1");
         task.setAssigneeRole("designer");
-        service.bindRuleSnapshot(task, "A1", "standard");
+        service.bindRuleSnapshot(task, "A1");
 
         service.awardTaskApproval(task);
 
@@ -253,15 +239,13 @@ class PointsServiceSnapshotTest {
         PointRuleRepository rules = mock(PointRuleRepository.class);
         PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
         ScoringRepository scoring = mock(ScoringRepository.class);
-        PointDifficultyConfigRepository difficulties = mock(PointDifficultyConfigRepository.class);
-        PointRule rule = rule("B1", 20, 1.5, true);
+        PointRule rule = rule("B1", 20, true);
         rule.setQualityBonusThreshold(95);
         rule.setQualityBonusRatio(0.5);
         rule.setQualityTopThreshold(97);
         rule.setQualityTopRatio(0.6);
         rule.setMaxTotalMultiplier(3d);
         when(rules.findByRuleCode("B1")).thenReturn(Optional.of(rule));
-        when(difficulties.findByDifficultyCode("COMPLEX")).thenReturn(Optional.of(difficulty("COMPLEX", 1.5, true)));
         ScoringRecord score = new ScoringRecord();
         score.setScore(96);
         when(scoring.findBySubTaskId(9L)).thenReturn(List.of(score));
@@ -279,7 +263,7 @@ class PointsServiceSnapshotTest {
         when(ledgers.existsByUserIdAndSubTaskIdAndRuleCode("designer-1", 9L, "B1:QUALITY"))
                 .thenReturn(false);
 
-        PointsService service = new PointsService(rules, ledgers, scoring, difficulties);
+        PointsService service = new PointsService(rules, ledgers, scoring);
         SubTask task = new SubTask();
         task.setId(9L);
         task.setDesignerId("designer-1");
@@ -311,11 +295,8 @@ class PointsServiceSnapshotTest {
     @Test
     void supplyChainTaskGetsNoBaseOrQualityAward() {
         PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
-        PointsService service = new PointsService(
-                mock(PointRuleRepository.class),
-                ledgers,
-                mock(ScoringRepository.class),
-                mock(PointDifficultyConfigRepository.class));
+        PointsService service =
+                new PointsService(mock(PointRuleRepository.class), ledgers, mock(ScoringRepository.class));
         SubTask task = taskWithRole("supplychain");
 
         service.awardBaseSubmission(task);
@@ -328,11 +309,8 @@ class PointsServiceSnapshotTest {
     @Test
     void nullRoleTaskGetsNoBaseOrQualityAward() {
         PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
-        PointsService service = new PointsService(
-                mock(PointRuleRepository.class),
-                ledgers,
-                mock(ScoringRepository.class),
-                mock(PointDifficultyConfigRepository.class));
+        PointsService service =
+                new PointsService(mock(PointRuleRepository.class), ledgers, mock(ScoringRepository.class));
         SubTask task = taskWithRole(null);
 
         service.awardBaseSubmission(task);
@@ -358,22 +336,13 @@ class PointsServiceSnapshotTest {
         return task;
     }
 
-    private PointRule rule(String code, int points, double multiplier, boolean enabled) {
+    private PointRule rule(String code, int points, boolean enabled) {
         PointRule rule = new PointRule();
         rule.setRuleCode(code);
         rule.setPoints(points);
-        rule.setDifficultyMultiplier(multiplier);
         rule.setEnabled(enabled);
         rule.setQualityBonusThreshold(0);
         rule.setQualityBonusRatio(0d);
         return rule;
-    }
-
-    private PointDifficultyConfig difficulty(String code, double multiplier, boolean enabled) {
-        PointDifficultyConfig difficulty = new PointDifficultyConfig();
-        difficulty.setDifficultyCode(code);
-        difficulty.setMultiplier(multiplier);
-        difficulty.setEnabled(enabled);
-        return difficulty;
     }
 }

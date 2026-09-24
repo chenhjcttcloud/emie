@@ -48,11 +48,11 @@ public interface DesignRequirementRepository extends JpaRepository<DesignRequire
             @Param("userId") String userId,
             Pageable pageable);
 
-    @Query("SELECT d FROM DesignRequirement d WHERE d.status NOT IN ('completed', 'terminated') "
-            + "AND (:userId IS NULL OR d.ownerId = :userId OR d.responsibleId = :userId "
-            + "OR d.plannerId = :userId OR d.designerId = :userId) "
-            + "ORDER BY CASE WHEN d.status = 'rejected' THEN 0 WHEN d.status = 'pending_self_score' THEN 1 "
-            + "WHEN d.status = 'pending_review' THEN 2 ELSE 3 END, d.deadline ASC, d.updatedAt DESC")
+    @Query(
+            "SELECT d FROM DesignRequirement d WHERE d.status NOT IN ('completed', 'terminated') "
+                    + "AND (:userId IS NULL OR d.ownerId = :userId OR d.responsibleId = :userId "
+                    + "OR d.plannerId = :userId OR d.designerId = :userId) "
+                    + "ORDER BY CASE WHEN d.status = 'rejected' THEN 0 WHEN d.status = 'pending_acceptance' THEN 1 ELSE 3 END, d.deadline ASC, d.updatedAt DESC")
     java.util.List<DesignRequirement> findDashboardItems(@Param("userId") String userId);
 
     /**

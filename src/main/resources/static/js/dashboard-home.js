@@ -44,7 +44,6 @@ function projectCardFilters(extra = {}) {
 function navigateChannelCard() { navigateProjectList('channel', projectCardFilters({})); }
 function navigateRegularCard() { navigateProjectList('regular', projectCardFilters({})); }
 function navigateInProgressCard() { navigateProjectList('orders', projectCardFilters({ status: 'in_progress' })); }
-function navigatePendingScoring() { EMIE.scoringFilterPreset = 'pending'; navigate('scoring'); }
 
 async function updateBadges(role, uid) {
   return refreshNavigationBadges();
@@ -96,7 +95,6 @@ async function renderDashboard(main, role, uid) {
       <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-tasks-all"><div class="stat-icon blue">📌</div><div><div class="stat-value">${stats.allTasks ?? 0}</div><div class="stat-label">子任务总数</div></div></div>
       <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-tasks-pending"><div class="stat-icon yellow">⏳</div><div><div class="stat-value">${stats.pendingTasks}</div><div class="stat-label">待处理子任务</div></div></div>
       <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-tasks-completed"><div class="stat-icon green">✅</div><div><div class="stat-value">${stats.approvedTasks}</div><div class="stat-label">已完成子任务</div></div></div>
-      <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-pending-scoring"><div class="stat-icon yellow">⭐</div><div><div class="stat-value">${stats.pendingScore}</div><div class="stat-label">待评分</div></div></div>
     </div>` : ''}
     ${rolePanelsHtml}
     ${!executionRole && orders.length === 0 ? `<div class="empty"><div class="empty-icon">📭</div><p>暂无您负责的项目</p></div>` : ''}
@@ -117,9 +115,9 @@ async function loadDashboardDesignRequirements(uid, role) {
     const rows = await apiGet('/design-requirements/dashboard');
     const actionable = (rows || []).filter(item => {
       if (role === 'designer') return item.designerId === uid
-        && ['draft', 'in_progress', 'rejected', 'pending_self_score'].includes(item.status);
+        && ['draft', 'in_progress', 'rejected'].includes(item.status);
       if (role === 'planner') return item.plannerId === uid;
-      if (role === 'sales' || role === 'promotion') return item.ownerId === uid || item.responsibleId === uid;
+      if (role === 'sales' || role === 'promotion') return (item.ownerId === uid || item.responsibleId === uid) && (!item.ownerAccepted || item.status === 'rejected');
       return role === 'admin';
     });
     if (!actionable.length) {
@@ -129,7 +127,7 @@ async function loadDashboardDesignRequirements(uid, role) {
     }
     const labels = {
       draft: '待设计交付', in_progress: '设计中', rejected: '驳回修改',
-      pending_self_score: '待设计师自评', pending_review: '待复评', terminated: '已终止'
+      pending_acceptance: '待验收', terminated: '已终止'
     };
     container.innerHTML = `<div class="type-section"><div class="card" style="padding:0;">
       <div style="padding:20px 20px 0;"><div class="type-section-title">🎨 设计/送审需求 <span class="count">共 ${actionable.length} 个</span></div></div>
@@ -169,13 +167,12 @@ async function loadDashboardPlannerTasks(uid) {
     const groups = [
       ['pending', '📥 待接单', '待接单'],
       ['active', '🔄 进行中', '进行中'],
-      ['delivered', '📤 待送审', '待送审'],
-      ['submitted_for_review', '🔎 送审中', '送审中']
+      ['review', '✅ 待验收', '待验收']
     ];
-    const grouped = key => tasks.filter(t => key === 'active' ? ['accepted', 'rejected'].includes(t.status) : t.status === key);
+    const grouped = key => tasks.filter(t => key === 'active' ? ['accepted', 'rejected'].includes(t.status) : key === 'review' ? ['delivered', 'submitted_for_review'].includes(t.status) : t.status === key);
     const renderGroup = ([key, title, label]) => {
       const list = grouped(key);
-      return `<div class="type-section"><div class="card" style="padding:0;"><div style="padding:16px 20px 0;"><div class="type-section-title">${title} <span class="count">共 ${list.length} 个</span></div></div><div style="padding:0 20px 16px;">${list.length ? `<div class="table-wrap"><table class="dashboard-uniform-task-table"><thead><tr><th>子任务</th><th>所属项目</th><th>负责人</th><th>要求完成时间</th><th>状态</th></tr></thead><tbody>${list.slice(0, 8).map(t => `<tr style="cursor:pointer" data-emie-action="click:home-subtask-detail" data-task-id="${t.id}"><td><strong>${escHtml(t.name || '-')}</strong><div style="font-size:11px;color:var(--gray-400)">#${t.id}</div></td><td>${escHtml(t.projectName || '-')}</td><td>${escHtml(t.designerName || t.assigneeName || '待接单')}</td><td>${formatDate(t.plannedDate)}</td><td><span class="badge ${getTaskStatusInfo(t.status).cls}">${label}</span></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state" style="padding:14px">暂无子任务</div>'}</div></div></div>`;
+      return `<div class="type-section"><div class="card" style="padding:0;"><div style="padding:16px 20px 0;"><div class="type-section-title">${title} <span class="count">共 ${list.length} 个</span></div></div><div style="padding:0 20px 16px;">${list.length ? `<div class="table-wrap"><table class="dashboard-uniform-task-table"><thead><tr><th>子任务</th><th>所属项目</th><th>负责人</th><th>要求完成时间</th><th>状态</th></tr></thead><tbody>${list.slice(0, 8).map(t => `<tr style="cursor:pointer" data-emie-action="click:home-subtask-detail" data-task-id="${t.id}"><td><strong>${escHtml(t.name || '-')}</strong><div style="font-size:11px;color:var(--gray-400)">#${t.id}</div></td><td>${escHtml(t.projectName || '-')}</td><td>${escHtml(t.designerName || t.assigneeName || '待接单')}</td><td>${formatDate(t.plannedDate)}</td><td><span class="badge ${getTaskStatusInfo(t.status).cls}">${getTaskStatusInfo(t.status).label}</span></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state" style="padding:14px">暂无子任务</div>'}</div></div></div>`;
     };
     container.innerHTML = groups.map(renderGroup).join('');
   } catch (error) { container.innerHTML = `<div class="empty"><p>子任务面板加载失败：${escHtml(error.message)}</p></div>`; }
@@ -625,7 +622,7 @@ async function loadUserTasksPopup(userId, cardRole) {
       html += `<div style="font-size:13px;font-weight:600;color:var(--gray-500);margin-bottom:8px;">子任务（${tasks.length}）</div>
         <div style="display:flex;flex-direction:column;gap:6px;">`;
       tasks.forEach(t => {
-        const statusLabels = { pending: '⏳ 待接单', accepted: '🔄 进行中', rejected: '↩️ 已驳回', delivered: '📤 已交付' };
+        const statusLabels = { pending: '⏳ 待接单', accepted: '🔄 进行中', rejected: '↩️ 已驳回', delivered: '✅ 待验收', submitted_for_review: '✅ 待验收' };
         html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;cursor:pointer;" data-emie-action="click:home-user-project" data-project-id="${t.projectId}">
           <span style="font-size:13px;">${escHtml(t.name)}</span>
           <span style="font-size:11px;color:var(--gray-500);">${statusLabels[t.status] || t.status}</span>
@@ -703,7 +700,6 @@ EMIE.registerActions({
   navigateChannelCard,
   navigateRegularCard,
   navigateInProgressCard,
-  navigatePendingScoring,
 });
 
 EMIE.registerModule('dashboardHome', {
@@ -723,7 +719,6 @@ EMIE.registerModule('dashboardHome', {
   navigateChannelCard,
   navigateRegularCard,
   navigateInProgressCard,
-  navigatePendingScoring,
 });
 
 const registerEventAction = EMIE.actions.registerEventAction;
@@ -735,7 +730,6 @@ if (registerEventAction) {
   registerEventAction('home-tasks-all', () => EMIE.actions.navigateTaskBucket('all'));
   registerEventAction('home-tasks-pending', () => EMIE.actions.navigateTaskBucket('pending'));
   registerEventAction('home-tasks-completed', () => EMIE.actions.navigateTaskBucket('completed'));
-  registerEventAction('home-pending-scoring', () => navigatePendingScoring());
   registerEventAction('home-workload-range', (_event, element) =>
     switchDashWorkload(element.dataset.workloadRange));
   registerEventAction('home-project-detail', (_event, element) =>

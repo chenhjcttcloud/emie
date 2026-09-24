@@ -30,8 +30,7 @@ final class AdminWorkloadTaskLedger {
             String status,
             LocalDateTime createdAt,
             LocalDateTime completedAt,
-            String projectType,
-            String difficultyCode) {}
+            String projectType) {}
 
     /** 单个人（或「未分配」桶）嘅统计。 */
     static final class Tally {
@@ -44,20 +43,10 @@ final class AdminWorkloadTaskLedger {
         long regularCreated;
         long channelCompleted;
         long regularCompleted;
-        /** 本期新增任务嘅难度分布：标准 / 复杂 / 重大 / 未设置 */
-        long difficultyStandard;
-
-        long difficultyComplex;
-        long difficultyMajor;
-        long difficultyUnset;
-        /** 期末在手任务嘅构成：分类同难度（同「在手」系同一批嘢） */
+        /** 期末在手任务嘅构成：渠道定制／常规品。 */
         long outstandingChannel;
 
         long outstandingRegular;
-        long outstandingStandard;
-        long outstandingComplex;
-        long outstandingMajor;
-        long outstandingUnset;
 
         long outstandingTotal() {
             return outstandingOwn + outstandingWaiting;
@@ -82,23 +71,12 @@ final class AdminWorkloadTaskLedger {
             boolean completedInRange = completedByEnd && !row.completedAt().isBefore(cutoff);
             boolean outstanding = !completedByEnd;
             boolean channel = "channel_custom".equals(row.projectType());
-            String difficulty = row.difficultyCode() == null
-                    ? ""
-                    : row.difficultyCode().trim().toUpperCase(java.util.Locale.ROOT);
 
             String assignee = blankToNull(row.assigneeId());
             String publisher = blankToNull(row.publisherId());
 
             if (assignee == null && publisher == null) {
-                apply(
-                        unassigned,
-                        Bucket.OWN,
-                        createdInRange,
-                        completedInRange,
-                        completedByEnd,
-                        outstanding,
-                        channel,
-                        difficulty);
+                apply(unassigned, Bucket.OWN, createdInRange, completedInRange, completedByEnd, outstanding, channel);
                 continue;
             }
 
@@ -115,21 +93,12 @@ final class AdminWorkloadTaskLedger {
                         completedInRange,
                         completedByEnd,
                         outstanding,
-                        channel,
-                        difficulty);
+                        channel);
             }
 
             // 有发布人但未指派承接人：呢啲活冇人托住，要单独睇得见
             if (assignee == null) {
-                apply(
-                        unassigned,
-                        Bucket.OWN,
-                        createdInRange,
-                        completedInRange,
-                        completedByEnd,
-                        outstanding,
-                        channel,
-                        difficulty);
+                apply(unassigned, Bucket.OWN, createdInRange, completedInRange, completedByEnd, outstanding, channel);
             }
         }
         return new Result(byUser, unassigned);
@@ -154,18 +123,11 @@ final class AdminWorkloadTaskLedger {
             boolean completedInRange,
             boolean completedByEnd,
             boolean outstanding,
-            boolean channel,
-            String difficulty) {
+            boolean channel) {
         if (createdInRange) {
             tally.created++;
             if (channel) tally.channelCreated++;
             else tally.regularCreated++;
-            switch (difficulty) {
-                case "STANDARD" -> tally.difficultyStandard++;
-                case "COMPLEX" -> tally.difficultyComplex++;
-                case "MAJOR" -> tally.difficultyMajor++;
-                default -> tally.difficultyUnset++;
-            }
             if (completedByEnd) tally.completedFromCreated++;
         }
         if (completedInRange) {
@@ -178,12 +140,6 @@ final class AdminWorkloadTaskLedger {
             else tally.outstandingWaiting++;
             if (channel) tally.outstandingChannel++;
             else tally.outstandingRegular++;
-            switch (difficulty) {
-                case "STANDARD" -> tally.outstandingStandard++;
-                case "COMPLEX" -> tally.outstandingComplex++;
-                case "MAJOR" -> tally.outstandingMajor++;
-                default -> tally.outstandingUnset++;
-            }
         }
     }
 

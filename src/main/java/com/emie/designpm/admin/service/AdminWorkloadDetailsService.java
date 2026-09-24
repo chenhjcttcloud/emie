@@ -30,9 +30,12 @@ public class AdminWorkloadDetailsService {
             return List.of();
         }
         boolean own = "own".equals(bucket);
+        boolean tasksOnly = "tasks".equals(bucket);
+        boolean projectsOnly = "projects".equals(bucket);
+        boolean all = "total".equals(bucket);
         List<Map<String, Object>> result = new ArrayList<>();
         String taskSql =
-                "SELECT s.id, s.designer_id, s.publisher_id, s.name, s.status, s.workflow_stage, p.id, p.project_code, p.product_name "
+                "SELECT s.id, s.designer_id, s.publisher_id, s.name, s.status, s.workflow_stage, p.id, p.project_code, p.product_name, p.type "
                         + "FROM sub_tasks s JOIN projects p ON p.id = s.project_id "
                         + "WHERE s.completed_at IS NULL AND p.status <> 'terminated' "
                         + "AND (s.designer_id = ?1 OR s.publisher_id = ?1) ORDER BY s.updated_at DESC";
@@ -48,7 +51,8 @@ public class AdminWorkloadDetailsService {
                     && WorkloadStatusBoundary.forPublisher(status) == WorkloadStatusBoundary.Bucket.OWN) {
                 taskBucket = WorkloadStatusBoundary.Bucket.OWN;
             }
-            if (own != (taskBucket == WorkloadStatusBoundary.Bucket.OWN)) continue;
+            if (projectsOnly) continue;
+            if (!all && !tasksOnly && own != (taskBucket == WorkloadStatusBoundary.Bucket.OWN)) continue;
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("type", "task");
             item.put("id", row[0]);
@@ -56,13 +60,15 @@ public class AdminWorkloadDetailsService {
             item.put("projectId", row[6]);
             item.put("project", row[8] == null ? row[7] : row[8]);
             item.put("projectCode", row[7]);
+            item.put("projectType", row[9]);
+            item.put("projectTypeLabel", projectTypeLabel(row[9]));
             item.put("stage", stageLabel(row[5]));
             item.put("status", status);
             item.put("statusLabel", taskStatusLabel(status));
             result.add(item);
         }
         if ("planner".equals(user.getRole())) {
-            String projectSql = "SELECT id, project_code, product_name, status, workflow_stage FROM projects "
+            String projectSql = "SELECT id, project_code, product_name, status, workflow_stage, type FROM projects "
                     + "WHERE planner_id = ?1 AND status NOT IN ('completed','terminated') ORDER BY updated_at DESC";
             for (Object[] row : (List<Object[]>) entityManager
                     .createNativeQuery(projectSql)
@@ -71,13 +77,16 @@ public class AdminWorkloadDetailsService {
                 String status = row[3] == null ? "" : String.valueOf(row[3]);
                 boolean projectOwn =
                         WorkloadStatusBoundary.forProjectPlanner(status) == WorkloadStatusBoundary.Bucket.OWN;
-                if (own != projectOwn) continue;
+                if (tasksOnly) continue;
+                if (!all && !projectsOnly && own != projectOwn) continue;
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("type", "project");
                 item.put("id", row[0]);
                 item.put("projectId", row[0]);
                 item.put("name", row[2] == null ? row[1] : row[2]);
                 item.put("projectCode", row[1]);
+                item.put("projectType", row[5]);
+                item.put("projectTypeLabel", projectTypeLabel(row[5]));
                 item.put("stage", stageLabel(row[4]));
                 item.put("status", status);
                 item.put("statusLabel", projectStatusLabel(status));
@@ -92,9 +101,8 @@ public class AdminWorkloadDetailsService {
             case "pending" -> "待接单";
             case "accepted" -> "处理中";
             case "rejected" -> "待返工";
-            case "delivered" -> "待验收";
-            case "submitted_for_review" -> "待审核";
-            case "planner_approved", "sales_approved", "admin_approved" -> "待评分";
+            case "delivered", "submitted_for_review" -> "待验收";
+            case "planner_approved", "sales_approved", "admin_approved" -> "待后续验收";
             default -> status.isBlank() ? "未设置状态" : status;
         };
     }
@@ -118,6 +126,15 @@ public class AdminWorkloadDetailsService {
             case "promotion" -> "推广阶段";
             case "bulk" -> "量产阶段";
             default -> stage.isBlank() ? "未设置阶段" : stage;
+        };
+    }
+
+    private String projectTypeLabel(Object rawType) {
+        return switch (rawType == null ? "" : String.valueOf(rawType)) {
+            case "channel_custom" -> "渠道定制单";
+            case "design_requirement" -> "设计/送审需求";
+            case "regular" -> "公司常规品";
+            default -> "未设置类型";
         };
     }
 }

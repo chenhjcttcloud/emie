@@ -31,10 +31,6 @@ final class AdminWorkloadMetrics {
             us.putIfAbsent("tasksChannel", 0L);
             us.putIfAbsent("tasksRegular", 0L);
             us.putIfAbsent("tasksCompletedFromCreated", 0L);
-            for (String key :
-                    List.of("difficultyStandard", "difficultyComplex", "difficultyMajor", "difficultyUnset")) {
-                us.putIfAbsent(key, 0L);
-            }
             return;
         }
         // 子任务层面单独出数，唔同项目层面混埋一齐（表格要分开显示）
@@ -42,16 +38,8 @@ final class AdminWorkloadMetrics {
         us.put("tasksChannel", tally.channelCreated);
         us.put("tasksRegular", tally.regularCreated);
         us.put("tasksCompletedFromCreated", tally.completedFromCreated);
-        us.put("difficultyStandard", tally.difficultyStandard);
-        us.put("difficultyComplex", tally.difficultyComplex);
-        us.put("difficultyMajor", tally.difficultyMajor);
-        us.put("difficultyUnset", tally.difficultyUnset);
         us.put("tasksOutstandingChannel", tally.outstandingChannel);
         us.put("tasksOutstandingRegular", tally.outstandingRegular);
-        us.put("outstandingStandard", tally.outstandingStandard);
-        us.put("outstandingComplex", tally.outstandingComplex);
-        us.put("outstandingMajor", tally.outstandingMajor);
-        us.put("outstandingUnset", tally.outstandingUnset);
         // 旧字段：项目角色（销售）已经写咗项目数，唔好覆盖；任务角色先由呢度填
         us.putIfAbsent("channelCustomProjects", tally.channelCreated);
         us.putIfAbsent("regularProjects", tally.regularCreated);

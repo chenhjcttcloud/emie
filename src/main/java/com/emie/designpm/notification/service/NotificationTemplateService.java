@@ -110,8 +110,8 @@ public class NotificationTemplateService {
                     context);
             case "TASK_DELIVERED" -> create(
                     eventType,
-                    "子任务待审核",
-                    "{{actorName}}已交付子任务“{{taskName}}”，请查看成果并完成审核。",
+                    "子任务待验收",
+                    "{{actorName}}已提交子任务“{{taskName}}”，请查看成果并完成验收或驳回。",
                     "high",
                     true,
                     taskLink(context),
@@ -122,8 +122,8 @@ public class NotificationTemplateService {
                     context);
             case "TASK_SUBMITTED_FOR_REVIEW" -> create(
                     eventType,
-                    "子任务已送审",
-                    "子任务“{{taskName}}”已送审，请进行通过并评分或驳回。",
+                    "子任务待验收",
+                    "子任务“{{taskName}}”已提交，请完成验收或驳回。",
                     "high",
                     true,
                     taskLink(context),
@@ -144,18 +144,6 @@ public class NotificationTemplateService {
                     deadline,
                     actor,
                     context);
-            case "DESIGN_REQUIREMENT_REVIEW_PENDING" -> create(
-                    eventType,
-                    "设计需求待复评",
-                    "“{{projectName}}”已完成设计师自评，请及时完成复评。",
-                    "high",
-                    true,
-                    projectLink(context),
-                    project,
-                    "设计需求待复评",
-                    deadline,
-                    actor,
-                    context);
             case "DESIGN_REQUIREMENT_REJECTED" -> create(
                     eventType,
                     "设计需求已驳回",
@@ -165,18 +153,6 @@ public class NotificationTemplateService {
                     projectLink(context),
                     project,
                     "设计需求驳回修改",
-                    deadline,
-                    actor,
-                    context);
-            case "DESIGN_REQUIREMENT_COMPLETED" -> create(
-                    eventType,
-                    "设计需求已完成",
-                    "“{{projectName}}”已完成全部评分流程。",
-                    "normal",
-                    false,
-                    projectLink(context),
-                    project,
-                    "设计需求已完成",
                     deadline,
                     actor,
                     context);
@@ -206,20 +182,20 @@ public class NotificationTemplateService {
                     context);
             case "TASK_REDELIVERED" -> create(
                     eventType,
-                    "子任务再次交付待审核",
+                    "子任务再次提交待验收",
                     "{{actorName}}已第{{deliveryCount}}次交付“{{taskName}}”。上次驳回原因：{{reason}}。",
                     "high",
                     true,
                     taskLink(context),
                     project,
-                    "再次交付待审核：" + task,
+                    "再次提交待验收：" + task,
                     deadline,
                     actor,
                     context);
             case "TASK_CORRECTED" -> create(
                     eventType,
                     "子任务交付已更正",
-                    "{{actorName}}已更正子任务“{{taskName}}”的交付内容。请确认最新提交后再送审。",
+                    "{{actorName}}已更正子任务“{{taskName}}”的交付内容，请验收最新成果。",
                     "high",
                     true,
                     taskLink(context),

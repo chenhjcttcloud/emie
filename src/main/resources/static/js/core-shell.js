@@ -14,7 +14,6 @@ const NAV_DEFINITIONS = [
   { view: 'task-market', icon: '⚡', label: '接单市场', permission: 'page.subtasks.market.view' },
   { view: 'materials', icon: '🧺', label: '素材广场', permission: 'page.material_market.view' },
   { view: 'image-library', icon: '🖼️', label: '图档库', permission: 'page.image_library.view' },
-  { view: 'scoring', icon: '⭐', label: '评分', permission: 'page.scoring.view' },
   { view: 'points', icon: '🏅', label: '积分', permission: 'page.points.view' },
   { view: 'admin', icon: '⚙️', label: '系统管理', permission: 'page.admin.view' },
 ];

@@ -137,35 +137,17 @@ function workloadPair(channel, regular, created, completed) {
   return `<b>${c}</b><span class="sep">/</span><b>${r}</b><small>本期新增 ${n}，完成 ${Number(completed || 0)}</small>`;
 }
 
-/** 子任务难度占比：标准→复杂→重大 单色由浅到深（顺序型数据用顺序色阶） */
-function workloadDifficulty(user) {
-  const parts = [
-    { key: 'standard', label: '标准', n: Number(user.outstandingStandard || 0), color: '#c7d2fe' },
-    { key: 'complex', label: '复杂', n: Number(user.outstandingComplex || 0), color: '#818cf8' },
-    { key: 'major', label: '重大', n: Number(user.outstandingMajor || 0), color: '#4338ca' },
-    { key: 'unset', label: '未设置', n: Number(user.outstandingUnset || 0), color: '#e2e8f0' },
-  ].filter(part => part.n > 0);
-  const total = parts.reduce((sum, part) => sum + part.n, 0);
-  if (!total) return '<span class="muted">—</span>';
-  const tip = parts.map(part => `${part.label} ${part.n} 项（${Math.round(part.n / total * 100)}%）`).join(' · ');
-  return `<span class="wl-diff" title="${escHtml(tip)}">
-    <i>${parts.map(part => `<em style="width:${part.n / total * 100}%;background:${part.color}"></em>`).join('')}</i>
-    <small>${parts.map(part => `${part.label} ${Math.round(part.n / total * 100)}%`).join(' · ')}</small>
-  </span>`;
-}
-
 function workloadMemberTable(users, roleFilter) {
   if (!users.length) return '<div class="empty">未找到员工</div>';
-  const head = `<tr><th>成员</th><th>状态</th><th>在手项目（渠道/常规）</th><th>在手子任务（渠道/常规）</th><th>未完成任务难度</th><th>本期新增</th><th>已完成</th><th>完成率</th><th>待本人处理</th><th>待他人处理</th><th>在手合计</th></tr>`;
+  const head = `<tr><th>成员</th><th>状态</th><th>在手项目（渠道/常规）</th><th>在手子任务（渠道/常规）</th><th>本期新增</th><th>已完成</th><th>完成率</th><th>待本人处理</th><th>待他人处理</th><th>在手合计</th></tr>`;
   const row = user => {
     const statusClass = WORKLOAD_STATUS_CLASS[user.statusKey] || 'normal';
     const rate = user.completionRate == null ? null : Math.round(user.completionRate);
     return `<tr id="wl-row-${escHtml(user.userId)}" class="wl-row ${user.statusKey}" title="${escHtml(user.statusReason || '')}">
       <td><b>${escHtml(user.name)}</b><small>${escHtml([...new Set([user.roleLabel, user.title].filter(Boolean))].join(' · '))}</small></td>
       <td><em class="workload-status ${statusClass}">${escHtml(user.statusLabel)}</em></td>
-      <td class="wl-mix">${workloadPair(user.projectsOutstandingChannel, user.projectsOutstandingRegular, user.projectsCreated, user.projectsCompletedFromCreated)}</td>
-      <td class="wl-mix">${workloadPair(user.tasksOutstandingChannel, user.tasksOutstandingRegular, user.tasksCreated, user.tasksCompletedFromCreated)}</td>
-      <td>${workloadDifficulty(user)}</td>
+      <td class="wl-mix wl-jump-cell" data-emie-action="click:workload-details" data-user-id="${escHtml(user.userId)}" data-bucket="projects" title="查看在手项目">${workloadPair(user.projectsOutstandingChannel, user.projectsOutstandingRegular, user.projectsCreated, user.projectsCompletedFromCreated)}</td>
+      <td class="wl-mix wl-jump-cell" data-emie-action="click:workload-details" data-user-id="${escHtml(user.userId)}" data-bucket="tasks" title="查看在手子任务">${workloadPair(user.tasksOutstandingChannel, user.tasksOutstandingRegular, user.tasksCreated, user.tasksCompletedFromCreated)}</td>
       <td class="num"><strong class="wl-total">${user.workloadTotal || '—'}</strong></td>
       <td class="num">${user.completedInRange || '—'}</td>
       <td class="wl-rate">${rate == null ? '<span class="muted">—</span>' : `<i><em style="width:${rate}%"></em></i><b>${rate}%</b>`}</td>
@@ -180,22 +162,23 @@ function workloadMemberTable(users, roleFilter) {
         const group = users.filter(user => user.role === role);
         if (!group.length) return '';
         const attention = group.filter(user => user.statusKey === 'risk' || user.statusKey === 'watch').length;
-        return `<tr class="wl-group"><td colspan="11">${label} <span>${group.length} 人${attention ? ` · ${attention} 人需关注` : ''}</span></td></tr>` + group.map(row).join('');
+        return `<tr class="wl-group"><td colspan="10">${label} <span>${group.length} 人${attention ? ` · ${attention} 人需关注` : ''}</span></td></tr>` + group.map(row).join('');
       }).join('');
   return `<div class="table-wrap wl-table"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }
 
 async function openWorkloadDetails(userId, bucket) {
   const user = document.getElementById('wl-row-' + userId)?.querySelector('td b')?.textContent || '员工';
+  const bucketLabels = { own: '待本人处理', waiting: '待他人处理', projects: '在手项目', tasks: '在手子任务', total: '在手合计' };
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay workload-detail-overlay';
-  overlay.innerHTML = `<aside class="workload-detail-drawer"><header><div><small>工作量明细</small><h3>${escHtml(user)} · ${bucket === 'own' ? '待本人处理' : '待他人处理'}</h3></div><button class="modal-close" data-emie-action="click:workload-details-close">✕</button></header><div class="workload-detail-body"><div class="loading">加载中</div></div></aside>`;
+  overlay.innerHTML = `<aside class="workload-detail-drawer"><header><div><small>工作量明细</small><h3>${escHtml(user)} · ${bucketLabels[bucket] || '工作量明细'}</h3></div><button class="modal-close" data-emie-action="click:workload-details-close">✕</button></header><div class="workload-detail-body"><div class="loading">加载中</div></div></aside>`;
   overlay.addEventListener('click', event => { if (event.target === overlay) closeWorkloadDetails(); });
   document.body.appendChild(overlay);
   try {
     const items = await apiGet(`/admin/workload/details?userId=${encodeURIComponent(userId)}&bucket=${bucket}`);
     const body = overlay.querySelector('.workload-detail-body');
-    body.innerHTML = items.length ? items.map(item => `<article class="workload-detail-item" data-emie-action="click:workload-detail-open" data-item-type="${escHtml(item.type || 'project')}" data-task-id="${escHtml(item.id || '')}" data-project-id="${escHtml(item.projectId || '')}"><div><strong>${escHtml(item.name || '未命名事项')}</strong><small>项目编号：${escHtml(item.projectCode || '未设置')}</small><small>${escHtml(item.project || '未命名项目')}</small></div><span class="workload-detail-status">${escHtml(item.statusLabel || item.status || '')}</span><small class="workload-detail-stage">${escHtml(item.stage || '未设置阶段')} · 点击查看${item.type === 'task' ? '子任务' : '项目'}</small></article>`).join('') : '<div class="empty">暂无明细</div>';
+    body.innerHTML = items.length ? items.map(item => `<article class="workload-detail-item" data-emie-action="click:workload-detail-open" data-item-type="${escHtml(item.type || 'project')}" data-task-id="${escHtml(item.id || '')}" data-project-id="${escHtml(item.projectId || '')}"><div><strong>${escHtml(item.name || '未命名事项')}</strong><small>项目编号：${escHtml(item.projectCode || '未设置')}</small><small>${escHtml(item.project || '未命名项目')}</small><span class="workload-detail-type">${escHtml(item.projectTypeLabel || '未设置类型')}</span></div><span class="workload-detail-status">${escHtml(item.statusLabel || item.status || '')}</span><small class="workload-detail-stage">${escHtml(item.stage || '未设置阶段')} · 点击查看${item.type === 'task' ? '子任务' : '项目'}</small></article>`).join('') : '<div class="empty">暂无明细</div>';
   } catch (error) {
     overlay.querySelector('.workload-detail-body').innerHTML = `<div class="empty">加载失败：${escHtml(error.message)}</div>`;
   }

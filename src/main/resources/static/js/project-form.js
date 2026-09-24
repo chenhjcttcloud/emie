@@ -232,7 +232,7 @@ const switchEditAssigneeType = function(role, el) {
 };
 
 
-function openCreateProject(type) {
+async function openCreateProject(type) {
   if (isModalOpen()) return;
   if (document.getElementById('createProjectModal')) return;
   EMIE.projectState.formModified = false;
@@ -260,6 +260,11 @@ function openCreateProject(type) {
   const designerOpts = `<option value="">请选择设计师</option>` + (EMIE.state.users.designer || []).map(u =>
     `<option value="${u.userId}" ${draft?.designerId === u.userId ? 'selected' : ''}>${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`
   ).join('');
+  let requirementPointRules = [];
+  if (type === 'design_requirement') {
+    try { requirementPointRules = (await apiGet('/points/rules')).filter(rule => rule.enabled !== false && String(rule.category || '').toUpperCase() !== 'M'); }
+    catch (e) { window.EMIE.actions.showSystemAlert('积分规则加载失败：' + e.message); return; }
+  }
   const title = type === 'channel_custom' ? '新建渠道定制项目' : (type === 'design_requirement' ? '新建设计/送审需求' : '新建常规品设计项目');
 
   const modal = document.createElement('div');
@@ -278,6 +283,7 @@ function openCreateProject(type) {
           </div>` : ''}
           ${type === 'design_requirement' ? `<div class="form-group"><label class="form-label"><span class="required">*</span> 需求负责人</label><input class="form-input" value="${escHtml(getCurrentUserName())}" disabled><input type="hidden" name="responsibleId" value="${escHtml(EMIE.state.currentUserId)}"></div>` : ''}
           ${type === 'design_requirement' ? `<div class="form-group"><label class="form-label"><span class="required">*</span> 交付设计师</label><select class="form-select" name="designerId" data-emie-action="change:form-field-change">${designerOpts}</select></div>` : ''}
+          ${type === 'design_requirement' ? `<div class="form-group"><label class="form-label"><span class="required">*</span> 积分规则</label><select class="form-select" name="pointRuleCode" data-emie-action="change:form-field-change"><option value="">请选择积分规则</option>${requirementPointRules.map(rule => `<option value="${escHtml(rule.ruleCode)}">${escHtml(rule.ruleCode)} · ${escHtml(rule.description || rule.category || '')} · ${Number(rule.points || 0)} 分</option>`).join('')}</select></div>` : ''}
           <div class="form-group"><label class="form-label"><span class="required">*</span> 产品企划</label>
             <select class="form-select" name="plannerId" ${EMIE.state.currentRole === 'planner' ? 'disabled' : ''} data-emie-action="change:form-field-change">${plannerOpts}</select>
             ${EMIE.state.currentRole === 'planner' ? `<input type="hidden" name="plannerId" value="${EMIE.state.currentUserId}">` : ''}
@@ -461,6 +467,7 @@ async function submitCreateProject(type) {
   // 产品企划（必选）
   if (!data.plannerId) addFieldError('plannerId', '请选择产品企划');
   if (type === 'design_requirement' && !data.designerId) addFieldError('designerId', '请选择交付设计师');
+  if (type === 'design_requirement' && !data.pointRuleCode) addFieldError('pointRuleCode', '请选择积分规则');
 
   // 产品名称（两类项目均必填）
   if (!data.productName || !data.productName.trim()) addFieldError('productName', '请填写产品名称');
@@ -652,7 +659,7 @@ function handleEditProjectAttachments(input) { handleFileUpload(input, EMIE.proj
 async function submitEditProject(pid) {
   if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
   const data = Object.fromEntries(new FormData(document.getElementById('editProjectForm')).entries());
-  if (!data.productName?.trim() || !data.productCategory || !data.priceRange || data.targetMarket === '[]' || !data.deadline || !data.productRequirements?.trim()) {
+  if (!data.productName?.trim() || !data.productCategory || data.priceRange === '' || data.targetMarket === '[]' || !data.deadline || !data.productRequirements?.trim()) {
     window.EMIE.actions.showSystemAlert('请完整填写产品类目、名称、参考零售价、目标市场、完成时间和产品要求');
     return;
   }

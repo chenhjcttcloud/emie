@@ -30,15 +30,15 @@ final class WorkloadStatusBoundary {
     static final String REJECTED = "rejected";
     /** 已交付，等验收。 */
     static final String DELIVERED = "delivered";
-    /** 已送审，等审核。 */
+    /** 负责人已提交成果，等项目相关角色验收；兼容旧送审状态。 */
     static final String SUBMITTED_FOR_REVIEW = "submitted_for_review";
-    /** 企划已验收，等后续评分。 */
+    /** 企划已验收：定制单等销售验收，常规品为兼容旧状态。 */
     static final String PLANNER_APPROVED = "planner_approved";
-    /** 销售已评分，等后续。 */
+    /** 销售已验收，等项目完成。 */
     static final String SALES_APPROVED = "sales_approved";
-    /** 管理已评分，等后续。 */
+    /** 历史管理员验收状态，兼容旧任务。 */
     static final String ADMIN_APPROVED = "admin_approved";
-    /** 评分齐全，真正完结（写入 completed_at）。 */
+    /** 验收齐全，真正完结（写入 completed_at）。 */
     static final String COMPLETED = "completed";
 
     static final Set<String> ALL = Set.of(
@@ -64,7 +64,7 @@ final class WorkloadStatusBoundary {
         return switch (status == null ? "" : status) {
                 // 波喺自己脚下：等接单、做紧、被驳回要返工
             case PENDING, ACCEPTED, REJECTED -> Bucket.OWN;
-                // 已经交出去：等验收、等审核、等评分
+                // 已交成果：等验收
             case DELIVERED, SUBMITTED_FOR_REVIEW, PLANNER_APPROVED, SALES_APPROVED, ADMIN_APPROVED -> Bucket.WAITING;
                 // 未登记状态一律当「等他人」，宁可少报积压都唔好错怪人
             default -> Bucket.WAITING;

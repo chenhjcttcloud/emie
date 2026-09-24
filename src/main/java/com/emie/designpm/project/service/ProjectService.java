@@ -874,7 +874,7 @@ public class ProjectService {
         return switch (status) {
             case "pending" -> Map.of("label", "待接单", "cls", "badge-pending", "icon", "⏳");
             case "accepted" -> Map.of("label", "设计中", "cls", "badge-progress", "icon", "🎨");
-            case "delivered" -> Map.of("label", "待验收", "cls", "badge-pending", "icon", "📤");
+            case "delivered", "submitted_for_review" -> Map.of("label", "待验收", "cls", "badge-pending", "icon", "📤");
             case "planner_approved" -> Map.of("label", "企划已验收", "cls", "badge-progress", "icon", "✅");
             case "scoring_planner" -> Map.of("label", "待二次验收", "cls", "badge-pending", "icon", "⏳");
             case "sales_approved" -> Map.of("label", "销售已验收", "cls", "badge-progress", "icon", "✅");

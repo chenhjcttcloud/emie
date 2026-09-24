@@ -602,7 +602,7 @@ const NOTIFICATION_TEMPLATE_SCENARIOS = [
   ['TASK_ASSIGNED', '子任务派发', '子任务首次指派给负责人时'],
   ['TASK_REASSIGNED', '子任务改派', '子任务改派给新负责人时'],
   ['TASK_ACCEPTED', '子任务接单', '负责人确认接单时'],
-  ['TASK_DELIVERED', '首次交付', '负责人提交成果、等待审核时'],
+  ['TASK_DELIVERED', '首次提交', '负责人提交成果并进入验收时'],
   ['TASK_REJECTED', '驳回修改', '审核人驳回成果时'],
   ['TASK_REDELIVERED', '再次交付', '驳回后再次提交成果时'],
   ['TASK_CORRECTED', '交付更正', '负责人在产品企划送审前更正成果时'],

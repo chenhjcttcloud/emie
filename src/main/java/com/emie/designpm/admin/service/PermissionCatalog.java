@@ -92,7 +92,6 @@ public final class PermissionCatalog {
                 permissions.add("project.workflow.review");
                 permissions.add("project.share.create");
                 permissions.add("design_requirement.create");
-                permissions.add("design_requirement.score.review");
             }
             case "planner" -> {
                 permissions.add("page.points.view");
@@ -107,15 +106,12 @@ public final class PermissionCatalog {
                 permissions.add("project.share.create");
                 permissions.add("subtask.create");
                 permissions.add("subtask.accept");
-                permissions.add("subtask.review.first.submit");
                 permissions.add("subtask.review.first.approve");
                 permissions.add("subtask.review.first.reject");
                 permissions.add("design_requirement.create");
-                permissions.add("design_requirement.score.review");
             }
             case "promotion" -> {
                 permissions.add("design_requirement.create");
-                permissions.add("design_requirement.score.review");
                 permissions.add("subtask.accept");
                 permissions.add("subtask.deliver");
                 permissions.add("subtask.redeliver");
@@ -127,7 +123,6 @@ public final class PermissionCatalog {
                 permissions.add("subtask.deliver");
                 permissions.add("subtask.redeliver");
                 permissions.add("design_requirement.deliver");
-                permissions.add("design_requirement.score.self");
             }
             case "supplychain" -> {
                 permissions.add("subtask.accept");
@@ -165,7 +160,6 @@ public final class PermissionCatalog {
             // 否则旧版角色编辑留下的 deny 会在进入业务归属校验前直接拦截所有企划。
             permissions.add("subtask.create");
             permissions.add("subtask.accept");
-            permissions.add("subtask.review.first.submit");
             permissions.add("subtask.review.first.approve");
             permissions.add("subtask.review.first.reject");
         }

@@ -39,7 +39,6 @@ class PerformanceServiceTest {
         task.setId(10L);
         task.setName("包装设计");
         task.setDesignerId("d1");
-        task.setDifficultyCode("COMPLEX");
         task.setPointRuleCode("A1");
         task.setCompletedAt(LocalDateTime.of(2026, 1, 31, 23, 59));
         task.setProject(project);
@@ -71,7 +70,6 @@ class PerformanceServiceTest {
 
         assertEquals(1, row.get("completedCount"));
         assertEquals(12d, row.get("score"));
-        assertEquals(1, ((Map<?, ?>) row.get("difficultyCounts")).get("COMPLEX"));
         assertEquals(1, ((Map<?, ?>) row.get("categoryCounts")).get("A"));
         assertEquals("regular", ((Map<?, ?>) ((List<?>) row.get("tasks")).getFirst()).get("projectType"));
         byte[] workbook = service.designerMonthlyReportExcel("2026-01");

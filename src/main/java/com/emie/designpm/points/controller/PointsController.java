@@ -3,7 +3,6 @@ package com.emie.designpm.points.controller;
 import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.DesignerMarketEligibility;
-import com.emie.designpm.entity.PointDifficultyConfig;
 import com.emie.designpm.entity.PointRule;
 import com.emie.designpm.entity.SystemConfig;
 import com.emie.designpm.materialmarket.repository.DesignerMarketEligibilityRepository;
@@ -149,11 +148,6 @@ public class PointsController {
         }
     }
 
-    @GetMapping("/difficulties")
-    public List<PointDifficultyConfig> difficulties() {
-        return points.difficulties();
-    }
-
     @GetMapping("/market-eligibility/{userId}")
     public ResponseEntity<?> marketEligibility(@PathVariable String userId, HttpServletRequest request) {
         AuthSession current = session(request);
@@ -235,22 +229,6 @@ public class PointsController {
         return ResponseEntity.ok(Map.of("userId", userId, "skills", normalized));
     }
 
-    @PutMapping("/difficulties/{difficultyCode}")
-    public ResponseEntity<?> updateDifficulty(
-            @PathVariable String difficultyCode, @RequestBody Map<String, Object> body, HttpServletRequest request) {
-        if (!"admin".equals(session(request).role())) {
-            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可修改难度配置"));
-        }
-        try {
-            Double multiplier = body.get("multiplier") instanceof Number n ? n.doubleValue() : null;
-            Boolean enabled = body.get("enabled") instanceof Boolean b ? b : null;
-            String description = body.get("description") instanceof String s ? s : null;
-            return ResponseEntity.ok(points.updateDifficulty(difficultyCode, multiplier, enabled, description));
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
-    }
-
     @PutMapping("/rules/{ruleCode}")
     public ResponseEntity<?> updateRule(
             @PathVariable String ruleCode, @RequestBody Map<String, Object> body, HttpServletRequest request) {
@@ -261,7 +239,6 @@ public class PointsController {
             Boolean enabled = body.get("enabled") instanceof Boolean b ? b : null;
             String description = body.get("description") instanceof String s ? s : null;
             String category = body.get("category") instanceof String s ? s : null;
-            Double difficulty = body.get("difficultyMultiplier") instanceof Number n ? n.doubleValue() : null;
             Integer threshold = body.get("qualityBonusThreshold") instanceof Number n ? n.intValue() : null;
             Double ratio = body.get("qualityBonusRatio") instanceof Number n ? n.doubleValue() : null;
             Integer topThreshold = body.get("qualityTopThreshold") instanceof Number n ? n.intValue() : null;
@@ -274,7 +251,6 @@ public class PointsController {
                     enabled,
                     description,
                     category,
-                    difficulty,
                     threshold,
                     ratio,
                     topThreshold,

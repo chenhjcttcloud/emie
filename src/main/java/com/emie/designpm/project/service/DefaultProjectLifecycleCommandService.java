@@ -2,7 +2,6 @@ package com.emie.designpm.project.service;
 
 import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.admin.service.UserService;
-import com.emie.designpm.designrequirement.service.DesignRequirementScoringService;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.file.repository.FileRecordRepository;
 import com.emie.designpm.file.service.FileArchiveService;
@@ -57,7 +56,6 @@ public class DefaultProjectLifecycleCommandService implements ProjectLifecycleCo
     private PointAppealRepository pointAppealRepository;
     private NotificationRepository notificationRepository;
     private FileRecordRepository fileRecordRepository;
-    private DesignRequirementScoringService designRequirementScoringService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public DefaultProjectLifecycleCommandService(
@@ -126,11 +124,6 @@ public class DefaultProjectLifecycleCommandService implements ProjectLifecycleCo
     @Autowired(required = false)
     void setFileRecordRepository(FileRecordRepository repository) {
         this.fileRecordRepository = repository;
-    }
-
-    @Autowired(required = false)
-    void setDesignRequirementScoringService(DesignRequirementScoringService service) {
-        this.designRequirementScoringService = service;
     }
 
     @Autowired(required = false)

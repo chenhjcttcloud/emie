@@ -28,12 +28,6 @@ const renderFileList = (...args) => EMIE.actions.renderFileList(...args);
 const handleDeliverImages = (...args) => EMIE.actions.handleDeliverImages(...args);
 const handleDeliverAttachments = (...args) => EMIE.actions.handleDeliverAttachments(...args);
 
-const POINT_DIFFICULTIES = [
-  { code: 'STANDARD', label: '标准', description: '常规工作量与复杂度' },
-  { code: 'COMPLEX', label: '复杂', description: '跨模块或高复杂度任务' },
-  { code: 'MAJOR', label: '重大', description: '重大项目或高影响任务' },
-];
-
 function enabledPointRules(rules) {
   // 素材广场采纳积分由采纳流程自动发放，不属于子任务积分；S1 内部建设规则已下线。
   const hiddenFromSubTasks = new Set(['S1', 'M1', 'M2', 'M3', 'MATERIAL_MARKET_LAUNCH', 'MATERIAL_MARKET_DESIGN_ADOPTION', 'MATERIAL_MARKET_DIRECT_ADOPTION']);
@@ -69,12 +63,6 @@ function pointRuleCategoryHint(category) {
   return ({ A: '常规设计执行类任务', B: '复杂/重点设计任务', E: '简单辅助类任务', S: '特殊或专项任务' }[String(category || '').toUpperCase()] || '按管理员配置的积分规则执行');
 }
 
-function renderDifficultyOptions(difficulties, selectedCode) {
-  const configured = (Array.isArray(difficulties) ? difficulties : []).filter(item => item.enabled !== false);
-  const labels = { STANDARD: '标准任务', COMPLEX: '复杂任务', MAJOR: '重大任务' };
-  const items = configured.length ? configured.map(item => ({ code: item.difficultyCode, label: labels[String(item.difficultyCode || '').toUpperCase()] || '其他任务', multiplier: Number(item.multiplier || 1) })) : POINT_DIFFICULTIES.map(item => ({ ...item, label: `${item.label}任务`, multiplier: 1 }));
-  return items.map(item => `<option value="${escHtml(item.code)}" ${item.code === String(selectedCode || 'STANDARD').toUpperCase() ? 'selected' : ''}>${escHtml(item.label)} ×${item.multiplier} 积分</option>`).join('');
-}
 
 // ==================== 添加 / 编辑子任务 ====================
 
@@ -98,9 +86,8 @@ async function addSubTask(pid) {
   EMIE.projectState.subTaskRefImages = [];
   EMIE.projectState.subTaskAttachments = [];
   let pointRules = [];
-  let pointDifficulties = [];
   try {
-    [pointRules, pointDifficulties] = await Promise.all([apiGet('/points/rules'), apiGet('/points/difficulties')]);
+    pointRules = await apiGet('/points/rules');
     pointRules = enabledPointRules(pointRules);
   } catch (error) {
     window.EMIE.actions.showSystemAlert('积分规则加载失败：' + (error.message || '请稍后重试'));
@@ -150,10 +137,6 @@ async function addSubTask(pid) {
             <div class="form-group"><label class="form-label"><span class="required">*</span> 积分规则</label>
               <select class="form-select" name="pointRuleCode" required>${renderPointRuleOptions(pointRules, '')}</select>
               <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">创建后将锁定规则快照并参与积分计算。</div>
-            </div>
-            <div class="form-group"><label class="form-label"><span class="required">*</span> 难度档位</label>
-              <select class="form-select" name="difficultyCode" required><option value="" selected>请选择难度档位</option>${renderDifficultyOptions(pointDifficulties, '').replace(/ selected/g, '')}</select>
-              <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">任务开始执行后不可修改。</div>
             </div>
           </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 负责人类型</label>
@@ -281,19 +264,11 @@ async function submitAddSubTask(pid) {
   delete data.assignmentMode;
   data.requiredSkillTags = JSON.stringify(String(data.requiredSkillTagsText || '').split(/[,，]/).map(value => value.trim()).filter(Boolean));
   delete data.requiredSkillTagsText;
-  try {
-    data.collaboratorAllocations = JSON.stringify(String(data.collaboratorAllocationsText || '').split(/[,，]/).map(item => item.trim()).filter(Boolean).map(item => {
-      const [userId, ratio] = item.split(/[:：]/); if (!userId || !ratio) throw new Error();
-      return { userId: userId.trim(), ratio: Number(ratio) };
-    }));
-  } catch (_) { showError('collaboratorAllocationsText', '格式应为 用户ID:比例，多个用逗号分隔'); return; }
-  delete data.collaboratorAllocationsText;
   let hasErr = false;
 
   if (!data.name) { showError('name', '请填写子任务名称'); hasErr = true; }
   if (!data.workflowStage) { showError('workflowStage', '请选择子任务所属阶段'); hasErr = true; }
   if (!data.pointRuleCode) { showError('pointRuleCode', '请选择积分规则'); hasErr = true; }
-  if (!data.difficultyCode) { showError('difficultyCode', '请选择难度档位'); hasErr = true; }
   if (!data.plannedDate) { showError('plannedDate', '请选择计划完成时间'); hasErr = true; }
   else if (!/^\d{4}-\d{2}-\d{2}$/.test(data.plannedDate) || isNaN(new Date(data.plannedDate).getTime())) {
     showError('plannedDate', '日期格式不正确（yyyy-mm-dd）');
@@ -346,13 +321,11 @@ async function submitAddSubTask(pid) {
 
 function editTask(pid, tid) {
   if (!tryOpenModal('editTaskModal')) return;
-  Promise.all([apiGet(`/projects/${pid}`), apiGet('/points/rules'), apiGet('/points/difficulties')]).then(([detail, rules, difficulties]) => {
+  Promise.all([apiGet(`/projects/${pid}`), apiGet('/points/rules')]).then(([detail, rules]) => {
     const task = detail.tasks.find(t => t.id === tid);
     if (!task) { doneOpenModal('editTaskModal'); return; }
     let requiredSkillTagsText = '';
     try { requiredSkillTagsText = (JSON.parse(task.requiredSkillTagsJson || '[]') || []).join('、'); } catch (e) {}
-    let collaboratorAllocationsText = '';
-    try { collaboratorAllocationsText = (JSON.parse(task.collaboratorAllocationsJson || '[]') || []).map(item => `${item.userId}:${item.ratio}`).join('、'); } catch (e) {}
     // 加载现有图片和附件
     EMIE.projectState.editTaskRefImages = [];
     EMIE.projectState.editTaskAttachments = [];
@@ -409,18 +382,11 @@ function editTask(pid, tid) {
               </div>
               <div class="form-group"><label class="form-label">计划完成时间</label>${renderDatePicker('plannedDate', {value: task.plannedDate || ''})}</div>
             </div>
-            <div class="form-row">
-              <div class="form-group"><label class="form-label">合作积分分配</label><input class="form-input" name="collaboratorAllocationsText" value="${escHtml(collaboratorAllocationsText)}" placeholder="designer02:30" ${task.status !== 'pending' ? 'disabled' : ''}></div>
-            </div>
             <input type="hidden" name="requiredSkillTagsText" value="">
             <div class="form-row">
               <div class="form-group"><label class="form-label">积分规则（可选）</label>
                 <select class="form-select" name="pointRuleCode" ${task.status !== 'pending' ? 'disabled' : ''}>${renderPointRuleOptions(rules, task.pointRuleCode)}</select>
                 ${task.status !== 'pending' ? '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">任务已开始，积分规则快照不可修改。</div>' : '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">留空则不计积分；选择规则后，任务开始后不可修改。</div>'}
-              </div>
-              <div class="form-group"><label class="form-label">难度档位</label>
-                <select class="form-select" name="difficultyCode" ${task.status !== 'pending' ? 'disabled' : ''}>${renderDifficultyOptions(difficulties, task.difficultyCode)}</select>
-                ${task.status !== 'pending' ? '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">任务已开始，难度档位不可修改。</div>' : ''}
               </div>
             </div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 负责人类型</label>
@@ -485,15 +451,6 @@ async function submitEditTask(pid, tid) {
   if (Object.prototype.hasOwnProperty.call(data, 'requiredSkillTagsText')) {
     data.requiredSkillTags = JSON.stringify(String(data.requiredSkillTagsText || '').split(/[,，、]/).map(value => value.trim()).filter(Boolean));
     delete data.requiredSkillTagsText;
-  }
-  if (Object.prototype.hasOwnProperty.call(data, 'collaboratorAllocationsText')) {
-    try {
-      data.collaboratorAllocations = JSON.stringify(String(data.collaboratorAllocationsText || '').split(/[,，、]/).map(item => item.trim()).filter(Boolean).map(item => {
-        const [userId, ratio] = item.split(/[:：]/); if (!userId || !ratio) throw new Error();
-        return { userId: userId.trim(), ratio: Number(ratio) };
-      }));
-    } catch (_) { window.EMIE.actions.showSystemAlert('合作积分分配格式应为 用户ID:比例'); return; }
-    delete data.collaboratorAllocationsText;
   }
 
   // 验证计划时间不能早于今天
@@ -654,13 +611,8 @@ async function taskDeliver(pid, tid) {
           <form id="taskDeliverForm">
             <input type="hidden" name="actualDate">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required placeholder="描述交付的设计成果..." style="min-height:100px;"></textarea></div>
-            <div class="form-group"><label class="form-label"><span class="required">*</span> 自评分数</label>
-              <div style="max-width:200px;">
-                <input type="number" class="form-input" name="selfScore" required placeholder="1-100" min="1" max="100" step="1" style="text-align:center;font-size:18px;" data-emie-action="input:task-score-input">
-                <div style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:4px;">总分100分，填写1-100的整数</div>
-              </div>
-            </div>
           </form>
+          <p class="form-hint">提交后积分立即入账，项目相关负责人会直接验收。</p>
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label" style="margin-bottom:8px;">🖼️ 本地上传的交付参考图</div>
             <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="deliverImageInput">
@@ -679,7 +631,7 @@ async function taskDeliver(pid, tid) {
             <div class="file-list" id="deliverAttachmentList"></div>
           </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-deliver-close">取消</button><button class="btn btn-primary" data-emie-action="click:task-submit-deliver" data-project-id="${pid}" data-task-id="${tid}">确认交付</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-deliver-close">取消</button><button class="btn btn-primary" data-emie-action="click:task-submit-deliver" data-project-id="${pid}" data-task-id="${tid}">提交成果</button></div>
       </div>`;
     document.body.appendChild(modal);
   } catch (e) {
@@ -718,24 +670,6 @@ function renderDeliveryLibrarySelection() {
   container.innerHTML = files.length ? files.map((file, index) => `<article><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(authUrl(`/api/files/thumbnail/${file.storedName}`))}" alt="${escHtml(file.name || '')}"><div><strong>${escHtml(file.libraryName || file.name || '图档库图片')}</strong><small>${escHtml(file.name || '')}</small></div><button type="button" data-emie-action="click:task-remove-library-image" data-index="${index}" aria-label="取消关联">✕</button></article>`).join('') : '<span>暂未关联图档库图片</span>';
 }
 
-// ===== 自评分数输入校验：1-100，整数 =====
-const validateScoreInput = function(input) {
-  let val = input.value.trim();
-  if (val === '') { input.setCustomValidity(''); return; }
-  const num = parseInt(val);
-  if (isNaN(num) || num < 1 || num > 100) {
-    input.setCustomValidity('请输入 1 ~ 100 之间的整数分数');
-  } else {
-    // 检查是否为整数（不允许小数）
-    if (val.includes('.') || val.includes(',')) {
-      input.setCustomValidity('不允许小数点，请输入整数');
-    } else {
-      input.setCustomValidity('');
-    }
-  }
-  input.reportValidity();
-};
-
 async function submitTaskDeliver(pid, tid) {
   if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
   if (EMIE.projectState.deliverImages.length + EMIE.projectState.deliverLibraryImages.length > 6) { window.EMIE.actions.showSystemAlert('本地图片和关联图档合计最多 6 张'); return; }
@@ -743,9 +677,6 @@ async function submitTaskDeliver(pid, tid) {
   const data = Object.fromEntries(fd.entries());
   data.actualDate = new Date().toISOString().split('T')[0];
   if (!data.deliverables) { window.EMIE.actions.showSystemAlert('请填写交付成果描述'); return; }
-  const selfScore = parseInt(data.selfScore);
-  if (isNaN(selfScore) || selfScore < 1 || selfScore > 100) { window.EMIE.actions.showSystemAlert('请输入有效的自评分（1-100分）'); return; }
-  data.selfScore = selfScore;
   data.currentUser = getCurrentUserName();
   data.currentRole = EMIE.state.currentRole;
   data.currentUserId = EMIE.state.currentUserId;
@@ -759,30 +690,6 @@ async function submitTaskDeliver(pid, tid) {
   } catch (e) {
     window.EMIE.actions.showSystemAlert('交付失败: ' + e.message);
   }
-}
-
-async function submitTaskReview(pid, tid) {
-  if (EMIE.actions.showSystemConfirm && !(await EMIE.actions.showSystemConfirm('确认将该子任务送审吗？', '提交送审'))) return;
-  try {
-    await apiPost(`/projects/${pid}/tasks/${tid}/submit-review`, {
-      currentUser: getCurrentUserName(), currentRole: EMIE.state.currentRole, currentUserId: getCurrentUserId()
-    });
-    // 送审后统一清理缓存并刷新项目详情，避免项目详情页继续显示送审前的状态。
-    clearSWRCache();
-    await refreshAfterMutation(pid);
-    const detail = await apiGet(`/projects/${pid}`);
-    const updatedTask = (detail.tasks || []).find(task => Number(task.id) === Number(tid));
-    if (updatedTask) {
-      const cache = EMIE.dashboardState.designerTaskCache || [];
-      EMIE.dashboardState.designerTaskCache = cache.map(task => Number(task.id) === Number(tid) ? { ...task, ...updatedTask } : task);
-    }
-    closeM('publishedSubTaskDetailModal');
-    setTimeout(() => EMIE.actions.openPublishedSubTaskDetail?.(tid), 0);
-    // 同步主页的子任务分组：只重载任务区域，不刷新整个工作台。
-    if (EMIE.state.currentRole === 'planner') {
-      await EMIE.actions.loadDashboardPlannerTasks?.(getCurrentUserId());
-    }
-  } catch (e) { window.EMIE.actions.showSystemAlert('送审失败: ' + e.message); }
 }
 
 async function taskRedeliver(pid, tid) {
@@ -807,12 +714,6 @@ async function taskRedeliver(pid, tid) {
           <form id="taskRedeliverForm">
             <input type="hidden" name="actualDate">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required style="min-height:100px;"></textarea></div>
-            <div class="form-group"><label class="form-label"><span class="required">*</span> 自评分数</label>
-              <div style="max-width:200px;">
-                <input type="number" class="form-input" name="selfScore" required placeholder="1-100" min="1" max="100" step="1" style="text-align:center;font-size:18px;" data-emie-action="input:task-score-input">
-                <div style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:4px;">总分100分，填写1-100的整数</div>
-              </div>
-            </div>
           </form>
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label" style="margin-bottom:8px;">🖼️ 本地上传的交付参考图</div>
@@ -869,9 +770,6 @@ async function submitTaskRedeliver(pid, tid) {
   const data = Object.fromEntries(fd.entries());
   data.actualDate = new Date().toISOString().split('T')[0];
   if (!data.deliverables) { window.EMIE.actions.showSystemAlert('请填写交付成果描述'); return; }
-  const selfScore = parseInt(data.selfScore);
-  if (isNaN(selfScore) || selfScore < 1 || selfScore > 100) { window.EMIE.actions.showSystemAlert('请输入有效的自评分（1-100分）'); return; }
-  data.selfScore = selfScore;
   data.currentUser = getCurrentUserName();
   data.currentRole = EMIE.state.currentRole;
   data.currentUserId = EMIE.state.currentUserId;
@@ -903,13 +801,12 @@ async function taskCorrectDelivery(pid, tid) {
       <div class="modal modal-lg">
         <div class="modal-header"><div class="modal-header-left">
           <div class="modal-title">📝 更正当前交付：${escHtml(task.name)}</div>
-          <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">产品企划送审前可以更正；记录会留底，但不会增加交付轮次。送审后将无法更改。</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">提交后直接进入项目验收；如需修改，请由验收人驳回后重新交付。更正记录会保留。</div>
         </div></div>
         <div class="modal-body">
           <form id="taskCorrectDeliveryForm">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 本次修正说明</label><textarea class="form-textarea" name="changeSummary" required maxlength="500" placeholder="例如：补充渲染源文件，移除误传的旧版包装图"></textarea></div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required style="min-height:100px;">${escHtml(task.deliverables || '')}</textarea></div>
-            <div class="form-group"><label class="form-label"><span class="required">*</span> 自评分数</label><input type="number" class="form-input" name="selfScore" required min="1" max="100" step="1" value="${task.selfScore || ''}" data-emie-action="input:task-score-input" style="max-width:200px;"></div>
           </form>
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label">🖼️ 当前本地交付参考图（可删除错误文件或补充文件）</div>
@@ -942,9 +839,6 @@ async function submitTaskCorrectDelivery(pid, tid) {
   const form = document.getElementById('taskCorrectDeliveryForm');
   if (!form?.reportValidity()) return;
   const data = Object.fromEntries(new FormData(form).entries());
-  const selfScore = parseInt(data.selfScore);
-  if (isNaN(selfScore) || selfScore < 1 || selfScore > 100) { window.EMIE.actions.showSystemAlert('请输入有效的自评分（1-100分）'); return; }
-  data.selfScore = selfScore;
   data.actualDate = new Date().toISOString().split('T')[0];
   data.currentUser = getCurrentUserName();
   data.currentRole = EMIE.state.currentRole;
@@ -970,10 +864,10 @@ function taskApprove(pid, tid, projectType) {
     const isChannel = projectType === 'channel_custom';
     const isSalesConfirm = EMIE.state.currentRole === 'sales';
     const isAdminConfirm = EMIE.state.currentRole === 'admin' && !isChannel;
-    const needsScore = EMIE.state.currentRole === 'planner' || isSalesConfirm || isAdminConfirm;
+    const needsScore = false;
     const title = isSalesConfirm
-      ? '✅ 销售确认评分通过'
-      : (isAdminConfirm ? '✅ 管理确认评分通过' : (isChannel ? '👍 企划确认评分通过' : '✅ 验收评分通过'));
+      ? '✅ 销售验收通过'
+      : (isAdminConfirm ? '✅ 管理验收通过' : (isChannel ? '👍 企划验收通过' : '✅ 企划验收通过'));
 
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
@@ -982,7 +876,7 @@ function taskApprove(pid, tid, projectType) {
       <div class="modal">
         <div class="modal-header"><div class="modal-header-left"><div class="modal-title">${title}：${escHtml(task.name)}</div></div></div>
         <div class="modal-body">
-          <p style="margin-bottom:12px;">${isSalesConfirm ? '销售确认该子任务通过并评分？' : (isAdminConfirm ? '管理确认该子任务通过并评分？' : (isChannel ? '企划确认该子任务通过并评分？之后需销售再次确认评分。' : '企划确认该子任务验收通过并评分？之后需管理再次确认。'))}</p>
+          <p style="margin-bottom:12px;">${isSalesConfirm ? '确认该子任务验收通过？' : (isAdminConfirm ? '确认该子任务验收通过？' : (isChannel ? '确认该子任务验收通过？之后由销售继续验收。' : '确认该子任务验收通过？之后由管理员继续验收。'))}</p>
           ${needsScore ? `
           <div class="form-group">
               <label class="form-label"><span class="required">*</span> 综合评分</label>
@@ -1147,7 +1041,6 @@ EMIE.registerActions({
   submitTaskAccept,
   taskDeliver,
   submitTaskDeliver,
-  submitTaskReview,
   taskRedeliver,
   taskConfirmRevision,
   taskCancelReject,
@@ -1163,7 +1056,6 @@ EMIE.registerActions({
   openScoring,
   submitScoring,
   toggleSubTaskMarketMode,
-  validateScoreInput,
 });
 
 EMIE.registerModule('projectTasks', {
@@ -1184,7 +1076,6 @@ EMIE.registerModule('projectTasks', {
   submitTaskAccept,
   taskDeliver,
   submitTaskDeliver,
-  submitTaskReview,
   taskRedeliver,
   taskConfirmRevision,
   taskCancelReject,
@@ -1200,7 +1091,6 @@ EMIE.registerModule('projectTasks', {
   openScoring,
   submitScoring,
   toggleSubTaskMarketMode,
-  validateScoreInput,
 });
 
 const registerEventAction = EMIE.actions.registerEventAction;
@@ -1237,7 +1127,6 @@ if (registerEventAction) {
   registerEventAction('task-toggle-library-image', (_event, element) => toggleDeliveryLibraryImage(element));
   registerEventAction('task-confirm-library-picker', () => confirmDeliveryLibraryPicker());
   registerEventAction('task-remove-library-image', (_event, element) => removeDeliveryLibraryImage(Number(element.dataset.index)));
-  registerEventAction('task-score-input', (_event, element) => validateScoreInput(element));
   registerEventAction('task-deliver-images', (_event, element) => handleDeliverImages(element));
   registerEventAction('task-deliver-attachments', (_event, element) => handleDeliverAttachments(element));
   registerEventAction('task-submit-deliver', (_event, element) =>

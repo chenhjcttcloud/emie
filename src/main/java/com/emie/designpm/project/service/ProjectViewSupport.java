@@ -107,6 +107,7 @@ public class ProjectViewSupport {
                     item.put("publisherName", task.getPublisherName());
                     item.put("publisherRole", task.getPublisherRole());
                     item.put("assigneeRole", task.getAssigneeRole());
+                    item.put("pointRuleCode", task.getPointRuleCode());
                     item.put("details", task.getDetails());
                     item.put("deliverables", task.getDeliverables());
                     item.put("referenceImagesJson", task.getReferenceImagesJson());
@@ -464,8 +465,6 @@ public class ProjectViewSupport {
         dto.setDesignerId(task.getDesignerId());
         dto.setDesignerName(task.getDesignerName());
         dto.setPointRuleCode(task.getPointRuleCode());
-        dto.setDifficultyCode(task.getDifficultyCode());
-        dto.setDifficultyMultiplierSnapshot(task.getDifficultyMultiplierSnapshot());
         dto.setBasePointSnapshot(task.getBasePointSnapshot());
         dto.setQualityBonusThresholdSnapshot(task.getQualityBonusThresholdSnapshot());
         dto.setQualityBonusRatioSnapshot(task.getQualityBonusRatioSnapshot());

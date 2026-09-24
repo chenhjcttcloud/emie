@@ -47,10 +47,9 @@ public class SubTask {
     @Column(length = 80)
     private String pointRuleCode;
 
-    @Column(length = 40)
-    private String difficultyCode;
-
+    /** Legacy snapshot retained so previously awarded tasks keep their original point total. */
     private Double difficultyMultiplierSnapshot;
+
     private Integer basePointSnapshot;
     private Integer qualityBonusThresholdSnapshot;
     private Double qualityBonusRatioSnapshot;

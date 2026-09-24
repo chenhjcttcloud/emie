@@ -24,9 +24,6 @@ public class PointRule {
     private String category;
 
     @Column(nullable = false)
-    private Double difficultyMultiplier = 1.0;
-
-    @Column(nullable = false)
     private Integer qualityBonusThreshold = 0;
 
     @Column(nullable = false)

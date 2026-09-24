@@ -51,15 +51,16 @@ async function openDesignRequirementDetail(id) {
   try {
     const detail = await apiGet(`/design-requirements/${id}`);
     const myRole = String(EMIE.state.currentRole || '').toLowerCase();
-    const myScore = (detail.scoringRecords || []).find(s =>
-      s.reviewerId === EMIE.state.currentUserId || (!s.reviewerId && s.role === myRole));
     const canDeliver = myRole === 'designer' && detail.designerId === EMIE.state.currentUserId;
     const canTerminate = detail.status !== 'completed' && detail.status !== 'terminated'
       && (myRole === 'admin' || detail.ownerId === EMIE.state.currentUserId
         || detail.responsibleId === EMIE.state.currentUserId
         || detail.plannerId === EMIE.state.currentUserId);
     const canConfirmRevision = canDeliver && detail.status === 'rejected';
-    const canReject = myRole === 'planner' && detail.plannerId === EMIE.state.currentUserId && ['pending_review', 'pending_self_score'].includes(detail.status);
+    const isOwner = detail.ownerId === EMIE.state.currentUserId;
+    const isPlanner = myRole === 'planner' && detail.plannerId === EMIE.state.currentUserId;
+    const canAccept = detail.status === 'pending_acceptance' && (myRole === 'admin' || (isOwner && !detail.ownerAccepted) || (isPlanner && !detail.plannerAccepted));
+    const canReject = detail.status === 'pending_acceptance' && (myRole === 'admin' || isOwner || isPlanner);
     const canManageChat = myRole === 'admin' || (myRole === 'planner' && detail.plannerId === EMIE.state.currentUserId);
     const hasChat = !!String(detail.feishuChatId || '').trim();
     const requirementMaterials = renderDesignRequirementMaterials(
@@ -100,14 +101,12 @@ async function openDesignRequirementDetail(id) {
             ${requirementMaterials}
           </div>` : ''}
           <div class="detail-section">
-            <div class="detail-section-title">📦 交付与评分</div>
+            <div class="detail-section-title">📦 交付成果与验收</div>
             ${detail.deliveryContent
               ? `<div class="detail-label">设计师交付成果</div><div class="detail-value" style="white-space:pre-wrap;margin-bottom:12px;">${escHtml(detail.deliveryContent)}</div>`
               : '<div style="color:var(--gray-400);font-size:13px;margin-bottom:12px;">设计师尚未提交交付成果</div>'}
             ${deliveryMaterials ? `<div style="margin-bottom:14px;">${deliveryMaterials}</div>` : ''}
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              ${(detail.scoringRecords || []).map(s => `<span class="badge ${s.status === 'completed' ? 'badge-completed' : 'badge-pending'}">${escHtml(s.stage === 'self' ? '设计师自评' : roleLabel(s.role) + '评分')}：${s.status === 'completed' ? `${s.score}分` : s.status === 'pending' ? '待评分' : '等待中'}</span>`).join('')}
-            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;"><span class="badge ${detail.ownerAccepted ? 'badge-completed' : 'badge-pending'}">创建人${detail.ownerAccepted ? '已' : '待'}验收</span><span class="badge ${detail.plannerAccepted ? 'badge-completed' : 'badge-pending'}">产品企划${detail.plannerAccepted ? '已' : '待'}验收</span></div>
           </div>
         </div>
         <div class="modal-footer">
@@ -115,9 +114,8 @@ async function openDesignRequirementDetail(id) {
           ${canTerminate ? `<button class="btn btn-danger" data-emie-action="click:lists-requirement-terminate" data-requirement-id="${id}">终止需求</button>` : ''}
           ${canConfirmRevision ? `<button class="btn btn-warning" data-emie-action="click:lists-requirement-confirm" data-requirement-id="${id}">🛠️ 确认修改</button>` : ''}
           ${canReject ? `<button class="btn btn-danger" data-emie-action="click:lists-requirement-reject" data-requirement-id="${id}">↩️ 驳回</button>` : ''}
+          ${canAccept ? `<button class="btn btn-success" data-emie-action="click:lists-requirement-accept" data-requirement-id="${id}">✓ 验收</button>` : ''}
           ${canDeliver && ['draft', 'in_progress'].includes(detail.status) ? `<button class="btn btn-primary" data-emie-action="click:lists-requirement-deliver" data-requirement-id="${id}">📦 提交交付成果</button>` : ''}
-          ${myScore?.status === 'pending' && myScore.stage === 'self' ? `<button class="btn btn-warning" data-emie-action="click:lists-requirement-score" data-requirement-id="${id}" data-self-score="true">⭐ 完成自评</button>` : ''}
-          ${myScore?.status === 'pending' && myScore.stage === 'review' ? `<button class="btn btn-primary" data-emie-action="click:lists-requirement-score" data-requirement-id="${id}" data-self-score="false">⭐ 立即评分</button>` : ''}
           ${hasChat ? `<button class="btn btn-outline" data-emie-action="click:lists-requirement-chat-open" data-chat-id="${escHtml(detail.feishuChatId)}">💬 进入项目群</button>` : (canManageChat && detail.status !== 'terminated' ? `<button class="btn btn-outline" data-emie-action="click:lists-requirement-chat-create" data-requirement-id="${id}">💬 创建项目群</button>` : '')}
           ${hasChat && ['completed', 'terminated'].includes(detail.status) && canManageChat ? `<button class="btn btn-danger" data-emie-action="click:lists-requirement-chat-dissolve" data-requirement-id="${id}">解散项目群</button>` : ''}
         </div>
@@ -164,6 +162,11 @@ async function submitDesignRequirementReject(id) {
   if (!comments || !requiredCompletionDate) return window.EMIE.actions.showSystemAlert('请填写驳回意见和要求完成时间');
   try { await apiPost(`/design-requirements/${id}/reject`, { comments, requiredCompletionDate }); closeM('designRequirementRejectModal'); closeM('designRequirementDetailModal'); await openDesignRequirementDetail(id); }
   catch (e) { window.EMIE.actions.showSystemAlert('驳回失败：' + e.message); }
+}
+
+async function acceptDesignRequirement(id) {
+  try { await apiPost(`/design-requirements/${id}/accept`, {}); closeM('designRequirementDetailModal'); await openDesignRequirementDetail(id); }
+  catch (e) { window.EMIE.actions.showSystemAlert('验收失败：' + e.message); }
 }
 
 async function confirmDesignRequirementRevision(id) {
@@ -221,29 +224,6 @@ async function submitDesignRequirementDelivery(id) {
     closeM('designRequirementDeliveryModal');
     await openDesignRequirementDetail(id);
   } catch (e) { window.EMIE.actions.showSystemAlert('提交失败：' + e.message); }
-}
-
-function openDesignRequirementScore(id, selfScore) {
-  closeM('designRequirementDetailModal');
-  const modal = document.createElement('div');
-  modal.className = 'modal-overlay';
-  modal.id = 'designRequirementScoreModal';
-  modal.innerHTML = `<div class="modal"><div class="modal-header"><div class="modal-title">⭐ ${selfScore ? '设计师自评' : '需求评分'}</div></div>
-    <div class="modal-body"><p style="color:var(--gray-500);margin-bottom:16px;">请对本次设计交付进行综合评分（1-100分）</p><input type="number" class="form-input" id="designRequirementScoreValue" min="1" max="100" style="font-size:24px;text-align:center;"></div>
-    <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:lists-score-close">取消</button><button class="btn btn-primary" data-emie-action="click:lists-score-submit" data-requirement-id="${id}" data-self-score="${selfScore}">提交评分</button></div></div>`;
-  document.body.appendChild(modal);
-}
-
-async function submitDesignRequirementScore(id, selfScore) {
-  const score = Number(document.getElementById('designRequirementScoreValue')?.value);
-  if (!Number.isInteger(score) || score < 1 || score > 100) return window.EMIE.actions.showSystemAlert('请输入1-100的整数评分');
-  try {
-    await apiPost(`/design-requirements/${id}/${selfScore ? 'self-score' : 'score'}`, { score });
-    closeM('designRequirementScoreModal');
-    EMIE.actions.clearSWRCache?.();
-    if (EMIE.state.currentView === 'scoring') await EMIE.actions.renderScoringView(document.getElementById('mainContent'), EMIE.state.currentRole, EMIE.state.currentUserId);
-    else await openDesignRequirementDetail(id);
-  } catch (e) { window.EMIE.actions.showSystemAlert('评分失败：' + e.message); }
 }
 
 async function renderOrderList(main, type, role, uid, titleOverride = '', endpoint = '/projects/page', renderId = EMIE.state.renderId) {
@@ -670,8 +650,7 @@ EMIE.registerActions({
   openDesignRequirementReject,
   submitDesignRequirementReject,
   submitDesignRequirementDelivery,
-  openDesignRequirementScore,
-  submitDesignRequirementScore,
+  acceptDesignRequirement,
   createDesignRequirementChat,
   dissolveDesignRequirementChat,
   openDesignRequirementChat,
@@ -707,7 +686,6 @@ EMIE.registerModule('dashboardLists', {
   createDesignRequirementChat,
   dissolveDesignRequirementChat,
   openDesignRequirementChat,
-  openDesignRequirementScore,
   changeProjectListPage,
   jumpProjectListPage,
   filterProjectList,
@@ -724,8 +702,8 @@ if (registerEventAction) {
   registerEventAction('lists-requirement-terminate', (_event, el) => terminateDesignRequirement(Number(el.dataset.requirementId)));
   registerEventAction('lists-requirement-confirm', (_event, el) => confirmDesignRequirementRevision(Number(el.dataset.requirementId)));
   registerEventAction('lists-requirement-reject', (_event, el) => openDesignRequirementReject(Number(el.dataset.requirementId)));
+  registerEventAction('lists-requirement-accept', (_event, el) => acceptDesignRequirement(Number(el.dataset.requirementId)));
   registerEventAction('lists-requirement-deliver', (_event, el) => openDesignRequirementDelivery(Number(el.dataset.requirementId)));
-  registerEventAction('lists-requirement-score', (_event, el) => openDesignRequirementScore(Number(el.dataset.requirementId), el.dataset.selfScore === 'true'));
   registerEventAction('lists-requirement-chat-open', (_event, el) => openDesignRequirementChat(el.dataset.chatId));
   registerEventAction('lists-requirement-chat-create', (_event, el) => createDesignRequirementChat(Number(el.dataset.requirementId)));
   registerEventAction('lists-requirement-chat-dissolve', (_event, el) => dissolveDesignRequirementChat(Number(el.dataset.requirementId)));
@@ -744,9 +722,6 @@ if (registerEventAction) {
   registerEventAction('lists-deliver-attachments', (_event, el) => handleDeliverAttachments(el));
   registerEventAction('lists-delivery-close', () => closeM('designRequirementDeliveryModal'));
   registerEventAction('lists-delivery-submit', (_event, el) => submitDesignRequirementDelivery(Number(el.dataset.requirementId)));
-  registerEventAction('lists-score-close', () => closeM('designRequirementScoreModal'));
-  registerEventAction('lists-score-submit', (_event, el) =>
-    submitDesignRequirementScore(Number(el.dataset.requirementId), el.dataset.selfScore === 'true'));
   registerEventAction('lists-create-project', (_event, el) => openCreateProject(el.dataset.projectType));
   registerEventAction('lists-project-detail', (_event, el) => openProjectDetail(Number(el.dataset.projectId)));
 }

@@ -442,7 +442,7 @@ public class AdminController {
             @RequestHeader("X-Auth-Token") String token) {
         AuthSession session = AuthSessions.validateToken(token);
         if (session == null) return ResponseEntity.status(401).build();
-        if (!Set.of("own", "waiting").contains(bucket)) {
+        if (!Set.of("own", "waiting", "projects", "tasks", "total").contains(bucket)) {
             return ResponseEntity.badRequest().body(Map.of("error", "无效的工作量类型"));
         }
         return ResponseEntity.ok(adminWorkloadDetailsService.getWorkloadDetails(userId, bucket));

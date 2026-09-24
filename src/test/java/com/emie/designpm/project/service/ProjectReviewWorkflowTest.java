@@ -110,12 +110,17 @@ class ProjectReviewWorkflowTest {
         service.addSubTask(
                 1L,
                 Map.ofEntries(
-                        Map.entry("name", "包装延展"), Map.entry("plannedDate", "2026-08-10"),
-                        Map.entry("designerId", "designer-2"), Map.entry("assigneeRole", "designer"),
-                        Map.entry("pointRuleCode", "A1"), Map.entry("difficultyCode", "STANDARD"),
-                        Map.entry("workflowStage", "design"), Map.entry("currentRole", "planner"),
-                        Map.entry("currentUserId", "planner-1"), Map.entry("currentUser", "企划甲"),
-                        Map.entry("referenceImagesJson", "[]"), Map.entry("attachmentsJson", "[]")));
+                        Map.entry("name", "包装延展"),
+                        Map.entry("plannedDate", "2026-08-10"),
+                        Map.entry("designerId", "designer-2"),
+                        Map.entry("assigneeRole", "designer"),
+                        Map.entry("pointRuleCode", "A1"),
+                        Map.entry("workflowStage", "design"),
+                        Map.entry("currentRole", "planner"),
+                        Map.entry("currentUserId", "planner-1"),
+                        Map.entry("currentUser", "企划甲"),
+                        Map.entry("referenceImagesJson", "[]"),
+                        Map.entry("attachmentsJson", "[]")));
 
         verify(notifications)
                 .notifyUserAfterCommit(
@@ -148,12 +153,17 @@ class ProjectReviewWorkflowTest {
                 () -> service.addSubTask(
                         1L,
                         Map.ofEntries(
-                                Map.entry("name", "不计积分任务"), Map.entry("plannedDate", "2026-08-10"),
-                                Map.entry("designerId", "designer-2"), Map.entry("assigneeRole", "designer"),
-                                Map.entry("pointRuleCode", ""), Map.entry("difficultyCode", "STANDARD"),
-                                Map.entry("workflowStage", "design"), Map.entry("currentRole", "planner"),
-                                Map.entry("currentUserId", "planner-1"), Map.entry("currentUser", "企划甲"),
-                                Map.entry("referenceImagesJson", "[]"), Map.entry("attachmentsJson", "[]"))));
+                                Map.entry("name", "不计积分任务"),
+                                Map.entry("plannedDate", "2026-08-10"),
+                                Map.entry("designerId", "designer-2"),
+                                Map.entry("assigneeRole", "designer"),
+                                Map.entry("pointRuleCode", ""),
+                                Map.entry("workflowStage", "design"),
+                                Map.entry("currentRole", "planner"),
+                                Map.entry("currentUserId", "planner-1"),
+                                Map.entry("currentUser", "企划甲"),
+                                Map.entry("referenceImagesJson", "[]"),
+                                Map.entry("attachmentsJson", "[]"))));
         verify(subTasks, never()).saveAndFlush(any(SubTask.class));
     }
 
@@ -183,7 +193,6 @@ class ProjectReviewWorkflowTest {
         Project project = projectWithTask("regular", "pending");
         SubTask task = project.getTasks().get(0);
         task.setPointRuleCode("A1");
-        task.setDifficultyCode("COMPLEX");
         task.setBasePointSnapshot(20);
         task.setDifficultyMultiplierSnapshot(1.5);
         task.setQualityBonusThresholdSnapshot(90);
@@ -206,24 +215,13 @@ class ProjectReviewWorkflowTest {
         service.updateSubTask(
                 1L,
                 11L,
-                Map.of(
-                        "currentRole",
-                        "admin",
-                        "currentUserId",
-                        "admin-1",
-                        "currentUser",
-                        "管理员甲",
-                        "pointRuleCode",
-                        "",
-                        "difficultyCode",
-                        "STANDARD"));
+                Map.of("currentRole", "admin", "currentUserId", "admin-1", "currentUser", "管理员甲", "pointRuleCode", ""));
 
         assertNull(task.getPointRuleCode());
-        assertEquals("STANDARD", task.getDifficultyCode());
         assertNull(task.getBasePointSnapshot());
         assertNull(task.getDifficultyMultiplierSnapshot());
         assertNull(task.getCountInPerformanceSnapshot());
-        verify(points, never()).bindRuleSnapshot(any(), anyString(), anyString());
+        verify(points, never()).bindRuleSnapshot(any(), anyString());
     }
 
     @Test
@@ -266,36 +264,7 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
-    void channelDeliveryCreatesPlannerAndSalesReviewRows() {
-        Project project = projectWithTask("channel_custom", "accepted");
-        when(projects.findById(1L)).thenReturn(Optional.of(project));
-        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(scoring.findBySubTaskIdAndRole(any(), anyString())).thenReturn(Optional.empty());
-
-        service.taskDeliver(1L, 11L, deliveryBody());
-
-        List<ScoringRecord> records = savedScoringRecords();
-        assertReview(records.get(0), "planner", "first", "pending", null);
-        assertReview(records.get(1), "sales", "second", "waiting", null);
-        assertEquals("delivered", project.getTasks().get(0).getStatus());
-    }
-
-    @Test
-    void regularDeliveryCreatesPlannerAndAdminReviewRows() {
-        Project project = projectWithTask("regular", "accepted");
-        when(projects.findById(1L)).thenReturn(Optional.of(project));
-        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(scoring.findBySubTaskIdAndRole(any(), anyString())).thenReturn(Optional.empty());
-
-        service.taskDeliver(1L, 11L, deliveryBody());
-
-        List<ScoringRecord> records = savedScoringRecords();
-        assertReview(records.get(0), "planner", "first", "pending", null);
-        assertReview(records.get(1), "admin", "second", "waiting", null);
-    }
-
-    @Test
-    void correctionBeforeReviewCreatesVersionAndKeepsTaskReadyForSubmission() {
+    void correctionBeforeAcceptanceCreatesVersionAndReturnsToAcceptanceQueue() {
         Project project = projectWithTask("channel_custom", "delivered");
         ScoringRecord planner = review(project.getTasks().get(0), "planner", "first");
         planner.setReviewStatus("pending");
@@ -310,7 +279,7 @@ class ProjectReviewWorkflowTest {
         body.put("deliverables", "V2 完整交付");
         service.taskCorrectDelivery(1L, 11L, body);
 
-        assertEquals("delivered", project.getTasks().get(0).getStatus());
+        assertEquals("submitted_for_review", project.getTasks().get(0).getStatus());
         assertReview(planner, "planner", "first", "pending", null);
         ArgumentCaptor<com.emie.designpm.entity.SubTaskDeliveryVersion> version =
                 ArgumentCaptor.forClass(com.emie.designpm.entity.SubTaskDeliveryVersion.class);
@@ -336,7 +305,7 @@ class ProjectReviewWorkflowTest {
 
         RuntimeException error = assertThrows(RuntimeException.class, () -> service.taskCorrectDelivery(1L, 11L, body));
 
-        assertEquals("仅产品企划送审前可以更正交付", error.getMessage());
+        assertEquals("仅尚未进入验收的已交付任务可以更正", error.getMessage());
         verify(deliveryVersions, never()).save(any());
     }
 
@@ -358,8 +327,8 @@ class ProjectReviewWorkflowTest {
         body.put("changeSummary", "补交源文件");
         service.taskRedeliver(1L, 11L, body);
 
-        assertEquals("delivered", project.getTasks().get(0).getStatus());
-        assertReview(planner, "planner", "first", "pending", null);
+        assertEquals("submitted_for_review", project.getTasks().get(0).getStatus());
+        assertReview(planner, "planner", "first", "rejected", null);
         assertReview(sales, "sales", "second", "waiting", null);
         ArgumentCaptor<com.emie.designpm.entity.SubTaskDeliveryVersion> version =
                 ArgumentCaptor.forClass(com.emie.designpm.entity.SubTaskDeliveryVersion.class);
@@ -370,48 +339,12 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
-    void plannerApprovalCompletesFirstReviewWithAuditContext() {
+    void plannerApprovalStartsCustomSalesReviewAndNotifiesSales() {
         Project project = projectWithTask("channel_custom", "submitted_for_review");
-        ScoringRecord firstReview = review(project.getTasks().get(0), "planner", "first");
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
         when(projects.findById(1L)).thenReturn(Optional.of(project));
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(scoring.findBySubTaskIdAndRole(11L, "planner")).thenReturn(Optional.of(firstReview));
-
-        service.taskApprove(
-                1L,
-                11L,
-                Map.of(
-                        "currentRole", "planner",
-                        "currentUserId", "planner-1",
-                        "currentUser", "企划甲",
-                        "comments", "一审通过",
-                        "score", 82));
-
-        assertReview(firstReview, "planner", "first", "approved", 82);
-        assertEquals("planner-1", firstReview.getReviewerId());
-        assertEquals("企划甲", firstReview.getReviewerName());
-        assertEquals("一审通过", firstReview.getComment());
-        assertNotNull(firstReview.getReviewedAt());
-        assertEquals("planner_approved", project.getTasks().get(0).getStatus());
-        ArgumentCaptor<ScoringRecord> captor = ArgumentCaptor.forClass(ScoringRecord.class);
-        verify(scoring, times(2)).save(captor.capture());
-        ScoringRecord secondReview = captor.getAllValues().stream()
-                .filter(record -> "sales".equals(record.getRole()))
-                .findFirst()
-                .orElseThrow();
-        assertReview(secondReview, "sales", "second", "pending", null);
-    }
-
-    @Test
-    void regularPlannerApprovalNotifiesAdminsAfterCommit() {
-        Project project = projectWithTask("regular", "submitted_for_review");
-        ScoringRecord firstReview = review(project.getTasks().get(0), "planner", "first");
-        ScoringRecord secondReview = review(project.getTasks().get(0), "admin", "second");
-        secondReview.setReviewStatus("waiting");
-        when(projects.findById(1L)).thenReturn(Optional.of(project));
-        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(scoring.findBySubTaskIdAndRole(11L, "planner")).thenReturn(Optional.of(firstReview));
-        when(scoring.findBySubTaskIdAndRole(11L, "admin")).thenReturn(Optional.of(secondReview));
 
         service.taskApprove(
                 1L,
@@ -424,71 +357,44 @@ class ProjectReviewWorkflowTest {
                         "currentUser",
                         "企划甲",
                         "comments",
-                        "一审通过",
-                        "score",
-                        82));
+                        "验收通过"));
 
         assertEquals("planner_approved", project.getTasks().get(0).getStatus());
-        assertReview(secondReview, "admin", "second", "pending", null);
+        verify(points, never()).awardBaseSubmission(any());
+        verify(scoring, never()).save(any());
         verify(notifications)
-                .notifyRoleAfterCommit(
-                        eq("REVIEW_PENDING"), eq("admin"), eq("sub_task"), eq(11L), eq("system"), anyMap());
-        verify(notifications, never())
-                .notifyRole(anyString(), anyString(), anyString(), anyLong(), anyString(), anyMap());
+                .notifyUser(eq("REVIEW_PENDING"), eq("sales-1"), eq("sub_task"), eq(11L), eq("system"), anyMap());
+    }
+
+    @Test
+    void regularPlannerApprovalCompletesWithoutNotifyingAdmins() {
+        Project project = projectWithTask("regular", "submitted_for_review");
+        when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.taskApprove(
+                1L,
+                11L,
+                Map.of(
+                        "currentRole",
+                        "planner",
+                        "currentUserId",
+                        "planner-1",
+                        "currentUser",
+                        "企划甲",
+                        "comments",
+                        "验收通过"));
+
+        assertEquals("completed", project.getTasks().get(0).getStatus());
+        verify(scoring, never()).save(any());
+        verify(notifications, never()).notifyRoleAfterCommit(any(), any(), any(), any(), any(), anyMap());
     }
 
     @Test
     void salesRejectionMarksSecondReviewRejected() {
         Project project = projectWithTask("channel_custom", "planner_approved");
-        ScoringRecord secondReview = review(project.getTasks().get(0), "sales", "second");
         when(projects.findById(1L)).thenReturn(Optional.of(project));
-        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(scoring.findBySubTaskIdAndRole(11L, "sales")).thenReturn(Optional.of(secondReview));
-
-        service.taskReject(
-                1L,
-                11L,
-                Map.of(
-                        "currentRole", "sales",
-                        "currentUserId", "sales-1",
-                        "currentUser", "销售甲",
-                        "comments", "二审需修改",
-                        "requiredCompletionDate", "2026-08-15"));
-
-        assertReview(secondReview, "sales", "second", "rejected", null);
-        assertEquals("sales-1", secondReview.getReviewerId());
-        assertEquals("销售甲", secondReview.getReviewerName());
-        assertEquals("二审需修改", secondReview.getComment());
-        assertNotNull(secondReview.getReviewedAt());
-        assertEquals("rejected", project.getTasks().get(0).getStatus());
-        assertEquals("sub_task", project.getLogs().get(0).getEntityType());
-        assertEquals(11L, project.getLogs().get(0).getEntityId());
-        assertTrue(project.getLogs().get(0).getBeforeData().contains("\"deliverables\""));
-        assertTrue(project.getLogs().get(0).getAfterData().contains("二审需修改"));
-        assertTrue(project.getLogs().get(0).getAfterData().contains("rejectionReferenceImagesJson"));
-        assertTrue(project.getLogs().get(0).getAfterData().contains("rejectionAttachmentsJson"));
-    }
-
-    @Test
-    void cancellingSalesRejectionRestoresExactSecondReviewAndTaskState() {
-        Project project = projectWithTask("channel_custom", "planner_approved");
-        SubTask task = project.getTasks().get(0);
-        task.setPlannedDate("2026-08-01");
-        task.setReviewComments("一审通过");
-        ScoringRecord secondReview = review(task, "sales", "second");
-        secondReview.setReviewerId("sales-old");
-        secondReview.setReviewerName("销售旧审核人");
-        secondReview.setComment("待确认");
-        secondReview.setScore(86);
-        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(scoring.findBySubTaskIdAndRole(11L, "sales")).thenReturn(Optional.of(secondReview));
-        when(rejectionCycles.findFirstBySubTaskIdOrderBySequenceNoDesc(11L)).thenReturn(Optional.empty());
-        when(rejectionCycles.save(any(SubTaskRejectionCycle.class))).thenAnswer(invocation -> {
-            SubTaskRejectionCycle cycle = invocation.getArgument(0);
-            if (cycle.getId() == null) cycle.setId(201L);
-            return cycle;
-        });
 
         service.taskReject(
                 1L,
@@ -501,13 +407,46 @@ class ProjectReviewWorkflowTest {
                         "currentUser",
                         "销售甲",
                         "comments",
-                        "错误驳回",
+                        "二审需修改",
                         "requiredCompletionDate",
                         "2026-08-15"));
 
-        ArgumentCaptor<SubTaskRejectionCycle> captor = ArgumentCaptor.forClass(SubTaskRejectionCycle.class);
-        verify(rejectionCycles, atLeastOnce()).save(captor.capture());
-        SubTaskRejectionCycle cycle = captor.getAllValues().getFirst();
+        assertEquals("rejected", project.getTasks().get(0).getStatus());
+        verify(scoring, never()).save(any());
+        assertEquals("sub_task", project.getLogs().get(0).getEntityType());
+    }
+
+    @Test
+    void cancellingSalesRejectionRestoresExactSecondReviewAndTaskState() {
+        Project project = projectWithTask("channel_custom", "planner_approved");
+        SubTask task = project.getTasks().get(0);
+        task.setPlannedDate("2026-08-01");
+        task.setReviewComments("一审通过");
+        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(rejectionCycles.findFirstBySubTaskIdOrderBySequenceNoDesc(11L)).thenReturn(Optional.empty());
+        when(rejectionCycles.save(any(SubTaskRejectionCycle.class))).thenAnswer(invocation -> {
+            SubTaskRejectionCycle cycle = invocation.getArgument(0);
+            if (cycle.getId() == null) cycle.setId(201L);
+            return cycle;
+        });
+        service.taskReject(
+                1L,
+                11L,
+                Map.of(
+                        "currentRole",
+                        "sales",
+                        "currentUserId",
+                        "sales-1",
+                        "currentUser",
+                        "销售甲",
+                        "comments",
+                        "二审需修改",
+                        "requiredCompletionDate",
+                        "2026-08-15"));
+        ArgumentCaptor<SubTaskRejectionCycle> cycleCaptor = ArgumentCaptor.forClass(SubTaskRejectionCycle.class);
+        verify(rejectionCycles).save(cycleCaptor.capture());
+        SubTaskRejectionCycle cycle = cycleCaptor.getValue();
         when(rejectionCycles.findById(201L)).thenReturn(Optional.of(cycle));
         when(rejectionCycles.findFirstBySubTaskIdAndStatusOrderBySequenceNoDesc(11L, "ACTIVE"))
                 .thenReturn(Optional.of(cycle));
@@ -518,14 +457,7 @@ class ProjectReviewWorkflowTest {
         assertEquals("planner_approved", task.getStatus());
         assertEquals("2026-08-01", task.getPlannedDate());
         assertEquals("一审通过", task.getReviewComments());
-        assertEquals("pending", secondReview.getReviewStatus());
-        assertEquals("sales-old", secondReview.getReviewerId());
-        assertEquals("销售旧审核人", secondReview.getReviewerName());
-        assertEquals("待确认", secondReview.getComment());
-        assertEquals(86, secondReview.getScore());
-        assertEquals("CANCELLED", cycle.getStatus());
-        assertNotNull(cycle.getCancelledAt());
-        assertTrue(project.getLogs().stream().anyMatch(log -> log.getAction().startsWith("取消子任务驳回：")));
+        verify(scoring, never()).save(any());
     }
 
     @Test
@@ -554,28 +486,29 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
-    void regularAdminApprovalCompletesSecondReviewAndTask() {
+    void regularAdminCannotPerformSubtaskReview() {
         Project project = projectWithTask("regular", "planner_approved");
         project.getTasks().get(0).setWorkflowStage("bulk");
-        ScoringRecord secondReview = review(project.getTasks().get(0), "admin", "second");
         when(projects.findById(1L)).thenReturn(Optional.of(project));
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(scoring.findBySubTaskIdAndRole(11L, "admin")).thenReturn(Optional.of(secondReview));
 
-        service.taskApprove(
-                1L,
-                11L,
-                Map.of(
-                        "currentRole", "admin",
-                        "currentUserId", "admin-1",
-                        "currentUser", "管理员甲",
-                        "comments", "二审通过",
-                        "score", 91));
+        assertThrows(
+                RuntimeException.class,
+                () -> service.taskApprove(
+                        1L,
+                        11L,
+                        Map.of(
+                                "currentRole",
+                                "admin",
+                                "currentUserId",
+                                "admin-1",
+                                "currentUser",
+                                "管理员甲",
+                                "comments",
+                                "二审通过")));
 
-        assertReview(secondReview, "admin", "second", "approved", 91);
-        assertEquals("管理员甲", secondReview.getReviewerName());
-        assertEquals("completed", project.getTasks().get(0).getStatus());
-        assertEquals("completed", project.getStatus());
+        assertEquals("planner_approved", project.getTasks().get(0).getStatus());
+        verify(scoring, never()).save(any());
     }
 
     @Test
@@ -609,124 +542,70 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
-    void scoringCenterExcludesRejectedTasks() {
-        Project project = projectWithTask("regular", "rejected");
-        SubTask rejected = project.getTasks().get(0);
-        ScoringRecord rejectedReview = review(rejected, "planner", "first");
-        rejectedReview.setReviewStatus("rejected");
-
-        SubTask pending = new SubTask();
-        pending.setId(12L);
-        pending.setName("保留的待评分任务");
-        pending.setStatus("delivered");
-        pending.setPlannedDate("2026-07-22");
-        pending.setProject(project);
-        project.getTasks().add(pending);
-        ScoringRecord pendingReview = review(pending, "planner", "first");
-
-        when(access.findVisibleProjectsLight("planner", "planner-1")).thenReturn(List.of(project));
-        when(scoring.findBySubTaskIds(List.of(11L, 12L))).thenReturn(List.of(rejectedReview, pendingReview));
-
-        List<Map<String, Object>> result = queryService.getPendingScoringTasks("planner", "planner-1");
-
-        assertEquals(1, result.size());
-        assertEquals(12L, result.getFirst().get("taskId"));
-        assertEquals(true, result.getFirst().get("isPending"));
-    }
-
-    @Test
-    void scoringCenterFinalApprovalAwardsQualityCompletion() {
-        Project project = projectWithTask("regular", "planner_approved");
-        ScoringRecord secondReview = review(project.getTasks().get(0), "admin", "second");
+    void designerDeliveryQueuesAcceptanceAndBooksPoints() {
+        Project project = projectWithTask("regular", "accepted");
+        project.getTasks().get(0).setAssigneeRole("designer");
         PointsService points = mock(PointsService.class);
         service.setPointsService(points);
-        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(scoring.findBySubTaskIdAndRole(11L, "admin")).thenReturn(Optional.of(secondReview));
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(deliveryVersions.findMaxVersionNoBySubTaskId(11L)).thenReturn(0);
 
-        service.submitScoring(
-                1L,
-                11L,
-                Map.of(
-                        "role", "admin",
-                        "currentRole", "admin",
-                        "currentUserId", "admin-1",
-                        "currentUser", "管理员甲",
-                        "score", 91));
+        service.taskDeliver(1L, 11L, deliveryBody());
 
-        // 与任务详情入口一致：最终验收通过必须发放质量加分
-        assertEquals("completed", project.getTasks().get(0).getStatus());
-        verify(points).awardQualityCompletion(project.getTasks().get(0));
+        assertEquals("submitted_for_review", project.getTasks().get(0).getStatus());
+        assertNotNull(project.getTasks().get(0).getSubmittedForReviewAt());
+        verify(points).awardBaseSubmission(project.getTasks().get(0));
     }
 
     @Test
-    void scoringCenterChannelSalesFinalApprovalAwardsQualityCompletion() {
-        Project project = projectWithTask("channel_custom", "planner_approved");
-        ScoringRecord secondReview = review(project.getTasks().get(0), "sales", "second");
-        PointsService points = mock(PointsService.class);
-        service.setPointsService(points);
-        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(scoring.findBySubTaskIdAndRole(11L, "sales")).thenReturn(Optional.of(secondReview));
-
-        service.submitScoring(
-                1L,
-                11L,
-                Map.of(
-                        "role", "sales",
-                        "currentRole", "sales",
-                        "currentUserId", "sales-1",
-                        "currentUser", "销售甲",
-                        "score", 88));
-
-        assertEquals("completed", project.getTasks().get(0).getStatus());
-        verify(points).awardQualityCompletion(project.getTasks().get(0));
-    }
-
-    @Test
-    void scoringCenterFirstReviewDoesNotAwardBeforeTaskCompleted() {
+    void plannerAcceptanceDoesNotAwardPointsAgain() {
         Project project = projectWithTask("regular", "submitted_for_review");
-        ScoringRecord firstReview = review(project.getTasks().get(0), "planner", "first");
         PointsService points = mock(PointsService.class);
         service.setPointsService(points);
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(scoring.findBySubTaskIdAndRole(11L, "planner")).thenReturn(Optional.of(firstReview));
-        when(scoring.findBySubTaskIdAndRole(11L, "admin")).thenReturn(Optional.empty());
-
-        service.submitScoring(
-                1L,
-                11L,
-                Map.of(
-                        "role", "planner",
-                        "currentRole", "planner",
-                        "currentUserId", "planner-1",
-                        "currentUser", "企划甲",
-                        "score", 82));
-
-        // 一审通过只是中间态，未到最终验收，不得发放质量加分
-        assertEquals("planner_approved", project.getTasks().get(0).getStatus());
-        verify(points, never()).awardQualityCompletion(any());
-    }
-
-    @Test
-    void taskDetailFinalApprovalAwardsQualityCompletion() {
-        Project project = projectWithTask("regular", "planner_approved");
-        ScoringRecord secondReview = review(project.getTasks().get(0), "admin", "second");
-        PointsService points = mock(PointsService.class);
-        service.setPointsService(points);
-        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(scoring.findBySubTaskIdAndRole(11L, "admin")).thenReturn(Optional.of(secondReview));
 
         service.taskApprove(
                 1L,
                 11L,
                 Map.of(
-                        "currentRole", "admin",
-                        "currentUserId", "admin-1",
-                        "currentUser", "管理员甲",
-                        "comments", "二审通过",
-                        "score", 91));
+                        "currentRole",
+                        "planner",
+                        "currentUserId",
+                        "planner-1",
+                        "currentUser",
+                        "企划甲",
+                        "comments",
+                        "验收通过"));
 
         assertEquals("completed", project.getTasks().get(0).getStatus());
-        verify(points).awardQualityCompletion(project.getTasks().get(0));
+        verify(points, never()).awardBaseSubmission(any());
+    }
+
+    @Test
+    void regularPlannerAcceptanceCompletesWithoutAdminReview() {
+        Project project = projectWithTask("regular", "planner_approved");
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThrows(
+                RuntimeException.class,
+                () -> service.taskApprove(
+                        1L,
+                        11L,
+                        Map.of(
+                                "currentRole",
+                                "admin",
+                                "currentUserId",
+                                "admin-1",
+                                "currentUser",
+                                "管理员甲",
+                                "comments",
+                                "验收通过")));
+
+        assertEquals("planner_approved", project.getTasks().get(0).getStatus());
+        verify(points, never()).awardBaseSubmission(any());
+        verify(points, never()).awardQualityCompletion(any());
     }
 
     private Project projectWithTask(String type, String taskStatus) {

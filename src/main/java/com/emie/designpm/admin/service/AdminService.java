@@ -535,23 +535,21 @@ public class AdminService {
             },
             {"TASK_REASSIGNED", "子任务改派", "有新的子任务待处理", "子任务“{{taskName}}”已改派给你，所属项目：{{projectName}}；计划完成：{{deadline}}。"},
             {"TASK_ACCEPTED", "子任务接单", "子任务已接单", "{{actorName}}已接单子任务“{{taskName}}”。"},
-            {"TASK_DELIVERED", "子任务首次交付", "子任务待审核", "{{actorName}}已交付子任务“{{taskName}}”，请查看成果并完成审核。"},
-            {"TASK_SUBMITTED_FOR_REVIEW", "子任务送审", "子任务已送审", "子任务“{{taskName}}”已送审，请进行通过并评分或驳回。"},
+            {"TASK_DELIVERED", "子任务首次交付", "子任务待验收", "{{actorName}}已提交子任务“{{taskName}}”，请查看成果并完成验收或驳回。"},
+            {"TASK_SUBMITTED_FOR_REVIEW", "子任务待验收", "子任务待验收", "子任务“{{taskName}}”已提交，请完成验收或驳回。"},
             {"DESIGN_REQUIREMENT_DELIVERED", "设计需求交付", "设计需求已交付", "设计师已提交“{{projectName}}”的交付成果，请及时查看。"},
-            {"DESIGN_REQUIREMENT_REVIEW_PENDING", "设计需求待复评", "设计需求待复评", "“{{projectName}}”已完成设计师自评，请及时完成复评。"},
             {
                 "DESIGN_REQUIREMENT_REJECTED",
                 "设计需求驳回",
                 "设计需求已驳回",
                 "“{{projectName}}”已被驳回，原因：{{reason}}。请在{{deadline}}前修改并重新交付。"
             },
-            {"DESIGN_REQUIREMENT_COMPLETED", "设计需求完成", "设计需求已完成", "“{{projectName}}”已完成全部评分流程。"},
             {"DESIGN_REQUIREMENT_TERMINATED", "设计需求终止", "设计需求已终止", "“{{projectName}}”已由{{actorName}}终止。"},
             {"TASK_REJECTED", "子任务驳回", "子任务已驳回", "子任务“{{taskName}}”被驳回，原因：{{reason}}。请修改后重新交付。"},
             {
                 "TASK_REDELIVERED",
                 "子任务再次交付",
-                "子任务再次交付待审核",
+                "子任务再次提交待验收",
                 "{{actorName}}已第{{deliveryCount}}次交付“{{taskName}}”。上次驳回原因：{{reason}}。"
             },
             {"TASK_CORRECTED", "子任务交付更正", "子任务交付已更正", "{{actorName}}已更正子任务“{{taskName}}”的交付内容。请确认最新提交后再送审。"},

@@ -277,7 +277,7 @@ class FrontendModuleLayoutTest {
         assertTrue(
                 scoring.indexOf("a.isPending !== b.isPending") < scoring.indexOf("const dateCompare"),
                 "评分列表必须先按待评分状态分组，再在组内按时间排序");
-        assertTrue(scoring.contains("reviewStage === stage"));
+        assertFalse(scoring.contains("设计/送审需求"), "评分中心不应再列入设计需求");
     }
 
     @Test

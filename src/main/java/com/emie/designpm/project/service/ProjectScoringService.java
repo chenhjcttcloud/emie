@@ -1,7 +1,6 @@
 package com.emie.designpm.project.service;
 
 import com.emie.designpm.admin.repository.SystemConfigRepository;
-import com.emie.designpm.designrequirement.service.DesignRequirementScoringService;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.ScoringRecord;
 import com.emie.designpm.entity.SubTask;
@@ -16,7 +15,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,25 +23,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class ProjectScoringService {
     private final ScoringRepository scoringRepository;
     private final ProjectAccessService projectAccessService;
-    private final DesignRequirementScoringService designRequirementScoringService;
     private final ScoringWeightConfig scoringWeights;
 
     public ProjectScoringService(
             ScoringRepository scoringRepository,
             SystemConfigRepository systemConfigRepository,
             ProjectAccessService projectAccessService) {
-        this(scoringRepository, systemConfigRepository, projectAccessService, null);
-    }
-
-    @Autowired
-    public ProjectScoringService(
-            ScoringRepository scoringRepository,
-            SystemConfigRepository systemConfigRepository,
-            ProjectAccessService projectAccessService,
-            DesignRequirementScoringService designRequirementScoringService) {
         this.scoringRepository = scoringRepository;
         this.projectAccessService = projectAccessService;
-        this.designRequirementScoringService = designRequirementScoringService;
         this.scoringWeights = new ScoringWeightConfig(systemConfigRepository);
     }
 
@@ -55,12 +42,7 @@ public class ProjectScoringService {
         long projectPending = getPendingScoringTasks(role, userId).stream()
                 .filter(item -> Boolean.TRUE.equals(item.get("isPending")))
                 .count();
-        long requirementPending = designRequirementScoringService == null
-                ? 0L
-                : designRequirementScoringService.pendingItems(role, userId).stream()
-                        .filter(item -> Boolean.TRUE.equals(item.get("isPending")))
-                        .count();
-        return projectPending + requirementPending;
+        return projectPending;
     }
 
     /** 判断子任务是否真正完成（已验收 + 所有评分角色已评分）。 */

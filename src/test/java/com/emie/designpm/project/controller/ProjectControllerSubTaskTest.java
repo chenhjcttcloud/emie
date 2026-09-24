@@ -57,6 +57,7 @@ class ProjectControllerSubTaskTest {
         ScoringRepository scoring = mock(ScoringRepository.class);
         Project project = project(9L, "蓝牙音箱新品", "完成外观与包装设计");
         SubTask task = task(21L, project, "designer-1");
+        task.setPointRuleCode("A1");
         when(tasks.findMySubTasks("designer-1")).thenReturn(List.of(task));
         when(scoring.findBySubTaskIds(List.of(21L))).thenReturn(List.of());
 
@@ -65,6 +66,7 @@ class ProjectControllerSubTaskTest {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> body = (List<Map<String, Object>>) (List<?>) response.getBody();
         assertEquals("蓝牙音箱新品", body.getFirst().get("projectName"));
+        assertEquals("A1", body.getFirst().get("pointRuleCode"));
     }
 
     @Test
