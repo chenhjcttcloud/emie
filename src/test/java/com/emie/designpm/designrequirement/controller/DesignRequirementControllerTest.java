@@ -8,11 +8,11 @@ import com.emie.designpm.admin.service.PermissionService;
 import com.emie.designpm.admin.service.UserService;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
+import com.emie.designpm.designrequirement.service.DesignRequirementPointsService;
 import com.emie.designpm.entity.DesignRequirement;
 import com.emie.designpm.entity.PointRule;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.notification.service.NotificationWorkflowService;
-import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
 import com.emie.designpm.points.repository.PointRuleRepository;
 import java.util.List;
 import java.util.Map;
@@ -200,7 +200,7 @@ class DesignRequirementControllerTest {
                 mock(NotificationWorkflowService.class),
                 null,
                 mock(PointRuleRepository.class),
-                mock(PointAdjustmentLedgerRepository.class));
+                mock(DesignRequirementPointsService.class));
 
         assertEquals(
                 HttpStatus.FORBIDDEN,

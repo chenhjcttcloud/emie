@@ -71,6 +71,9 @@ GET /api/materials/{id}
 GET /api/performance/designer-monthly-report
 GET /api/performance/designer-monthly-report.xlsx
 GET /api/performance/designer-targets
+GET /api/performance/exports
+GET /api/performance/exports/{month}/files/{userId}
+GET /api/performance/exports/{month}/zip
 GET /api/performance/leaderboard
 GET /api/performance/monthly
 GET /api/performance/preview
@@ -158,6 +161,7 @@ POST /api/materials/{id}/adopt
 POST /api/materials/{id}/like
 POST /api/materials/{id}/select
 POST /api/materials/{id}/withdraw
+POST /api/performance/exports/{month}
 POST /api/point-governance/appeals
 POST /api/point-governance/appeals/{id}/admin-review
 POST /api/point-governance/appeals/{id}/planner-process
@@ -186,6 +190,7 @@ POST /api/projects/{id}/terminate
 POST /api/projects/{id}/workflow/complete-execution
 POST /api/projects/{id}/workflow/review
 POST /api/projects/{id}/workflow/submit-review
+POST /api/projects/{projectId}/subtasks/{taskId}/change-bonus
 POST /api/projects/{projectId}/tasks/{taskId}/accept
 POST /api/projects/{projectId}/tasks/{taskId}/approve
 POST /api/projects/{projectId}/tasks/{taskId}/cancel-accept

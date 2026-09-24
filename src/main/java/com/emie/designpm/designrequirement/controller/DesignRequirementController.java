@@ -4,14 +4,13 @@ import com.emie.designpm.admin.service.PermissionService;
 import com.emie.designpm.admin.service.UserService;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
+import com.emie.designpm.designrequirement.service.DesignRequirementPointsService;
 import com.emie.designpm.dto.PageResponse;
 import com.emie.designpm.entity.DesignRequirement;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.feishu.service.FeishuChatService;
 import com.emie.designpm.notification.service.NotificationWorkflowService;
-import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
 import com.emie.designpm.points.repository.PointRuleRepository;
-import com.emie.designpm.points.service.ConceptPointCapService;
 import com.emie.designpm.util.SecurityUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.format.DateTimeFormatter;
@@ -30,13 +29,7 @@ public class DesignRequirementController {
     private final NotificationWorkflowService notificationWorkflowService;
     private final FeishuChatService feishuChatService;
     private final PointRuleRepository pointRules;
-    private final PointAdjustmentLedgerRepository pointAdjustments;
-    private ConceptPointCapService conceptCap;
-
-    @Autowired
-    void setConceptCap(ConceptPointCapService conceptCap) {
-        this.conceptCap = conceptCap;
-    }
+    private final DesignRequirementPointsService pointsService;
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
@@ -48,14 +41,14 @@ public class DesignRequirementController {
             NotificationWorkflowService notificationWorkflowService,
             FeishuChatService feishuChatService,
             PointRuleRepository pointRules,
-            PointAdjustmentLedgerRepository pointAdjustments) {
+            DesignRequirementPointsService pointsService) {
         this.repository = repository;
         this.userService = userService;
         this.permissionService = permissionService;
         this.notificationWorkflowService = notificationWorkflowService;
         this.feishuChatService = feishuChatService;
         this.pointRules = pointRules;
-        this.pointAdjustments = pointAdjustments;
+        this.pointsService = pointsService;
     }
 
     /** 保留给轻量单元测试；生产运行始终使用完整依赖构造器。 */
@@ -258,37 +251,7 @@ public class DesignRequirementController {
         d.setOwnerAccepted(false);
         d.setPlannerAccepted(false);
         repository.save(d);
-        if (!d.isPointsAwarded()
-                && pointAdjustments != null
-                && pointRules != null
-                && pointAdjustments
-                        .findBySourceTypeAndSourceId("DESIGN_REQUIREMENT", d.getId())
-                        .isEmpty()) {
-            double points = d.getBasePointSnapshot() == null
-                    ? 0d
-                    : d.getBasePointSnapshot() * d.getDifficultyMultiplierSnapshot();
-            if (ConceptPointCapService.cappedRule(d.getPointRuleCode()) && !d.isConceptReserveExempt()) {
-                if (conceptCap == null) throw new IllegalStateException("纯概念积分上限服务未就绪");
-                points = Math.min(
-                        points,
-                        conceptCap.remaining(
-                                d.getDesignerId(), java.time.YearMonth.now().toString()));
-            }
-            points = java.math.BigDecimal.valueOf(points)
-                    .setScale(2, java.math.RoundingMode.HALF_UP)
-                    .doubleValue();
-            if (points > 0d) {
-                var award = new com.emie.designpm.entity.PointAdjustmentLedger();
-                award.setUserId(d.getDesignerId());
-                award.setSourceType("DESIGN_REQUIREMENT");
-                award.setSourceId(d.getId());
-                award.setPoints(points);
-                award.setReason("设计/送审需求交付：" + d.getName() + "（" + d.getPointRuleCode() + "）");
-                award.setCreatedBy(session.userId());
-                pointAdjustments.save(award);
-            }
-            d.setPointsAwarded(true);
-        }
+        if (pointsService != null && pointRules != null) pointsService.awardOnDelivery(d, session.userId());
         // 设计/送审需求统一通知创建人：无论由销售、产品推广还是产品企划创建，
         // 首次交付和驳回后的重新交付都回到同一个需求发起人。
         String ownerId = d.getOwnerId();

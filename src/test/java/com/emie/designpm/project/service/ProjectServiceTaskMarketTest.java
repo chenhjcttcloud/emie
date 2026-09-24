@@ -114,7 +114,7 @@ class ProjectServiceTaskMarketTest {
                                 "designerUserId",
                                 "designer-1")));
 
-        assertEquals("当前A/B类主任务已达上限（3个），请完成现有任务后再接单", error.getMessage());
+        assertEquals("当前设计任务已达接单上限（3个），请完成现有任务后再接单", error.getMessage());
         assertEquals(null, fixture.task.getDesignerId());
     }
 
