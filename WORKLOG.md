@@ -6,13 +6,15 @@
 
 - 当前分支：`master`
 - 本次接续文档：`docs/假期开发接续-积分规则2.0.md`
-- 本次发布前生产版本：`1.14.0`（发布脚本预检，HTTP 200）；本次目标版本：`1.14.1`
-- 本次发布状态及最终提交：见接续文档（发布完成后更新）
+- 当前生产版本：`1.14.1`；生产代码提交：`153382ca3ad6806861f66a96b9801f42f5292499`
+- 当前发布状态：2026-09-24 发布成功；公网 HTTP 200、JAR 校验一致，发布后预检确认生产 SHA 与 Gitee `master` 一致
 - 本地测试环境：本次业务改动已通过 `./scripts/test-update.sh`
-- 本次聚焦测试：`PointsServiceSnapshotTest`、`DesignRequirementControllerTest`、`ProjectReviewWorkflowTest` 通过；`-DskipTests test-compile` 和 `git diff --check` 通过
+- 完整构建测试：358 项，0 失败、1 项跳过；浏览器入口冒烟与弹窗回归通过
 - 设计部积分规则 2.0：45 条规则按主表替换；详情与未完成项见接续文档
 
 ## 最近完成
+
+- 发布设计部积分规则 2.0 与设计师月报导出（2026-09-24）：提交 `153382ca3ad6806861f66a96b9801f42f5292499` 已推送 Gitee `master` 并发布生产，版本 `1.14.1`；生产数据库备份位于 `/home/emie/emie-deploy-backups/20260924_185043`。发布前 358 项测试通过（0 失败、1 跳过），本地测试容器、HTTP 和浏览器冒烟检查通过。假期跨设备接续见 `docs/假期开发接续-积分规则2.0.md`。
 
 - 固定 GitHub CI 使用 JDK 21（2026-08-18）：新增 GitHub Actions 工作流，使用 Temurin 21、Maven 缓存并执行完整构建测试，避免 GitHub 按历史信息显示或使用 JDK 17。
 
