@@ -50,12 +50,18 @@ public class SubTask {
     /** Legacy snapshot retained so previously awarded tasks keep their original point total. */
     private Double difficultyMultiplierSnapshot;
 
-    private Integer basePointSnapshot;
+    @Column(columnDefinition = "DECIMAL(12,2)")
+    private Double basePointSnapshot;
+
+    private LocalDateTime basePointProcessedAt;
     private Integer qualityBonusThresholdSnapshot;
     private Double qualityBonusRatioSnapshot;
     private Integer qualityTopThresholdSnapshot;
     private Double qualityTopRatioSnapshot;
     private Double maxTotalMultiplierSnapshot;
+
+    /** 专项概念储备任务不受纯概念月度积分上限约束。 */
+    private boolean conceptReserveExempt;
 
     /** 合作成员积分比例快照，JSON: [{userId,name,ratio}]；剩余比例归主负责人。 */
     @Column(columnDefinition = "TEXT")
@@ -69,6 +75,19 @@ public class SubTask {
     private String assignmentReason;
 
     private Boolean countInPerformanceSnapshot;
+
+    /** 需求方变更产生的待交付追加分；重新交付时发放并清空。 */
+    @Column(length = 36)
+    private String pendingChangeBonusRequestId;
+
+    @Column(columnDefinition = "DECIMAL(12,2)")
+    private Double pendingChangeBonusPoints;
+
+    @Column(length = 500)
+    private String pendingChangeBonusReason;
+
+    @Column(length = 100)
+    private String pendingChangeBonusCreatedBy;
 
     /** 接单所需能力标签，JSON 字符串数组。 */
     @Column(columnDefinition = "TEXT")

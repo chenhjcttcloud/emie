@@ -50,7 +50,7 @@ class DesignRequirementControllerTest {
         PointRuleRepository rules = mock(PointRuleRepository.class);
         PointRule rule = new PointRule();
         rule.setRuleCode("A1");
-        rule.setPoints(10);
+        rule.setPoints(10d);
         rule.setEnabled(true);
         when(rules.findByRuleCode("A1")).thenReturn(Optional.of(rule));
         DesignRequirementController controller =
@@ -262,7 +262,7 @@ class DesignRequirementControllerTest {
         PointRuleRepository rules = mock(PointRuleRepository.class);
         PointRule rule = new PointRule();
         rule.setRuleCode("A1");
-        rule.setPoints(10);
+        rule.setPoints(10d);
         rule.setEnabled(true);
         when(rules.findByRuleCode("A1")).thenReturn(Optional.of(rule));
         DesignRequirementController controller =

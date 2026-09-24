@@ -38,6 +38,12 @@ public class PointLedger {
     @Column(length = 7)
     private String accountingMonth;
 
+    @Column(length = 500)
+    private String reason;
+
+    @Column(length = 100)
+    private String createdBy;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 

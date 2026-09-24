@@ -19,7 +19,11 @@ public class TaskDetailDTO {
     private String designerId;
     private String designerName;
     private String pointRuleCode;
-    private Integer basePointSnapshot;
+    private Double basePointSnapshot;
+    private Double difficultyMultiplierSnapshot;
+    private boolean conceptReserveExempt;
+    private String pendingChangeBonusRequestId;
+    private Double pendingChangeBonusPoints;
     private Integer qualityBonusThresholdSnapshot;
     private Double qualityBonusRatioSnapshot;
     private Integer qualityTopThresholdSnapshot;

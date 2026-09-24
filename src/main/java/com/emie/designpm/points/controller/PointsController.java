@@ -235,7 +235,7 @@ public class PointsController {
         if (!"admin".equals(session(request).role()))
             return ResponseEntity.status(403).body(Map.of("error", "仅管理员可修改积分规则"));
         try {
-            Integer value = body.get("points") instanceof Number n ? n.intValue() : null;
+            Double value = body.get("points") instanceof Number n ? n.doubleValue() : null;
             Boolean enabled = body.get("enabled") instanceof Boolean b ? b : null;
             String description = body.get("description") instanceof String s ? s : null;
             String category = body.get("category") instanceof String s ? s : null;

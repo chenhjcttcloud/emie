@@ -38,6 +38,16 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
     private static final Logger log = LoggerFactory.getLogger(DefaultSubTaskCommandService.class);
     private static final Object PROJECT_CODE_LOCK = new Object();
 
+    private static double difficultyMultiplier(Object raw) {
+        if (raw == null || String.valueOf(raw).isBlank()) return 1d;
+        try {
+            double value = Double.parseDouble(String.valueOf(raw));
+            if (value == 1d || value == 1.2d || value == 1.5d) return value;
+        } catch (NumberFormatException ignored) {
+        }
+        throw new IllegalArgumentException("特殊难度系数只能是 1、1.2 或 1.5");
+    }
+
     private final ProjectRepository projectRepository;
     private final SubTaskRepository subTaskRepository;
     private final ScoringRepository scoringRepository;
@@ -213,7 +223,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         task.setPublisherName((String) body.getOrDefault("currentUser", ""));
         task.setPublisherRole(role);
         if (pointsService != null) {
-            pointsService.bindRuleSnapshot(task, pointRuleCode);
+            pointsService.bindRuleSnapshot(task, pointRuleCode, difficultyMultiplier(body.get("difficultyMultiplier")));
+            task.setConceptReserveExempt(Boolean.TRUE.equals(body.get("conceptReserveExempt")));
         }
         task.setRequiredSkillTagsJson(inputValidator.skillTags(body.get("requiredSkillTags")));
         task.setCollaboratorAllocationsJson(
@@ -366,7 +377,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                 task.setMaxTotalMultiplierSnapshot(null);
                 task.setCountInPerformanceSnapshot(null);
             } else {
-                pointsService.bindRuleSnapshot(task, ruleCode);
+                pointsService.bindRuleSnapshot(task, ruleCode, difficultyMultiplier(body.get("difficultyMultiplier")));
+                task.setConceptReserveExempt(Boolean.TRUE.equals(body.get("conceptReserveExempt")));
             }
         }
         if (body.containsKey("requiredSkillTags")) {
@@ -432,6 +444,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         data.put("allocationStatus", task.getAllocationStatus());
         data.put("pointRuleCode", task.getPointRuleCode());
         data.put("basePointSnapshot", task.getBasePointSnapshot());
+        data.put("difficultyMultiplierSnapshot", task.getDifficultyMultiplierSnapshot());
+        data.put("conceptReserveExempt", task.isConceptReserveExempt());
         data.put("qualityBonusThresholdSnapshot", task.getQualityBonusThresholdSnapshot());
         data.put("qualityBonusRatioSnapshot", task.getQualityBonusRatioSnapshot());
         data.put("qualityTopThresholdSnapshot", task.getQualityTopThresholdSnapshot());
@@ -646,9 +660,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         double perWithdrawalRate = boundedDoubleConfig("points.withdrawal.penalty_rate", 10d) / 100d;
         int suspendDays = positiveIntConfig("points.withdrawal.suspend_days", 7);
         double ratio = elapsed <= freeMinutes ? 0d : Math.min(1d, perWithdrawalRate * (previous + 1));
-        int base = (int) Math.round(Optional.ofNullable(task.getBasePointSnapshot())
-                        .orElse(0)
-                * Optional.ofNullable(task.getDifficultyMultiplierSnapshot()).orElse(1d));
+        double base = Optional.ofNullable(task.getBasePointSnapshot()).orElse(0d)
+                * Optional.ofNullable(task.getDifficultyMultiplierSnapshot()).orElse(1d);
         int penalty = (int) Math.ceil(base * ratio);
         // 积分仅面向设计师任务：供应链等其它负责人类型的退单不扣分（P2-3），事件 penaltyPoints=0、reason 走免罚文案。
         if (!"designer".equals(task.getAssigneeRole())) penalty = 0;
@@ -742,6 +755,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         }
     }
 
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public Project taskDeliver(Long projectId, Long taskId, Map<String, Object> body) {
         Project p = lockProject(projectId);
 
@@ -774,7 +788,10 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         p.getLogs().add(new ActivityLog("子任务交付：" + task.getName(), currentUser, currentRole, p));
 
         Project saved = projectRepository.saveAndFlush(p);
-        if (pointsService != null) pointsService.awardBaseSubmission(task);
+        if (pointsService != null) {
+            pointsService.awardBaseSubmission(task);
+            pointsService.awardPendingChangeBonus(task);
+        }
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
         notifier.safeNotifyAfterCommit(
@@ -799,6 +816,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         return saved;
     }
 
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public Project taskRedeliver(Long projectId, Long taskId, Map<String, Object> body) {
         Project p = lockProject(projectId);
 
@@ -839,7 +857,10 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         p.getLogs().add(new ActivityLog("子任务重新交付：" + task.getName(), currentUser, currentRole, p));
 
         Project saved = projectRepository.save(p);
-        if (pointsService != null) pointsService.awardBaseSubmission(task);
+        if (pointsService != null) {
+            pointsService.awardBaseSubmission(task);
+            pointsService.awardPendingChangeBonus(task);
+        }
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
         notifier.safeNotifyAfterCommit(
@@ -863,6 +884,91 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         return saved;
     }
 
+    public Project requestChangeBonus(Long projectId, Long taskId, Map<String, Object> body) {
+        Project project = lockProject(projectId);
+        if (List.of("terminated", "paused", "pending_terminate").contains(project.getStatus())) {
+            throw new IllegalArgumentException("当前项目状态不允许追加需求变化积分");
+        }
+        SubTask task = lockSubTask(projectId, taskId);
+        String role = String.valueOf(body.getOrDefault("currentRole", ""));
+        String actorId = String.valueOf(body.getOrDefault("currentUserId", ""));
+        if (!("admin".equals(role) || ("planner".equals(role) && actorId.equals(project.getPlannerId())))) {
+            throw new IllegalArgumentException("仅项目企划或管理员可登记需求变化");
+        }
+        if (!"designer".equals(task.getAssigneeRole())
+                || task.getPointRuleCode() == null
+                || !task.getPointRuleCode().startsWith("D20_")) {
+            throw new IllegalArgumentException("仅 2.0 设计师任务可追加需求变化积分");
+        }
+        if (!List.of(
+                        "submitted_for_review",
+                        "delivered",
+                        "planner_approved",
+                        "sales_approved",
+                        "admin_approved",
+                        "completed")
+                .contains(task.getStatus())) {
+            throw new IllegalArgumentException("请在设计师首次交付后登记需求变化");
+        }
+        String requestId = String.valueOf(body.getOrDefault("requestId", ""));
+        try {
+            if (!UUID.fromString(requestId).toString().equals(requestId)) throw new IllegalArgumentException();
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("需求变化请求编号无效");
+        }
+        if (task.getPendingChangeBonusRequestId() != null) {
+            if (requestId.equals(task.getPendingChangeBonusRequestId())) return project;
+            throw new IllegalArgumentException("该任务已有待重新交付的需求变化，请先完成");
+        }
+        if (pointsService == null) throw new IllegalStateException("积分服务暂不可用");
+        if (pointsService.changeBonusAlreadyAwarded(task, requestId)) return project;
+        String reason = SecurityUtil.sanitizeText((String) body.get("reason"), 500);
+        if (reason == null || reason.isBlank()) throw new IllegalArgumentException("请填写需求变化原因");
+        double amount;
+        try {
+            amount = Double.parseDouble(String.valueOf(body.get("amount")));
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("追加值无效");
+        }
+        String mode = String.valueOf(body.getOrDefault("mode", ""));
+        double points;
+        if ("POINTS".equals(mode) && amount >= 0.5d && amount <= 3d) {
+            points = amount;
+        } else if ("REWORK".equals(mode) && amount >= 0.3d && amount <= 0.8d) {
+            points = task.getBasePointSnapshot() * task.getDifficultyMultiplierSnapshot() * amount;
+        } else {
+            throw new IllegalArgumentException("追加分只支持 0.5–3 分，或原任务的 30%–80%");
+        }
+        task.setPendingChangeBonusRequestId(requestId);
+        task.setPendingChangeBonusPoints(java.math.BigDecimal.valueOf(points)
+                .setScale(2, java.math.RoundingMode.HALF_UP)
+                .doubleValue());
+        task.setPendingChangeBonusReason(reason);
+        task.setPendingChangeBonusCreatedBy(actorId);
+        task.setStatus("rejected");
+        task.setCompletedAt(null);
+        task.setReviewComments("需求变化：" + reason);
+        if ("completed".equals(project.getStatus())) {
+            project.setStatus("in_progress");
+            project.setCompletedAt(null);
+        }
+        project.getLogs()
+                .add(new ActivityLog(
+                        "登记需求变化追加分：" + task.getName(),
+                        String.valueOf(body.getOrDefault("currentUser", "")),
+                        role,
+                        project));
+        Project saved = projectRepository.saveAndFlush(project);
+        notifier.safeNotifyAfterCommit(
+                "TASK_REJECTED",
+                task.getDesignerId(),
+                "sub_task",
+                task.getId(),
+                actorId,
+                notifier.context(project, task, String.valueOf(body.getOrDefault("currentUser", "")), reason));
+        return saved;
+    }
+
     /** 被驳回负责人确认开始修改，任务回到执行中。 */
     public Project taskConfirmRevision(Long projectId, Long taskId, Map<String, Object> body) {
         Project p = lockProject(projectId);
@@ -877,6 +983,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         return projectRepository.saveAndFlush(p);
     }
 
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public Project taskCorrectDelivery(Long projectId, Long taskId, Map<String, Object> body) {
         Project p = lockProject(projectId);
         if (List.of("terminated", "paused", "pending_terminate").contains(p.getStatus())) {

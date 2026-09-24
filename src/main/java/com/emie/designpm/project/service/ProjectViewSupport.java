@@ -466,6 +466,10 @@ public class ProjectViewSupport {
         dto.setDesignerName(task.getDesignerName());
         dto.setPointRuleCode(task.getPointRuleCode());
         dto.setBasePointSnapshot(task.getBasePointSnapshot());
+        dto.setDifficultyMultiplierSnapshot(task.getDifficultyMultiplierSnapshot());
+        dto.setConceptReserveExempt(task.isConceptReserveExempt());
+        dto.setPendingChangeBonusRequestId(task.getPendingChangeBonusRequestId());
+        dto.setPendingChangeBonusPoints(task.getPendingChangeBonusPoints());
         dto.setQualityBonusThresholdSnapshot(task.getQualityBonusThresholdSnapshot());
         dto.setQualityBonusRatioSnapshot(task.getQualityBonusRatioSnapshot());
         dto.setQualityTopThresholdSnapshot(task.getQualityTopThresholdSnapshot());

@@ -167,12 +167,13 @@ public class SubTaskInputValidator {
             });
         String code =
                 Optional.ofNullable(task.getPointRuleCode()).orElse("").trim().toUpperCase();
-        if (code.startsWith("A") || code.startsWith("B")) {
+        if (code.startsWith("A") || code.startsWith("B") || code.startsWith("D20_")) {
             long activeMainTasks = subTaskRepository.countActiveMainTasksByCategory(designerUserId, "A")
-                    + subTaskRepository.countActiveMainTasksByCategory(designerUserId, "B");
+                    + subTaskRepository.countActiveMainTasksByCategory(designerUserId, "B")
+                    + subTaskRepository.countActiveMainTasksByCategory(designerUserId, "D20_");
             int maxMainTasks = positiveIntConfig("points.claim.max_main_tasks", 5);
             if (activeMainTasks >= maxMainTasks) {
-                throw new RuntimeException("当前A/B类主任务已达上限（" + maxMainTasks + "个），请完成现有任务后再接单");
+                throw new RuntimeException("当前设计任务已达接单上限（" + maxMainTasks + "个），请完成现有任务后再接单");
             }
         }
 

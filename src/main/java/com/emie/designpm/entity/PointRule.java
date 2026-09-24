@@ -17,8 +17,8 @@ public class PointRule {
     @Column(name = "rule_code", nullable = false, unique = true, length = 80)
     private String ruleCode;
 
-    @Column(nullable = false)
-    private Integer points;
+    @Column(nullable = false, columnDefinition = "DECIMAL(12,2)")
+    private Double points;
 
     @Column(length = 50)
     private String category;

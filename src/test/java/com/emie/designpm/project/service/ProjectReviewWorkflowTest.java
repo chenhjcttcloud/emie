@@ -193,7 +193,7 @@ class ProjectReviewWorkflowTest {
         Project project = projectWithTask("regular", "pending");
         SubTask task = project.getTasks().get(0);
         task.setPointRuleCode("A1");
-        task.setBasePointSnapshot(20);
+        task.setBasePointSnapshot(20d);
         task.setDifficultyMultiplierSnapshot(1.5);
         task.setQualityBonusThresholdSnapshot(90);
         task.setQualityBonusRatioSnapshot(.3);

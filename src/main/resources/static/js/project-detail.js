@@ -51,6 +51,7 @@ function taskPointSummary(task) {
   const estimated = Math.round(base * multiplier * 100) / 100;
   const labels = { TASK_APPROVED: '通用任务（验收完成）', A1: '包装整套设计', A2: '包装单项设计', A3: '包装修改/刀模/箱规', A4: '包装多语言版', A5: '详情页全套设计', A6: '详情页局部/改版', A7: '主图/单张卖点图', A8: '海报/立牌/单页', A9: '展会物料整套', A10: 'UI界面/灯珠图案/待机页', A11: 'AI生图/场景图/推广图', B1: '原创产品设计', B2: '外采产品IP化设计', B3: '新增SKU/配色衍生', B4: '展会样品/客户定制产品', B5: '3D建模渲染出图', B6: '3D公仔建模/输出', E1: '执行类任务', E2: '执行类任务', E3: '执行类任务', E4: '执行类任务', S1: '特殊专项任务' };
   const code = String(task.pointRuleCode).toUpperCase();
+  if (code.startsWith('D20_')) return `${code} · ${estimated} 分${multiplier !== 1 ? `（×${multiplier}）` : ''}`;
   return `${code}（${labels[code] || '积分任务'}） · ${estimated} 分`;
 }
 
@@ -286,6 +287,8 @@ function renderSubTaskCard(detail, task, idx) {
         <button class="btn btn-success btn-sm" data-emie-action="click:detail-task-approve" data-project-id="${detail.id}" data-task-id="${task.id}" data-project-type="channel_custom">✅ 销售确认通过</button>
         <button class="btn btn-danger btn-sm" data-emie-action="click:detail-task-reject" data-project-id="${detail.id}" data-task-id="${task.id}">↩️ 驳回</button>
       ` : ''}
+      ${(EMIE.state.currentRole === 'admin' || (isPlanner && String(getCurrentUserId()) === String(detail.plannerId || ''))) && (!task.assigneeRole || task.assigneeRole === 'designer') && String(task.pointRuleCode || '').startsWith('D20_') && !task.pendingChangeBonusRequestId && (deliveryVersions.length > 0 || Boolean(task.deliverables)) && ['submitted_for_review', 'delivered', 'planner_approved', 'sales_approved', 'admin_approved', 'completed'].includes(task.status) ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-change-bonus" data-project-id="${detail.id}" data-task-id="${task.id}">＋ 需求变化追加分</button>` : ''}
+      ${task.pendingChangeBonusRequestId ? `<span class="subtask-meta-item">需求变化追加 ${Number(task.pendingChangeBonusPoints || 0)} 分，待重新交付入账</span>` : ''}
       ${myTask && task.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-accept" data-project-id="${detail.id}" data-task-id="${task.id}">✅ 接单</button>` : ''}
       ${myTask && task.status === 'accepted' ? (isRedelivering ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-redeliver" data-project-id="${detail.id}" data-task-id="${task.id}">📤 重新交付</button>` : `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-deliver" data-project-id="${detail.id}" data-task-id="${task.id}">📤 交付成果</button>`) : ''}
       ${task.status === 'rejected' && task.activeRejectionCycleId && task.activeRejectionRole === EMIE.state.currentRole && (
@@ -1085,6 +1088,8 @@ if (registerEventAction) {
     taskApprove(Number(element.dataset.projectId), Number(element.dataset.taskId), element.dataset.projectType));
   registerEventAction('detail-task-reject', (_event, element) =>
     taskReject(Number(element.dataset.projectId), Number(element.dataset.taskId)));
+  registerEventAction('detail-task-change-bonus', (_event, element) =>
+    EMIE.actions.openTaskChangeBonus(Number(element.dataset.projectId), Number(element.dataset.taskId)));
   registerEventAction('detail-task-cancel-reject', (_event, element) =>
     taskCancelReject(Number(element.dataset.projectId), Number(element.dataset.taskId), Number(element.dataset.cycleId)));
   registerEventAction('detail-task-accept', (_event, element) =>

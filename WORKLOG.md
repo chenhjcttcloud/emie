@@ -4,13 +4,13 @@
 
 ## 当前状态
 
-- 当前分支：`project_manager_system`
-- 当前生产版本：`1.6.3`
-- 当前已发布提交：`5a3c408`
-- 生产发布状态：已完成（1.4.1 缺陷修复批次含 V38/V39/V40；1.4.2 CSP 修复；1.4.3 积分上线前修复含 V41）
-- 积分功能：已于 2026-08-16 正式启用（mode=ACTIVE，生效日 2026-08-17，冒烟验证通过）
-- 测试环境状态：已通过 `./scripts/test-update.sh`
-- 最近完整测试：222 个测试全部通过
+- 当前分支：`master`
+- 本次接续文档：`docs/假期开发接续-积分规则2.0.md`
+- 本次发布前生产版本：`1.14.0`（发布脚本预检，HTTP 200）；本次目标版本：`1.14.1`
+- 本次发布状态及最终提交：见接续文档（发布完成后更新）
+- 本地测试环境：本次业务改动已通过 `./scripts/test-update.sh`
+- 本次聚焦测试：`PointsServiceSnapshotTest`、`DesignRequirementControllerTest`、`ProjectReviewWorkflowTest` 通过；`-DskipTests test-compile` 和 `git diff --check` 通过
+- 设计部积分规则 2.0：45 条规则按主表替换；详情与未完成项见接续文档
 
 ## 最近完成
 

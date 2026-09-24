@@ -283,7 +283,7 @@ async function openCreateProject(type) {
           </div>` : ''}
           ${type === 'design_requirement' ? `<div class="form-group"><label class="form-label"><span class="required">*</span> 需求负责人</label><input class="form-input" value="${escHtml(getCurrentUserName())}" disabled><input type="hidden" name="responsibleId" value="${escHtml(EMIE.state.currentUserId)}"></div>` : ''}
           ${type === 'design_requirement' ? `<div class="form-group"><label class="form-label"><span class="required">*</span> 交付设计师</label><select class="form-select" name="designerId" data-emie-action="change:form-field-change">${designerOpts}</select></div>` : ''}
-          ${type === 'design_requirement' ? `<div class="form-group"><label class="form-label"><span class="required">*</span> 积分规则</label><select class="form-select" name="pointRuleCode" data-emie-action="change:form-field-change"><option value="">请选择积分规则</option>${requirementPointRules.map(rule => `<option value="${escHtml(rule.ruleCode)}">${escHtml(rule.ruleCode)} · ${escHtml(rule.description || rule.category || '')} · ${Number(rule.points || 0)} 分</option>`).join('')}</select></div>` : ''}
+          ${type === 'design_requirement' ? `<div class="form-group"><label class="form-label"><span class="required">*</span> 积分规则</label><select class="form-select" name="pointRuleCode" data-emie-action="change:form-field-change"><option value="">请选择积分规则</option>${requirementPointRules.map(rule => `<option value="${escHtml(rule.ruleCode)}">${escHtml(rule.description || rule.ruleCode)} · ${Number(rule.points || 0)} 分</option>`).join('')}</select></div><div class="form-row"><div class="form-group"><label class="form-label">特殊难度系数</label><select class="form-select" name="difficultyMultiplier" data-emie-action="change:form-field-change"><option value="1">常规 ×1</option><option value="1.2">复杂 ×1.2</option><option value="1.5">特别复杂 ×1.5</option></select></div></div><div class="form-group"><label class="checkbox-item"><input type="checkbox" name="conceptReserveExempt" value="true" data-emie-action="change:form-field-change"> 纯概念储备，不计入月度上限</label></div>` : ''}
           <div class="form-group"><label class="form-label"><span class="required">*</span> 产品企划</label>
             <select class="form-select" name="plannerId" ${EMIE.state.currentRole === 'planner' ? 'disabled' : ''} data-emie-action="change:form-field-change">${plannerOpts}</select>
             ${EMIE.state.currentRole === 'planner' ? `<input type="hidden" name="plannerId" value="${EMIE.state.currentUserId}">` : ''}
@@ -434,6 +434,7 @@ async function submitCreateProject(type) {
 
   const fd = new FormData(document.getElementById('createProjectForm'));
   const data = Object.fromEntries(fd.entries());
+  if (type === 'design_requirement') data.conceptReserveExempt = data.conceptReserveExempt === 'true';
   let hasError = false;
 
   // 验证必填字段

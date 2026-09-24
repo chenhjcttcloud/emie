@@ -22,6 +22,35 @@ import org.mockito.ArgumentCaptor;
 class PointsServiceSnapshotTest {
 
     @Test
+    void designRule20KeepsDecimalBaseAndAwardsChangeOnlyWhenRedelivered() {
+        PointRuleRepository rules = mock(PointRuleRepository.class);
+        PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
+        PointRule rule = rule("D20_6", 2.5d, true);
+        when(rules.findByRuleCode("D20_6")).thenReturn(Optional.of(rule));
+        PointsService service = new PointsService(rules, ledgers, mock(ScoringRepository.class));
+        SubTask task = new SubTask();
+        task.setId(90L);
+        task.setDesignerId("designer-1");
+        task.setAssigneeRole("designer");
+        service.bindRuleSnapshot(task, "D20_6", 1.2d);
+        task.setPendingChangeBonusRequestId("fa8dc57e-0902-4fc7-8a6d-aee662a6369d");
+        task.setPendingChangeBonusPoints(0.5d);
+        task.setPendingChangeBonusReason("客户更改已确认方向");
+        task.setPendingChangeBonusCreatedBy("planner-1");
+
+        service.awardBaseSubmission(task);
+        verify(ledgers).save(argThat(ledger -> "D20_6:BASE".equals(ledger.getRuleCode()) && ledger.getPoints() == 3d));
+        verify(ledgers, times(1)).save(any(PointLedger.class));
+
+        service.awardPendingChangeBonus(task);
+        verify(ledgers)
+                .save(argThat(ledger -> ledger.getRuleCode().startsWith("D20_6:CHANGE:")
+                        && ledger.getPoints() == 0.5d
+                        && "客户更改已确认方向".equals(ledger.getReason())));
+        assertEquals(null, task.getPendingChangeBonusRequestId());
+    }
+
+    @Test
     void bindsEnabledRuleAndAwardsFromSnapshotAfterRuleChanges() {
         PointRuleRepository rules = mock(PointRuleRepository.class);
         PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
@@ -41,7 +70,7 @@ class PointsServiceSnapshotTest {
         task.setAssigneeRole("designer");
 
         service.bindRuleSnapshot(task, "b1");
-        rule.setPoints(100);
+        rule.setPoints(100d);
         rule.setQualityBonusThreshold(100);
         rule.setQualityBonusRatio(0d);
         rule.setCountInPerformance(true);
@@ -73,7 +102,7 @@ class PointsServiceSnapshotTest {
         task.setDesignerId("main");
         task.setAssigneeRole("designer");
         task.setPointRuleCode("B1");
-        task.setBasePointSnapshot(25);
+        task.setBasePointSnapshot(25d);
         task.setDifficultyMultiplierSnapshot(1.5);
         task.setQualityBonusThresholdSnapshot(95);
         task.setQualityBonusRatioSnapshot(.3);
@@ -269,7 +298,7 @@ class PointsServiceSnapshotTest {
         task.setDesignerId("designer-1");
         task.setAssigneeRole("designer");
         task.setPointRuleCode("B1");
-        task.setBasePointSnapshot(20);
+        task.setBasePointSnapshot(20d);
         task.setDifficultyMultiplierSnapshot(1.5);
         task.setQualityBonusThresholdSnapshot(95);
         task.setQualityBonusRatioSnapshot(0.5);
@@ -325,7 +354,7 @@ class PointsServiceSnapshotTest {
         task.setDesignerId("designer-1");
         task.setAssigneeRole(role);
         task.setPointRuleCode("B1");
-        task.setBasePointSnapshot(20);
+        task.setBasePointSnapshot(20d);
         task.setDifficultyMultiplierSnapshot(1.5);
         task.setQualityBonusThresholdSnapshot(95);
         task.setQualityBonusRatioSnapshot(0.5);
@@ -336,10 +365,10 @@ class PointsServiceSnapshotTest {
         return task;
     }
 
-    private PointRule rule(String code, int points, boolean enabled) {
+    private PointRule rule(String code, double points, boolean enabled) {
         PointRule rule = new PointRule();
         rule.setRuleCode(code);
-        rule.setPoints(points);
+        rule.setPoints((double) points);
         rule.setEnabled(enabled);
         rule.setQualityBonusThreshold(0);
         rule.setQualityBonusRatio(0d);

@@ -25,6 +25,8 @@ public interface SubTaskCommandService {
 
     Project taskRedeliver(Long projectId, Long taskId, Map<String, Object> body);
 
+    Project requestChangeBonus(Long projectId, Long taskId, Map<String, Object> body);
+
     Project taskConfirmRevision(Long projectId, Long taskId, Map<String, Object> body);
 
     Project taskCorrectDelivery(Long projectId, Long taskId, Map<String, Object> body);

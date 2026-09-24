@@ -89,6 +89,10 @@ public class ProjectTaskController {
                 throw unsupported();
             }
 
+            public Project requestChangeBonus(Long id, Long taskId, Map<String, Object> body) {
+                throw unsupported();
+            }
+
             public Project taskConfirmRevision(Long id, Long taskId, Map<String, Object> body) {
                 throw unsupported();
             }
@@ -219,6 +223,24 @@ public class ProjectTaskController {
             if (denied != null) return denied;
             return ResponseEntity.ok(view.toDetail(subTaskCommandService.cancelAcceptedTask(
                     projectId, taskId, req.withSessionContext(new LinkedHashMap<>(), request))));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** 需求方变更确认后登记追加分，设计师重新交付时入账。 */
+    @PostMapping("/{projectId}/subtasks/{taskId}/change-bonus")
+    public ResponseEntity<?> requestChangeBonus(
+            @PathVariable Long projectId,
+            @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest request) {
+        try {
+            ResponseEntity<?> denied = req.denyUnless(request, "subtask.edit");
+            if (denied != null) return denied;
+            Project project =
+                    subTaskCommandService.requestChangeBonus(projectId, taskId, req.withSessionContext(body, request));
+            return ResponseEntity.ok(view.toDetail(project));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

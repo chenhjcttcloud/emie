@@ -300,7 +300,7 @@ public class MaterialMarketService {
         adoptionRecord.setSelectedBy(actorId);
         adoptions.save(adoptionRecord);
         String ruleCode = "direct".equals(adoption) ? "M2" : "M1";
-        int points = pointRules == null
+        double points = pointRules == null
                 ? ("direct".equals(adoption) ? 20 : 10)
                 : pointRules
                         .findByRuleCode(ruleCode)

@@ -47,7 +47,15 @@ public class DesignRequirement {
     @Column(length = 80)
     private String pointRuleCode;
 
-    private Integer basePointSnapshot;
+    @Column(columnDefinition = "DECIMAL(12,2)")
+    private Double basePointSnapshot;
+
+    private boolean pointsAwarded;
+
+    @Column(nullable = false, columnDefinition = "DECIMAL(3,1)")
+    private Double difficultyMultiplierSnapshot = 1d;
+
+    private boolean conceptReserveExempt;
 
     @Column(nullable = false)
     private boolean ownerAccepted;

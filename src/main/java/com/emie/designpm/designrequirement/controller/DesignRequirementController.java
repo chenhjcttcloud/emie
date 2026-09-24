@@ -11,6 +11,7 @@ import com.emie.designpm.feishu.service.FeishuChatService;
 import com.emie.designpm.notification.service.NotificationWorkflowService;
 import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
 import com.emie.designpm.points.repository.PointRuleRepository;
+import com.emie.designpm.points.service.ConceptPointCapService;
 import com.emie.designpm.util.SecurityUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.format.DateTimeFormatter;
@@ -30,6 +31,13 @@ public class DesignRequirementController {
     private final FeishuChatService feishuChatService;
     private final PointRuleRepository pointRules;
     private final PointAdjustmentLedgerRepository pointAdjustments;
+    private ConceptPointCapService conceptCap;
+
+    @Autowired
+    void setConceptCap(ConceptPointCapService conceptCap) {
+        this.conceptCap = conceptCap;
+    }
+
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     @Autowired
@@ -171,6 +179,17 @@ public class DesignRequirementController {
         d.setDesignerName(designerName);
         d.setPointRuleCode(rule.getRuleCode());
         d.setBasePointSnapshot(rule.getPoints());
+        double multiplier;
+        try {
+            multiplier = Double.parseDouble(String.valueOf(body.getOrDefault("difficultyMultiplier", "1")));
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", "特殊难度系数无效"));
+        }
+        if (multiplier != 1d && multiplier != 1.2d && multiplier != 1.5d) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", "特殊难度系数只能是 1、1.2 或 1.5"));
+        }
+        d.setDifficultyMultiplierSnapshot(rule.getRuleCode().startsWith("D20_") ? multiplier : 1d);
+        d.setConceptReserveExempt(Boolean.TRUE.equals(body.get("conceptReserveExempt")));
         d.setAttachmentsJson(text(body.get("attachmentsJson")));
         d.setReferenceImagesJson(text(body.get("referenceImagesJson")));
         d.setOwnerId(session.userId());
@@ -212,7 +231,7 @@ public class DesignRequirementController {
     }
 
     @PostMapping("/{id}/deliver")
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public ResponseEntity<?> deliver(
             @PathVariable Long id, @RequestBody java.util.Map<String, Object> body, HttpServletRequest request) {
         AuthSession session = session(request);
@@ -239,22 +258,36 @@ public class DesignRequirementController {
         d.setOwnerAccepted(false);
         d.setPlannerAccepted(false);
         repository.save(d);
-        if (pointAdjustments != null
+        if (!d.isPointsAwarded()
+                && pointAdjustments != null
                 && pointRules != null
                 && pointAdjustments
                         .findBySourceTypeAndSourceId("DESIGN_REQUIREMENT", d.getId())
                         .isEmpty()) {
-            var award = new com.emie.designpm.entity.PointAdjustmentLedger();
-            award.setUserId(d.getDesignerId());
-            award.setSourceType("DESIGN_REQUIREMENT");
-            award.setSourceId(d.getId());
-            award.setPoints(
-                    d.getBasePointSnapshot() == null
-                            ? 0d
-                            : d.getBasePointSnapshot().doubleValue());
-            award.setReason("设计/送审需求交付：" + d.getName() + "（" + d.getPointRuleCode() + "）");
-            award.setCreatedBy(session.userId());
-            pointAdjustments.save(award);
+            double points = d.getBasePointSnapshot() == null
+                    ? 0d
+                    : d.getBasePointSnapshot() * d.getDifficultyMultiplierSnapshot();
+            if (ConceptPointCapService.cappedRule(d.getPointRuleCode()) && !d.isConceptReserveExempt()) {
+                if (conceptCap == null) throw new IllegalStateException("纯概念积分上限服务未就绪");
+                points = Math.min(
+                        points,
+                        conceptCap.remaining(
+                                d.getDesignerId(), java.time.YearMonth.now().toString()));
+            }
+            points = java.math.BigDecimal.valueOf(points)
+                    .setScale(2, java.math.RoundingMode.HALF_UP)
+                    .doubleValue();
+            if (points > 0d) {
+                var award = new com.emie.designpm.entity.PointAdjustmentLedger();
+                award.setUserId(d.getDesignerId());
+                award.setSourceType("DESIGN_REQUIREMENT");
+                award.setSourceId(d.getId());
+                award.setPoints(points);
+                award.setReason("设计/送审需求交付：" + d.getName() + "（" + d.getPointRuleCode() + "）");
+                award.setCreatedBy(session.userId());
+                pointAdjustments.save(award);
+            }
+            d.setPointsAwarded(true);
         }
         // 设计/送审需求统一通知创建人：无论由销售、产品推广还是产品企划创建，
         // 首次交付和驳回后的重新交付都回到同一个需求发起人。

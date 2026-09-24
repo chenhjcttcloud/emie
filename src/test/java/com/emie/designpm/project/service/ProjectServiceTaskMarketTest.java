@@ -157,7 +157,7 @@ class ProjectServiceTaskMarketTest {
         task.setStatus("accepted");
         task.setDesignerId("supply-1");
         task.setAssigneeRole("supplychain");
-        task.setBasePointSnapshot(20);
+        task.setBasePointSnapshot(20d);
         task.setDifficultyMultiplierSnapshot(1.5);
         task.setClaimedAt(LocalDateTime.now().minusHours(3));
         task.setProject(project);
@@ -211,7 +211,7 @@ class ProjectServiceTaskMarketTest {
         task.setStatus("accepted");
         task.setDesignerId("designer-1");
         task.setAssigneeRole("designer");
-        task.setBasePointSnapshot(20);
+        task.setBasePointSnapshot(20d);
         task.setDifficultyMultiplierSnapshot(1.5);
         task.setClaimedAt(LocalDateTime.now().minusHours(3));
         task.setProject(project);
