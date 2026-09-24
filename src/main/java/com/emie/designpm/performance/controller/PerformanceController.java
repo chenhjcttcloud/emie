@@ -28,8 +28,10 @@ public class PerformanceController {
         try {
             java.time.YearMonth.parse(month);
             return ResponseEntity.ok(service.designerMonthlyReport(month));
-        } catch (RuntimeException e) {
+        } catch (java.time.format.DateTimeParseException e) {
             return ResponseEntity.badRequest().body(Map.of("error", "月份格式应为 YYYY-MM"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", "Excel 生成失败，请稍后重试"));
         }
     }
 
@@ -48,8 +50,10 @@ public class PerformanceController {
                                     .build()
                                     .toString())
                     .body(service.designerMonthlyReportExcel(month));
-        } catch (RuntimeException e) {
+        } catch (java.time.format.DateTimeParseException e) {
             return ResponseEntity.badRequest().body(Map.of("error", "月份格式应为 YYYY-MM"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", "Excel 生成失败，请稍后重试"));
         }
     }
 

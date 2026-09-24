@@ -96,6 +96,9 @@ class FrontendModuleLayoutTest {
         }
 
         assertFalse(html.contains("/js/app.js"), "页面不应继续加载已拆分的 app.js");
+        String adminScoring = readResource("/static/js/admin-scoring.js");
+        assertTrue(adminScoring.contains("'X-Auth-Token': token"), "受保护的绩效 Excel 下载必须携带会话令牌");
+        assertTrue(adminScoring.contains("link.download = `designer-performance-${month}.xlsx`"));
         assertTrue(
                 html.matches("(?s).*<script type=\"module\" src=\"/js/bootstrap\\.js\\?v=\\d+\"></script>.*"),
                 "页面应只通过带版本号的 ES Module 启动入口加载前端");

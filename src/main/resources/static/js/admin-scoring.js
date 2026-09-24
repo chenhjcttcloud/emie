@@ -173,12 +173,28 @@ async function reloadDesignerMonthlyReport() {
   } catch (error) { window.EMIE.actions.showSystemAlert('月度绩效表加载失败：' + (error.message || '')); }
 }
 
-function exportDesignerMonthlyReport() {
+async function exportDesignerMonthlyReport() {
   const month = document.getElementById('designerPerformanceMonth')?.value;
   if (!month) return;
-  const link = document.createElement('a');
-  link.href = '/api/performance/designer-monthly-report.xlsx?month=' + encodeURIComponent(month);
-  link.click();
+  try {
+    const token = localStorage.getItem('design_pm_token');
+    const response = await fetch('/api/performance/designer-monthly-report.xlsx?month=' + encodeURIComponent(month), {
+      headers: token ? { 'X-Auth-Token': token } : {},
+      credentials: 'same-origin',
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || `导出失败（HTTP ${response.status}）`);
+    }
+    const blobUrl = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = `designer-performance-${month}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(blobUrl);
+  } catch (error) {
+    window.EMIE.actions.showSystemAlert(error.message || 'Excel 导出失败');
+  }
 }
 
 function filterAdminPointRules() {
