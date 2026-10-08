@@ -18,8 +18,6 @@ import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.util.Units;
 import org.apache.poi.xssf.usermodel.*;
-import org.apache.poi.xssf.usermodel.DefaultIndexedColorMap;
-import org.apache.poi.xssf.usermodel.XSSFColor;
 
 /**
  * 生成单个设计师嘅月度绩效 Excel：
@@ -278,38 +276,8 @@ final class DesignerPerformanceWorkbook {
                         + (report.createdCount() - report.completedCount()) + " 项；按时完成 "
                         + report.onTimeCount() + " 项；往月接单/指派、本月完成 "
                         + report.carriedOverCompleted().size() + " 项");
-        Row progress = sheet.createRow(r++);
-        cell(progress, 0, "本月完成进度", styles.header);
-        Cell progressValue = progress.createCell(1);
-        progressValue.setCellValue(
-                report.createdCount() == 0 ? 0d : (double) report.completedCount() / report.createdCount());
-        progressValue.setCellStyle(styles.progress);
-        text(
-                sheet,
-                progress.getRowNum(),
-                2,
-                report.createdCount() == 0
-                        ? "本月无接单/指派任务"
-                        : "已完成 " + report.completedCount() + " / " + report.createdCount() + " 项，未完成 "
-                                + (report.createdCount() - report.completedCount()) + " 项",
-                styles.plain);
-        merge(sheet, progress.getRowNum(), progress.getRowNum(), 2, lastColumn);
-        var progressRule = sheet.getSheetConditionalFormatting()
-                .createConditionalFormattingRule(
-                        new XSSFColor(new java.awt.Color(46, 125, 50), new DefaultIndexedColorMap()));
-        progressRule
-                .getDataBarFormatting()
-                .getMinThreshold()
-                .setRangeType(ConditionalFormattingThreshold.RangeType.MIN);
-        progressRule
-                .getDataBarFormatting()
-                .getMaxThreshold()
-                .setRangeType(ConditionalFormattingThreshold.RangeType.MAX);
-        sheet.getSheetConditionalFormatting()
-                .addConditionalFormatting(
-                        new CellRangeAddress[] {new CellRangeAddress(progress.getRowNum(), progress.getRowNum(), 1, 1)},
-                        progressRule);
-        progress.setHeightInPoints(24f);
+        DesignerPerformanceProgressRow.write(
+                sheet, r++, lastColumn, report.completedCount(), report.createdCount(), styles.header, styles.plain);
 
         String[] headers = {"序号", "任务名称", "类别", "接单/指派日期", "计划完成", "实际完成", "当前状态", "统计归属", "交付成果描述", "附件"};
         Row head = sheet.createRow(r++);
@@ -564,7 +532,6 @@ final class DesignerPerformanceWorkbook {
                 center,
                 left,
                 leftWrap,
-                progress,
                 percent,
                 score,
                 scoreBold,
@@ -593,11 +560,6 @@ final class DesignerPerformanceWorkbook {
             leftWrap = bordered(wb);
             leftWrap.setAlignment(HorizontalAlignment.LEFT);
             leftWrap.setWrapText(true);
-            progress = bordered(wb);
-            progress.setAlignment(HorizontalAlignment.CENTER);
-            progress.setDataFormat(wb.createDataFormat().getFormat("0%"));
-            progress.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
-            progress.setFillPattern(FillPatternType.SOLID_FOREGROUND);
             header = bordered(wb);
             header.setAlignment(HorizontalAlignment.CENTER);
             header.setFont(bold);
