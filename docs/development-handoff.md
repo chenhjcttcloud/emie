@@ -1,11 +1,12 @@
 # EMIE 开发交接状态
 
-## 2026-10-08 子任务旧任务手动积分（待发布）
+## 2026-10-08 子任务旧任务手动积分（已发布，1.15.1）
 
 - 2026-10-01 前创建的设计师子任务，企划验收时必填本次手动积分；积分进入关联交付版本、子任务积分流水和操作日志。旧任务驳回阶段选定的修改积分不会自动发放，验收时清除待发修改积分，避免重复计分。10-01 起创建的任务维持规则自动发分。
 - 定向 `ProjectReviewWorkflowTest`、`PointsServiceSnapshotTest` 通过；`./scripts/test-update.sh` 本地测试容器、数据库/Redis/应用健康、首页/静态资源和浏览器弹窗回归通过。
-- 生产只读预检通过：生产当前 SHA 与 `emie/master` 均为 `49a45dcd969b9c7a546381354355c5ce45f7c531`，版本 1.15.0，公网 HTTP 200，计划版本 1.15.1；尚未提交、推送或部署。
-- 月报图片导出试验文件 `DesignerPerformanceWorkbook.java`、`PerformanceImageLoader.java`、`DesignerPerformanceWorkbookTest.java` 及未跟踪 `test-results/` 为其他本地改动，本次发布需保留且排除。
+- 提交 `2962846e878ee535ca627d8de741fff78c9779c5` 已推送至 Gitee `master` 与 GitHub `main`，并从生产旧 SHA `49a45dcd969b9c7a546381354355c5ce45f7c531` 原子切换到版本 1.15.1。生产应用 SHA、release-sha、JAR 校验和一致；备份 `/home/emie/emie-deploy-backups/20261008_181722`（711385 字节），旧容器 `emie-app-old-20261008_181722` 保留。
+- Java 21 全量 371 项测试通过（0 失败、0 错误、1 项既有规则跳过）；生产应用与预览容器均 running、重启数 0、OOM false；发布后预检公网 HTTP 200、版本 1.15.1、运行 SHA 一致。无数据库迁移。
+- 月报图片导出试验文件 `DesignerPerformanceWorkbook.java`、`PerformanceImageLoader.java`、`DesignerPerformanceWorkbookTest.java` 及未跟踪 `test-results/` 已单独 stash 保留，未纳入本次生产提交。
 
 ## 2026-09-24 月度绩效 Excel 导出修复（已发布）
 
