@@ -86,21 +86,21 @@ public class DesignerPerformanceExportService {
 
     public record Manifest(String month, String generatedAt, String generatedBy, List<Entry> designers) {}
 
-    public record GenerationStatus(String month, String status, String message) {}
+    public record GenerationStatus(String month, String status, String message, int progress) {}
 
     public synchronized GenerationStatus startGeneration(YearMonth month, String generatedBy) {
         if (month.isAfter(YearMonth.now())) throw new IllegalArgumentException("不能生成未来月份的绩效表");
         GenerationStatus current = generations.get(month);
         if (current != null && "RUNNING".equals(current.status())) return current;
-        GenerationStatus running = new GenerationStatus(month.toString(), "RUNNING", "正在生成绩效表");
+        GenerationStatus running = new GenerationStatus(month.toString(), "RUNNING", "正在准备月报", 0);
         generations.put(month, running);
         taskExecutor.execute(() -> {
             try {
                 generate(month, generatedBy);
-                generations.put(month, new GenerationStatus(month.toString(), "READY", "生成完成"));
+                generations.put(month, new GenerationStatus(month.toString(), "READY", "生成完成", 100));
             } catch (Exception e) {
                 log.error("生成 {} 绩效表失败", month, e);
-                generations.put(month, new GenerationStatus(month.toString(), "FAILED", "生成失败，请重试"));
+                generations.put(month, new GenerationStatus(month.toString(), "FAILED", "生成失败，请重试", 0));
             }
         });
         return running;
@@ -109,7 +109,8 @@ public class DesignerPerformanceExportService {
     public GenerationStatus generationStatus(YearMonth month) {
         GenerationStatus current = generations.get(month);
         if (current != null) return current;
-        return new GenerationStatus(month.toString(), manifest(month).isPresent() ? "READY" : "NOT_STARTED", "");
+        boolean ready = manifest(month).isPresent();
+        return new GenerationStatus(month.toString(), ready ? "READY" : "NOT_STARTED", "", ready ? 100 : 0);
     }
 
     @Scheduled(cron = "${app.performance-export.cron:0 30 2 1 * ?}")
@@ -135,12 +136,14 @@ public class DesignerPerformanceExportService {
     public synchronized Manifest generate(YearMonth month, String generatedBy) throws IOException {
         if (month.isAfter(YearMonth.now())) throw new IllegalArgumentException("不能生成未来月份的绩效表");
         List<DesignerMonthlyReport> monthReports = reports.buildMonth(month);
+        updateProgress(month, "正在生成设计师绩效表", monthReports.isEmpty() ? 90 : 5);
         Files.createDirectories(root);
         Path staging = root.resolve(month + ".tmp-" + UUID.randomUUID());
         Files.createDirectories(staging);
         try {
             List<Entry> entries = new ArrayList<>();
             Set<String> usedNames = new HashSet<>();
+            int completed = 0;
             for (DesignerMonthlyReport report : monthReports) {
                 String fileName = fileName(report, usedNames);
                 try (OutputStream out = Files.newOutputStream(staging.resolve(fileName))) {
@@ -159,7 +162,13 @@ public class DesignerPerformanceExportService {
                                         .filter(DesignerMonthlyReport.Attachment::embeddableImage)
                                         .count())
                                 .sum()));
+                completed++;
+                updateProgress(
+                        month,
+                        "正在生成设计师绩效表（" + completed + "/" + monthReports.size() + "）",
+                        5 + completed * 85 / monthReports.size());
             }
+            updateProgress(month, "正在整理导出文件", 95);
             Manifest manifest =
                     new Manifest(month.toString(), LocalDateTime.now().format(STAMP), generatedBy, entries);
             MAPPER.writerWithDefaultPrettyPrinter()
@@ -167,10 +176,18 @@ public class DesignerPerformanceExportService {
             Path target = monthDir(month);
             deleteRecursively(target);
             Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
+            updateProgress(month, "生成完成", 100);
             log.info("已生成 {} 绩效表，共 {} 位设计师（{}）", month, entries.size(), generatedBy);
             return manifest;
         } finally {
             deleteRecursively(staging);
+        }
+    }
+
+    private void updateProgress(YearMonth month, String message, int progress) {
+        GenerationStatus current = generations.get(month);
+        if (current != null && "RUNNING".equals(current.status())) {
+            generations.put(month, new GenerationStatus(month.toString(), "RUNNING", message, progress));
         }
     }
 

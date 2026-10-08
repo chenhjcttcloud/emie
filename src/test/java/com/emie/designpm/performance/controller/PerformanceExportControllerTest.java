@@ -20,9 +20,9 @@ class PerformanceExportControllerTest {
     void generationReturnsQuicklyAndExposesStatus() throws Exception {
         DesignerPerformanceExportService exports = mock(DesignerPerformanceExportService.class);
         when(exports.startGeneration(YearMonth.of(2026, 9), "管理员"))
-                .thenReturn(new DesignerPerformanceExportService.GenerationStatus("2026-09", "RUNNING", "正在生成绩效表"));
+                .thenReturn(new DesignerPerformanceExportService.GenerationStatus("2026-09", "RUNNING", "正在生成绩效表", 5));
         when(exports.generationStatus(YearMonth.of(2026, 9)))
-                .thenReturn(new DesignerPerformanceExportService.GenerationStatus("2026-09", "READY", "生成完成"));
+                .thenReturn(new DesignerPerformanceExportService.GenerationStatus("2026-09", "READY", "生成完成", 100));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new PerformanceExportController(exports))
                 .build();
         var admin = new AuthSession("admin", "admin", "管理员");

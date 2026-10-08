@@ -21,7 +21,7 @@ function renderDesignerMonthlyReport(report) {
   const rows = report?.designers || [];
   const mix = (counts, total) => Object.entries(counts || {}).map(([label, count]) => `${escHtml(label)} ${count} (${total ? Math.round(count * 100 / total) : 0}%)`).join('、') || '—';
   const typeLabel = type => ({ channel_custom: '渠道定制', regular: '公司常规品' }[type] || type || '未设置');
-  return `<div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>设计师月度绩效表</h3><p class="admin-section-hint">完成时间：${escHtml(report.from.replace('T', ' '))} 至 ${escHtml(report.to.replace('T', ' '))}（含起点，不含终点）；分数为已入账绩效积分合计，暂未套用权重。</p></div><div style="display:flex;align-items:end;gap:6px;"><label class="form-label">月份 <input class="form-input" type="month" id="designerPerformanceMonth" value="${escHtml(report.month)}" data-emie-action="change:scoring-performance-month"></label><button type="button" aria-label="导出当前月份 Excel" title="导出当前月份 Excel" style="height:38px;padding:0 6px;border:0;background:transparent;color:var(--gray-500);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;" data-emie-action="click:scoring-export-performance">↓ 导出 Excel</button></div></div><div class="table-wrap"><table><thead><tr><th>设计师</th><th>月份</th><th>完成子任务</th><th>类别数量占比</th><th>分数（积分）</th><th>完成任务明细</th></tr></thead><tbody>${rows.map(row => `<tr><td><strong>${escHtml(row.designer)}</strong></td><td>${escHtml(row.month)}</td><td>${row.completedCount}</td><td>${mix(row.categoryCounts, row.completedCount)}</td><td>${Number(row.score || 0).toFixed(2)}</td><td><details><summary>查看 ${row.tasks.length} 项</summary><div style="min-width:480px;padding:8px 0;">${row.tasks.map(task => `<div style="padding:7px 0;border-bottom:1px solid var(--gray-100);"><strong>${escHtml(task.name)}</strong> · ${escHtml(task.project)}（${escHtml(typeLabel(task.projectType))}）<br><span style="color:var(--gray-500);font-size:12px;">${escHtml(task.completedAt.replace('T', ' '))} · ${escHtml(task.category)} · ${escHtml(task.ruleCode || '无规则')} · ${Number(task.score || 0).toFixed(2)} 分</span></div>`).join('') || '本月暂无完成任务'}</div></details></td></tr>`).join('') || '<tr><td colspan="6">暂无在职设计师</td></tr>'}</tbody></table></div></div>`;
+  return `<div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>设计师月度绩效表</h3><p class="admin-section-hint">完成时间：${escHtml(report.from.replace('T', ' '))} 至 ${escHtml(report.to.replace('T', ' '))}（含起点，不含终点）；分数为已入账绩效积分合计，暂未套用权重。</p></div><div style="display:flex;align-items:end;gap:6px;"><label class="form-label">月份 <input class="form-input" type="month" id="designerPerformanceMonth" value="${escHtml(report.month)}" data-emie-action="change:scoring-performance-month"></label><button type="button" aria-label="导出当前月份 Excel" title="导出当前月份 Excel" style="height:38px;padding:0 6px;border:0;background:transparent;color:var(--gray-500);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;" data-emie-action="click:scoring-export-performance">↓ 导出 Excel</button></div></div><div id="designerPerformanceExportProgress" hidden role="status" aria-live="polite" style="margin:0 0 16px;"><div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;color:var(--gray-600);"><span data-export-message>正在准备月报</span><span data-export-percent>0%</span></div><div class="progress-bar" style="height:8px;margin-top:6px;"><div class="progress-fill" data-export-fill style="width:0%;"></div></div></div><div class="table-wrap"><table><thead><tr><th>设计师</th><th>月份</th><th>完成子任务</th><th>类别数量占比</th><th>分数（积分）</th><th>完成任务明细</th></tr></thead><tbody>${rows.map(row => `<tr><td><strong>${escHtml(row.designer)}</strong></td><td>${escHtml(row.month)}</td><td>${row.completedCount}</td><td>${mix(row.categoryCounts, row.completedCount)}</td><td>${Number(row.score || 0).toFixed(2)}</td><td><details><summary>查看 ${row.tasks.length} 项</summary><div style="min-width:480px;padding:8px 0;">${row.tasks.map(task => `<div style="padding:7px 0;border-bottom:1px solid var(--gray-100);"><strong>${escHtml(task.name)}</strong> · ${escHtml(task.project)}（${escHtml(typeLabel(task.projectType))}）<br><span style="color:var(--gray-500);font-size:12px;">${escHtml(task.completedAt.replace('T', ' '))} · ${escHtml(task.category)} · ${escHtml(task.ruleCode || '无规则')} · ${Number(task.score || 0).toFixed(2)} 分</span></div>`).join('') || '本月暂无完成任务'}</div></details></td></tr>`).join('') || '<tr><td colspan="6">暂无在职设计师</td></tr>'}</tbody></table></div></div>`;
 }
 
 // ==================== 评分权重管理 ====================
@@ -175,6 +175,15 @@ async function exportDesignerMonthlyReport(button) {
   const month = document.getElementById('designerPerformanceMonth')?.value;
   if (!month) return;
   const originalText = button?.textContent;
+  const progress = document.getElementById('designerPerformanceExportProgress');
+  const setProgress = status => {
+    if (!progress) return;
+    const percent = Math.max(0, Math.min(100, Number(status.progress || 0)));
+    progress.hidden = false;
+    progress.querySelector('[data-export-message]').textContent = status.message || '正在生成绩效表';
+    progress.querySelector('[data-export-percent]').textContent = `${percent}%`;
+    progress.querySelector('[data-export-fill]').style.width = `${percent}%`;
+  };
   if (button) { button.disabled = true; button.textContent = '正在生成…'; button.setAttribute('aria-busy', 'true'); }
   try {
     const token = localStorage.getItem('design_pm_token');
@@ -187,15 +196,18 @@ async function exportDesignerMonthlyReport(button) {
       throw new Error(error.error || `生成失败（HTTP ${generated.status}）`);
     }
     let status = await generated.json();
+    setProgress(status);
     for (let attempt = 0; status.status === 'RUNNING' && attempt < 200; attempt++) {
-      button && (button.textContent = `正在生成 ${month}…`);
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      button && (button.textContent = `生成中 ${Number(status.progress || 0)}%`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
       const response = await fetch('/api/performance/exports/' + encodeURIComponent(month), { headers, credentials: 'same-origin' });
       if (!response.ok) throw new Error(`查询生成状态失败（HTTP ${response.status}）`);
       status = await response.json();
+      setProgress(status);
     }
     if (status.status === 'FAILED') throw new Error(status.message || '生成失败，请重试');
     if (status.status !== 'READY') throw new Error('生成仍在进行；稍后再次点击可继续下载');
+    setProgress(status);
     const response = await fetch('/api/performance/exports/' + encodeURIComponent(month) + '/zip', {
       headers,
       credentials: 'same-origin',
@@ -211,6 +223,7 @@ async function exportDesignerMonthlyReport(button) {
     link.click();
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   } catch (error) {
+    if (progress) { progress.querySelector('[data-export-message]').textContent = error.message || '生成失败'; progress.querySelector('[data-export-percent]').textContent = '失败'; }
     window.EMIE.actions.showSystemAlert(error.message || 'Excel 导出失败');
   } finally {
     if (button) { button.disabled = false; button.textContent = originalText || '↓ 导出 Excel'; button.removeAttribute('aria-busy'); }

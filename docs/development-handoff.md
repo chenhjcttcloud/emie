@@ -1300,3 +1300,9 @@
 - 提交 `b4f6afaa0330b67a9ce1abad6dbe7563fa5d6eed` 已推送 Gitee `master` 和 GitHub `main`，生产版本 `1.14.4` 已原子发布，公网 HTTP 200，运行 SHA 一致。
 - 生产备份 `/home/emie/emie-deploy-backups/20261008_153347`（700173 bytes）；旧容器 `emie-app-old-20261008_153347` 保留；无本次新增数据库迁移。
 - 工作区临时 `test-results/` 不纳入提交。
+
+## 2026-10-08 月报 Excel 任务完成进度条（本地）
+
+- “任务详情”顶部新增 Excel 原生数据条，进度按本月已完成任务数/接单或指派任务数计算；0% 有灰色底槽，非零时叠加绿色数据条，零任务另显示说明，按时完成率口径未改。
+- `DesignerPerformanceWorkbookTest` 定向测试通过，验证比例值、底槽样式及 XLSX 数据条规则；待运行 `./scripts/test-update.sh` 完成本地容器验证。
+- 尚未提交、推送或发布生产。

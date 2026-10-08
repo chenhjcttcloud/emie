@@ -139,6 +139,16 @@ class DesignerPerformanceWorkbookTest {
             assertEquals("4", sheet.getRow(7).getCell(0).getStringCellValue());
             assertEquals("SUM(J6:J9)", sheet.getRow(9).getCell(9).getCellFormula());
             var details = workbook.getSheet("任务详情");
+            assertEquals("本月完成进度", details.getRow(2).getCell(0).getStringCellValue());
+            assertEquals(1d, details.getRow(2).getCell(1).getNumericCellValue());
+            assertEquals(
+                    org.apache.poi.ss.usermodel.IndexedColors.GREY_25_PERCENT.getIndex(),
+                    details.getRow(2).getCell(1).getCellStyle().getFillForegroundColor());
+            assertEquals(1, details.getSheetConditionalFormatting().getNumConditionalFormattings());
+            assertNotNull(details.getSheetConditionalFormatting()
+                    .getConditionalFormattingAt(0)
+                    .getRule(0)
+                    .getDataBarFormatting());
             assertEquals("统计归属", details.getRow(3).getCell(7).getStringCellValue());
             assertEquals("交付成果描述", details.getRow(3).getCell(8).getStringCellValue());
             assertEquals("包装主视觉、内页插画和生产文件", details.getRow(7).getCell(8).getStringCellValue());

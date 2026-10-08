@@ -26,10 +26,12 @@ class DesignerPerformanceExportServiceTest {
 
         assertEquals(
                 "RUNNING", exports.startGeneration(YearMonth.of(2026, 8), "管理员").status());
+        assertEquals(0, exports.generationStatus(YearMonth.of(2026, 8)).progress());
         assertEquals(1, queued.size());
         queued.getFirst().run();
 
         assertEquals("READY", exports.generationStatus(YearMonth.of(2026, 8)).status());
+        assertEquals(100, exports.generationStatus(YearMonth.of(2026, 8)).progress());
         assertTrue(exports.manifest(YearMonth.of(2026, 8)).isPresent());
     }
 }
