@@ -375,6 +375,10 @@ public class ProjectViewSupport {
             record.put("reviewerRole", log.getRole());
             record.put("reviewedAt", log.getTime().format(DTF));
             record.put("reason", reason);
+            record.put("withPoints", rejection.get("withPoints"));
+            record.put("pointRuleCode", rejection.get("pointRuleCode"));
+            record.put("pointRuleDescription", rejection.get("pointRuleDescription"));
+            record.put("points", rejection.get("points"));
             record.put(
                     "requiredCompletionDate",
                     rejection.getOrDefault("requiredCompletionDate", snapshot.getOrDefault("plannedDate", "")));

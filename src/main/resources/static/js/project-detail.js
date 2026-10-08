@@ -372,6 +372,7 @@ function openProjectSubTaskDetail(event, taskId) {
               style="width:100%;display:flex;align-items:center;gap:8px;padding:10px 12px;margin-bottom:8px;border:1px solid #F3C1C1;border-radius:9px;background:#FFF8F8;cursor:pointer;text-align:left;">
               <strong style="color:#A32D2D;white-space:nowrap;">第 ${record.attemptNo} 次修改要求${record.cancelled ? '（已取消）' : ''}</strong>
               <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray-600);">${escHtml(record.reason || '未填写修改意见')}</span>
+              ${record.withPoints === true ? `<span style="font-size:12px;color:var(--warning-dark,#92400E);white-space:nowrap;">${escHtml(record.pointRuleDescription || record.pointRuleCode || '积分规则')} · ${Number(record.points || 0)} 分</span>` : record.withPoints === false ? '<span style="font-size:12px;color:var(--gray-500);white-space:nowrap;">本次无积分</span>' : ''}
               <span style="font-size:11px;color:var(--gray-400);white-space:nowrap;">${fmtDT(record.reviewedAt)}</span>
               <span style="color:var(--primary);white-space:nowrap;">查看详情 ›</span>
             </button>`).join('') : '<div class="empty" style="padding:24px;"><p>暂无修改要求记录</p></div>'}
@@ -423,6 +424,7 @@ function openTaskRejectionRecord(taskId, attemptNo) {
           </div>
           <div class="detail-label" style="color:#A32D2D;margin-bottom:4px;">要求完成时间：${record.requiredCompletionDate ? formatDate(record.requiredCompletionDate) : '-'}</div>
           <div style="font-size:13px;line-height:1.7;color:var(--gray-700);white-space:pre-wrap;">${escHtml(record.reason || '未填写驳回意见')}</div>
+          ${typeof record.withPoints === 'boolean' ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #F7C1C1;font-size:13px;color:var(--gray-700);">${record.withPoints ? `本次修改积分：${escHtml(record.pointRuleDescription || record.pointRuleCode || '积分规则')}（${escHtml(record.pointRuleCode || '未知编号')}） · ${Number(record.points || 0)} 分` : '本次修改不加分'}</div>` : ''}
           ${rejectionImages ? `<div style="margin-top:14px;"><div class="detail-label">驳回参考图</div>${rejectionImages}</div>` : ''}
           ${rejectionAttachments ? `<div style="margin-top:14px;"><div class="detail-label">驳回附件</div>${rejectionAttachments}</div>` : ''}
           ${record.cancelled ? `<div style="margin-top:10px;font-size:12px;color:var(--success);">该次驳回已由 ${escHtml(record.cancelledByName || '审核人')} 于 ${fmtDT(record.cancelledAt)} 取消，历史记录保留。</div>` : ''}
