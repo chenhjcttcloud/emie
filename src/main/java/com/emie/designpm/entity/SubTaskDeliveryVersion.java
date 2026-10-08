@@ -61,6 +61,23 @@ public class SubTaskDeliveryVersion {
     @Column(name = "submitted_at", nullable = false)
     private LocalDateTime submittedAt;
 
+    @Column(columnDefinition = "DECIMAL(12,2)")
+    private Double expectedPoints;
+
+    @Column(length = 80)
+    private String pointRuleCode;
+
+    @Column(length = 255)
+    private String pointRuleDescription;
+
+    @Column(length = 36)
+    private String pointRequestId;
+
+    private LocalDateTime confirmedAt;
+
+    @Column(length = 100)
+    private String confirmedBy;
+
     @PrePersist
     void onCreate() {
         if (submittedAt == null) submittedAt = LocalDateTime.now();

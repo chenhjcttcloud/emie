@@ -15,7 +15,7 @@ public interface PointAdjustmentLedgerRepository extends JpaRepository<PointAdju
     long maxSourceIdByType(@Param("sourceType") String sourceType);
 
     @Query("select coalesce(sum(a.points),0) from PointAdjustmentLedger a where a.userId=:userId")
-    long sumPointsByUserId(@Param("userId") String userId);
+    double sumPointsByUserId(@Param("userId") String userId);
     /** 月度归月口径与流水统一（P1-4）：指定月份按 accounting_month 归月，未指定月份时按入账时间区间归月（与 PointLedgerRepository.sumPerformancePointsByMonth 一致）。 */
     @Query("select a.userId, coalesce(sum(a.points), 0) from PointAdjustmentLedger a "
             + "where ((:month is not null and a.accountingMonth = :month) or "
@@ -23,6 +23,12 @@ public interface PointAdjustmentLedgerRepository extends JpaRepository<PointAdju
             + "group by a.userId")
     List<Object[]> sumPointsByMonth(
             @Param("month") String month, @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    @Query(
+            "SELECT CASE WHEN COUNT(a)>0 THEN true ELSE false END FROM PointAdjustmentLedger a WHERE "
+                    + "(a.sourceType='APPEAL' AND a.sourceId IN :appealIds) OR (a.sourceType='TASK_WITHDRAWAL' AND a.sourceId IN :withdrawalIds)")
+    boolean hasProjectRelated(
+            @Param("appealIds") Collection<Long> appealIds, @Param("withdrawalIds") Collection<Long> withdrawalIds);
 
     /** 删除项目关联的调账记录：异议（APPEAL，按 appealId）与退单（TASK_WITHDRAWAL，按 withdrawalId）。 */
     @Modifying

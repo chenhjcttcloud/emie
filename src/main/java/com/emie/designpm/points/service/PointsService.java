@@ -4,8 +4,8 @@ import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.entity.PointAdjustmentLedger;
 import com.emie.designpm.entity.PointLedger;
 import com.emie.designpm.entity.PointRule;
-import com.emie.designpm.entity.ScoringRecord;
 import com.emie.designpm.entity.SubTask;
+import com.emie.designpm.entity.SubTaskDeliveryVersion;
 import com.emie.designpm.entity.SystemConfig;
 import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
 import com.emie.designpm.points.repository.PointLedgerRepository;
@@ -63,90 +63,71 @@ public class PointsService {
         this.configs = null;
     }
 
-    /** 设计师提交交付成果时立即发放基础积分。 */
+    /** 产品企划确认成果后发放基础分；既有流水保持不变。 */
     public void awardBaseSubmission(SubTask task) {
-        if (!eligibleForPoints(task)) return;
-        String ruleCode = normalizedRuleCode(task.getPointRuleCode());
-        String ledgerCode = ruleCode + ":BASE";
-        if (ConceptPointCapService.cappedRule(ruleCode) && task.getBasePointProcessedAt() != null) return;
-        if (ledgers.existsByUserIdAndSubTaskIdAndRuleCode(task.getDesignerId(), task.getId(), ledgerCode)) return;
-        ensureSnapshot(task, ruleCode);
-        double points = task.getBasePointSnapshot() * task.getDifficultyMultiplierSnapshot();
-        if (ConceptPointCapService.cappedRule(ruleCode)) {
-            if (!task.isConceptReserveExempt()) {
-                if (conceptCap == null) throw new IllegalStateException("纯概念积分上限服务未就绪");
-                points = Math.min(points, conceptCap.remaining(task.getDesignerId(), accountingMonth(task)));
-            }
-            saveRecipientAward(
-                    task,
-                    ledgerCode,
-                    task.getDesignerId(),
-                    points,
-                    task.isConceptReserveExempt() ? "专项概念储备（不计月度概念上限）" : "纯概念月度上限内积分",
-                    null);
-            task.setBasePointProcessedAt(java.time.LocalDateTime.now());
-        } else {
-            saveAward(task, ledgerCode, points);
-        }
+        awardBaseSubmission(task, null, null);
     }
 
-    /** 需求变化追加分在设计师重新交付修改成果时入账。 */
+    public void awardBaseSubmission(SubTask task, SubTaskDeliveryVersion version, String actorId) {
+        if (!eligibleForPoints(task) || !"completed".equals(task.getStatus())) return;
+        String ruleCode = normalizedRuleCode(task.getPointRuleCode());
+        ensureSnapshot(task, ruleCode);
+        saveRecipientAward(
+                task, ruleCode + ":BASE", task.getDesignerId(), task.getBasePointSnapshot(), null, actorId, version);
+    }
+
+    /** 修改轮次在企划确认时入账，无积分轮只清理待办。 */
     public void awardPendingChangeBonus(SubTask task) {
+        awardPendingChangeBonus(task, null, null);
+    }
+
+    public void awardPendingChangeBonus(SubTask task, SubTaskDeliveryVersion version, String actorId) {
         String requestId = task.getPendingChangeBonusRequestId();
-        if (requestId == null) return;
-        if (!eligibleForPoints(task)) throw new IllegalStateException("追加分任务不符合积分条件");
-        String ledgerCode = normalizedRuleCode(task.getPointRuleCode()) + ":CHANGE:" + requestId;
+        if (requestId == null || !"completed".equals(task.getStatus())) return;
+        if (task.getId() == null
+                || task.getDesignerId() == null
+                || task.getDesignerId().isBlank()
+                || !"designer".equals(task.getAssigneeRole())) throw new IllegalStateException("修改任务不符合积分条件");
+        String ledgerCode = normalizedRuleCode(
+                        task.getPendingChangeRuleCode() == null
+                                ? task.getPointRuleCode()
+                                : task.getPendingChangeRuleCode())
+                + ":CHANGE:" + requestId;
         saveRecipientAward(
                 task,
                 ledgerCode,
                 task.getDesignerId(),
-                task.getPendingChangeBonusPoints(),
+                task.getPendingChangeBonusPoints() == null ? 0d : task.getPendingChangeBonusPoints(),
                 task.getPendingChangeBonusReason(),
-                task.getPendingChangeBonusCreatedBy());
+                actorId == null ? task.getPendingChangeBonusCreatedBy() : actorId,
+                version);
         task.setPendingChangeBonusRequestId(null);
         task.setPendingChangeBonusPoints(null);
         task.setPendingChangeBonusReason(null);
         task.setPendingChangeBonusCreatedBy(null);
+        task.setPendingChangeRuleCode(null);
+    }
+
+    public boolean baseAlreadyAwarded(SubTask task) {
+        return ledgers.existsByUserIdAndSubTaskIdAndRuleCode(
+                task.getDesignerId(), task.getId(), normalizedRuleCode(task.getPointRuleCode()) + ":BASE");
+    }
+
+    public String ruleDescription(String code) {
+        return code == null
+                ? null
+                : rules.findByRuleCode(code).map(PointRule::getDescription).orElse(null);
     }
 
     public boolean changeBonusAlreadyAwarded(SubTask task, String requestId) {
-        return ledgers.existsByUserIdAndSubTaskIdAndRuleCode(
-                task.getDesignerId(),
-                task.getId(),
-                normalizedRuleCode(task.getPointRuleCode()) + ":CHANGE:" + requestId);
+        return ledgers.findBySubTaskId(task.getId()).stream()
+                .anyMatch(ledger -> task.getDesignerId().equals(ledger.getUserId())
+                        && ledger.getRuleCode().endsWith(":CHANGE:" + requestId));
     }
 
-    /** 最终验收后为 A/B 类按评分另发质量加分。 */
+    /** 兼容历史调用方：不再计算质量加分。 */
     public void awardQualityCompletion(SubTask task) {
-        if (!eligibleForPoints(task)) return;
-        String ruleCode = normalizedRuleCode(task.getPointRuleCode());
-        // 归属月在每笔流水入账时锁定（见 saveRecipientAward）：BASE 在送审入账时按
-        // 里程碑月/入账月落账，QUALITY 在本节点按实际完成月落账。
-        // 严禁在此回溯改写同一子任务的既有流水（P1-3）：跨月任务（送审月≠完成月）若把
-        // 已入账/已归档月份的 BASE 统一挪到完成月，会回溯改写已归档与已统计的月度数据，
-        // 并与完成月统计重复错位。去掉改写后，各月统计按各自入账归属月取值，前后一致。
         awardBaseSubmission(task);
-        String ledgerCode = ruleCode + ":QUALITY";
-        if (ledgers.existsByUserIdAndSubTaskIdAndRuleCode(task.getDesignerId(), task.getId(), ledgerCode)) return;
-        ensureSnapshot(task, ruleCode);
-        // 质量阈值按页面展示的加权综合分判断（Σ(评分×权重)/Σ(权重)，与项目详情/设计师看板的加权综合一致），
-        // 避免服务端简单平均与前端加权平均不一致，导致同一批数据服务端判定与页面展示矛盾。
-        double weightedSum = 0d, totalWeight = 0d;
-        for (ScoringRecord record : scoring.findBySubTaskId(task.getId())) {
-            if (record.getScore() != null) {
-                double weight = record.getWeight() == null ? 1d : record.getWeight();
-                weightedSum += record.getScore() * weight;
-                totalWeight += weight;
-            }
-        }
-        double averageScore = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0d;
-        double ratio = averageScore >= task.getQualityTopThresholdSnapshot()
-                ? task.getQualityTopRatioSnapshot()
-                : averageScore >= task.getQualityBonusThresholdSnapshot() ? task.getQualityBonusRatioSnapshot() : 0d;
-        if (ratio <= 0) return;
-        double base = task.getBasePointSnapshot() * task.getDifficultyMultiplierSnapshot();
-        double cap = task.getBasePointSnapshot() * task.getMaxTotalMultiplierSnapshot();
-        saveAward(task, ledgerCode, Math.min(base * ratio, Math.max(0d, cap - base)));
     }
 
     private boolean eligibleForPoints(SubTask task) {
@@ -179,22 +160,10 @@ public class PointsService {
     }
 
     private void ensureSnapshot(SubTask task, String ruleCode) {
+        if (task.getBasePointSnapshot() == null) bindRuleSnapshot(task, ruleCode);
         if (task.getBasePointSnapshot() == null
-                || task.getDifficultyMultiplierSnapshot() == null
-                || task.getQualityBonusThresholdSnapshot() == null
-                || task.getQualityBonusRatioSnapshot() == null
-                || task.getQualityTopThresholdSnapshot() == null
-                || task.getQualityTopRatioSnapshot() == null
-                || task.getMaxTotalMultiplierSnapshot() == null
-                || task.getCountInPerformanceSnapshot() == null) {
-            bindRuleSnapshot(task, ruleCode);
-        }
-        if (task.getBasePointSnapshot() == null
-                || task.getBasePointSnapshot() <= 0
-                || task.getDifficultyMultiplierSnapshot() == null
-                || task.getDifficultyMultiplierSnapshot() <= 0) {
-            throw new IllegalStateException("任务积分快照无效");
-        }
+                || !Double.isFinite(task.getBasePointSnapshot())
+                || task.getBasePointSnapshot() < 0) throw new IllegalStateException("任务积分快照无效");
     }
 
     private void saveAward(SubTask task, String ledgerCode, double rawPoints) {
@@ -207,6 +176,23 @@ public class PointsService {
 
     private void saveRecipientAward(
             SubTask task, String ledgerCode, String userId, double rawPoints, String reason, String createdBy) {
+        saveRecipientAward(task, ledgerCode, userId, rawPoints, reason, createdBy, null);
+    }
+
+    private void saveRecipientAward(
+            SubTask task,
+            String ledgerCode,
+            String userId,
+            double rawPoints,
+            String reason,
+            String createdBy,
+            SubTaskDeliveryVersion version) {
+        if (version != null && version.getExpectedPoints() != null) {
+            rawPoints = version.getExpectedPoints();
+            userId = version.getSubmittedById();
+            ledgerCode = version.getPointRuleCode()
+                    + (version.getPointRequestId() == null ? ":BASE" : ":CHANGE:" + version.getPointRequestId());
+        }
         double awarded = roundedPoints(rawPoints);
         if (awarded <= 0
                 || userId == null
@@ -222,6 +208,12 @@ public class PointsService {
         ledger.setPoints(awarded);
         ledger.setReason(reason);
         ledger.setCreatedBy(createdBy);
+        if (version != null) {
+            ledger.setDeliveryVersionId(version.getId());
+            ledger.setSubmittedAt(version.getSubmittedAt());
+            ledger.setConfirmedAt(version.getConfirmedAt());
+            ledger.setRuleDescription(version.getPointRuleDescription());
+        }
         ledgers.save(ledger);
     }
 
@@ -238,12 +230,8 @@ public class PointsService {
         return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 
-    /** Validate an enabled rule and freeze its point/multiplier values onto a task. */
+    /** Validate an enabled rule and freeze its base points onto a task. */
     public void bindRuleSnapshot(SubTask task, String requestedRuleCode) {
-        bindRuleSnapshot(task, requestedRuleCode, 1d);
-    }
-
-    public void bindRuleSnapshot(SubTask task, String requestedRuleCode, double difficultyMultiplier) {
         if (task == null) throw new IllegalArgumentException("子任务不能为空");
         if (requestedRuleCode == null || requestedRuleCode.isBlank()) {
             throw new IllegalArgumentException("请选择积分规则");
@@ -252,15 +240,9 @@ public class PointsService {
         PointRule rule = rules.findByRuleCode(ruleCode).orElseThrow(() -> new IllegalArgumentException("积分规则不存在或已删除"));
         if (!rule.isEnabled()) throw new IllegalArgumentException("积分规则已停用，请重新选择");
         if (rule.getPoints() == null || rule.getPoints() < 0) throw new IllegalArgumentException("积分规则基础分无效");
-        if (ruleCode.startsWith("D20_")
-                && difficultyMultiplier != 1d
-                && difficultyMultiplier != 1.2d
-                && difficultyMultiplier != 1.5d) {
-            throw new IllegalArgumentException("特殊难度系数只能是 1、1.2 或 1.5");
-        }
         task.setPointRuleCode(ruleCode);
         task.setBasePointSnapshot(rule.getPoints());
-        task.setDifficultyMultiplierSnapshot(ruleCode.startsWith("D20_") ? difficultyMultiplier : 1d);
+        task.setDifficultyMultiplierSnapshot(1d);
         task.setQualityBonusThresholdSnapshot(
                 rule.getQualityBonusThreshold() == null ? 0 : rule.getQualityBonusThreshold());
         task.setQualityBonusRatioSnapshot(rule.getQualityBonusRatio() == null ? 0d : rule.getQualityBonusRatio());
@@ -323,6 +305,7 @@ public class PointsService {
             Boolean enabled,
             String description,
             String category,
+            String subcategory,
             Integer qualityThreshold,
             Double qualityRatio,
             Integer qualityTopThreshold,
@@ -339,6 +322,7 @@ public class PointsService {
             rule.setDescription(
                     description.trim().substring(0, Math.min(description.trim().length(), 255)));
         if (category != null) rule.setCategory(category.trim());
+        if (subcategory != null) rule.setSubcategory(normalizedSubcategory(subcategory));
         if (qualityThreshold != null) {
             if (qualityThreshold < 0) throw new IllegalArgumentException("质量阈值不能小于 0");
             rule.setQualityBonusThreshold(qualityThreshold);
@@ -375,12 +359,20 @@ public class PointsService {
         if (rules.findByRuleCode(code).isPresent()) throw new IllegalArgumentException("积分规则编号已存在");
         if (rule.getPoints() == null) rule.setPoints(0d);
         if (rule.getPoints() < 0) throw new IllegalArgumentException("积分不能小于0");
+        rule.setSubcategory(normalizedSubcategory(rule.getSubcategory()));
         rule.setId(null);
         rule.setRuleCode(code);
         rule.setEnabled(true);
         if (rule.getCategory() == null || rule.getCategory().isBlank()) rule.setCategory("GENERAL");
         if (rule.getDescription() == null) rule.setDescription("");
         return rules.save(rule);
+    }
+
+    private String normalizedSubcategory(String value) {
+        if (value == null || value.isBlank()) return null;
+        String trimmed = value.trim();
+        if (trimmed.length() > 50) throw new IllegalArgumentException("二级分类不能超过50个字符");
+        return trimmed;
     }
 
     public void deleteRule(String ruleCode) {

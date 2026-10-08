@@ -35,6 +35,27 @@ public class PointsController {
         this.marketEligibility = marketEligibility;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.emie.designpm.points.service.PointAuditService auditService;
+
+    @GetMapping({"/logs", "/audit"})
+    public ResponseEntity<?> pointLogs(
+            @RequestParam Map<String, String> filters,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            HttpServletRequest request) {
+        if (!"admin".equals(session(request).role()))
+            return ResponseEntity.status(403).body(Map.of("error", "仅管理员可查看全系统积分日志"));
+        try {
+            return ResponseEntity.ok(
+                    request.getRequestURI().endsWith("/audit")
+                            ? auditService.audit(filters, page, size)
+                            : auditService.logs(filters, page, size));
+        } catch (java.time.DateTimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "日期格式应为 yyyy-MM-dd"));
+        }
+    }
+
     @GetMapping("/me")
     public ResponseEntity<?> mine(
             @RequestParam(defaultValue = "0") int page,
@@ -239,6 +260,7 @@ public class PointsController {
             Boolean enabled = body.get("enabled") instanceof Boolean b ? b : null;
             String description = body.get("description") instanceof String s ? s : null;
             String category = body.get("category") instanceof String s ? s : null;
+            String subcategory = body.get("subcategory") instanceof String s ? s : null;
             Integer threshold = body.get("qualityBonusThreshold") instanceof Number n ? n.intValue() : null;
             Double ratio = body.get("qualityBonusRatio") instanceof Number n ? n.doubleValue() : null;
             Integer topThreshold = body.get("qualityTopThreshold") instanceof Number n ? n.intValue() : null;
@@ -251,6 +273,7 @@ public class PointsController {
                     enabled,
                     description,
                     category,
+                    subcategory,
                     threshold,
                     ratio,
                     topThreshold,

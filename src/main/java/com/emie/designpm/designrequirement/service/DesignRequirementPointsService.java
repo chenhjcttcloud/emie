@@ -6,7 +6,6 @@ import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
 import com.emie.designpm.points.service.ConceptPointCapService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.YearMonth;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -23,16 +22,7 @@ public class DesignRequirementPointsService {
         if (requirement.isPointsAwarded()
                 || ledgers.findBySourceTypeAndSourceId("DESIGN_REQUIREMENT", requirement.getId())
                         .isPresent()) return;
-        double points = requirement.getBasePointSnapshot() == null
-                ? 0d
-                : requirement.getBasePointSnapshot() * requirement.getDifficultyMultiplierSnapshot();
-        if (ConceptPointCapService.cappedRule(requirement.getPointRuleCode())
-                && !requirement.isConceptReserveExempt()) {
-            points = Math.min(
-                    points,
-                    conceptCap.remaining(
-                            requirement.getDesignerId(), YearMonth.now().toString()));
-        }
+        double points = requirement.getBasePointSnapshot() == null ? 0d : requirement.getBasePointSnapshot();
         points = BigDecimal.valueOf(points).setScale(2, RoundingMode.HALF_UP).doubleValue();
         if (points > 0d) {
             PointAdjustmentLedger award = new PointAdjustmentLedger();
@@ -40,6 +30,8 @@ public class DesignRequirementPointsService {
             award.setSourceType("DESIGN_REQUIREMENT");
             award.setSourceId(requirement.getId());
             award.setPoints(points);
+            award.setRuleCode(requirement.getPointRuleCode());
+            award.setSubmittedAt(requirement.getDeliveredAt());
             award.setReason("设计/送审需求交付：" + requirement.getName() + "（" + requirement.getPointRuleCode() + "）");
             award.setCreatedBy(createdBy);
             ledgers.save(award);

@@ -168,6 +168,18 @@ public class NotificationTemplateService {
                     deadline,
                     actor,
                     context);
+            case "TASK_REVISION_REQUESTED" -> create(
+                    eventType,
+                    "子任务需要修改",
+                    "子任务“{{taskName}}”需要修改：{{reason}}。请确认修改后重新提交。",
+                    "high",
+                    true,
+                    taskLink(context),
+                    project,
+                    "待修改：" + task,
+                    deadline,
+                    actor,
+                    context);
             case "TASK_REJECTED" -> create(
                     eventType,
                     "子任务已驳回",
@@ -183,7 +195,7 @@ public class NotificationTemplateService {
             case "TASK_REDELIVERED" -> create(
                     eventType,
                     "子任务再次提交待验收",
-                    "{{actorName}}已第{{deliveryCount}}次交付“{{taskName}}”。上次驳回原因：{{reason}}。",
+                    "{{actorName}}已第{{deliveryCount}}次交付“{{taskName}}”。修改要求：{{reason}}。",
                     "high",
                     true,
                     taskLink(context),

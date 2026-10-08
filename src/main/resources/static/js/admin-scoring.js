@@ -138,9 +138,10 @@ async function renderAdminPoints(container) {
       <div class="card admin-point-rules-card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>积分规则</h3><p class="admin-section-hint">共 ${ruleList.length} 条，列表显示 5 条，可滚动查看</p></div><button class="btn btn-primary btn-sm" data-emie-action="click:scoring-create-rule">＋ 新增规则</button></div>
         <div class="admin-point-rule-filters"><div class="admin-filter-card"><span class="admin-filter-title">筛选规则</span><input class="form-input" id="adminPointRuleSearch" placeholder="搜索规则编号或说明"><select class="form-select" id="adminPointRuleCategory"><option value="">全部类别</option>${[...new Set(ruleList.map(rule => String(rule.category || '').trim()).filter(Boolean))].sort().map(category => `<option value="${escHtml(category)}">${escHtml(category)}</option>`).join('')}</select><select class="form-select" id="adminPointRuleStatus"><option value="">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select><button class="btn btn-primary btn-sm" data-emie-action="click:scoring-filter-rules">查询</button><button class="btn btn-outline btn-sm" data-emie-action="click:scoring-reset-rules">重置</button></div></div>
         ${ruleList.length ? `<div class="admin-point-rules-scroll">${ruleList.map((rule, index) => `<div class="admin-point-rule-item" data-rule-code="${escHtml(String(rule.ruleCode || '').toLowerCase())}" data-rule-description="${escHtml(String(rule.description || '').toLowerCase())}" data-rule-category="${escHtml(String(rule.category || ''))}" data-rule-enabled="${rule.enabled === false ? 'disabled' : 'enabled'}" style="${index ? 'border-top:1px solid var(--gray-200);' : ''}">
-        <div style="display:grid;grid-template-columns:1.1fr 1fr .8fr;gap:10px;align-items:end;">
+        <div style="display:grid;grid-template-columns:1.1fr 1fr 1fr .8fr;gap:10px;align-items:end;">
           <label class="form-label">规则编号<input class="form-input" value="${escHtml(displayPointRuleCode(rule.ruleCode))}" disabled title="系统内部编号：${escHtml(rule.ruleCode || '')}"></label>
-          <label class="form-label">类别<input class="form-input" id="pr_category_${index}" value="${escHtml(rule.category || '')}" placeholder="规则类别"></label>
+          <label class="form-label">工作大类<input class="form-input" maxlength="50" id="pr_category_${index}" value="${escHtml(rule.category || '')}" placeholder="工作大类"></label>
+          <label class="form-label">二级分类（可选）<input class="form-input" id="pr_subcategory_${index}" value="${escHtml(rule.subcategory || '')}" maxlength="50" placeholder="可留空"></label>
           <label class="form-label">基础分<input class="form-input" type="number" min="0" step="0.01" id="pr_points_${index}" value="${Number(rule.points || 0)}"></label>
         </div>
         <div style="display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap;">
@@ -272,7 +273,7 @@ async function createPointRule() {
   const categories = await apiGet('/points/categories');
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay'; overlay.id = 'createPointRuleModal'; overlay.style.zIndex = '450';
-  overlay.innerHTML = `<div class="modal" style="max-width:560px;"><div class="modal-header"><div class="modal-title">新增积分规则</div><button class="modal-close" type="button" aria-label="关闭">✕</button></div><form class="modal-body" style="padding:22px 24px;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;"><label class="form-label">规则编号<input class="form-input" name="ruleCode" required pattern="[A-Za-z0-9_-]+" placeholder="如 M1、A1"></label><label class="form-label">类别<input class="form-input" name="category" required placeholder="如 M / A / T"></label><label class="form-label">基础分<input class="form-input" name="points" type="number" min="0" step="0.01" value="1" required></label></div><label class="form-label" style="display:block;margin-top:14px;">规则说明<input class="form-input" name="description" placeholder="例如：设计采纳奖励"></label></form><div class="modal-footer"><button class="btn btn-outline" type="button" data-action="cancel">取消</button><button class="btn btn-primary" type="button" data-action="save">保存规则</button></div></div>`;
+  overlay.innerHTML = `<div class="modal" style="max-width:560px;"><div class="modal-header"><div class="modal-title">新增积分规则</div><button class="modal-close" type="button" aria-label="关闭">✕</button></div><form class="modal-body" style="padding:22px 24px;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;"><label class="form-label">规则编号<input class="form-input" name="ruleCode" required pattern="[A-Za-z0-9_-]+" placeholder="如 M1、A1"></label><label class="form-label">工作大类<input class="form-input" name="category" required placeholder="如 产品设计、包装设计"></label><label class="form-label">二级分类（可选）<input class="form-input" name="subcategory" maxlength="50" placeholder="可留空"></label><label class="form-label">基础分<input class="form-input" name="points" type="number" min="0" step="0.01" value="1" required></label></div><label class="form-label" style="display:block;margin-top:14px;">规则说明<input class="form-input" name="description" placeholder="例如：设计采纳奖励"></label></form><div class="modal-footer"><button class="btn btn-outline" type="button" data-action="cancel">取消</button><button class="btn btn-primary" type="button" data-action="save">保存规则</button></div></div>`;
   document.body.appendChild(overlay);
   const categoryInput = overlay.querySelector('[name="category"]');
   if (categoryInput) { const select = document.createElement('select'); select.className = 'form-select'; select.name = 'category'; select.required = true; select.innerHTML = (Array.isArray(categories) ? categories : []).map(category => `<option value="${escHtml(category)}">${escHtml(category)}</option>`).join(''); categoryInput.replaceWith(select); }
@@ -284,7 +285,7 @@ async function createPointRule() {
     const form = overlay.querySelector('form'); if (!form.reportValidity()) return;
     const data = new FormData(form); const ruleCode = String(data.get('ruleCode') || '').trim().toUpperCase();
     try {
-      await apiPost('/points/rules', { ruleCode, category: String(data.get('category') || '').trim(), points: Number(data.get('points')), qualityBonusThreshold: 0, qualityBonusRatio: 0, description: String(data.get('description') || '').trim() });
+      await apiPost('/points/rules', { ruleCode, category: String(data.get('category') || '').trim(), subcategory: String(data.get('subcategory') || '').trim(), points: Number(data.get('points')), qualityBonusThreshold: 0, qualityBonusRatio: 0, description: String(data.get('description') || '').trim() });
       finish();
       const pointsContainer = EMIE.state.currentView === 'points' ? document.getElementById('mainContent') : document.getElementById('adminContent');
       await renderAdminPoints(pointsContainer);
@@ -313,7 +314,7 @@ async function savePointRule(code, index) {
     const value = id => document.getElementById(id)?.value ?? '';
     const checked = id => Boolean(document.getElementById(id)?.checked);
     await apiPut('/points/rules/' + encodeURIComponent(code), {
-      points: Number(value('pr_points_' + index)), category: value('pr_category_' + index).trim(),
+      points: Number(value('pr_points_' + index)), category: value('pr_category_' + index).trim(), subcategory: value('pr_subcategory_' + index).trim(),
       qualityBonusThreshold: 0, qualityBonusRatio: 0,
       qualityTopThreshold: Number(value('pr_top_threshold_' + index) || 0), qualityTopRatio: Number(value('pr_top_ratio_' + index) || 0),
       // The current rule editor does not expose a cap input. Keep the backend's

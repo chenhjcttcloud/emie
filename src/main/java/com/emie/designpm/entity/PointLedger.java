@@ -25,7 +25,7 @@ public class PointLedger {
     @Column(name = "sub_task_id", nullable = false)
     private Long subTaskId;
 
-    @Column(name = "rule_code", nullable = false, length = 80)
+    @Column(name = "rule_code", nullable = false, length = 128)
     private String ruleCode;
 
     @Column(nullable = false, columnDefinition = "DECIMAL(12,2)")
@@ -43,6 +43,13 @@ public class PointLedger {
 
     @Column(length = 100)
     private String createdBy;
+
+    private Long deliveryVersionId;
+    private LocalDateTime submittedAt;
+    private LocalDateTime confirmedAt;
+
+    @Column(length = 255)
+    private String ruleDescription;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;

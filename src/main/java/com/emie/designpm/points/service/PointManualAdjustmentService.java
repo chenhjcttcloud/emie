@@ -46,7 +46,7 @@ public class PointManualAdjustmentService {
         x.setReason(r);
         x.setCreatedBy(s.userId());
         try {
-            return adjustments.save(x);
+            return adjustments.saveAndFlush(x);
         } catch (DataIntegrityViolationException e) {
             // (source_type, source_id) 唯一索引兜底并发窗口内的重复 sourceId。
             throw new IllegalStateException("手动调账记录冲突，请重试", e);

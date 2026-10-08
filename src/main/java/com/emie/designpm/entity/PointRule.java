@@ -23,6 +23,9 @@ public class PointRule {
     @Column(length = 50)
     private String category;
 
+    @Column(length = 50)
+    private String subcategory;
+
     @Column(nullable = false)
     private Integer qualityBonusThreshold = 0;
 

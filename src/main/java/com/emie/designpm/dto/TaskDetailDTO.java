@@ -22,6 +22,7 @@ public class TaskDetailDTO {
     private Double basePointSnapshot;
     private Double difficultyMultiplierSnapshot;
     private boolean conceptReserveExempt;
+    private String pendingChangeRuleCode;
     private String pendingChangeBonusRequestId;
     private Double pendingChangeBonusPoints;
     private Integer qualityBonusThresholdSnapshot;

@@ -312,6 +312,12 @@ public class MaterialMarketService {
         l.setSourceType("MATERIAL_MARKET");
         l.setSourceId(p.getId());
         l.setPoints(points);
+        l.setRuleCode(ruleCode);
+        if (pointRules != null)
+            l.setRuleDescription(pointRules
+                    .findByRuleCode(ruleCode)
+                    .map(PointRule::getDescription)
+                    .orElse(null));
         l.setReason("direct".equals(adoption) ? "素材广场直接采纳奖励" : "素材广场设计采纳奖励");
         l.setCreatedBy(actorId);
         adjustments.save(l);

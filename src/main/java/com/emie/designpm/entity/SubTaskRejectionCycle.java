@@ -59,6 +59,9 @@ public class SubTaskRejectionCycle {
 
     private String requiredCompletionDate;
 
+    @Column(length = 36)
+    private String createdBonusRequestId;
+
     @Column(columnDefinition = "LONGTEXT")
     private String referenceImagesJson;
 

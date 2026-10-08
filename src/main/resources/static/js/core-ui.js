@@ -35,6 +35,7 @@ function getTaskStatusInfo(status) {
     admin_approved: { label: '待确认', cls: 'badge-pending', icon: '⏳' },
     approved: { label: '已通过', cls: 'badge-completed', icon: '✅' },
     completed: { label: '已完成', cls: 'badge-completed', icon: '✅' },
+    revision_requested: { label: '待修改', cls: 'badge-progress', icon: '🛠️' },
     rejected: { label: '已驳回', cls: 'badge-rejected', icon: '↩️' },
   }[status] || { label: status, cls: '', icon: '❓' };
 }

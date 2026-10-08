@@ -90,6 +90,7 @@ public class PoPointsService {
             ledgers.save(l);
         }
         if (approve
+                && p.getMonthlyPoints() > 0
                 && adjustments
                         .findBySourceTypeAndSourceId("PO_PROGRESS", g.getId())
                         .isEmpty()) {
@@ -98,6 +99,7 @@ public class PoPointsService {
             x.setSourceType("PO_PROGRESS");
             x.setSourceId(g.getId());
             x.setPoints(p.getMonthlyPoints());
+            x.setSubmittedAt(g.getSubmittedAt());
             x.setReason("PO项目月度履职积分：" + p.getName() + " " + g.getMonthKey());
             x.setCreatedBy(s.userId());
             x.setAccountingMonth(g.getMonthKey());

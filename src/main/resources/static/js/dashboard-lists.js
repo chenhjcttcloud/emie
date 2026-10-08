@@ -102,6 +102,7 @@ async function openDesignRequirementDetail(id) {
           </div>` : ''}
           <div class="detail-section">
             <div class="detail-section-title">📦 交付成果与验收</div>
+            ${detail.deliveredAt ? `<div class="detail-label">成果提交时间：${EMIE.actions.fmtDT(detail.deliveredAt)}</div>` : ''}
             ${detail.deliveryContent
               ? `<div class="detail-label">设计师交付成果</div><div class="detail-value" style="white-space:pre-wrap;margin-bottom:12px;">${escHtml(detail.deliveryContent)}</div>`
               : '<div style="color:var(--gray-400);font-size:13px;margin-bottom:12px;">设计师尚未提交交付成果</div>'}

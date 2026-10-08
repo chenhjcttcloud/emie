@@ -169,7 +169,7 @@ async function loadDashboardPlannerTasks(uid) {
       ['active', '🔄 进行中', '进行中'],
       ['review', '✅ 待验收', '待验收']
     ];
-    const grouped = key => tasks.filter(t => key === 'active' ? ['accepted', 'rejected'].includes(t.status) : key === 'review' ? ['delivered', 'submitted_for_review'].includes(t.status) : t.status === key);
+    const grouped = key => tasks.filter(t => key === 'active' ? ['accepted', 'rejected', 'revision_requested'].includes(t.status) : key === 'review' ? ['delivered', 'submitted_for_review'].includes(t.status) : t.status === key);
     const renderGroup = ([key, title, label]) => {
       const list = grouped(key);
       return `<div class="type-section"><div class="card" style="padding:0;"><div style="padding:16px 20px 0;"><div class="type-section-title">${title} <span class="count">共 ${list.length} 个</span></div></div><div style="padding:0 20px 16px;">${list.length ? `<div class="table-wrap"><table class="dashboard-uniform-task-table"><thead><tr><th>子任务</th><th>所属项目</th><th>负责人</th><th>要求完成时间</th><th>状态</th></tr></thead><tbody>${list.slice(0, 8).map(t => `<tr style="cursor:pointer" data-emie-action="click:home-subtask-detail" data-task-id="${t.id}"><td><strong>${escHtml(t.name || '-')}</strong><div style="font-size:11px;color:var(--gray-400)">#${t.id}</div></td><td>${escHtml(t.projectName || '-')}</td><td>${escHtml(t.designerName || t.assigneeName || '待接单')}</td><td>${formatDate(t.plannedDate)}</td><td><span class="badge ${getTaskStatusInfo(t.status).cls}">${getTaskStatusInfo(t.status).label}</span></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state" style="padding:14px">暂无子任务</div>'}</div></div></div>`;
@@ -191,7 +191,7 @@ async function loadDashboardExecutionTasks(uid, role) {
         .includes(String(t.projectStatus || '').toLowerCase());
       return roleMatches && (t.designerId === uid || t.relation === 'assignee')
         && projectIsActive
-        && ['pending', 'accepted', 'rejected'].includes(t.status);
+        && ['pending', 'accepted', 'rejected', 'revision_requested'].includes(t.status);
     });
     tasks.sort(EMIE.actions.compareTaskPriority);
     EMIE.dashboardState.designerTaskCache = tasks;
@@ -220,7 +220,7 @@ async function loadDashboardExecutionTasks(uid, role) {
                 <tbody>${display.map(t => {
                   const statusInfo = getTaskStatusInfo(t.status);
                   if (String(role || '').toLowerCase().replace(/[-_]/g, '') === 'supplychain'
-                      && ['accepted', 'rejected'].includes(t.status)) {
+                      && ['accepted', 'rejected', 'revision_requested'].includes(t.status)) {
                     statusInfo.label = '进行中';
                     statusInfo.icon = '🔧';
                   }
@@ -243,7 +243,7 @@ async function loadDashboardExecutionTasks(uid, role) {
         </div>`;
     };
     const pendingTasks = tasks.filter(t => t.status === 'pending');
-    const designingTasks = tasks.filter(t => ['accepted', 'rejected'].includes(t.status));
+    const designingTasks = tasks.filter(t => ['accepted', 'rejected', 'revision_requested'].includes(t.status));
     const activeTitle = String(role || '').toLowerCase().replace(/[-_]/g, '') === 'supplychain' ? '🔧 进行中' : '🎨 设计中';
     container.innerHTML = renderGroup(pendingTasks, '📥 待接单')
       + renderGroup(designingTasks, activeTitle);

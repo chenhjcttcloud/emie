@@ -36,7 +36,7 @@ async function renderAdmin(main, role, uid) {
         <div class="admin-tab-group"><div class="admin-tab-group-title">用户与权限</div><button class="admin-tab ${EMIE.adminState.currentTab === 'users' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="users">👥 用户管理</button><button class="admin-tab ${EMIE.adminState.currentTab === 'roles' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="roles">🔐 角色与权限</button><button class="admin-tab ${EMIE.adminState.currentTab === 'org' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="org">🏢 组织架构</button></div>
         <div class="admin-tab-group"><div class="admin-tab-group-title">业务配置</div><button class="admin-tab ${EMIE.adminState.currentTab === 'categories' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="categories">📂 产品类目</button><button class="admin-tab ${EMIE.adminState.currentTab === 'ipOptions' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="ipOptions">🏷️ IP配置</button><button class="admin-tab ${EMIE.adminState.currentTab === 'compliance' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="compliance">⚖️ 合规处罚</button><button class="admin-tab ${EMIE.adminState.currentTab === 'priceRanges' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="priceRanges">💰 参考零售价</button><button class="admin-tab ${EMIE.adminState.currentTab === 'scoring' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="scoring">⭐ 评分管理</button><button class="admin-tab ${EMIE.adminState.currentTab === 'points' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="points">🏅 积分规则</button></div>
         <div class="admin-tab-group"><div class="admin-tab-group-title">通知中心</div><button class="admin-tab ${EMIE.adminState.currentTab === 'notificationCenter' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="notificationCenter">🔔 通知设置与发送记录</button><button class="admin-tab ${EMIE.adminState.currentTab === 'notificationTemplates' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="notificationTemplates">💬 通知文案</button></div>
-        <div class="admin-tab-group"><div class="admin-tab-group-title">运维与审计</div><button class="admin-tab ${EMIE.adminState.currentTab === 'logs' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="logs">📜 日志</button><button class="admin-tab ${EMIE.adminState.currentTab === 'shares' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="shares">🔗 分享管理</button></div>
+        <div class="admin-tab-group"><div class="admin-tab-group-title">运维与审计</div><button class="admin-tab ${EMIE.adminState.currentTab === 'logs' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="logs">📜 日志</button><button class="admin-tab ${EMIE.adminState.currentTab === 'pointLogs' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="pointLogs">🏅 积分日志</button><button class="admin-tab ${EMIE.adminState.currentTab === 'shares' ? 'active' : ''}" data-emie-action="click:admin-tab" data-tab="shares">🔗 分享管理</button></div>
       </aside><section class="admin-content-shell"><div id="adminSectionHeader"></div><main id="adminContent"></main></section></div>
     </div>`;
   await renderAdminContent();
@@ -95,6 +95,8 @@ async function renderAdminContent() {
       await renderAdminScoring(container);
     } else if (EMIE.adminState.currentTab === 'points') {
       await renderAdminPoints(container);
+    } else if (EMIE.adminState.currentTab === 'pointLogs') {
+      await EMIE.actions.renderAdminPointLogs(container);
     } else if (EMIE.adminState.currentTab === 'logs') {
       await renderAdminLogs(container);
     } else if (EMIE.adminState.currentTab === 'shares') {
@@ -130,6 +132,7 @@ function renderAdminSectionHeader() {
     points: ['积分规则', '管理积分、绩效、异议、归档和接单治理', '✦'],
     notificationCenter: ['通知设置与发送记录', '配置通知渠道并查看后台投递情况', '●'],
     notificationTemplates: ['通知文案', '维护业务节点使用的通知模板', '✉'],
+    pointLogs: ['积分日志', '查询入账记录并核对确认成果的积分', '≡'],
     logs: ['操作日志', '查询关键业务操作与账号活动记录', '≡'],
     shares: ['分享管理', '查看并维护系统生成的外部分享链接', '↗'],
     workload: ['工作量分析', '按成员和时间范围查看任务工作量', '▥'],

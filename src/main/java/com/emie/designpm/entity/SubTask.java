@@ -80,6 +80,9 @@ public class SubTask {
     @Column(length = 36)
     private String pendingChangeBonusRequestId;
 
+    @Column(length = 80)
+    private String pendingChangeRuleCode;
+
     @Column(columnDefinition = "DECIMAL(12,2)")
     private Double pendingChangeBonusPoints;
 

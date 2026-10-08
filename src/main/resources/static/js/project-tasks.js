@@ -49,15 +49,75 @@ function pointRuleDisplayName(code, description) {
   return labels[String(code || '').toUpperCase()] || description || code;
 }
 
-function renderPointRuleOptions(rules, selectedCode) {
-  const active = enabledPointRules(rules);
-  const selected = String(selectedCode || '');
-  const missingSelected = selected && !active.some(rule => String(rule.ruleCode || '') === selected)
-    ? `<option value="${escHtml(selected)}" selected>${escHtml(selected)}（已停用，仅保留当前任务）</option>` : '';
-  const groups = new Map();
-  active.forEach(rule => { const key = String(rule.category || '其他').toUpperCase(); if (!groups.has(key)) groups.set(key, []); groups.get(key).push(rule); });
-  const order = { A: 1, B: 2, E: 3, S: 4, 其他: 9 };
-  return `<option value="" ${selected ? '' : 'selected'}>不设置积分规则</option>` + missingSelected + [...groups.entries()].sort((a, b) => (order[a[0]] || 8) - (order[b[0]] || 8)).map(([category, items]) => `<optgroup label="${escHtml(category)}">${items.sort((a, b) => String(a.ruleCode || '').localeCompare(String(b.ruleCode || ''), undefined, { numeric: true })).map(rule => { const code = String(rule.ruleCode || ''); const label = pointRuleDisplayName(code, rule.description); return `<option value="${escHtml(code)}" ${code === selected ? 'selected' : ''}>${escHtml(label)}（${Number(rule.points || 0)} 分）</option>`; }).join('')}</optgroup>`).join('');
+const POINT_RULE_PAGE_SIZE = 10;
+
+function pointRuleTabs(values, selected, action, dataName, disabled) {
+  const attribute = dataName === 'category' ? 'data-point-category-tab' : 'data-point-subcategory-tab';
+  return `<div class="point-rule-tabs" role="tablist"><span>${dataName === 'category' ? '一级分类' : '二级分类'}</span><button type="button" role="tab" aria-selected="${selected ? 'false' : 'true'}" class="${selected ? '' : 'is-active'}" ${attribute}="" data-emie-action="click:${action}" ${disabled ? 'disabled' : ''}>全部</button>${values.map(value => `<button type="button" role="tab" aria-selected="${value === selected ? 'true' : 'false'}" class="${value === selected ? 'is-active' : ''}" ${attribute}="${escHtml(value)}" data-emie-action="click:${action}" ${disabled ? 'disabled' : ''}>${escHtml(value)}</button>`).join('')}</div>`;
+}
+
+function pointRulePickerView(rules, category, subcategory, keyword, page, selectedCode, disabled) {
+  const categories = [...new Set(rules.map(rule => rule.category || '其他'))];
+  const subcategories = category ? [...new Set(rules.filter(rule => rule.category === category).map(rule => rule.subcategory).filter(Boolean))] : [];
+  const query = keyword.trim().toLowerCase();
+  const filtered = rules.filter(rule => (!category || (rule.category || '其他') === category)
+    && (!subcategory || rule.subcategory === subcategory)
+    && (!query || `${rule.ruleCode || ''} ${rule.category || ''} ${rule.subcategory || ''} ${rule.description || ''}`.toLowerCase().includes(query)));
+  const pages = Math.max(1, Math.ceil(filtered.length / POINT_RULE_PAGE_SIZE));
+  const currentPage = Math.max(0, Math.min(page, pages - 1));
+  const visible = filtered.slice(currentPage * POINT_RULE_PAGE_SIZE, (currentPage + 1) * POINT_RULE_PAGE_SIZE);
+  const selectedRule = filtered.find(rule => String(rule.ruleCode) === selectedCode);
+  const ruleRows = visible.length ? visible.map(rule => {
+    const code = String(rule.ruleCode || '');
+    const active = code === selectedCode;
+    return `<button type="button" class="point-rule-row ${active ? 'is-selected' : ''}" data-point-rule-code="${escHtml(code)}" data-emie-action="click:task-point-select" aria-pressed="${active}" ${disabled ? 'disabled' : ''}><span class="point-rule-row-check">${active ? '✓' : ''}</span><span class="point-rule-row-name">${escHtml(pointRuleDisplayName(code, rule.description))}<small>${escHtml(code)}${rule.subcategory ? ` · ${escHtml(rule.subcategory)}` : ''}</small></span><strong>${Number(rule.points || 0)} 分</strong></button>`;
+  }).join('') : '<div class="point-rule-empty">没有匹配的积分规则，请调整分类或关键词</div>';
+  const paginationHtml = `<div class="point-rule-pagination"><span>共 ${filtered.length} 条 · ${filtered.length ? currentPage + 1 : 0} / ${pages} 页</span><div><button type="button" data-emie-action="click:task-point-page" data-page="${currentPage - 1}" ${currentPage <= 0 || disabled ? 'disabled' : ''} aria-label="上一页">‹</button><button type="button" data-emie-action="click:task-point-page" data-page="${currentPage + 1}" ${currentPage >= pages - 1 || disabled ? 'disabled' : ''} aria-label="下一页">›</button></div></div>`;
+  return {
+    subcategories,
+    page: currentPage,
+    ruleRows,
+    paginationHtml,
+    selectedCode: selectedRule ? selectedCode : '',
+    html: `<div class="point-rule-search"><span aria-hidden="true">⌕</span><input type="search" data-point-search data-emie-action="input:task-point-search" aria-label="搜索积分规则" placeholder="搜索规则名称或编号" value="${escHtml(keyword)}" ${disabled ? 'disabled' : ''}></div>${pointRuleTabs(categories, category, 'task-point-category-tab', 'category', disabled)}<div data-point-subcategory-tabs ${subcategories.length ? '' : 'hidden'}>${pointRuleTabs(subcategories, subcategory, 'task-point-subcategory-tab', 'subcategory', disabled)}</div><div class="point-rule-results"><div class="point-rule-list">${ruleRows}</div>${paginationHtml}</div><input type="hidden" name="pointRuleCode" value="${escHtml(selectedRule ? selectedCode : '')}"><div class="point-rule-selected">${selectedRule ? `已选：${escHtml(pointRuleDisplayName(selectedCode, selectedRule.description))} · ${Number(selectedRule.points || 0)} 分` : '请选择一条积分规则'}<button type="button" data-emie-action="click:task-point-clear" ${selectedRule && !disabled ? '' : 'hidden'}>清除选择</button></div>`
+  };
+}
+
+function renderPointRulePicker(rules, selectedCode = '', disabled = false) {
+  const active = enabledPointRules(rules).sort((a, b) => String(a.ruleCode || '').localeCompare(String(b.ruleCode || ''), undefined, { numeric: true }));
+  const selected = active.find(rule => String(rule.ruleCode) === String(selectedCode));
+  const category = selected?.category || '';
+  const subcategory = selected?.subcategory || '';
+  const selectedIndex = selected ? active.filter(rule => (!category || rule.category === category) && (!subcategory || rule.subcategory === subcategory)).indexOf(selected) : -1;
+  const initial = pointRulePickerView(active, category, subcategory, '', selectedIndex < 0 ? 0 : Math.floor(selectedIndex / POINT_RULE_PAGE_SIZE), String(selectedCode || ''), disabled);
+  return `<div class="point-rule-picker" data-rules="${escHtml(JSON.stringify(active))}" data-category="${escHtml(category)}" data-subcategory="${escHtml(subcategory)}" data-page="${initial.page}">${initial.html}</div>`;
+}
+
+function updatePointRulePicker(element) {
+  const picker = element.closest('.point-rule-picker');
+  const rules = JSON.parse(picker.dataset.rules);
+  const category = picker.dataset.category || '';
+  const subcategory = picker.dataset.subcategory || '';
+  const keyword = picker.querySelector('[data-point-search]').value;
+  const selectedCode = picker.querySelector('[name="pointRuleCode"]').value;
+  const view = pointRulePickerView(rules, category, subcategory, keyword, Number(picker.dataset.page || 0), selectedCode, false);
+  picker.dataset.page = String(view.page);
+  picker.querySelectorAll('[data-point-category-tab]').forEach(tab => {
+    const active = tab.dataset.pointCategoryTab === category;
+    tab.classList.toggle('is-active', active);
+    tab.setAttribute('aria-selected', String(active));
+  });
+  picker.querySelector('[data-point-subcategory-tabs]').innerHTML = view.subcategories.length
+    ? pointRuleTabs(view.subcategories, subcategory, 'task-point-subcategory-tab', 'subcategory', false)
+    : '';
+  picker.querySelector('[data-point-subcategory-tabs]').hidden = !view.subcategories.length;
+  picker.querySelector('[name="pointRuleCode"]').value = view.selectedCode;
+  picker.querySelector('.point-rule-list').innerHTML = view.ruleRows;
+  picker.querySelector('.point-rule-pagination').outerHTML = view.paginationHtml;
+  const rule = rules.find(item => String(item.ruleCode) === view.selectedCode);
+  const selected = picker.querySelector('.point-rule-selected');
+  selected.firstChild.textContent = rule ? `已选：${pointRuleDisplayName(rule.ruleCode, rule.description)} · ${Number(rule.points || 0)} 分` : '请选择一条积分规则';
+  selected.querySelector('button').hidden = !rule;
 }
 
 function pointRuleCategoryHint(category) {
@@ -132,16 +192,10 @@ async function addSubTask(pid) {
             </div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 计划要求完成时间</label>${renderDatePicker('plannedDate', {required:true})}</div>
           </div>
-          <div class="form-row">
+          <div class="form-group"><label class="form-label"><span class="required">*</span> 积分规则</label>
+            ${renderPointRulePicker(pointRules)}
+            <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">创建后将锁定规则快照并参与积分计算。</div>
           </div>
-          <div class="form-row">
-            <div class="form-group"><label class="form-label"><span class="required">*</span> 积分规则</label>
-              <select class="form-select" name="pointRuleCode" required>${renderPointRuleOptions(pointRules, '')}</select>
-              <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">创建后将锁定规则快照并参与积分计算。</div>
-            </div>
-            <div class="form-group"><label class="form-label">特殊难度系数</label><select class="form-select" name="difficultyMultiplier"><option value="1">常规 ×1</option><option value="1.2">复杂 ×1.2</option><option value="1.5">特别复杂 ×1.5</option></select></div>
-          </div>
-          <div class="form-group"><label class="checkbox-item"><input type="checkbox" name="conceptReserveExempt" value="true"> 纯概念储备，不计入月度上限</label></div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 负责人类型</label>
             <div style="display:flex;gap:16px;">
               <label class="checkbox-item checked" style="cursor:pointer;" data-emie-action="click:task-add-assignee" data-assignee-role="designer">
@@ -262,7 +316,6 @@ async function submitAddSubTask(pid) {
 
   const fd = new FormData(document.getElementById('addSubTaskForm'));
   const data = Object.fromEntries(fd.entries());
-  data.conceptReserveExempt = data.conceptReserveExempt === 'true';
   // 直接从当前选中的 radio 读取，避免事件代理或同名字段导致模式丢失。
   const form = document.getElementById('addSubTaskForm');
   data.publishToMarket = form?.dataset.assignmentMode === 'market'
@@ -389,14 +442,10 @@ function editTask(pid, tid) {
               <div class="form-group"><label class="form-label">计划完成时间</label>${renderDatePicker('plannedDate', {value: task.plannedDate || ''})}</div>
             </div>
             <input type="hidden" name="requiredSkillTagsText" value="">
-            <div class="form-row">
-              <div class="form-group"><label class="form-label">积分规则（可选）</label>
-                <select class="form-select" name="pointRuleCode" ${task.status !== 'pending' ? 'disabled' : ''}>${renderPointRuleOptions(rules, task.pointRuleCode)}</select>
-                ${task.status !== 'pending' ? '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">任务已开始，积分规则快照不可修改。</div>' : '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">留空则不计积分；选择规则后，任务开始后不可修改。</div>'}
-              </div>
-              <div class="form-group"><label class="form-label">特殊难度系数</label><select class="form-select" name="difficultyMultiplier" ${task.status !== 'pending' ? 'disabled' : ''}><option value="1" ${Number(task.difficultyMultiplierSnapshot || 1) === 1 ? 'selected' : ''}>常规 ×1</option><option value="1.2" ${Number(task.difficultyMultiplierSnapshot) === 1.2 ? 'selected' : ''}>复杂 ×1.2</option><option value="1.5" ${Number(task.difficultyMultiplierSnapshot) === 1.5 ? 'selected' : ''}>特别复杂 ×1.5</option></select></div>
+            <div class="form-group"><label class="form-label">积分规则（可选）</label>
+              ${renderPointRulePicker(rules, task.pointRuleCode, task.status !== 'pending')}
+              ${task.status !== 'pending' ? '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">任务已开始，积分规则快照不可修改。</div>' : '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">留空则不计积分；选择规则后，任务开始后不可修改。</div>'}
             </div>
-            <div class="form-group"><label class="checkbox-item"><input type="checkbox" name="conceptReserveExempt" value="true" ${task.conceptReserveExempt ? 'checked' : ''} ${task.status !== 'pending' ? 'disabled' : ''}> 纯概念储备任务：不计入月度上限</label></div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 负责人类型</label>
               <div style="display:flex;gap:16px;">
                 <label class="checkbox-item ${task.assigneeRole === 'designer' || !task.assigneeRole ? 'checked' : ''}" style="cursor:pointer;" data-emie-action="click:task-edit-assignee" data-assignee-role="designer">
@@ -456,7 +505,6 @@ async function submitEditTask(pid, tid) {
   if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
   const fd = new FormData(document.getElementById('editTaskForm'));
   const data = Object.fromEntries(fd.entries());
-  if (document.querySelector('#editTaskForm [name="conceptReserveExempt"]:not(:disabled)')) data.conceptReserveExempt = data.conceptReserveExempt === 'true';
   if (Object.prototype.hasOwnProperty.call(data, 'requiredSkillTagsText')) {
     data.requiredSkillTags = JSON.stringify(String(data.requiredSkillTagsText || '').split(/[,，、]/).map(value => value.trim()).filter(Boolean));
     delete data.requiredSkillTagsText;
@@ -621,7 +669,7 @@ async function taskDeliver(pid, tid) {
             <input type="hidden" name="actualDate">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required placeholder="描述交付的设计成果..." style="min-height:100px;"></textarea></div>
           </form>
-          <p class="form-hint">提交后积分立即入账，项目相关负责人会直接验收。</p>
+          <p class="form-hint">提交后通知产品企划，企划确认后发放基础分。</p>
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label" style="margin-bottom:8px;">🖼️ 本地上传的交付参考图</div>
             <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="deliverImageInput">
@@ -719,7 +767,7 @@ async function taskRedeliver(pid, tid) {
       <div class="modal modal-lg">
         <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📤 重新交付：${escHtml(task.name)}</div></div></div>
         <div class="modal-body">
-          ${task.reviewComments ? `<div class="review-box rejected" style="margin-bottom:16px;"><strong>驳回意见：</strong>${escHtml(task.reviewComments)}</div>` : ''}
+          ${task.reviewComments ? `<div class="review-box rejected" style="margin-bottom:16px;"><strong>${task.status === 'revision_requested' || task.pendingChangeBonusRequestId ? '修改意见' : '驳回意见'}：</strong>${escHtml(task.reviewComments)}</div>` : ''}
           <form id="taskRedeliverForm">
             <input type="hidden" name="actualDate">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required style="min-height:100px;"></textarea></div>
@@ -870,13 +918,7 @@ function taskApprove(pid, tid, projectType) {
     const task = detail.tasks.find(t => t.id === tid);
     if (!task) return;
 
-    const isChannel = projectType === 'channel_custom';
-    const isSalesConfirm = EMIE.state.currentRole === 'sales';
-    const isAdminConfirm = EMIE.state.currentRole === 'admin' && !isChannel;
-    const needsScore = false;
-    const title = isSalesConfirm
-      ? '✅ 销售验收通过'
-      : (isAdminConfirm ? '✅ 管理验收通过' : (isChannel ? '👍 企划验收通过' : '✅ 企划验收通过'));
+    const title = '✅ 企划确认';
 
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
@@ -885,32 +927,20 @@ function taskApprove(pid, tid, projectType) {
       <div class="modal">
         <div class="modal-header"><div class="modal-header-left"><div class="modal-title">${title}：${escHtml(task.name)}</div></div></div>
         <div class="modal-body">
-          <p style="margin-bottom:12px;">${isSalesConfirm ? '确认该子任务验收通过？' : (isAdminConfirm ? '确认该子任务验收通过？' : (isChannel ? '确认该子任务验收通过？之后由销售继续验收。' : '确认该子任务验收通过？之后由管理员继续验收。'))}</p>
-          ${needsScore ? `
-          <div class="form-group">
-              <label class="form-label"><span class="required">*</span> 综合评分</label>
-              <input type="number" class="form-input" id="approveScore" min="1" max="100" step="1" placeholder="1-100" required style="max-width:200px;text-align:center;">
-              <div style="font-size:11px;color:var(--gray-400);margin-top:4px;">总分100分，填写1-100的整数</div>
-            </div>` : ''}
+          <p>确认后完成该子任务，并按本轮规则发放基础分；无积分修改轮次不发分。</p>
           <div class="form-group"><label class="form-label">验收意见（可选）</label><textarea class="form-textarea" id="approveComments" placeholder="输入验收意见..."></textarea></div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-approve-close">取消</button><button class="btn btn-success" data-emie-action="click:task-submit-approve" data-project-id="${pid}" data-task-id="${tid}" data-project-type="${escHtml(projectType)}">${needsScore ? '确认通过并评分' : '确认通过'}</button></div>
+        <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-approve-close">取消</button><button class="btn btn-success" data-emie-action="click:task-submit-approve" data-project-id="${pid}" data-task-id="${tid}" data-project-type="${escHtml(projectType)}">确认</button></div>
       </div>`;
     document.body.appendChild(modal);
   });
 }
 
 async function submitTaskApprove(pid, tid) {
-  const scoreVal = parseInt(document.getElementById('approveScore')?.value);
-  const hasScoreFields = document.getElementById('approveScore') !== null;
-  if (hasScoreFields) {
-    if (isNaN(scoreVal) || scoreVal < 1 || scoreVal > 100) { window.EMIE.actions.showSystemAlert('请输入有效的评分（1-100）'); return; }
-  }
   const comments = document.getElementById('approveComments')?.value || '';
 
   const data = {
     comments: comments,
-    score: hasScoreFields ? scoreVal : null,
     currentUser: getCurrentUserName(),
     currentRole: EMIE.state.currentRole,
   };
@@ -925,8 +955,14 @@ async function submitTaskApprove(pid, tid) {
 }
 
 
-function taskReject(pid, tid) {
+async function taskReject(pid, tid) {
   if (document.getElementById('taskRejectModal')) return;
+  let rules = [];
+  try {
+    rules = enabledPointRules(await apiGet('/points/rules'));
+  } catch (error) {
+    console.warn('积分规则加载失败，本次仍可选择不加分驳回', error);
+  }
   EMIE.projectState.rejectionImages = [];
   EMIE.projectState.rejectionAttachments = [];
   const modal = document.createElement('div');
@@ -938,6 +974,8 @@ function taskReject(pid, tid) {
       <div class="modal-body">
         <div class="form-group"><label class="form-label"><span class="required">*</span> 修改意见</label><textarea class="form-textarea" id="rejectComments" required placeholder="请详细说明修改意见..." style="min-height:100px;"></textarea></div>
         <div class="form-group"><label class="form-label"><span class="required">*</span> 要求完成时间</label><div class="date-picker" style="max-width:280px;"><input type="date" class="form-input" id="rejectDeadline" required min="${new Date().toISOString().slice(0, 10)}" aria-label="选择要求完成时间" autocomplete="off" style="width:100%;min-height:38px;cursor:pointer;"></div><div class="form-hint">设计师重新交付需在此日期前完成</div></div>
+        <div class="form-group"><span class="form-label">本次驳回修改是否加分</span><div class="reject-points-choice" role="radiogroup" aria-label="本次驳回修改是否加分"><label><input type="radio" name="rejectWithPoints" value="false" checked data-emie-action="change:task-reject-points-mode">否</label><label><input type="radio" name="rejectWithPoints" value="true" data-emie-action="change:task-reject-points-mode">是</label></div><div class="form-hint">选择“是”后设置本次修改的积分规则；原任务基础分在验收通过后照常计算。</div></div>
+        <div data-reject-point-rules hidden>${renderPointRulePicker(rules)}</div>
         <div class="form-group"><label class="form-label">参考图片（选填）</label><div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="rejectImageInput"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="rejectImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-reject-images"></div><div class="file-list" id="rejectImageList"></div></div>
         <div class="form-group"><label class="form-label">附件（选填）</label><div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="rejectAttachmentInput"><div>📁 拖拽文件到此处，或点击选择文件</div><input type="file" id="rejectAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-reject-attachments"></div><div class="file-list" id="rejectAttachmentList"></div></div>
       </div>
@@ -963,14 +1001,20 @@ function updateRejectDeadlineLabel(input) {
 }
 
 async function submitTaskReject(pid, tid) {
+  const modal = document.getElementById('taskRejectModal');
   const comments = document.getElementById('rejectComments')?.value || '';
   const requiredCompletionDate = document.getElementById('rejectDeadline')?.value || '';
+  const withPoints = modal.querySelector('[name="rejectWithPoints"]:checked').value === 'true';
+  const pointRuleCode = modal.querySelector('[name="pointRuleCode"]').value;
   if (!comments) { window.EMIE.actions.showSystemAlert('请填写修改意见'); return; }
   if (!requiredCompletionDate) { window.EMIE.actions.showSystemAlert('请选择要求完成时间'); return; }
+  if (withPoints && !pointRuleCode) { window.EMIE.actions.showSystemAlert('请选择本次修改的积分规则'); return; }
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/reject`, {
       comments,
       requiredCompletionDate,
+      withPoints,
+      pointRuleCode: withPoints ? pointRuleCode : null,
       rejectionReferenceImagesJson: JSON.stringify(EMIE.projectState.rejectionImages),
       rejectionAttachmentsJson: JSON.stringify(EMIE.projectState.rejectionAttachments),
       currentUser: getCurrentUserName(),
@@ -983,90 +1027,38 @@ async function submitTaskReject(pid, tid) {
   }
 }
 
-function openTaskChangeBonus(pid, tid) {
+async function openTaskChangeBonus(pid, tid) {
   if (document.getElementById('taskChangeBonusModal')) return;
-  const modal = document.createElement('div');
-  modal.className = 'modal-overlay';
-  modal.id = 'taskChangeBonusModal';
-  modal.dataset.requestId = crypto.randomUUID();
-  modal.innerHTML = `<div class="modal" style="max-width:480px;"><div class="modal-header"><div class="modal-title">需求变化追加分</div><button class="modal-close" type="button" data-emie-action="click:task-change-bonus-close">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">变化类型</label><select class="form-select" name="mode" data-emie-action="change:task-change-bonus-mode"><option value="POINTS">局部追加：0.5–3 分</option><option value="REWORK">方向重做：原任务 30–80%</option></select></div><div class="form-group"><label class="form-label">追加值</label><input class="form-input" name="amount" type="number" min="0.5" max="3" step="0.1" required placeholder="0.5–3 分"></div><div class="form-group"><label class="form-label">变化原因</label><textarea class="form-textarea" name="reason" required maxlength="500" placeholder="填写已确认的需求变化"></textarea></div></div><div class="modal-footer"><button class="btn btn-outline" type="button" data-emie-action="click:task-change-bonus-close">取消</button><button class="btn btn-primary" type="button" data-emie-action="click:task-change-bonus-submit" data-project-id="${Number(pid)}" data-task-id="${Number(tid)}">确认追加</button></div></div>`;
-  document.body.appendChild(modal);
+  try {
+    const rules = await apiGet('/points/rules');
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'taskChangeBonusModal';
+    modal.dataset.requestId = crypto.randomUUID();
+    modal.innerHTML = `<div class="modal" style="max-width:600px;"><div class="modal-header"><div class="modal-title">修改子任务</div><button class="modal-close" type="button" data-emie-action="click:task-change-bonus-close">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">修改意见</label><textarea class="form-textarea" name="reason" required maxlength="500"></textarea></div><div class="form-group"><label class="checkbox-item"><input type="checkbox" name="withPoints" data-emie-action="change:task-change-bonus-mode"> 本次修改有积分</label></div><div data-change-point-rules hidden>${renderPointRulePicker(rules)}</div></div><div class="modal-footer"><button class="btn btn-outline" type="button" data-emie-action="click:task-change-bonus-close">取消</button><button class="btn btn-primary" type="button" data-emie-action="click:task-change-bonus-submit" data-project-id="${Number(pid)}" data-task-id="${Number(tid)}">发起修改</button></div></div>`;
+    document.body.appendChild(modal);
+  } catch (error) { window.EMIE.actions.showSystemAlert('加载积分规则失败：' + error.message); }
 }
 
-function updateTaskChangeBonusMode(select) {
-  const amount = select.closest('.modal')?.querySelector('[name="amount"]');
-  if (!amount) return;
-  amount.value = '';
-  amount.min = select.value === 'REWORK' ? '30' : '0.5';
-  amount.max = select.value === 'REWORK' ? '80' : '3';
-  amount.step = select.value === 'REWORK' ? '1' : '0.1';
-  amount.placeholder = select.value === 'REWORK' ? '30–80%' : '0.5–3 分';
+function updateTaskChangeBonusMode(input) {
+  input.closest('.modal').querySelector('[data-change-point-rules]').hidden = !input.checked;
 }
 
 async function submitTaskChangeBonus(pid, tid) {
   const modal = document.getElementById('taskChangeBonusModal');
-  const mode = modal?.querySelector('[name="mode"]')?.value;
-  const rawAmount = Number(modal?.querySelector('[name="amount"]')?.value);
-  const reason = modal?.querySelector('[name="reason"]')?.value.trim();
-  const valid = mode === 'REWORK' ? rawAmount >= 30 && rawAmount <= 80 : rawAmount >= 0.5 && rawAmount <= 3;
-  if (!valid || !reason) { window.EMIE.actions.showSystemAlert('请填写有效的追加值和变化原因'); return; }
+  const withPoints = modal.querySelector('[name="withPoints"]').checked;
+  const pointRuleCode = modal.querySelector('[name="pointRuleCode"]').value;
+  const reason = modal.querySelector('[name="reason"]').value.trim();
+  if (!reason || (withPoints && !pointRuleCode)) { window.EMIE.actions.showSystemAlert('请填写修改意见，有积分时请选择积分规则'); return; }
   try {
-    await apiPost(`/projects/${pid}/subtasks/${tid}/change-bonus`, { mode, amount: mode === 'REWORK' ? rawAmount / 100 : rawAmount, reason, requestId: modal.dataset.requestId });
+    await apiPost(`/projects/${pid}/subtasks/${tid}/change-bonus`, { withPoints, pointRuleCode: withPoints ? pointRuleCode : null, reason, requestId: modal.dataset.requestId });
     modal.remove();
     await refreshAfterMutation(pid);
-  } catch (e) { window.EMIE.actions.showSystemAlert('追加分失败：' + e.message); }
+  } catch (error) { window.EMIE.actions.showSystemAlert('发起修改失败：' + error.message); }
 }
-
-// ==================== 评分 ====================
-function openScoring(pid, tid) {
-  if (!tryOpenModal('scoringModal')) return;
-  apiGet(`/projects/${pid}`).then(detail => {
-    const task = detail.tasks.find(t => t.id === tid);
-    if (!task || !task.scoringRecords) return;
-    const myRecord = task.scoringRecords.find(sr => sr.role === EMIE.state.currentRole);
-    if (!myRecord) { window.EMIE.actions.showSystemAlert('您无需对此任务评分'); return; }
-
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    modal.id = 'scoringModal';
-    modal.innerHTML = `
-      <div class="modal">
-        <div class="modal-header"><button class="modal-close" data-emie-action="click:task-score-close">✕</button><div class="modal-header-left"><div class="modal-title">⭐ 评分：${escHtml(task.name)}</div></div></div>
-        <div class="modal-body">
-          <p style="margin-bottom:8px;color:var(--gray-500);">评分人：<strong>${escHtml(roleLabel(EMIE.state.currentRole))}</strong>（${escHtml(getCurrentUserName())}）</p>
-          <p style="margin-bottom:16px;color:var(--gray-500);">请对 <strong>${escHtml(task.name)}</strong> 进行评分（1-100分）</p>
-          <div>
-            <div class="form-group"><label class="form-label">⭐ 综合评分</label><input type="number" class="form-input" id="scoreValue" min="1" max="100" step="1" placeholder="1-100" value="${myRecord.score ?? ''}" style="font-size:24px;text-align:center;max-width:200px;margin:0 auto;"></div>
-          </div>
-        </div>
-        <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-score-close">取消</button><button class="btn btn-primary" data-emie-action="click:task-submit-score" data-project-id="${pid}" data-task-id="${tid}">提交评分</button></div>
-      </div>`;
-    document.body.appendChild(modal);
-  });
-}
-
-async function submitScoring(pid, tid) {
-  const score = parseInt(document.getElementById('scoreValue').value);
-  if (isNaN(score) || score < 1 || score > 100) { window.EMIE.actions.showSystemAlert('请输入有效的评分（1-100分）'); return; }
-
-  const data = {
-    role: EMIE.state.currentRole,
-    score,
-    currentUser: getCurrentUserName(),
-    currentRole: EMIE.state.currentRole,
-  };
-
-  try {
-    await apiPost(`/projects/${pid}/tasks/${tid}/score`, data);
-    closeM('scoringModal');
-    await refreshAfterMutation(pid);
-  } catch (e) {
-    window.EMIE.actions.showSystemAlert('评分提交失败: ' + e.message);
-  }
-}
-
 
 EMIE.registerActions({
+  renderPointRulePicker,
   handleSubTaskRefImages,
   handleSubTaskAttachments,
   addSubTask,
@@ -1098,8 +1090,6 @@ EMIE.registerActions({
   handleRejectImages,
   handleRejectAttachments,
   submitTaskReject,
-  openScoring,
-  submitScoring,
   toggleSubTaskMarketMode,
 });
 
@@ -1135,8 +1125,6 @@ EMIE.registerModule('projectTasks', {
   handleRejectImages,
   handleRejectAttachments,
   submitTaskReject,
-  openScoring,
-  submitScoring,
   toggleSubTaskMarketMode,
 });
 
@@ -1188,6 +1176,41 @@ if (registerEventAction) {
   registerEventAction('task-submit-approve', (_event, element) =>
     submitGuard(element, () => submitTaskApprove(element.dataset.projectId, element.dataset.taskId, element.dataset.projectType)));
   registerEventAction('task-reject-close', () => closeM('taskRejectModal'));
+  registerEventAction('task-reject-points-mode', (_event, element) => {
+    element.closest('#taskRejectModal').querySelector('[data-reject-point-rules]').hidden = element.value !== 'true';
+  });
+  registerEventAction('task-point-category-tab', (_event, element) => {
+    const picker = element.closest('.point-rule-picker');
+    picker.dataset.category = element.dataset.pointCategoryTab;
+    picker.dataset.subcategory = '';
+    picker.dataset.page = '0';
+    updatePointRulePicker(element);
+  });
+  registerEventAction('task-point-subcategory-tab', (_event, element) => {
+    const picker = element.closest('.point-rule-picker');
+    picker.dataset.subcategory = element.dataset.pointSubcategoryTab;
+    picker.dataset.page = '0';
+    updatePointRulePicker(element);
+  });
+  registerEventAction('task-point-search', (_event, element) => {
+    const picker = element.closest('.point-rule-picker');
+    picker.dataset.page = '0';
+    updatePointRulePicker(element);
+  });
+  registerEventAction('task-point-page', (_event, element) => {
+    const picker = element.closest('.point-rule-picker');
+    picker.dataset.page = element.dataset.page;
+    updatePointRulePicker(element);
+  });
+  registerEventAction('task-point-select', (_event, element) => {
+    const picker = element.closest('.point-rule-picker');
+    picker.querySelector('[name="pointRuleCode"]').value = element.dataset.pointRuleCode;
+    updatePointRulePicker(element);
+  });
+  registerEventAction('task-point-clear', (_event, element) => {
+    element.closest('.point-rule-picker').querySelector('[name="pointRuleCode"]').value = '';
+    updatePointRulePicker(element);
+  });
   registerEventAction('task-change-bonus-close', () => closeM('taskChangeBonusModal'));
   registerEventAction('task-change-bonus-mode', (_event, element) => updateTaskChangeBonusMode(element));
   registerEventAction('task-change-bonus-submit', (_event, element) => submitGuard(element, () => submitTaskChangeBonus(Number(element.dataset.projectId), Number(element.dataset.taskId))));
@@ -1195,7 +1218,4 @@ if (registerEventAction) {
   registerEventAction('task-reject-attachments', (_event, element) => handleRejectAttachments(element));
   registerEventAction('task-submit-reject', (_event, element) =>
     submitGuard(element, () => submitTaskReject(element.dataset.projectId, element.dataset.taskId)));
-  registerEventAction('task-score-close', () => closeM('scoringModal'));
-  registerEventAction('task-submit-score', (_event, element) =>
-    submitGuard(element, () => submitScoring(element.dataset.projectId, element.dataset.taskId)));
 }

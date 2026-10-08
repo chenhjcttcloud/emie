@@ -21,7 +21,7 @@ class PointManualAdjustmentServiceTest {
         PointManualAdjustmentService service = new PointManualAdjustmentService(adjustments, users);
         when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
         when(adjustments.maxSourceIdByType("MANUAL")).thenReturn(3L);
-        when(adjustments.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(adjustments.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
         PointAdjustmentLedger added = service.adjust("designer-1", 50, "  管理员补分  ", session("admin-1", "admin"));
         assertEquals("MANUAL", added.getSourceType());
         assertEquals(4L, added.getSourceId());
@@ -63,7 +63,7 @@ class PointManualAdjustmentServiceTest {
         PointManualAdjustmentService service = new PointManualAdjustmentService(adjustments, users);
         when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
         when(adjustments.maxSourceIdByType("MANUAL")).thenReturn(0L);
-        when(adjustments.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(adjustments.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
         assertEquals(
                 100000, service.adjust("designer-1", 100000, "上限补分", admin()).getPoints());
         assertEquals(
@@ -103,7 +103,7 @@ class PointManualAdjustmentServiceTest {
         when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
         // 模拟两次独立调账事务：每次取 MAX(source_id)+1，分别得到 1、2。
         when(adjustments.maxSourceIdByType("MANUAL")).thenReturn(0L, 1L);
-        when(adjustments.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(adjustments.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
         PointAdjustmentLedger first = service.adjust("designer-1", 20, "第一次补分", admin());
         PointAdjustmentLedger second = service.adjust("designer-1", -5, "第二次扣分", admin());
         assertEquals(1L, first.getSourceId());
@@ -117,7 +117,8 @@ class PointManualAdjustmentServiceTest {
         PointManualAdjustmentService service = new PointManualAdjustmentService(adjustments, users);
         when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
         when(adjustments.maxSourceIdByType("MANUAL")).thenReturn(5L);
-        when(adjustments.save(any())).thenThrow(new DataIntegrityViolationException("uk_point_adjustment_source"));
+        when(adjustments.saveAndFlush(any()))
+                .thenThrow(new DataIntegrityViolationException("uk_point_adjustment_source"));
         IllegalStateException e =
                 assertThrows(IllegalStateException.class, () -> service.adjust("designer-1", 10, "备注", admin()));
         assertEquals("手动调账记录冲突，请重试", e.getMessage());
@@ -130,7 +131,7 @@ class PointManualAdjustmentServiceTest {
         PointManualAdjustmentService service = new PointManualAdjustmentService(adjustments, users);
         when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
         when(adjustments.maxSourceIdByType(eq("MANUAL"))).thenReturn(0L);
-        when(adjustments.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(adjustments.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
         PointAdjustmentLedger saved = service.adjust("  designer-1  ", 10, "  补发漏记积分  ", admin());
         assertEquals("designer-1", saved.getUserId());
         assertEquals("补发漏记积分", saved.getReason());

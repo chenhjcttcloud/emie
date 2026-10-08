@@ -680,7 +680,8 @@ public class ProjectService {
                 // pending 代表尚未接单，不应把设计师标记为进行中/忙碌。
                 // 状态看板只展示负责人仍需执行的任务；已交付/送审中交由企划审核，不再算执行中。
                 List<SubTask> activeTasks = userTasks.stream()
-                        .filter(t -> List.of("accepted", "rejected").contains(t.getStatus()))
+                        .filter(t -> List.of("accepted", "rejected", "revision_requested")
+                                .contains(t.getStatus()))
                         .collect(Collectors.toList());
                 List<SubTask> completedTasks = userTasks.stream()
                         .filter(t -> List.of("approved", "completed", "sales_approved", "admin_approved")
@@ -753,7 +754,7 @@ public class ProjectService {
                 if ("planner".equals(role)) {
                     List<Map<String, Object>> activeTasks = activeProjects.stream()
                             .flatMap(p -> p.getTasks().stream()
-                                    .filter(t -> List.of("pending", "accepted", "rejected")
+                                    .filter(t -> List.of("pending", "accepted", "rejected", "revision_requested")
                                             .contains(t.getStatus()))
                                     .map(t -> {
                                         Map<String, Object> tm = new LinkedHashMap<>();
@@ -863,9 +864,6 @@ public class ProjectService {
         return projectScoringService.computeProjectScoresBatch(projects);
     }
 
-    // ==================== Pending Scoring (聚合查询) ====================
-
-    /** 获取待评分任务列表（替代前端 N+1 次循环） */
     public List<Map<String, Object>> getPendingScoringTasks(String role, String userId) {
         return projectScoringService.getPendingScoringTasks(role, userId);
     }
@@ -881,6 +879,7 @@ public class ProjectService {
             case "admin_approved" -> Map.of("label", "管理已验收", "cls", "badge-progress", "icon", "✅");
             case "approved" -> Map.of("label", "已通过", "cls", "badge-completed", "icon", "✅");
             case "completed" -> Map.of("label", "已完成", "cls", "badge-completed", "icon", "✅");
+            case "revision_requested" -> Map.of("label", "待修改", "cls", "badge-pending", "icon", "✎");
             case "rejected" -> Map.of("label", "已驳回", "cls", "badge-rejected", "icon", "↩️");
             default -> Map.of("label", status, "cls", "", "icon", "❓");
         };

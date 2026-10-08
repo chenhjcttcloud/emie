@@ -172,17 +172,8 @@ public class DesignRequirementController {
         d.setDesignerName(designerName);
         d.setPointRuleCode(rule.getRuleCode());
         d.setBasePointSnapshot(rule.getPoints());
-        double multiplier;
-        try {
-            multiplier = Double.parseDouble(String.valueOf(body.getOrDefault("difficultyMultiplier", "1")));
-        } catch (NumberFormatException e) {
-            return ResponseEntity.badRequest().body(java.util.Map.of("error", "特殊难度系数无效"));
-        }
-        if (multiplier != 1d && multiplier != 1.2d && multiplier != 1.5d) {
-            return ResponseEntity.badRequest().body(java.util.Map.of("error", "特殊难度系数只能是 1、1.2 或 1.5"));
-        }
-        d.setDifficultyMultiplierSnapshot(rule.getRuleCode().startsWith("D20_") ? multiplier : 1d);
-        d.setConceptReserveExempt(Boolean.TRUE.equals(body.get("conceptReserveExempt")));
+        d.setDifficultyMultiplierSnapshot(1d);
+        d.setConceptReserveExempt(false);
         d.setAttachmentsJson(text(body.get("attachmentsJson")));
         d.setReferenceImagesJson(text(body.get("referenceImagesJson")));
         d.setOwnerId(session.userId());
@@ -232,7 +223,7 @@ public class DesignRequirementController {
         if (permissionService != null && !permissionService.has(session.role(), "design_requirement.deliver")) {
             return forbidden("design_requirement.deliver");
         }
-        DesignRequirement d = repository.findById(id).orElse(null);
+        DesignRequirement d = repository.findByIdForUpdate(id).orElse(null);
         if (d == null) return ResponseEntity.notFound().build();
         if (!"designer".equals(normalizeRole(session.role()))
                 || !session.userId().equals(d.getDesignerId())) {

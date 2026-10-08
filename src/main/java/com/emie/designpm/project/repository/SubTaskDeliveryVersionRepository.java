@@ -16,6 +16,8 @@ public interface SubTaskDeliveryVersionRepository extends JpaRepository<SubTaskD
 
     List<SubTaskDeliveryVersion> findBySubTaskIdInOrderBySubTaskIdAscVersionNoDesc(Collection<Long> subTaskIds);
 
+    Optional<SubTaskDeliveryVersion> findFirstBySubTaskIdOrderByVersionNoDesc(Long subTaskId);
+
     long countBySubTaskId(Long subTaskId);
 
     @Query("SELECT COALESCE(MAX(v.versionNo), 0) FROM SubTaskDeliveryVersion v WHERE v.subTask.id = :subTaskId")

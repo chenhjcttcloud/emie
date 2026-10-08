@@ -44,6 +44,14 @@ public class PointAdjustmentLedger {
     @Column(name = "created_by", nullable = false, length = 100)
     private String createdBy;
 
+    @Column(length = 80)
+    private String ruleCode;
+
+    @Column(length = 255)
+    private String ruleDescription;
+
+    private LocalDateTime submittedAt;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
     /** 会计归属月（P1-4）：月度排行榜/统计与 point_ledgers 统一按 accounting_month 归月；缺省即入账当月。 */

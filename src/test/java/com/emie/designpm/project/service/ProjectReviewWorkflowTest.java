@@ -311,7 +311,7 @@ class ProjectReviewWorkflowTest {
 
     @Test
     void rejectedTaskRedeliveryResetsReviewsAndPreservesNewDeliveryVersion() {
-        Project project = projectWithTask("channel_custom", "rejected");
+        Project project = projectWithTask("channel_custom", "accepted");
         ScoringRecord planner = review(project.getTasks().get(0), "planner", "first");
         planner.setReviewStatus("rejected");
         planner.setComment("请补充源文件");
@@ -339,7 +339,7 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
-    void plannerApprovalStartsCustomSalesReviewAndNotifiesSales() {
+    void plannerApprovalCompletesChannelTaskAndAwardsBase() {
         Project project = projectWithTask("channel_custom", "submitted_for_review");
         PointsService points = mock(PointsService.class);
         service.setPointsService(points);
@@ -359,10 +359,12 @@ class ProjectReviewWorkflowTest {
                         "comments",
                         "验收通过"));
 
-        assertEquals("planner_approved", project.getTasks().get(0).getStatus());
-        verify(points, never()).awardBaseSubmission(any());
+        assertEquals("completed", project.getTasks().get(0).getStatus());
+        verify(points)
+                .awardBaseSubmission(
+                        same(project.getTasks().get(0)), nullable(SubTaskDeliveryVersion.class), anyString());
         verify(scoring, never()).save(any());
-        verify(notifications)
+        verify(notifications, never())
                 .notifyUser(eq("REVIEW_PENDING"), eq("sales-1"), eq("sub_task"), eq(11L), eq("system"), anyMap());
     }
 
@@ -391,7 +393,7 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
-    void salesRejectionMarksSecondReviewRejected() {
+    void plannerRejectionDoesNotBookPoints() {
         Project project = projectWithTask("channel_custom", "planner_approved");
         when(projects.findById(1L)).thenReturn(Optional.of(project));
         when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -401,9 +403,9 @@ class ProjectReviewWorkflowTest {
                 11L,
                 Map.of(
                         "currentRole",
-                        "sales",
+                        "planner",
                         "currentUserId",
-                        "sales-1",
+                        "planner-1",
                         "currentUser",
                         "销售甲",
                         "comments",
@@ -417,7 +419,63 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
-    void cancellingSalesRejectionRestoresExactSecondReviewAndTaskState() {
+    void paidRejectionKeepsBasePointsAndClearsBonusWhenCancelled() {
+        Project project = projectWithTask("regular", "delivered");
+        SubTask task = project.getTasks().get(0);
+        task.setAssigneeRole("designer");
+        task.setPointRuleCode("BASE");
+        task.setBasePointSnapshot(5d);
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+        doAnswer(invocation -> {
+                    SubTask snapshot = invocation.getArgument(0);
+                    snapshot.setPointRuleCode("BONUS");
+                    snapshot.setBasePointSnapshot(3d);
+                    return null;
+                })
+                .when(points)
+                .bindRuleSnapshot(any(SubTask.class), eq("BONUS"));
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(i -> i.getArgument(0));
+        when(projects.save(any(Project.class))).thenAnswer(i -> i.getArgument(0));
+        when(rejectionCycles.save(any(SubTaskRejectionCycle.class))).thenAnswer(i -> {
+            SubTaskRejectionCycle cycle = i.getArgument(0);
+            if (cycle.getId() == null) cycle.setId(201L);
+            return cycle;
+        });
+        service.taskReject(
+                1L,
+                11L,
+                Map.of(
+                        "currentRole",
+                        "planner",
+                        "currentUserId",
+                        "planner-1",
+                        "comments",
+                        "新增修改范围",
+                        "requiredCompletionDate",
+                        "2026-10-10",
+                        "withPoints",
+                        true,
+                        "pointRuleCode",
+                        "BONUS"));
+        assertEquals("BONUS", task.getPendingChangeRuleCode());
+        assertEquals(3d, task.getPendingChangeBonusPoints());
+        SubTaskRejectionCycle cycle = mockingDetails(rejectionCycles).getInvocations().stream()
+                .filter(i -> i.getMethod().getName().equals("save"))
+                .map(i -> (SubTaskRejectionCycle) i.getArgument(0))
+                .findFirst()
+                .orElseThrow();
+        when(rejectionCycles.findById(201L)).thenReturn(Optional.of(cycle));
+        when(rejectionCycles.findFirstBySubTaskIdAndStatusOrderBySequenceNoDesc(11L, "ACTIVE"))
+                .thenReturn(Optional.of(cycle));
+        service.taskCancelReject(1L, 11L, 201L, Map.of("currentRole", "planner", "currentUserId", "planner-1"));
+        assertNull(task.getPendingChangeBonusRequestId());
+        assertNull(task.getPendingChangeBonusPoints());
+        assertEquals("delivered", task.getStatus());
+    }
+
+    @Test
+    void cancellingPlannerRejectionRestoresTaskState() {
         Project project = projectWithTask("channel_custom", "planner_approved");
         SubTask task = project.getTasks().get(0);
         task.setPlannedDate("2026-08-01");
@@ -435,9 +493,9 @@ class ProjectReviewWorkflowTest {
                 11L,
                 Map.of(
                         "currentRole",
-                        "sales",
+                        "planner",
                         "currentUserId",
-                        "sales-1",
+                        "planner-1",
                         "currentUser",
                         "销售甲",
                         "comments",
@@ -452,7 +510,7 @@ class ProjectReviewWorkflowTest {
                 .thenReturn(Optional.of(cycle));
 
         service.taskCancelReject(
-                1L, 11L, 201L, Map.of("currentRole", "sales", "currentUserId", "sales-1", "currentUser", "销售甲"));
+                1L, 11L, 201L, Map.of("currentRole", "planner", "currentUserId", "planner-1", "currentUser", "销售甲"));
 
         assertEquals("planner_approved", task.getStatus());
         assertEquals("2026-08-01", task.getPlannedDate());
@@ -542,7 +600,7 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
-    void designerDeliveryQueuesAcceptanceAndBooksPoints() {
+    void designerDeliveryQueuesAcceptanceWithoutBookingPoints() {
         Project project = projectWithTask("regular", "accepted");
         project.getTasks().get(0).setAssigneeRole("designer");
         PointsService points = mock(PointsService.class);
@@ -554,11 +612,11 @@ class ProjectReviewWorkflowTest {
 
         assertEquals("submitted_for_review", project.getTasks().get(0).getStatus());
         assertNotNull(project.getTasks().get(0).getSubmittedForReviewAt());
-        verify(points).awardBaseSubmission(project.getTasks().get(0));
+        verify(points, never()).awardBaseSubmission(any(), nullable(SubTaskDeliveryVersion.class), anyString());
     }
 
     @Test
-    void plannerAcceptanceDoesNotAwardPointsAgain() {
+    void plannerAcceptanceAwardsPointsOnce() {
         Project project = projectWithTask("regular", "submitted_for_review");
         PointsService points = mock(PointsService.class);
         service.setPointsService(points);
@@ -578,7 +636,11 @@ class ProjectReviewWorkflowTest {
                         "验收通过"));
 
         assertEquals("completed", project.getTasks().get(0).getStatus());
-        verify(points, never()).awardBaseSubmission(any());
+        verify(points)
+                .awardBaseSubmission(
+                        same(project.getTasks().get(0)), nullable(SubTaskDeliveryVersion.class), anyString());
+        service.taskApprove(1L, 11L, Map.of("currentRole", "planner", "currentUserId", "planner-1"));
+        verify(points, times(1)).awardBaseSubmission(any(), nullable(SubTaskDeliveryVersion.class), anyString());
     }
 
     @Test
@@ -604,8 +666,129 @@ class ProjectReviewWorkflowTest {
                                 "验收通过")));
 
         assertEquals("planner_approved", project.getTasks().get(0).getStatus());
-        verify(points, never()).awardBaseSubmission(any());
+        verify(points, never()).awardBaseSubmission(any(), nullable(SubTaskDeliveryVersion.class), anyString());
         verify(points, never()).awardQualityCompletion(any());
+    }
+
+    @Test
+    void paidRevisionRequiresPlannerSelectionAndOnlyAwardsAfterConfirmedResubmission() {
+        Project project = projectWithTask("channel_custom", "completed");
+        project.setStatus("completed");
+        SubTask task = project.getTasks().get(0);
+        task.setAssigneeRole("designer");
+        task.setPointRuleCode("original");
+        task.setBasePointSnapshot(2.5d);
+        task.setCompletedAt(java.time.LocalDateTime.now());
+        task.setActualDate("2026-09-01");
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+        doAnswer(invocation -> {
+                    SubTask revision = invocation.getArgument(0);
+                    revision.setPointRuleCode("D30_8");
+                    revision.setBasePointSnapshot(15d);
+                    return null;
+                })
+                .when(points)
+                .bindRuleSnapshot(any(SubTask.class), eq("D30_8"));
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(i -> i.getArgument(0));
+        when(projects.save(any(Project.class))).thenAnswer(i -> i.getArgument(0));
+        String request = "fa8dc57e-0902-4fc7-8a6d-aee662a6369d";
+        Map<String, Object> modification = Map.of(
+                "currentRole",
+                "planner",
+                "currentUserId",
+                "planner-1",
+                "requestId",
+                request,
+                "reason",
+                "增加原创设计",
+                "withPoints",
+                true,
+                "pointRuleCode",
+                "D30_8");
+        service.requestChangeBonus(1L, 11L, modification);
+        service.requestChangeBonus(1L, 11L, modification);
+        assertEquals("revision_requested", task.getStatus());
+        assertNull(task.getCompletedAt());
+        assertNull(task.getActualDate());
+        assertEquals("in_progress", project.getStatus());
+        assertEquals("original", task.getPointRuleCode());
+        assertEquals(2.5d, task.getBasePointSnapshot());
+        assertEquals("D30_8", task.getPendingChangeRuleCode());
+        assertEquals(15d, task.getPendingChangeBonusPoints());
+        assertThrows(RuntimeException.class, () -> service.taskRedeliver(1L, 11L, deliveryBody()));
+        service.taskConfirmRevision(1L, 11L, deliveryBody());
+        service.taskRedeliver(1L, 11L, deliveryBody());
+        verify(points, never()).awardBaseSubmission(any(), nullable(SubTaskDeliveryVersion.class), anyString());
+        verify(points, never()).awardPendingChangeBonus(any(), nullable(SubTaskDeliveryVersion.class), anyString());
+        service.taskReject(
+                1L,
+                11L,
+                Map.of(
+                        "currentRole",
+                        "planner",
+                        "currentUserId",
+                        "planner-1",
+                        "comments",
+                        "补充内容",
+                        "requiredCompletionDate",
+                        "2026-10-10"));
+        assertEquals(request, task.getPendingChangeBonusRequestId());
+        service.taskConfirmRevision(1L, 11L, deliveryBody());
+        service.taskRedeliver(1L, 11L, deliveryBody());
+        service.taskApprove(1L, 11L, Map.of("currentRole", "planner", "currentUserId", "planner-1"));
+        service.taskApprove(1L, 11L, Map.of("currentRole", "planner", "currentUserId", "planner-1"));
+        assertEquals("completed", task.getStatus());
+        verify(points, times(1))
+                .awardPendingChangeBonus(same(task), nullable(SubTaskDeliveryVersion.class), anyString());
+        verify(points, times(1)).awardBaseSubmission(same(task), isNull(), anyString());
+    }
+
+    @Test
+    void unpaidRevisionDoesNotSelectRuleAndUnauthorizedPlannerCannotModifyOrConfirm() {
+        Project project = projectWithTask("regular", "completed");
+        SubTask task = project.getTasks().get(0);
+        task.setAssigneeRole("designer");
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(i -> i.getArgument(0));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.requestChangeBonus(
+                        1L, 11L, Map.of("currentRole", "planner", "currentUserId", "another-planner")));
+        service.requestChangeBonus(
+                1L,
+                11L,
+                Map.of(
+                        "currentRole",
+                        "planner",
+                        "currentUserId",
+                        "planner-1",
+                        "requestId",
+                        "fa8dc57e-0902-4fc7-8a6d-aee662a6369d",
+                        "reason",
+                        "调整文字",
+                        "withPoints",
+                        false));
+        assertEquals(0d, task.getPendingChangeBonusPoints());
+        assertNull(task.getPendingChangeRuleCode());
+        verify(points, never()).bindRuleSnapshot(any(), anyString());
+        task.setStatus("submitted_for_review");
+        assertThrows(
+                RuntimeException.class,
+                () -> service.taskApprove(
+                        1L, 11L, Map.of("currentRole", "planner", "currentUserId", "another-planner")));
+        assertThrows(
+                RuntimeException.class,
+                () -> service.taskApprove(1L, 11L, Map.of("currentRole", "sales", "currentUserId", "sales-1")));
+    }
+
+    @Test
+    void completedTaskCannotBypassModificationByDirectResubmission() {
+        projectWithTask("regular", "completed");
+        assertThrows(RuntimeException.class, () -> service.taskDeliver(1L, 11L, deliveryBody()));
+        assertThrows(RuntimeException.class, () -> service.taskRedeliver(1L, 11L, deliveryBody()));
+        verify(deliveryVersions, never()).save(any());
     }
 
     private Project projectWithTask(String type, String taskStatus) {

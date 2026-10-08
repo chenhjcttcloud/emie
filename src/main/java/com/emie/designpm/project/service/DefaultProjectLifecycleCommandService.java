@@ -242,6 +242,7 @@ public class DefaultProjectLifecycleCommandService implements ProjectLifecycleCo
      * 项目本身（级联删除子任务与操作日志）。
      */
     public void deleteProject(Long projectId) {
+        lockProject(projectId);
         List<SubTask> tasks = subTaskRepository.findByProjectIdOrderByCreatedAtAsc(projectId);
         List<Long> taskIds = tasks.stream().map(SubTask::getId).toList();
 
@@ -251,6 +252,9 @@ public class DefaultProjectLifecycleCommandService implements ProjectLifecycleCo
             return;
         }
 
+        if (pointLedgerRepository != null
+                && !pointLedgerRepository.findBySubTaskIdIn(taskIds).isEmpty())
+            throw new IllegalStateException("项目已有积分入账，不能删除，请保留历史记录");
         // 1) 关联调账记录（异议调账按 appealId、退单调账按 withdrawalId）
         List<Long> withdrawalIds = taskWithdrawalRepository == null
                 ? List.of()
@@ -267,6 +271,9 @@ public class DefaultProjectLifecycleCommandService implements ProjectLifecycleCo
                 : pointAppealRepository.findByPointLedgerIdIn(ledgerIds).stream()
                         .map(PointAppeal::getId)
                         .toList();
+        if (pointAdjustmentLedgerRepository != null
+                && pointAdjustmentLedgerRepository.hasProjectRelated(appealIds, withdrawalIds))
+            throw new IllegalStateException("项目已有积分调整，不能删除，请保留历史记录");
         if (pointAdjustmentLedgerRepository != null && (!appealIds.isEmpty() || !withdrawalIds.isEmpty())) {
             pointAdjustmentLedgerRepository.deleteProjectRelated(appealIds, withdrawalIds);
         }

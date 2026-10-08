@@ -50,14 +50,7 @@ public class ProjectScoringService {
         if (!List.of("completed", "approved").contains(task.getStatus())) {
             return false;
         }
-        List<String> requiredRoles = getRequiredScoringRoles(task);
-        if (requiredRoles.isEmpty()) {
-            return true;
-        }
-        List<ScoringRecord> records = scoringRepository.findBySubTaskId(task.getId());
-        return requiredRoles.stream().allMatch(role -> records.stream()
-                .filter(sr -> role.equals(sr.getRole()))
-                .anyMatch(this::isScoringRecordCompleted));
+        return true;
     }
 
     /**

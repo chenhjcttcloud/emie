@@ -47,11 +47,10 @@ function formatProjectIp(ipName, ipSubOptions) {
 function taskPointSummary(task) {
   if (!task?.pointRuleCode) return '';
   const base = Number(task.basePointSnapshot || 0);
-  const multiplier = Number(task.difficultyMultiplierSnapshot || 1);
-  const estimated = Math.round(base * multiplier * 100) / 100;
+  const estimated = base;
   const labels = { TASK_APPROVED: '通用任务（验收完成）', A1: '包装整套设计', A2: '包装单项设计', A3: '包装修改/刀模/箱规', A4: '包装多语言版', A5: '详情页全套设计', A6: '详情页局部/改版', A7: '主图/单张卖点图', A8: '海报/立牌/单页', A9: '展会物料整套', A10: 'UI界面/灯珠图案/待机页', A11: 'AI生图/场景图/推广图', B1: '原创产品设计', B2: '外采产品IP化设计', B3: '新增SKU/配色衍生', B4: '展会样品/客户定制产品', B5: '3D建模渲染出图', B6: '3D公仔建模/输出', E1: '执行类任务', E2: '执行类任务', E3: '执行类任务', E4: '执行类任务', S1: '特殊专项任务' };
   const code = String(task.pointRuleCode).toUpperCase();
-  if (code.startsWith('D20_')) return `${code} · ${estimated} 分${multiplier !== 1 ? `（×${multiplier}）` : ''}`;
+  if (code.startsWith('D20_')) return `${code} · ${estimated} 分`;
   return `${code}（${labels[code] || '积分任务'}） · ${estimated} 分`;
 }
 
@@ -243,7 +242,7 @@ function renderSubTaskCard(detail, task, idx) {
   }[task.workflowStage] || '未设置阶段';
   const rejectionRecords = Array.isArray(task.rejectionRecords) ? task.rejectionRecords : [];
   const latestRejection = rejectionRecords.length ? rejectionRecords[rejectionRecords.length - 1] : null;
-  const isRedelivering = task.status === 'accepted' && latestRejection && !latestRejection.cancelled;
+  const isRedelivering = task.status === 'accepted' && (task.pendingChangeBonusRequestId || (latestRejection && !latestRejection.cancelled));
   const deliveryVersions = Array.isArray(task.deliveryVersions) ? task.deliveryVersions : [];
   const visibleDeadline = task.status === 'rejected' && latestRejection?.requiredCompletionDate
     ? latestRejection.requiredCompletionDate : task.plannedDate;
@@ -261,6 +260,7 @@ function renderSubTaskCard(detail, task, idx) {
       <div class="subtask-meta-item">📍 所属阶段：<strong>${escHtml(workflowStageLabel)}</strong></div>
       <div class="subtask-meta-item">👤 负责人：<strong>${escHtml(task.designerName || '待分配')}</strong>${task.assigneeRole ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;${task.assigneeRole === 'supplychain' ? 'background:#F0FDFA;color:#0D9488;' : task.assigneeRole === 'planner' ? 'background:#EFF6FF;color:#1D4ED8;' : task.assigneeRole === 'promotion' ? 'background:#F5F3FF;color:#7C3AED;' : 'background:#FEF2F2;color:#DC2626;'}">${task.assigneeRole === 'supplychain' ? '供应链' : task.assigneeRole === 'planner' ? '企划' : task.assigneeRole === 'promotion' ? '产品推广' : task.assigneeRole === 'sales' ? '销售' : '设计师'}</span>` : ''}</div>
       <div class="subtask-meta-item">📅 ${task.status === 'rejected' && latestRejection?.requiredCompletionDate ? '驳回后要求完成' : '计划完成'}：<strong>${formatDate(visibleDeadline)}</strong></div>
+      ${task.submittedForReviewAt || deliveryVersions[0]?.submittedAt ? `<div class="subtask-meta-item">成果提交：<strong>${fmtDT(deliveryVersions[0]?.submittedAt || task.submittedForReviewAt)}</strong></div>` : ''}
       ${task.actualDate ? `<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(task.actualDate)}</strong></div>` : ''}
       ${task.pointRuleCode ? `<div class="subtask-meta-item">🏅 积分：<strong>${escHtml(taskPointSummary(task))}</strong></div>` : ''}
     </div>
@@ -273,22 +273,18 @@ function renderSubTaskCard(detail, task, idx) {
       ${task.deliverables ? `<div class="detail-item"><div class="detail-label">交付成果</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.deliverables)}</div></div>` : ''}
     </div>` : ''}
 
-    ${task.reviewComments ? `<div class="review-box ${task.status === 'rejected' ? 'rejected' : 'approved'}"><strong>${task.status === 'rejected' ? '驳回意见' : '验收意见'}：</strong>${escHtml(task.reviewComments)}</div>` : ''}
+    ${task.reviewComments ? `<div class="review-box ${task.status === 'rejected' ? 'rejected' : 'approved'}"><strong>${task.status === 'revision_requested' || task.pendingChangeBonusRequestId ? '修改意见' : task.status === 'rejected' ? '驳回意见' : '验收意见'}：</strong>${escHtml(task.reviewComments)}</div>` : ''}
 
 
     <div class="subtask-actions">
       ${/* 企划验收（首轮）：常规品直接通过；渠道定制单进入企划确认状态 */''}
-      ${isPlanner && String(getCurrentUserId()) === String(detail.plannerId || '') && ['delivered', 'submitted_for_review'].includes(task.status) ? `
-        <button class="btn btn-success btn-sm" data-emie-action="click:detail-task-approve" data-project-id="${detail.id}" data-task-id="${task.id}" data-project-type="${escHtml(detail.type)}">✅ 验收通过</button>
+      ${isPlanner && String(getCurrentUserId()) === String(detail.plannerId || '') && ['delivered', 'submitted_for_review', 'planner_approved'].includes(task.status) ? `
+        <button class="btn btn-success btn-sm" data-emie-action="click:detail-task-approve" data-project-id="${detail.id}" data-task-id="${task.id}" data-project-type="${escHtml(detail.type)}">✅ 确认</button>
         <button class="btn btn-danger btn-sm" data-emie-action="click:detail-task-reject" data-project-id="${detail.id}" data-task-id="${task.id}">↩️ 驳回</button>
       ` : ''}
       ${/* 渠道定制单：销售第二轮确认 */''}
-      ${EMIE.state.currentRole === 'sales' && detail.type === 'channel_custom' && task.status === 'planner_approved' ? `
-        <button class="btn btn-success btn-sm" data-emie-action="click:detail-task-approve" data-project-id="${detail.id}" data-task-id="${task.id}" data-project-type="channel_custom">✅ 销售确认通过</button>
-        <button class="btn btn-danger btn-sm" data-emie-action="click:detail-task-reject" data-project-id="${detail.id}" data-task-id="${task.id}">↩️ 驳回</button>
-      ` : ''}
-      ${(EMIE.state.currentRole === 'admin' || (isPlanner && String(getCurrentUserId()) === String(detail.plannerId || ''))) && (!task.assigneeRole || task.assigneeRole === 'designer') && String(task.pointRuleCode || '').startsWith('D20_') && !task.pendingChangeBonusRequestId && (deliveryVersions.length > 0 || Boolean(task.deliverables)) && ['submitted_for_review', 'delivered', 'planner_approved', 'sales_approved', 'admin_approved', 'completed'].includes(task.status) ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-change-bonus" data-project-id="${detail.id}" data-task-id="${task.id}">＋ 需求变化追加分</button>` : ''}
-      ${task.pendingChangeBonusRequestId ? `<span class="subtask-meta-item">需求变化追加 ${Number(task.pendingChangeBonusPoints || 0)} 分，待重新交付入账</span>` : ''}
+      ${isPlanner && String(getCurrentUserId()) === String(detail.plannerId || '') && (!task.assigneeRole || task.assigneeRole === 'designer') && task.status === 'completed' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-change-bonus" data-project-id="${detail.id}" data-task-id="${task.id}">修改</button>` : ''}
+      ${task.pendingChangeBonusRequestId ? `<span class="subtask-meta-item">本次修改 ${task.pendingChangeRuleCode ? Number(task.pendingChangeBonusPoints || 0) + ' 分，企划确认后入账' : '无积分'}</span>` : ''}
       ${myTask && task.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-accept" data-project-id="${detail.id}" data-task-id="${task.id}">✅ 接单</button>` : ''}
       ${myTask && task.status === 'accepted' ? (isRedelivering ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-redeliver" data-project-id="${detail.id}" data-task-id="${task.id}">📤 重新交付</button>` : `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-deliver" data-project-id="${detail.id}" data-task-id="${task.id}">📤 交付成果</button>`) : ''}
       ${task.status === 'rejected' && task.activeRejectionCycleId && task.activeRejectionRole === EMIE.state.currentRole && (
@@ -296,7 +292,7 @@ function renderSubTaskCard(detail, task, idx) {
         || (EMIE.state.currentRole === 'sales' && detail.type === 'channel_custom')
         || (EMIE.state.currentRole === 'admin' && detail.type !== 'channel_custom')
       ) ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-cancel-reject" data-project-id="${detail.id}" data-task-id="${task.id}" data-cycle-id="${task.activeRejectionCycleId}">↩️ 取消驳回</button>` : ''}
-      ${myTask && task.status === 'rejected' ? `<button class="btn btn-warning btn-sm" data-emie-action="click:detail-task-confirm-revision" data-project-id="${detail.id}" data-task-id="${task.id}">🛠️ 确认修改</button>` : ''}
+      ${myTask && ['rejected', 'revision_requested'].includes(task.status) ? `<button class="btn btn-warning btn-sm" data-emie-action="click:detail-task-confirm-revision" data-project-id="${detail.id}" data-task-id="${task.id}">🛠️ 确认修改</button>` : ''}
       ${myTask && task.status === 'delivered' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-correct" data-project-id="${detail.id}" data-task-id="${task.id}">📝 更正当前交付</button>` : ''}
       ${isPlanner && detail.status !== 'paused' && (task.status === 'pending' || task.status === 'accepted') ? `
         ${task.allocationStatus === 'market_open' ? `<button class="btn btn-warning btn-sm" data-emie-action="click:detail-task-withdraw" data-project-id="${detail.id}" data-task-id="${task.id}">撤回市场</button>` : ''}
@@ -341,6 +337,7 @@ function openProjectSubTaskDetail(event, taskId) {
           <div class="detail-item"><div class="detail-label">计划完成</div><div class="detail-value">${formatDate(task.plannedDate)}</div></div>
           <div class="detail-item"><div class="detail-label">实际完成</div><div class="detail-value">${task.actualDate ? formatDate(task.actualDate) : '-'}</div></div>
           <div class="detail-item"><div class="detail-label">修改要求次数</div><div class="detail-value">${records.length} 次</div></div>
+          ${task.submittedForReviewAt || task.deliveryVersions?.[0]?.submittedAt ? `<div class="detail-item"><div class="detail-label">成果提交时间</div><div class="detail-value">${fmtDT(task.deliveryVersions?.[0]?.submittedAt || task.submittedForReviewAt)}</div></div>` : ''}
           ${task.pointRuleCode ? `<div class="detail-item"><div class="detail-label">积分规则</div><div class="detail-value">${escHtml(task.pointRuleCode)}</div></div><div class="detail-item"><div class="detail-label">积分快照</div><div class="detail-value">${Number(task.basePointSnapshot || 0)} 分</div></div><div class="detail-item"><div class="detail-label">合作分配快照</div><div class="detail-value">${escHtml(taskCollaborationSummary(task))}</div></div><div class="detail-item"><div class="detail-label">积分归属月份</div><div class="detail-value">${escHtml(task.milestoneMonth || '按实际入账月份')}</div></div><div class="detail-item"><div class="detail-label">指派/立项说明</div><div class="detail-value">${escHtml(task.assignmentReason || '-')}</div></div>` : ''}
         </div>
         <div class="detail-item" style="margin-top:12px;">
@@ -884,7 +881,7 @@ function renderProjectPipeline(detail) {
       return { color: '#854F0B', bg: '#FAEEDA', border: '#FAC775', icon: '⏸️', title: '项目已暂停', text: '点击"继续"按钮可恢复项目。' };
     }
     if (status === 'completed') {
-      return { color: '#3B6D11', bg: '#EAF3DE', border: '#C0DD97', icon: '🎉', title: '项目已完成', text: '所有子任务已验收评分完毕。' };
+      return { color: '#3B6D11', bg: '#EAF3DE', border: '#C0DD97', icon: '🎉', title: '项目已完成', text: '所有子任务已确认完成。' };
     }
 
     if (status === 'pending_planner') {
@@ -906,7 +903,7 @@ function renderProjectPipeline(detail) {
     // 优先级：已企划评分 → 已交付 → 执行中 → 待分配
     if (plannerApprovedTasks.length > 0) {
       const names = plannerApprovedTasks.map(t => t.name).join('、');
-      const confirmer = isChannel ? '销售' : '管理';
+      const confirmer = '企划';
       return { color: '#854F0B', bg: '#FAEEDA', border: '#FAC775', icon: '💡', title: '等待' + confirmer + '验收', text: '子任务「' + names + '」已通过企划验收，等待' + confirmer + '验收。' };
     }
     if (deliveredTasks.length > 0) {

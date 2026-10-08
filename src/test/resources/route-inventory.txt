@@ -83,7 +83,9 @@ GET /api/point-governance/archives
 GET /api/point-governance/po/me
 GET /api/point-governance/po/progress
 GET /api/point-program/forecasts
+GET /api/points/audit
 GET /api/points/categories
+GET /api/points/logs
 GET /api/points/market-eligibility/{userId}
 GET /api/points/me
 GET /api/points/rules

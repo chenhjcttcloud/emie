@@ -239,8 +239,8 @@ class ProjectServiceTaskMarketTest {
 
         service.withdrawAcceptedTask(1L, 2L, Map.of("currentUserId", "designer-1", "currentUser", "张设计"));
 
-        verify(withdrawals).save(argThat(w -> w.getPenaltyPoints() == 3 && "接单超1小时退单，按累计次数比例扣分".equals(w.getReason())));
-        verify(adjustments).save(argThat(a -> a.getPoints() == -3));
+        verify(withdrawals).save(argThat(w -> w.getPenaltyPoints() == 2 && "接单超1小时退单，按累计次数比例扣分".equals(w.getReason())));
+        verify(adjustments).save(argThat(a -> a.getPoints() == -2));
         ArgumentCaptor<DesignerMarketEligibility> captor = ArgumentCaptor.forClass(DesignerMarketEligibility.class);
         verify(eligibilityRepo).save(captor.capture());
         assertEquals(1, captor.getValue().getViolationCount());
@@ -291,7 +291,7 @@ class ProjectServiceTaskMarketTest {
             SystemConfigRepository configs) {}
 
     @Test
-    void deleteProjectCleansOrphanRelatedDataBeforeRemovingProject() {
+    void deleteProjectPreservesBookedPointsAndNegativeAdjustments() {
         ProjectRepository projects = mock(ProjectRepository.class);
         SubTaskRepository tasks = mock(SubTaskRepository.class);
         ScoringRepository scoring = mock(ScoringRepository.class);
@@ -342,21 +342,14 @@ class ProjectServiceTaskMarketTest {
         service.setNotificationRepository(notifications);
         service.setFileRecordRepository(files);
 
-        service.deleteProject(1L);
-
-        InOrder order =
-                inOrder(adjustments, withdrawals, appeals, ledgers, versions, scoring, notifications, files, projects);
-        order.verify(adjustments).deleteProjectRelated(List.of(300L), List.of(100L));
-        order.verify(withdrawals).deleteBySubTaskIds(List.of(10L, 11L));
-        order.verify(appeals).deleteByPointLedgerIds(List.of(200L));
-        order.verify(ledgers).deleteBySubTaskIds(List.of(10L, 11L));
-        order.verify(versions).deleteBySubTaskIds(List.of(10L, 11L));
-        order.verify(scoring).deleteByProjectId(1L);
-        order.verify(notifications).deleteByAggregateTypeAndAggregateIdIn("project", List.of(1L));
-        order.verify(notifications).deleteByAggregateTypeAndAggregateIdIn("sub_task", List.of(10L, 11L));
-        order.verify(files).deleteByTargetTypeAndTargetIdIn("project", List.of(1L));
-        order.verify(files).deleteByTargetTypeAndTargetIdIn("sub_task", List.of(10L, 11L));
-        order.verify(projects).deleteById(1L);
+        when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
+        assertThrows(IllegalStateException.class, () -> service.deleteProject(1L));
+        when(ledgers.findBySubTaskIdIn(List.of(10L, 11L))).thenReturn(List.of());
+        when(adjustments.hasProjectRelated(List.of(), List.of(100L))).thenReturn(true);
+        assertThrows(IllegalStateException.class, () -> service.deleteProject(1L));
+        verify(projects, never()).deleteById(any());
+        verify(ledgers, never()).deleteBySubTaskIds(any());
+        verify(adjustments, never()).deleteProjectRelated(any(), any());
     }
 
     @Test

@@ -108,6 +108,10 @@ public class ProjectViewSupport {
                     item.put("publisherRole", task.getPublisherRole());
                     item.put("assigneeRole", task.getAssigneeRole());
                     item.put("pointRuleCode", task.getPointRuleCode());
+                    item.put("basePointSnapshot", task.getBasePointSnapshot());
+                    item.put("pendingChangeRuleCode", task.getPendingChangeRuleCode());
+                    item.put("pendingChangeBonusRequestId", task.getPendingChangeBonusRequestId());
+                    item.put("pendingChangeBonusPoints", task.getPendingChangeBonusPoints());
                     item.put("details", task.getDetails());
                     item.put("deliverables", task.getDeliverables());
                     item.put("referenceImagesJson", task.getReferenceImagesJson());
@@ -468,6 +472,7 @@ public class ProjectViewSupport {
         dto.setBasePointSnapshot(task.getBasePointSnapshot());
         dto.setDifficultyMultiplierSnapshot(task.getDifficultyMultiplierSnapshot());
         dto.setConceptReserveExempt(task.isConceptReserveExempt());
+        dto.setPendingChangeRuleCode(task.getPendingChangeRuleCode());
         dto.setPendingChangeBonusRequestId(task.getPendingChangeBonusRequestId());
         dto.setPendingChangeBonusPoints(task.getPendingChangeBonusPoints());
         dto.setQualityBonusThresholdSnapshot(task.getQualityBonusThresholdSnapshot());
