@@ -206,6 +206,13 @@ function taskDetailFiles(json, images) {
   return typeof renderer === 'function' && json ? renderer(json) : '';
 }
 
+function rejectionPointInfo(record) {
+  if (record.withPoints === true) {
+    return `本次加分：${record.pointRuleDescription || record.pointRuleCode || '积分规则'}（${record.pointRuleCode || '未知编号'}） · ${Number(record.points || 0)} 分`;
+  }
+  return record.withPoints === false ? '本次不加分' : '';
+}
+
 function renderDeliveryPointInfo(version) {
   if (version.expectedPoints == null && !version.pointRuleCode) return '';
   const rule = version.pointRuleDescription || version.pointRuleCode || '积分规则未记录';
@@ -284,6 +291,7 @@ function openPublishedSubTaskDetail(taskId) {
               <summary style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#FFF8F8;cursor:pointer;list-style:none;">
                 <strong style="color:#A32D2D;white-space:nowrap;">第 ${record.attemptNo} 次修改要求</strong>
                 <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray-600);">${escHtml(record.reason || '未填写修改意见')}</span>
+                ${rejectionPointInfo(record) ? `<span style="font-size:11px;color:var(--gray-500);white-space:nowrap;">${escHtml(rejectionPointInfo(record))}</span>` : ''}
                 <span style="font-size:11px;color:var(--gray-400);white-space:nowrap;">${record.reviewedAt ? new Date(record.reviewedAt).toLocaleString('zh-CN', { hour12: false }) : '-'}</span>
               </summary>
               <div style="padding:14px;">
@@ -297,6 +305,7 @@ function openPublishedSubTaskDetail(taskId) {
                   <div class="detail-label" style="color:#A32D2D;">修改意见 · ${escHtml(roleNames[record.reviewerRole] || record.reviewerRole || '')} ${escHtml(record.reviewerName || '-')}</div>
                   <div class="detail-label" style="color:#A32D2D;margin-top:6px;">要求完成时间：${record.requiredCompletionDate ? formatDate(record.requiredCompletionDate) : '-'}</div>
                   <div class="detail-value" style="white-space:pre-wrap;margin-top:5px;">${escHtml(record.reason || '未填写修改意见')}</div>
+                  ${rejectionPointInfo(record) ? `<div class="detail-label" style="margin-top:8px;color:var(--gray-600);">${escHtml(rejectionPointInfo(record))}</div>` : ''}
                   ${taskDetailFiles(record.rejectionReferenceImagesJson, true)}
                   ${taskDetailFiles(record.rejectionAttachmentsJson, false)}
                 </div>
