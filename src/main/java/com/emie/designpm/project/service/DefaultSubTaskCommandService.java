@@ -197,8 +197,10 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (!ProjectWorkflowService.STAGES.contains(workflowStage)) {
             throw new RuntimeException("请选择有效的子任务所属阶段");
         }
+        String assigneeRole = (String) body.get("assigneeRole");
+        assigneeRole = assigneeRole != null && !assigneeRole.isBlank() ? assigneeRole : "designer";
         String pointRuleCode = (String) body.get("pointRuleCode");
-        if (pointRuleCode == null || pointRuleCode.isBlank()) {
+        if ("designer".equals(assigneeRole) && (pointRuleCode == null || pointRuleCode.isBlank())) {
             throw new IllegalArgumentException("请选择积分规则");
         }
 
@@ -212,7 +214,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         task.setPublisherId((String) body.get("currentUserId"));
         task.setPublisherName((String) body.getOrDefault("currentUser", ""));
         task.setPublisherRole(role);
-        if (pointsService != null) {
+        if (pointsService != null && "designer".equals(assigneeRole)) {
             pointsService.bindRuleSnapshot(task, pointRuleCode);
             task.setConceptReserveExempt(Boolean.TRUE.equals(body.get("conceptReserveExempt")));
         }
@@ -222,8 +224,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         task.setMilestoneMonth(inputValidator.milestoneMonth(body.get("milestoneMonth")));
         task.setAssignmentReason(SecurityUtil.sanitizeText((String) body.get("assignmentReason"), 500));
         // 设置负责人角色类型（designer / supplychain / planner / sales），默认 designer
-        String assigneeRole = (String) body.get("assigneeRole");
-        task.setAssigneeRole(assigneeRole != null && !assigneeRole.isBlank() ? assigneeRole : "designer");
+        task.setAssigneeRole(assigneeRole);
         if (publishToMarket) {
             if (!"designer".equals(task.getAssigneeRole())) {
                 throw new RuntimeException("只有设计师子任务可以发布到接单市场");
@@ -348,6 +349,12 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                             ? assigneeRole
                             : "designer");
         }
+        if (body.containsKey("assigneeRole") && !"designer".equals(task.getAssigneeRole())) {
+            if (!"pending".equals(task.getStatus())) {
+                throw new RuntimeException("子任务开始执行后不能修改负责人类型");
+            }
+            clearPointRuleSnapshot(task);
+        }
         if (body.containsKey("pointRuleCode")) {
             if (!"pending".equals(task.getStatus())) {
                 throw new RuntimeException("子任务开始执行后不能修改积分规则");
@@ -356,16 +363,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             String ruleCode =
                     body.containsKey("pointRuleCode") ? (String) body.get("pointRuleCode") : task.getPointRuleCode();
             if (ruleCode == null || ruleCode.isBlank()) {
-                task.setPointRuleCode(null);
-                task.setDifficultyMultiplierSnapshot(null);
-                task.setBasePointSnapshot(null);
-                task.setDifficultyMultiplierSnapshot(null);
-                task.setQualityBonusThresholdSnapshot(null);
-                task.setQualityBonusRatioSnapshot(null);
-                task.setQualityTopThresholdSnapshot(null);
-                task.setQualityTopRatioSnapshot(null);
-                task.setMaxTotalMultiplierSnapshot(null);
-                task.setCountInPerformanceSnapshot(null);
+                clearPointRuleSnapshot(task);
             } else {
                 pointsService.bindRuleSnapshot(task, ruleCode);
                 task.setConceptReserveExempt(Boolean.TRUE.equals(body.get("conceptReserveExempt")));
@@ -421,6 +419,18 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
         return saved;
+    }
+
+    private void clearPointRuleSnapshot(SubTask task) {
+        task.setPointRuleCode(null);
+        task.setDifficultyMultiplierSnapshot(null);
+        task.setBasePointSnapshot(null);
+        task.setQualityBonusThresholdSnapshot(null);
+        task.setQualityBonusRatioSnapshot(null);
+        task.setQualityTopThresholdSnapshot(null);
+        task.setQualityTopRatioSnapshot(null);
+        task.setMaxTotalMultiplierSnapshot(null);
+        task.setCountInPerformanceSnapshot(null);
     }
 
     private Map<String, Object> snapshotSubTask(SubTask task) {

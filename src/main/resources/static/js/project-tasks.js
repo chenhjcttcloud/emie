@@ -194,7 +194,7 @@ async function addSubTask(pid) {
             </div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 计划要求完成时间</label>${renderDatePicker('plannedDate', {required:true})}</div>
           </div>
-          <div class="form-group"><label class="form-label"><span class="required">*</span> 积分规则</label>
+          <div class="form-group" id="addSubTaskPointRuleGroup"><label class="form-label"><span class="required">*</span> 积分规则</label>
             ${renderPointRulePicker(pointRules)}
             <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">创建后将锁定规则快照并参与积分计算。</div>
           </div>
@@ -329,7 +329,8 @@ async function submitAddSubTask(pid) {
 
   if (!data.name) { showError('name', '请填写子任务名称'); hasErr = true; }
   if (!data.workflowStage) { showError('workflowStage', '请选择子任务所属阶段'); hasErr = true; }
-  if (!data.pointRuleCode) { showError('pointRuleCode', '请选择积分规则'); hasErr = true; }
+  if (data.assigneeRole === 'designer' && !data.pointRuleCode) { showError('pointRuleCode', '请选择积分规则'); hasErr = true; }
+  if (data.assigneeRole !== 'designer') data.pointRuleCode = '';
   if (!data.plannedDate) { showError('plannedDate', '请选择计划完成时间'); hasErr = true; }
   else if (!/^\d{4}-\d{2}-\d{2}$/.test(data.plannedDate) || isNaN(new Date(data.plannedDate).getTime())) {
     showError('plannedDate', '日期格式不正确（yyyy-mm-dd）');
@@ -444,7 +445,7 @@ function editTask(pid, tid) {
               <div class="form-group"><label class="form-label">计划完成时间</label>${renderDatePicker('plannedDate', {value: task.plannedDate || ''})}</div>
             </div>
             <input type="hidden" name="requiredSkillTagsText" value="">
-            <div class="form-group"><label class="form-label">积分规则（可选）</label>
+            <div class="form-group" id="editSubTaskPointRuleGroup" style="${(task.assigneeRole || 'designer') === 'designer' ? '' : 'display:none;'}"><label class="form-label">积分规则（可选）</label>
               ${renderPointRulePicker(rules, task.pointRuleCode, task.status !== 'pending')}
               ${task.status !== 'pending' ? '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">任务已开始，积分规则快照不可修改。</div>' : '<div style="font-size:12px;color:var(--gray-500);margin-top:5px;">留空则不计积分；选择规则后，任务开始后不可修改。</div>'}
             </div>
@@ -507,6 +508,7 @@ async function submitEditTask(pid, tid) {
   if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
   const fd = new FormData(document.getElementById('editTaskForm'));
   const data = Object.fromEntries(fd.entries());
+  if (data.assigneeRole !== 'designer') data.pointRuleCode = '';
   if (Object.prototype.hasOwnProperty.call(data, 'requiredSkillTagsText')) {
     data.requiredSkillTags = JSON.stringify(String(data.requiredSkillTagsText || '').split(/[,，、]/).map(value => value.trim()).filter(Boolean));
     delete data.requiredSkillTagsText;

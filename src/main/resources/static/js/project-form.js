@@ -159,6 +159,14 @@ const switchAssigneeType = function(prefix, role, el) {
   // 更新 hidden input
   const hidden = document.getElementById(prefix + 'SubTaskAssigneeRole');
   if (hidden) hidden.value = role;
+  const pointRuleGroup = document.getElementById(prefix + 'SubTaskPointRuleGroup');
+  if (pointRuleGroup) {
+    pointRuleGroup.style.display = role === 'designer' ? '' : 'none';
+    if (role !== 'designer') {
+      const pointRule = pointRuleGroup.querySelector('[name="pointRuleCode"]');
+      if (pointRule) pointRule.value = '';
+    }
+  }
   if (prefix === 'add') {
     const modeWrap = document.getElementById('addSubTaskAssignmentMode');
     const marketLabel = modeWrap?.querySelector('input[value="market"]')?.closest('label');
@@ -201,8 +209,16 @@ const switchAssigneeType = function(prefix, role, el) {
 // 编辑子任务时切换负责人类型
 const switchEditAssigneeType = function(role, el) {
   document.querySelectorAll('#editTaskForm .checkbox-item').forEach(c => c.classList.remove('checked'));
-  el.classList.add('checked');
+  if (el) el.classList.add('checked');
   document.getElementById('editSubTaskAssigneeRole').value = role;
+  const pointRuleGroup = document.getElementById('editSubTaskPointRuleGroup');
+  if (pointRuleGroup) {
+    pointRuleGroup.style.display = role === 'designer' ? '' : 'none';
+    if (role !== 'designer') {
+      const pointRule = pointRuleGroup.querySelector('[name="pointRuleCode"]');
+      if (pointRule) pointRule.value = '';
+    }
+  }
   const sel = document.getElementById('editSubTaskDesignerId');
   if (!sel) return;
   if (role === 'designer') {

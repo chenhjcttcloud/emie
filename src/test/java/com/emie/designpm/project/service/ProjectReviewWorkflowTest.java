@@ -168,6 +168,49 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
+    void createsNonDesignerSubTaskWithoutBindingPointRule() {
+        Project project = projectWithTask("regular", "completed");
+        project.getTasks().clear();
+        when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(users.getUserByUserId("planner-2"))
+                .thenReturn(com.emie.designpm.entity.User.builder()
+                        .userId("planner-2")
+                        .name("企划乙")
+                        .role("planner")
+                        .status("active")
+                        .build());
+        when(users.getUserName("planner-2")).thenReturn("企划乙");
+        when(subTasks.saveAndFlush(any(SubTask.class))).thenAnswer(invocation -> {
+            SubTask saved = invocation.getArgument(0);
+            saved.setId(24L);
+            return saved;
+        });
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+
+        service.addSubTask(
+                1L,
+                Map.ofEntries(
+                        Map.entry("name", "企划跟进"),
+                        Map.entry("plannedDate", "2026-08-10"),
+                        Map.entry("designerId", "planner-2"),
+                        Map.entry("assigneeRole", "planner"),
+                        Map.entry("workflowStage", "design"),
+                        Map.entry("currentRole", "admin"),
+                        Map.entry("currentUserId", "admin-1"),
+                        Map.entry("currentUser", "管理员甲"),
+                        Map.entry("referenceImagesJson", "[]"),
+                        Map.entry("attachmentsJson", "[]")));
+
+        ArgumentCaptor<SubTask> task = ArgumentCaptor.forClass(SubTask.class);
+        verify(subTasks).saveAndFlush(task.capture());
+        assertEquals("planner", task.getValue().getAssigneeRole());
+        assertNull(task.getValue().getPointRuleCode());
+        verify(points, never()).bindRuleSnapshot(any(), anyString());
+    }
+
+    @Test
     void batchesDeliveryVersionsForMultipleTasks() {
         SubTask first = new SubTask();
         first.setId(11L);
