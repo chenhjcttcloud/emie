@@ -1738,6 +1738,16 @@
 
 当前分支规则为：本地/Gitee 使用 `master`，GitHub 使用 `main`。下方较早的历史记录中若出现 `project_manager_system`，仅表示当时的历史分支名称，不代表当前分支。
 
+## 2026-10-08 设计师月度绩效交付成果导出（已发布）
+
+- 变更：月报按设计师接单/指派月份统计子任务，明示完成状态；新增逐版本交付成果明细，嵌入可读取的交付图片，并为普通附件提供下载链接；长耗时导出改为异步生成并查询状态。
+- 同批包含已授权的子任务积分审计与操作日志字段完善。
+- 验证：Java 21 `clean package` 通过，367 项测试、0 失败、1 项既有跳过；`./scripts/test-update.sh` 容器健康和浏览器回归通过；XLSX 图片对象与附件下载链接定向测试通过。
+- 提交：`b4f6afaa0330b67a9ce1abad6dbe7563fa5d6eed`；Gitee `master`、GitHub `main` 均已核对为同一 SHA。
+- 生产：从 `66299eab9a1806d1db6beabba7b8202093ebadd2`（`1.14.3`）原子切换至目标 SHA（`1.14.4`）；`emie-app` 健康检查通过，公网 HTTP 200，生产运行 SHA 一致。
+- 数据库：本提交无新增迁移；发布脚本备份目录 `/home/emie/emie-deploy-backups/20261008_153347`，备份大小 700173 bytes；旧容器 `emie-app-old-20261008_153347` 保留。
+- 发布脚本出现远端 `en_US.UTF-8` locale 警告，不影响备份、切换和验证。
+
 ## 2026-09-20 工作量设计/选审需求统计（已发布）
 
 - 生产提交：`ba59ad8eb8bdc056c5e180d5310ffe1a02d0bd1f`；Gitee `master` 与 GitHub `main` 均已核对为该提交。
