@@ -1321,3 +1321,9 @@
 - “任务详情”顶部新增 Excel 原生数据条，进度按本月已完成任务数/接单或指派任务数计算；0% 有灰色底槽，非零时叠加绿色数据条，零任务另显示说明，按时完成率口径未改。
 - `DesignerPerformanceWorkbookTest` 定向测试通过，验证比例值、底槽样式及 XLSX 数据条规则；待运行 `./scripts/test-update.sh` 完成本地容器验证。
 - 尚未提交、推送或发布生产。
+
+## 2026-10-08 操作日志留存加强（已发布，1.15.2）
+
+- 操作日志留存修复已发布，提交 `e69ccc75566e1a63a13d304f86b221a01bba42e3`；Gitee `master` 与 GitHub `main` 同步，生产 SHA 一致，公网 HTTP 200。
+- 备份 `/home/emie/emie-deploy-backups/20261008_185239`（713781 bytes）；旧容器 `emie-app-old-20261008_185239` 保留；无数据库迁移。
+- Java 21 全量构建通过：372 项测试，0 失败、1 项既有跳过；发布记录补写后重跑 `./scripts/test-update.sh` 通过，测试容器、应用/MySQL/Redis、静态资源及浏览器回归正常。
