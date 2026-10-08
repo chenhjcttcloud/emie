@@ -1,5 +1,12 @@
 # EMIE 开发交接状态
 
+## 2026-10-08 子任务旧任务手动积分（待发布）
+
+- 2026-10-01 前创建的设计师子任务，企划验收时必填本次手动积分；积分进入关联交付版本、子任务积分流水和操作日志。旧任务驳回阶段选定的修改积分不会自动发放，验收时清除待发修改积分，避免重复计分。10-01 起创建的任务维持规则自动发分。
+- 定向 `ProjectReviewWorkflowTest`、`PointsServiceSnapshotTest` 通过；`./scripts/test-update.sh` 本地测试容器、数据库/Redis/应用健康、首页/静态资源和浏览器弹窗回归通过。
+- 生产只读预检通过：生产当前 SHA 与 `emie/master` 均为 `49a45dcd969b9c7a546381354355c5ce45f7c531`，版本 1.15.0，公网 HTTP 200，计划版本 1.15.1；尚未提交、推送或部署。
+- 月报图片导出试验文件 `DesignerPerformanceWorkbook.java`、`PerformanceImageLoader.java`、`DesignerPerformanceWorkbookTest.java` 及未跟踪 `test-results/` 为其他本地改动，本次发布需保留且排除。
+
 ## 2026-09-24 月度绩效 Excel 导出修复（已发布）
 
 - 根因是导出按钮通过原生链接访问受保护接口，无法携带 `X-Auth-Token`；生产和测试环境都因此下载失败。服务端原先会把生成异常误报为月份格式错误。

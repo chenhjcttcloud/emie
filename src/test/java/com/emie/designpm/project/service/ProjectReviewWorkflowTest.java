@@ -422,6 +422,7 @@ class ProjectReviewWorkflowTest {
     @Test
     void regularPlannerApprovalCompletesWithoutNotifyingAdmins() {
         Project project = projectWithTask("regular", "submitted_for_review");
+        project.getTasks().get(0).setAssigneeRole(null);
         when(projects.findById(1L)).thenReturn(Optional.of(project));
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -697,6 +698,49 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
+    void legacyDesignerTaskUsesManualPointsAndDoesNotAwardSelectedRejectionBonus() {
+        Project project = projectWithTask("regular", "submitted_for_review");
+        SubTask task = project.getTasks().get(0);
+        task.setAssigneeRole("designer");
+        task.setCreatedAt(java.time.LocalDateTime.of(2026, 9, 30, 23, 59));
+        task.setPendingChangeBonusRequestId("change-1");
+        task.setPendingChangeBonusPoints(8d);
+        task.setPendingChangeRuleCode("D30_8");
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+        SubTaskDeliveryVersion version = deliveryVersion(task, 2);
+        when(deliveryVersions.findFirstBySubTaskIdOrderByVersionNoDesc(11L)).thenReturn(Optional.of(version));
+        when(projects.save(any(Project.class))).thenAnswer(i -> i.getArgument(0));
+
+        service.taskApprove(
+                1L, 11L, Map.of("currentRole", "planner", "currentUserId", "planner-1", "manualPoints", 12.5));
+
+        verify(points).awardLegacyManualApproval(same(task), same(version), eq(12.5d), eq("planner-1"));
+        verify(points, never()).awardBaseSubmission(any(), nullable(SubTaskDeliveryVersion.class), anyString());
+        verify(points, never()).awardPendingChangeBonus(any(), nullable(SubTaskDeliveryVersion.class), anyString());
+        assertNull(task.getPendingChangeBonusRequestId());
+        assertEquals("completed", task.getStatus());
+        assertTrue(project.getLogs().get(0).getAfterData().contains("\"manualPoints\":12.5"));
+    }
+
+    @Test
+    void taskCreatedOnRuleStartDateKeepsRuleBasedScoring() {
+        Project project = projectWithTask("regular", "submitted_for_review");
+        project.getTasks().get(0).setCreatedAt(java.time.LocalDateTime.of(2026, 10, 1, 0, 0));
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+        when(projects.save(any(Project.class))).thenAnswer(i -> i.getArgument(0));
+
+        service.taskApprove(1L, 11L, Map.of("currentRole", "planner", "currentUserId", "planner-1"));
+
+        verify(points)
+                .awardBaseSubmission(
+                        same(project.getTasks().get(0)), nullable(SubTaskDeliveryVersion.class), anyString());
+        verify(points, never())
+                .awardLegacyManualApproval(any(), nullable(SubTaskDeliveryVersion.class), anyDouble(), anyString());
+    }
+
+    @Test
     void regularPlannerAcceptanceCompletesWithoutAdminReview() {
         Project project = projectWithTask("regular", "planner_approved");
         PointsService points = mock(PointsService.class);
@@ -858,8 +902,10 @@ class ProjectReviewWorkflowTest {
 
         SubTask task = new SubTask();
         task.setId(11L);
+        task.setCreatedAt(java.time.LocalDateTime.now());
         task.setName("包装设计");
         task.setStatus(taskStatus);
+        task.setAssigneeRole("designer");
         task.setDesignerId("designer-1");
         task.setDesignerName("设计师甲");
         task.setPlannedDate("2026-07-20");

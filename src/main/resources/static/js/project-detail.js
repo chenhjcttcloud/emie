@@ -209,6 +209,7 @@ function renderSubTaskAuditDetail(log) {
     if (data.withPoints) parts.push(`积分规则：${data.pointRuleDescription || data.pointRuleCode || '未知'}（${data.pointRuleCode || '未知'}） · ${Number(data.points || 0)} 分`);
   }
   if (data.deliveryVersionId) parts.push(`交付版本 ID：${data.deliveryVersionId}`);
+  if (data.legacyManualScoring === true) parts.push(`旧任务本次验收手动给分：${Number(data.manualPoints || 0)} 分`);
   if (Array.isArray(data.ledgerIds)) parts.push(`本次确认规则：${data.pointRuleCode || '无'}；预期积分：${Number(data.points || 0)} 分`);
   if (Array.isArray(data.ledgerIds)) parts.push(`实际入账：${Number(data.awardedPoints || 0)} 分；积分流水 ID：${data.ledgerIds.length ? data.ledgerIds.join('、') : '本次无新增积分'}`);
   if (data.pointRequestId) parts.push(`修改请求 ID：${data.pointRequestId}`);

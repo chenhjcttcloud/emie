@@ -923,6 +923,8 @@ function taskApprove(pid, tid, projectType) {
     if (!task) return;
 
     const title = '✅ 企划确认';
+    const legacyManualScoring = task.assigneeRole === 'designer'
+      && (!task.createdAt || String(task.createdAt).slice(0, 10) < '2026-10-01');
 
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
@@ -931,7 +933,8 @@ function taskApprove(pid, tid, projectType) {
       <div class="modal">
         <div class="modal-header"><div class="modal-header-left"><div class="modal-title">${title}：${escHtml(task.name)}</div></div></div>
         <div class="modal-body">
-          <p>确认后完成该子任务，并按本轮规则发放基础分；无积分修改轮次不发分。</p>
+          <p>${legacyManualScoring ? '这是 2026 年 10 月 1 日前创建的旧任务，请按本次最终交付情况手动给分；驳回时登记的积分不会另行自动发放。' : '确认后完成该子任务，并按本轮规则发放基础分；无积分修改轮次不发分。'}</p>
+          ${legacyManualScoring ? '<div class="form-group"><label class="form-label"><span class="required">*</span> 本次验收积分</label><input type="number" class="form-input" id="approveManualPoints" min="0" max="100000" step="0.01" required placeholder="请输入 0 到 100000，可保留两位小数"></div>' : ''}
           <div class="form-group"><label class="form-label">验收意见（可选）</label><textarea class="form-textarea" id="approveComments" placeholder="输入验收意见..."></textarea></div>
         </div>
         <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-approve-close">取消</button><button class="btn btn-success" data-emie-action="click:task-submit-approve" data-project-id="${pid}" data-task-id="${tid}" data-project-type="${escHtml(projectType)}">确认</button></div>
@@ -942,12 +945,19 @@ function taskApprove(pid, tid, projectType) {
 
 async function submitTaskApprove(pid, tid) {
   const comments = document.getElementById('approveComments')?.value || '';
+  const manualPointsInput = document.getElementById('approveManualPoints');
+  const manualPoints = manualPointsInput ? Number(manualPointsInput.value) : null;
+  if (manualPointsInput && (!manualPointsInput.value || !Number.isFinite(manualPoints) || manualPoints < 0 || manualPoints > 100000)) {
+    window.EMIE.actions.showSystemAlert('请输入 0 到 100000 之间的验收积分');
+    return;
+  }
 
   const data = {
     comments: comments,
     currentUser: getCurrentUserName(),
     currentRole: EMIE.state.currentRole,
   };
+  if (manualPointsInput) data.manualPoints = manualPoints;
 
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/approve`, data);

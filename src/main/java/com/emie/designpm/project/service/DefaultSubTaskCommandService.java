@@ -23,6 +23,7 @@ import com.emie.designpm.reference.repository.ProductCategoryRepository;
 import com.emie.designpm.scoring.repository.ScoringRepository;
 import com.emie.designpm.sync.service.SyncQueueService;
 import com.emie.designpm.util.SecurityUtil;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -37,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class DefaultSubTaskCommandService implements SubTaskCommandService {
     private static final Logger log = LoggerFactory.getLogger(DefaultSubTaskCommandService.class);
     private static final Object PROJECT_CODE_LOCK = new Object();
+    private static final LocalDate RULE_BASED_POINTS_START = LocalDate.of(2026, 10, 1);
 
     private final ProjectRepository projectRepository;
     private final SubTaskRepository subTaskRepository;
@@ -431,6 +433,34 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         task.setQualityTopRatioSnapshot(null);
         task.setMaxTotalMultiplierSnapshot(null);
         task.setCountInPerformanceSnapshot(null);
+    }
+
+    private boolean usesLegacyManualScoring(SubTask task) {
+        return "designer".equals(task.getAssigneeRole())
+                && (task.getCreatedAt() == null
+                        || task.getCreatedAt().toLocalDate().isBefore(RULE_BASED_POINTS_START));
+    }
+
+    private double manualApprovalPoints(Object value) {
+        if (!(value instanceof Number number)) throw new IllegalArgumentException("请输入本次验收积分");
+        double points = number.doubleValue();
+        if (!Double.isFinite(points) || points < 0 || points > 100_000) {
+            throw new IllegalArgumentException("验收积分须在 0 到 100000 之间");
+        }
+        if (Math.abs(points * 100 - Math.rint(points * 100)) > 0.000001) {
+            throw new IllegalArgumentException("验收积分最多保留两位小数");
+        }
+        return java.math.BigDecimal.valueOf(points)
+                .setScale(2, java.math.RoundingMode.HALF_UP)
+                .doubleValue();
+    }
+
+    private void clearPendingChangeBonus(SubTask task) {
+        task.setPendingChangeRuleCode(null);
+        task.setPendingChangeBonusRequestId(null);
+        task.setPendingChangeBonusPoints(null);
+        task.setPendingChangeBonusReason(null);
+        task.setPendingChangeBonusCreatedBy(null);
     }
 
     private Map<String, Object> snapshotSubTask(SubTask task) {
@@ -1176,6 +1206,11 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (!List.of("delivered", "submitted_for_review", "planner_approved").contains(task.getStatus())) {
             throw new RuntimeException("当前状态无法确认成果");
         }
+        boolean legacyManualScoring = usesLegacyManualScoring(task);
+        double manualPoints = legacyManualScoring ? manualApprovalPoints(body.get("manualPoints")) : 0d;
+        if (legacyManualScoring && pointsService == null) {
+            throw new IllegalStateException("手动积分服务暂不可用，请稍后重试");
+        }
         task.setStatus("completed");
         task.setCompletedAt(LocalDateTime.now());
         task.setActualDate(java.time.LocalDate.now().toString());
@@ -1183,29 +1218,43 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         SubTaskDeliveryVersion version = deliveryVersionRepository
                 .findFirstBySubTaskIdOrderByVersionNoDesc(taskId)
                 .orElse(null);
-        if (version != null && version.getExpectedPoints() != null) {
+        if (version != null && (version.getExpectedPoints() != null || legacyManualScoring)) {
             version.setConfirmedAt(task.getCompletedAt());
             version.setConfirmedBy(currentUserId);
-            deliveryVersionRepository.save(version);
         }
-        if (pointsService == null && "designer".equals(task.getAssigneeRole()))
+        if (pointsService == null && "designer".equals(task.getAssigneeRole()) && !legacyManualScoring)
             throw new IllegalStateException("积分服务暂不可用，确认已取消");
         var priorLedgerIds = pointLedgerRepository == null
                 ? java.util.Set.<Long>of()
                 : pointLedgerRepository.findBySubTaskId(taskId).stream()
                         .map(com.emie.designpm.entity.PointLedger::getId)
                         .collect(java.util.stream.Collectors.toSet());
-        if (pointsService != null) {
+        if (legacyManualScoring) {
+            pointsService.awardLegacyManualApproval(task, version, manualPoints, currentUserId);
+            clearPendingChangeBonus(task);
+        } else if (pointsService != null) {
             pointsService.awardBaseSubmission(
                     task, task.getPendingChangeBonusRequestId() == null ? version : null, currentUserId);
             if (task.getPendingChangeBonusRequestId() != null)
                 pointsService.awardPendingChangeBonus(task, version, currentUserId);
         }
+        if (version != null && (version.getExpectedPoints() != null || legacyManualScoring))
+            deliveryVersionRepository.save(version);
         Map<String, Object> confirmation = new LinkedHashMap<>();
         confirmation.put("deliveryVersionId", version == null ? null : version.getId());
         confirmation.put("pointRequestId", version == null ? null : version.getPointRequestId());
-        confirmation.put("pointRuleCode", version == null ? task.getPointRuleCode() : version.getPointRuleCode());
-        confirmation.put("points", version == null ? task.getBasePointSnapshot() : version.getExpectedPoints());
+        confirmation.put(
+                "pointRuleCode",
+                legacyManualScoring
+                        ? "LEGACY_MANUAL"
+                        : version == null ? task.getPointRuleCode() : version.getPointRuleCode());
+        confirmation.put(
+                "points",
+                legacyManualScoring
+                        ? Double.valueOf(manualPoints)
+                        : version == null ? task.getBasePointSnapshot() : version.getExpectedPoints());
+        confirmation.put("legacyManualScoring", legacyManualScoring);
+        if (legacyManualScoring) confirmation.put("manualPoints", manualPoints);
         if (pointLedgerRepository != null) {
             var awardedLedgers = pointLedgerRepository.findBySubTaskId(taskId).stream()
                     .filter(ledger -> !priorLedgerIds.contains(ledger.getId()))

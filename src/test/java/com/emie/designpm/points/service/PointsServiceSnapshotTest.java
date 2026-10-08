@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 import com.emie.designpm.entity.PointLedger;
 import com.emie.designpm.entity.PointRule;
 import com.emie.designpm.entity.SubTask;
+import com.emie.designpm.entity.SubTaskDeliveryVersion;
 import com.emie.designpm.points.repository.PointLedgerRepository;
 import com.emie.designpm.points.repository.PointRuleRepository;
 import com.emie.designpm.scoring.repository.ScoringRepository;
@@ -122,5 +123,28 @@ class PointsServiceSnapshotTest {
         rule.setEnabled(false);
         when(rules.findByRuleCode("DISABLED")).thenReturn(Optional.of(rule));
         assertThrows(IllegalArgumentException.class, () -> service.bindRuleSnapshot(new SubTask(), "DISABLED"));
+    }
+
+    @Test
+    void legacyManualApprovalLinksPointsToDeliveryAndRecordsZeroScores() {
+        SubTask task = task();
+        task.setName("旧任务");
+        task.setMilestoneMonth("2026-09");
+        SubTaskDeliveryVersion version = new SubTaskDeliveryVersion();
+        version.setId(7L);
+        version.setSubTask(task);
+        version.setSubmittedAt(java.time.LocalDateTime.of(2026, 9, 30, 10, 0));
+        version.setConfirmedAt(java.time.LocalDateTime.of(2026, 10, 2, 10, 0));
+
+        service.awardLegacyManualApproval(task, version, 0d, "planner-1");
+
+        assertEquals(0d, version.getExpectedPoints());
+        assertEquals("LEGACY_MANUAL", version.getPointRuleCode());
+        verify(ledgers)
+                .save(argThat(ledger -> ledger.getPoints() == 0d
+                        && "LEGACY_MANUAL:APPROVAL".equals(ledger.getRuleCode())
+                        && Long.valueOf(7L).equals(ledger.getDeliveryVersionId())
+                        && "2026-09".equals(ledger.getAccountingMonth())
+                        && "planner-1".equals(ledger.getCreatedBy())));
     }
 }

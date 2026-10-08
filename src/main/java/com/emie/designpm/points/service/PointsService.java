@@ -108,6 +108,40 @@ public class PointsService {
         task.setPendingChangeRuleCode(null);
     }
 
+    /** 旧任务由企划在最终验收时手动给分，仍记录到任务积分流水并关联本次交付。 */
+    public void awardLegacyManualApproval(SubTask task, SubTaskDeliveryVersion version, double points, String actorId) {
+        if (task == null
+                || task.getId() == null
+                || task.getDesignerId() == null
+                || task.getDesignerId().isBlank()) throw new IllegalArgumentException("旧任务缺少有效设计师，无法登记验收积分");
+        String ruleCode = "LEGACY_MANUAL:APPROVAL";
+        if (ledgers.existsByUserIdAndSubTaskIdAndRuleCode(task.getDesignerId(), task.getId(), ruleCode))
+            throw new IllegalStateException("该旧任务已登记验收积分，不能重复给分");
+        double awarded = roundedPoints(points);
+        PointLedger ledger = new PointLedger();
+        ledger.setUserId(task.getDesignerId());
+        ledger.setSubTaskId(task.getId());
+        ledger.setRuleCode(ruleCode);
+        ledger.setCountInPerformance(true);
+        ledger.setAccountingMonth(
+                task.getMilestoneMonth() == null || task.getMilestoneMonth().isBlank()
+                        ? YearMonth.now().toString()
+                        : task.getMilestoneMonth());
+        ledger.setPoints(awarded);
+        ledger.setReason("旧任务验收手动积分：" + task.getName());
+        ledger.setCreatedBy(actorId);
+        ledger.setRuleDescription("企划验收手动给分");
+        if (version != null) {
+            version.setExpectedPoints(awarded);
+            version.setPointRuleCode("LEGACY_MANUAL");
+            version.setPointRuleDescription("企划验收手动给分");
+            ledger.setDeliveryVersionId(version.getId());
+            ledger.setSubmittedAt(version.getSubmittedAt());
+            ledger.setConfirmedAt(version.getConfirmedAt());
+        }
+        ledgers.save(ledger);
+    }
+
     public boolean baseAlreadyAwarded(SubTask task) {
         return ledgers.existsByUserIdAndSubTaskIdAndRuleCode(
                 task.getDesignerId(), task.getId(), normalizedRuleCode(task.getPointRuleCode()) + ":BASE");
