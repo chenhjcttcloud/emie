@@ -150,7 +150,11 @@ public class Project {
     @OrderBy("id ASC")
     private List<SubTask> tasks = new ArrayList<>();
 
-    @OneToMany(mappedBy = "project", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    // 操作日志是审计记录，项目删除时必须保留；解绑前由删除流程保留 projectRefId。
+    @OneToMany(
+            mappedBy = "project",
+            cascade = {CascadeType.PERSIST, CascadeType.MERGE},
+            fetch = FetchType.LAZY)
     @OrderBy("time ASC")
     private List<ActivityLog> logs = new ArrayList<>();
 

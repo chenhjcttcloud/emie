@@ -114,7 +114,8 @@ public class PointsService {
                 || task.getId() == null
                 || task.getDesignerId() == null
                 || task.getDesignerId().isBlank()) throw new IllegalArgumentException("旧任务缺少有效设计师，无法登记验收积分");
-        String ruleCode = "LEGACY_MANUAL:APPROVAL";
+        if (version == null || version.getId() == null) throw new IllegalStateException("旧任务手动积分必须关联本次交付记录");
+        String ruleCode = "LEGACY_MANUAL:APPROVAL:" + version.getId();
         if (ledgers.existsByUserIdAndSubTaskIdAndRuleCode(task.getDesignerId(), task.getId(), ruleCode))
             throw new IllegalStateException("该旧任务已登记验收积分，不能重复给分");
         double awarded = roundedPoints(points);

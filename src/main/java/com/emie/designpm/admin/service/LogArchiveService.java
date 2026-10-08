@@ -2,6 +2,8 @@ package com.emie.designpm.admin.service;
 
 import com.emie.designpm.admin.repository.ActivityLogRepository;
 import com.emie.designpm.entity.ActivityLog;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import java.io.*;
 import java.nio.file.*;
@@ -25,6 +27,7 @@ import org.springframework.stereotype.Service;
 public class LogArchiveService {
 
     private final ActivityLogRepository activityLogRepository;
+    private final ObjectMapper objectMapper;
     /** 归档互斥锁：串行化「读日志 → 写归档文件 → 删库」整段流程，防止并发归档互相覆盖损坏文件。 */
     private final ReentrantLock archiveLock = new ReentrantLock();
 
@@ -36,6 +39,7 @@ public class LogArchiveService {
 
     public LogArchiveService(ActivityLogRepository activityLogRepository) {
         this.activityLogRepository = activityLogRepository;
+        this.objectMapper = new ObjectMapper();
     }
 
     @PostConstruct
@@ -101,26 +105,26 @@ public class LogArchiveService {
 
         try {
             // 转为 JSON 并压缩写入临时文件
-            StringBuilder json = new StringBuilder("[");
-            boolean first = true;
+            List<Map<String, Object>> archiveEntries = new ArrayList<>();
             for (ActivityLog l : logs) {
-                if (!first) json.append(",");
-                first = false;
-                json.append("{");
-                json.append("\"id\":").append(l.getId()).append(",");
-                json.append("\"time\":\"").append(l.getTime().format(LOG_DTF)).append("\",");
-                json.append("\"action\":\"").append(escapeJson(l.getAction())).append("\",");
-                json.append("\"username\":\"")
-                        .append(escapeJson(l.getUsername()))
-                        .append("\",");
-                json.append("\"role\":\"").append(escapeJson(l.getRole())).append("\",");
-                json.append("\"projectRefId\":").append(l.getProjectRefId() != null ? l.getProjectRefId() : "null");
-                json.append("}");
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("id", l.getId());
+                entry.put("time", l.getTime().format(LOG_DTF));
+                entry.put("action", l.getAction());
+                entry.put("username", l.getUsername());
+                entry.put("role", l.getRole());
+                entry.put("projectId", l.getProject() != null ? l.getProject().getId() : l.getProjectRefId());
+                entry.put("entityType", l.getEntityType());
+                entry.put("entityId", l.getEntityId());
+                entry.put("beforeData", l.getBeforeData());
+                entry.put("afterData", l.getAfterData());
+                entry.put("changedFields", l.getChangedFields());
+                archiveEntries.add(entry);
             }
-            json.append("]");
+            byte[] json = objectMapper.writeValueAsBytes(archiveEntries);
 
             try (GZIPOutputStream gz = new GZIPOutputStream(Files.newOutputStream(tmpPath))) {
-                gz.write(json.toString().getBytes("UTF-8"));
+                gz.write(json);
             }
 
             // 原子 rename：同一文件系统内的 rename 原子完成，最终文件要么完整存在要么不存在，
@@ -165,6 +169,11 @@ public class LogArchiveService {
             m.put("projectId", l.getProject() != null ? l.getProject().getId() : l.getProjectRefId());
             m.put("projectType", "");
             m.put("projectRequirement", "");
+            m.put("entityType", l.getEntityType());
+            m.put("entityId", l.getEntityId());
+            m.put("beforeData", l.getBeforeData());
+            m.put("afterData", l.getAfterData());
+            m.put("changedFields", l.getChangedFields());
             result.add(m);
         }
 
@@ -208,18 +217,16 @@ public class LogArchiveService {
             json = new String(gz.readAllBytes(), "UTF-8");
         }
 
-        // 简单 JSON 解析（不引入依赖）
         json = json.trim();
         if (!json.startsWith("[") || !json.endsWith("]")) return result;
-        json = json.substring(1, json.length() - 1);
-        if (json.isBlank()) return result;
-
-        // 按顶层逗号分割
-        List<String> items = splitJsonArray(json);
-        for (String item : items) {
-            Map<String, Object> m = parseLogEntry(item);
-            if (m == null) continue;
-            String timeStr = (String) m.get("time");
+        List<Map<String, Object>> items = objectMapper.readValue(json, new TypeReference<>() {});
+        for (Map<String, Object> m : items) {
+            if (m.get("projectId") == null && m.get("projectRefId") != null) {
+                m.put("projectId", m.get("projectRefId"));
+            }
+            m.putIfAbsent("projectType", "");
+            m.putIfAbsent("projectRequirement", "");
+            String timeStr = Objects.toString(m.get("time"), null);
             if (timeStr != null) {
                 LocalDateTime logTime = LocalDateTime.parse(timeStr, LOG_DTF);
                 if (!logTime.isBefore(start) && !logTime.isAfter(end)) {
@@ -228,90 +235,5 @@ public class LogArchiveService {
             }
         }
         return result;
-    }
-
-    // ==================== 工具方法 ====================
-
-    private String escapeJson(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
-    }
-
-    /**
-     * 分割 JSON 数组顶层元素
-     */
-    private List<String> splitJsonArray(String json) {
-        List<String> items = new ArrayList<>();
-        int depth = 0;
-        int start = 0;
-        for (int i = 0; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '{') depth++;
-            else if (c == '}') depth--;
-            else if (c == ',' && depth == 0) {
-                items.add(json.substring(start, i).trim());
-                start = i + 1;
-            }
-        }
-        String last = json.substring(start).trim();
-        if (!last.isEmpty()) items.add(last);
-        return items;
-    }
-
-    /**
-     * 解析单个日志 JSON 对象
-     */
-    private Map<String, Object> parseLogEntry(String json) {
-        Map<String, Object> m = new LinkedHashMap<>();
-        json = json.trim();
-        if (!json.startsWith("{") || !json.endsWith("}")) return null;
-        json = json.substring(1, json.length() - 1).trim();
-
-        // 按逗号分割字段（忽略引号内和嵌套的逗号）
-        List<String> fields = splitJsonFields(json);
-        for (String field : fields) {
-            int colon = field.indexOf(':');
-            if (colon < 0) continue;
-            String key = field.substring(0, colon).trim().replaceAll("^\"|\"$", "");
-            String val = field.substring(colon + 1).trim();
-            if (val.equals("null")) {
-                m.put(key, null);
-            } else if (val.startsWith("\"") && val.endsWith("\"")) {
-                m.put(key, val.substring(1, val.length() - 1));
-            } else {
-                // 数字
-                try {
-                    m.put(key, Long.parseLong(val));
-                } catch (NumberFormatException e) {
-                    m.put(key, val);
-                }
-            }
-        }
-        return m;
-    }
-
-    private List<String> splitJsonFields(String json) {
-        List<String> fields = new ArrayList<>();
-        boolean inStr = false;
-        int depth = 0;
-        int start = 0;
-        for (int i = 0; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) inStr = !inStr;
-            else if (!inStr) {
-                if (c == '{' || c == '[') depth++;
-                else if (c == '}' || c == ']') depth--;
-                else if (c == ',' && depth == 0) {
-                    fields.add(json.substring(start, i).trim());
-                    start = i + 1;
-                }
-            }
-        }
-        if (start < json.length()) fields.add(json.substring(start).trim());
-        return fields;
     }
 }

@@ -594,7 +594,6 @@ public class ProjectService {
         }
         // 使用悲观锁锁定项目行，防止并发接单
         Project p = projectRepository.findByIdForUpdate(projectId).orElseThrow(() -> new RuntimeException("项目不存在"));
-
         if (!List.of("draft", "pending_planner").contains(p.getStatus())) {
             throw new RuntimeException("当前项目状态不允许接单");
         }

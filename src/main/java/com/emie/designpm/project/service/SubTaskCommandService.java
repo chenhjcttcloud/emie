@@ -21,6 +21,10 @@ public interface SubTaskCommandService {
 
     Project deleteSubTask(Long projectId, Long taskId);
 
+    default Project deleteSubTask(Long projectId, Long taskId, Map<String, Object> actor) {
+        return deleteSubTask(projectId, taskId);
+    }
+
     Project taskDeliver(Long projectId, Long taskId, Map<String, Object> body);
 
     Project taskRedeliver(Long projectId, Long taskId, Map<String, Object> body);

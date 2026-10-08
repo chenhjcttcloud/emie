@@ -407,7 +407,7 @@ public class ProjectController {
         }
         // 日志单独查询，避免项目详情同时 fetch 两个集合导致连接和结果集膨胀；
         // 不替换实体的 orphanRemoval 集合，避免 Hibernate 误判为删除全部日志。
-        List<ActivityLog> detailLogs = new ArrayList<>(activityLogRepository.findTop200ByProjectIdOrderByTimeDesc(id));
+        List<ActivityLog> detailLogs = new ArrayList<>(activityLogRepository.findProjectHistory(id));
         Collections.reverse(detailLogs);
         // 仅记录成功访问，避免把未授权探测误记为正常查询。
         activityLogRepository.save(new ActivityLog("查询项目 #" + id, session.name(), session.role()));
@@ -783,7 +783,7 @@ public class ProjectController {
             if (denied != null) return denied;
             ResponseEntity<?> projectDenied = denyUnlessProjectManager(id, request);
             if (projectDenied != null) return projectDenied;
-            projectLifecycleCommandService.deleteProject(id);
+            projectLifecycleCommandService.deleteProject(id, withSessionContext(new HashMap<>(), request));
             return ResponseEntity.ok(Map.of("message", "项目已删除"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

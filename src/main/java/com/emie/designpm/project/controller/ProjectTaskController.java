@@ -369,7 +369,8 @@ public class ProjectTaskController {
                                     && Objects.equals(session.userId(), project.getPlannerId())))) {
                 return ResponseEntity.status(403).body(Map.of("error", "仅项目企划或管理员可删除子任务"));
             }
-            return ResponseEntity.ok(view.toDetail(subTaskCommandService.deleteSubTask(projectId, taskId)));
+            return ResponseEntity.ok(view.toDetail(subTaskCommandService.deleteSubTask(
+                    projectId, taskId, req.withSessionContext(new LinkedHashMap<>(), request))));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

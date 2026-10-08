@@ -14,4 +14,8 @@ public interface ProjectLifecycleCommandService {
     Project resumeProject(Long projectId, Map<String, Object> body);
 
     void deleteProject(Long projectId);
+
+    default void deleteProject(Long projectId, Map<String, Object> actor) {
+        deleteProject(projectId);
+    }
 }

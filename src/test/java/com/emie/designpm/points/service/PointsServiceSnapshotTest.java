@@ -142,7 +142,7 @@ class PointsServiceSnapshotTest {
         assertEquals("LEGACY_MANUAL", version.getPointRuleCode());
         verify(ledgers)
                 .save(argThat(ledger -> ledger.getPoints() == 0d
-                        && "LEGACY_MANUAL:APPROVAL".equals(ledger.getRuleCode())
+                        && "LEGACY_MANUAL:APPROVAL:7".equals(ledger.getRuleCode())
                         && Long.valueOf(7L).equals(ledger.getDeliveryVersionId())
                         && "2026-09".equals(ledger.getAccountingMonth())
                         && "planner-1".equals(ledger.getCreatedBy())));

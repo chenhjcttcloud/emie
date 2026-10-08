@@ -92,4 +92,12 @@ public class ActivityLog {
         this.afterData = afterData;
         this.changedFields = changedFields;
     }
+
+    @PrePersist
+    void fillProjectReference() {
+        if (project == null) return;
+        if (projectRefId == null) projectRefId = project.getId();
+        if (entityType == null) entityType = "project";
+        if (entityId == null) entityId = project.getId();
+    }
 }

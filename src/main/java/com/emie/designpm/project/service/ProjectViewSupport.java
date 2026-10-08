@@ -86,7 +86,7 @@ public class ProjectViewSupport {
                 .map(task -> {
                     Project project = task.getProject();
                     List<ActivityLog> projectLogs = logsByProject.computeIfAbsent(
-                            project.getId(), id -> activityLogRepository.findTop200ByProjectIdOrderByTimeDesc(id));
+                            project.getId(), id -> activityLogRepository.findProjectHistory(id));
                     Map<String, Object> item = new LinkedHashMap<>();
                     item.put("id", task.getId());
                     item.put("name", task.getName());
@@ -157,7 +157,7 @@ public class ProjectViewSupport {
                 .map(task -> {
                     Project project = task.getProject();
                     List<ActivityLog> projectLogs = logsByProject.computeIfAbsent(
-                            project.getId(), id -> activityLogRepository.findTop200ByProjectIdOrderByTimeDesc(id));
+                            project.getId(), id -> activityLogRepository.findProjectHistory(id));
                     Map<String, Object> item = new LinkedHashMap<>();
                     item.put("id", task.getId());
                     item.put("name", task.getName());
@@ -199,9 +199,8 @@ public class ProjectViewSupport {
     public ProjectDetailDTO toDetail(Project p) {
         Project loaded =
                 p.getId() == null ? p : projectService.getProjectById(p.getId()).orElse(p);
-        List<ActivityLog> logs = loaded.getId() == null
-                ? List.of()
-                : activityLogRepository.findTop200ByProjectIdOrderByTimeDesc(loaded.getId());
+        List<ActivityLog> logs =
+                loaded.getId() == null ? List.of() : activityLogRepository.findProjectHistory(loaded.getId());
         return toDetail(loaded, null, logs);
     }
 
@@ -231,9 +230,7 @@ public class ProjectViewSupport {
         ProjectDetailDTO dto = new ProjectDetailDTO();
         List<ActivityLog> effectiveLogs = preloadedLogs != null
                 ? preloadedLogs
-                : (p.getId() == null
-                        ? List.of()
-                        : activityLogRepository.findTop200ByProjectIdOrderByTimeDesc(p.getId()));
+                : (p.getId() == null ? List.of() : activityLogRepository.findProjectHistory(p.getId()));
         dto.setId(p.getId());
         dto.setProjectCode(p.getProjectCode());
         dto.setType(p.getType());

@@ -164,6 +164,31 @@ class LogArchiveServiceTest {
         verify(repository, never()).flush();
     }
 
+    @Test
+    void archiveRoundTripKeepsEntityAndChangeSnapshots() {
+        ActivityLogRepository repository = mock(ActivityLogRepository.class);
+        ActivityLog log = log(42L, LocalDateTime.of(2025, 12, 3, 10, 0));
+        log.setEntityType("sub_task");
+        log.setEntityId(77L);
+        log.setBeforeData("{\"name\":\"before, \\\"quoted\\\"\"}");
+        log.setAfterData("{\"name\":\"after\\nline\"}");
+        log.setChangedFields("[\"name\"]");
+        when(repository.findByTimeBetween(any(), any())).thenReturn(List.of(log), List.of());
+        LogArchiveService service = service(repository);
+
+        assertTrue(service.archiveMonth(YearMonth.of(2025, 12)));
+        var archived = service.queryLogs(LocalDateTime.of(2025, 12, 1, 0, 0), LocalDateTime.of(2025, 12, 31, 23, 59));
+
+        assertEquals(1, archived.size());
+        assertEquals(42L, ((Number) archived.getFirst().get("id")).longValue());
+        assertEquals(1L, ((Number) archived.getFirst().get("projectId")).longValue());
+        assertEquals("sub_task", archived.getFirst().get("entityType"));
+        assertEquals(77L, ((Number) archived.getFirst().get("entityId")).longValue());
+        assertEquals(log.getBeforeData(), archived.getFirst().get("beforeData"));
+        assertEquals(log.getAfterData(), archived.getFirst().get("afterData"));
+        assertEquals("[\"name\"]", archived.getFirst().get("changedFields"));
+    }
+
     private LogArchiveService service(ActivityLogRepository repository) {
         LogArchiveService service = new LogArchiveService(repository);
         ReflectionTestUtils.setField(service, "archiveDir", archiveDir.toString());

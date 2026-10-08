@@ -274,7 +274,14 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         }
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
-        p.getLogs().add(new ActivityLog((publishToMarket ? "发布接单市场子任务：" : "添加子任务：") + name, currentUser, role, p));
+        logTaskChange(
+                p,
+                task,
+                (publishToMarket ? "发布接单市场子任务：" : "添加子任务：") + name,
+                currentUser,
+                role,
+                Map.of(),
+                snapshotSubTask(task));
 
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
@@ -313,7 +320,6 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (task.getProject() == null || !Objects.equals(task.getProject().getId(), projectId)) {
             throw new RuntimeException("子任务不属于当前项目");
         }
-
         Map<String, Object> before = snapshotSubTask(task);
 
         if (body.containsKey("name")) task.setName(SecurityUtil.sanitizeText((String) body.get("name"), 200));
@@ -492,8 +498,34 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         return data;
     }
 
+    private void logTaskChange(
+            Project project,
+            SubTask task,
+            String action,
+            String user,
+            String role,
+            Map<String, Object> before,
+            Map<String, Object> after) {
+        project.getLogs()
+                .add(new ActivityLog(
+                        action,
+                        user,
+                        role,
+                        project,
+                        "sub_task",
+                        task.getId(),
+                        AuditJson.toJson(before),
+                        AuditJson.toJson(after),
+                        AuditJson.changedFields(before, after)));
+    }
+
     @Transactional
     public Project deleteSubTask(Long projectId, Long taskId) {
+        return deleteSubTask(projectId, taskId, Map.of());
+    }
+
+    @Transactional
+    public Project deleteSubTask(Long projectId, Long taskId, Map<String, Object> actor) {
         // 锁序与全项目一致：project → subtask。锁内重新加载并重校验状态，
         // 避免与 taskAccept 抢单并发时快照校验通过、DELETE 阻塞后误删刚被认领的任务。
         Project p = lockProject(projectId);
@@ -508,6 +540,19 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (pointLedgerRepository != null
                 && !pointLedgerRepository.findBySubTaskId(taskId).isEmpty())
             throw new IllegalStateException("子任务已有积分入账，不能删除，请保留历史记录");
+        Map<String, Object> snapshot = snapshotSubTask(task);
+        p.getLogs()
+                .add(new ActivityLog(
+                        "删除子任务：" + task.getName(),
+                        String.valueOf(actor.getOrDefault("currentUser", "")),
+                        String.valueOf(actor.getOrDefault("currentRole", "")),
+                        p,
+                        "sub_task",
+                        task.getId(),
+                        AuditJson.toJson(snapshot),
+                        null,
+                        "删除"));
+        projectRepository.saveAndFlush(p);
         // 锁内按 FK 依赖顺序清理子任务关联数据，避免 DELETE 子任务时触发外键违例：
         // 退单调账（TASK_WITHDRAWAL，按 withdrawalId）→ 退单记录（FK→sub_tasks）→ 交付版本（FK→sub_tasks）→ 评分（FK→sub_tasks）。
         List<TaskWithdrawal> withdrawals = taskWithdrawalRepository == null
@@ -566,6 +611,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             throw new RuntimeException("子任务不属于当前项目");
         }
 
+        Map<String, Object> before = snapshotSubTask(task);
         String currentRole = (String) body.getOrDefault("currentRole", "");
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String designerUserId = (String) body.get("designerUserId");
@@ -600,12 +646,6 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                 task.setDesignerName(userService.getUserName(designerUserId));
                 task.setAllocationStatus("claimed");
                 task.setClaimedAt(LocalDateTime.now());
-                p.getLogs()
-                        .add(new ActivityLog(
-                                "设计师接单：" + task.getName() + "（自动绑定" + task.getDesignerName() + "）",
-                                currentUser,
-                                currentRole,
-                                p));
             }
         } else if (!task.getDesignerId().equals(designerUserId)) {
             // 已被其他设计师接单
@@ -617,7 +657,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (body.containsKey("plannedDate")) task.setPlannedDate((String) body.get("plannedDate"));
         p.setStatus("in_progress");
 
-        p.getLogs().add(new ActivityLog("子任务接单：" + task.getName(), currentUser, currentRole, p));
+        logTaskChange(p, task, "子任务接单：" + task.getName(), currentUser, currentRole, before, snapshotSubTask(task));
 
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
@@ -660,10 +700,16 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (!"market_open".equals(task.getAllocationStatus()) || !"pending".equals(task.getStatus())) {
             throw new RuntimeException("该任务已被领取或不在接单市场");
         }
+        Map<String, Object> before = snapshotSubTask(task);
         task.setAllocationStatus("withdrawn");
-        p.getLogs()
-                .add(new ActivityLog(
-                        "撤回接单市场子任务：" + task.getName(), (String) body.getOrDefault("currentUser", ""), role, p));
+        logTaskChange(
+                p,
+                task,
+                "撤回接单市场子任务：" + task.getName(),
+                String.valueOf(body.getOrDefault("currentUser", "")),
+                role,
+                before,
+                snapshotSubTask(task));
         return projectRepository.saveAndFlush(p);
     }
 
@@ -675,6 +721,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         String userId = String.valueOf(body.getOrDefault("currentUserId", ""));
         if (userId.isBlank() || !userId.equals(task.getDesignerId())) throw new RuntimeException("仅当前负责人可退单");
         if (!"accepted".equals(task.getStatus())) throw new RuntimeException("只有已接单且未交付的任务可以退单");
+        Map<String, Object> before = snapshotSubTask(task);
         if (taskWithdrawalRepository == null) throw new RuntimeException("退单服务未就绪");
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime claimed = task.getClaimedAt() == null ? now : task.getClaimedAt();
@@ -732,12 +779,18 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         task.setClaimedAt(null);
         task.setStatus("pending");
         task.setAllocationStatus("market_open");
-        p.getLogs()
-                .add(new ActivityLog(
-                        "设计师退单：" + task.getName() + "，扣分" + penalty,
-                        String.valueOf(body.getOrDefault("currentUser", userId)),
-                        "designer",
-                        p));
+        Map<String, Object> after = snapshotSubTask(task);
+        after.put("withdrawalId", event.getId());
+        after.put("penaltyPoints", penalty);
+        after.put("penaltyRatio", ratio);
+        logTaskChange(
+                p,
+                task,
+                "设计师退单：" + task.getName() + "，扣分" + penalty,
+                String.valueOf(body.getOrDefault("currentUser", userId)),
+                "designer",
+                before,
+                after);
         return projectRepository.saveAndFlush(p);
     }
 
@@ -750,14 +803,20 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if ("planner".equals(role) && !isProjectPlanner(p, body)) throw new RuntimeException("仅项目负责人企划可取消接单");
         SubTask task = lockSubTask(projectId, taskId);
         if (!"accepted".equals(task.getStatus())) throw new RuntimeException("只有已接单且未交付的任务可以取消接单");
+        Map<String, Object> before = snapshotSubTask(task);
         task.setDesignerId(null);
         task.setDesignerName(null);
         task.setClaimedAt(null);
         task.setStatus("pending");
         task.setAllocationStatus("direct_assigned");
-        p.getLogs()
-                .add(new ActivityLog(
-                        "企划取消接单：" + task.getName(), String.valueOf(body.getOrDefault("currentUser", "")), role, p));
+        logTaskChange(
+                p,
+                task,
+                "企划取消接单：" + task.getName(),
+                String.valueOf(body.getOrDefault("currentUser", "")),
+                role,
+                before,
+                snapshotSubTask(task));
         return projectRepository.saveAndFlush(p);
     }
 
@@ -807,6 +866,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         }
 
         if (!"accepted".equals(task.getStatus())) throw new RuntimeException("请先接受任务或确认修改后再提交成果");
+        Map<String, Object> before = snapshotSubTask(task);
         String submittedActualDate = (String) body.get("actualDate");
         task.setStatus("submitted_for_review");
         task.setActualDate(null);
@@ -823,23 +883,10 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         String currentRole = (String) body.getOrDefault("currentRole", "");
         SubTaskDeliveryVersion submittedVersion = saveDeliveryVersion(
                 task, "initial", "首次交付", submittedActualDate, currentUserId, currentUser, currentRole);
-        p.getLogs()
-                .add(new ActivityLog(
-                        "子任务交付：" + task.getName(),
-                        currentUser,
-                        currentRole,
-                        p,
-                        "sub_task",
-                        taskId,
-                        null,
-                        AuditJson.toJson(Map.of(
-                                "deliveryVersionId",
-                                submittedVersion == null || submittedVersion.getId() == null
-                                        ? 0L
-                                        : submittedVersion.getId(),
-                                "pointRequestId",
-                                "")),
-                        "status,deliverables"));
+        Map<String, Object> after = snapshotSubTask(task);
+        after.put("deliveryVersionId", submittedVersion == null ? null : submittedVersion.getId());
+        after.put("pointRequestId", "");
+        logTaskChange(p, task, "子任务交付：" + task.getName(), currentUser, currentRole, before, after);
 
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
@@ -882,6 +929,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         }
 
         if (!"accepted".equals(task.getStatus())) throw new RuntimeException("请先接受任务或确认修改后再提交成果");
+        Map<String, Object> before = snapshotSubTask(task);
         String submittedActualDate = (String) body.get("actualDate");
         task.setStatus("submitted_for_review");
         task.setActualDate(null);
@@ -911,23 +959,11 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                 currentUserId,
                 currentUser,
                 currentRole);
-        p.getLogs()
-                .add(new ActivityLog(
-                        "子任务重新交付：" + task.getName(),
-                        currentUser,
-                        currentRole,
-                        p,
-                        "sub_task",
-                        taskId,
-                        null,
-                        AuditJson.toJson(Map.of(
-                                "deliveryVersionId",
-                                submittedVersion == null || submittedVersion.getId() == null
-                                        ? 0L
-                                        : submittedVersion.getId(),
-                                "pointRequestId",
-                                Objects.toString(task.getPendingChangeBonusRequestId(), ""))),
-                        "status,deliverables"));
+        Map<String, Object> after = snapshotSubTask(task);
+        after.put("deliveryVersionId", submittedVersion == null ? null : submittedVersion.getId());
+        after.put("pointRequestId", task.getPendingChangeBonusRequestId());
+        after.put("changeSummary", changeSummary);
+        logTaskChange(p, task, "子任务重新交付：" + task.getName(), currentUser, currentRole, before, after);
 
         Project saved = projectRepository.save(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
@@ -1046,10 +1082,11 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (!userId.equals(task.getDesignerId())) throw new RuntimeException("仅当前子任务负责人可确认修改");
         if (!List.of("rejected", "revision_requested").contains(task.getStatus()))
             throw new RuntimeException("当前子任务无需确认修改");
+        Map<String, Object> before = snapshotSubTask(task);
         task.setStatus("accepted");
         String user = (String) body.getOrDefault("currentUser", "");
         String role = (String) body.getOrDefault("currentRole", "");
-        p.getLogs().add(new ActivityLog("确认修改子任务：" + task.getName(), user, role, p));
+        logTaskChange(p, task, "确认修改子任务：" + task.getName(), user, role, before, snapshotSubTask(task));
         return projectRepository.saveAndFlush(p);
     }
 
@@ -1071,6 +1108,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (changeSummary == null || changeSummary.isBlank()) {
             throw new RuntimeException("请填写本次修正说明");
         }
+        Map<String, Object> before = snapshotSubTask(task);
         String submittedActualDate = (String) body.get("actualDate");
         task.setStatus("submitted_for_review");
         task.setActualDate(null);
@@ -1085,11 +1123,19 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         resetReviewWorkflow(task);
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
-        saveDeliveryVersion(
+        SubTaskDeliveryVersion correctedVersion = saveDeliveryVersion(
                 task, "correction", changeSummary, submittedActualDate, currentUserId, currentUser, currentRole);
-        p.getLogs()
-                .add(new ActivityLog(
-                        "子任务主动修正交付：" + task.getName() + "（" + changeSummary + "）", currentUser, currentRole, p));
+        Map<String, Object> after = snapshotSubTask(task);
+        after.put("deliveryVersionId", correctedVersion == null ? null : correctedVersion.getId());
+        after.put("changeSummary", changeSummary);
+        logTaskChange(
+                p,
+                task,
+                "子任务主动修正交付：" + task.getName() + "（" + changeSummary + "）",
+                currentUser,
+                currentRole,
+                before,
+                after);
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
         fileArchiveService.bindFilesFromJson(task.getAttachmentsJson(), "sub_task", task.getId());
@@ -1206,6 +1252,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (!List.of("delivered", "submitted_for_review", "planner_approved").contains(task.getStatus())) {
             throw new RuntimeException("当前状态无法确认成果");
         }
+        Map<String, Object> before = snapshotSubTask(task);
         boolean legacyManualScoring = usesLegacyManualScoring(task);
         double manualPoints = legacyManualScoring ? manualApprovalPoints(body.get("manualPoints")) : 0d;
         if (legacyManualScoring && pointsService == null) {
@@ -1270,6 +1317,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                             .mapToDouble(com.emie.designpm.entity.PointLedger::getPoints)
                             .sum());
         }
+        Map<String, Object> after = snapshotSubTask(task);
+        after.putAll(confirmation);
         p.getLogs()
                 .add(new ActivityLog(
                         "产品企划确认成果：" + task.getName(),
@@ -1278,9 +1327,9 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                         p,
                         "sub_task",
                         task.getId(),
-                        null,
-                        AuditJson.toJson(confirmation),
-                        "status,points"));
+                        AuditJson.toJson(before),
+                        AuditJson.toJson(after),
+                        AuditJson.changedFields(before, after)));
         checkTaskCompletion(task, p);
         Project saved = projectRepository.save(p);
         Map<String, String> notifyContext = notifier.context(saved, task, currentUser, comments);

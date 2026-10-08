@@ -206,6 +206,20 @@ public class ProjectWorkflowService {
     }
 
     private void addLog(Project project, String action, String userName, String role) {
-        project.getLogs().add(new ActivityLog(action, userName, role, project));
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("workflowStage", project.getWorkflowStage());
+        after.put("workflowStatus", project.getWorkflowStatus());
+        after.put("status", project.getStatus());
+        project.getLogs()
+                .add(new ActivityLog(
+                        action,
+                        userName,
+                        role,
+                        project,
+                        "project",
+                        project.getId(),
+                        null,
+                        AuditJson.toJson(after),
+                        "workflowStage,workflowStatus,status"));
     }
 }
