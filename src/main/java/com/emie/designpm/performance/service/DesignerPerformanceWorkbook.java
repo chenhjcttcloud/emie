@@ -2,6 +2,7 @@ package com.emie.designpm.performance.service;
 
 import com.emie.designpm.performance.service.DesignerMonthlyReport.Attachment;
 import com.emie.designpm.performance.service.DesignerMonthlyReport.Category;
+import com.emie.designpm.performance.service.DesignerMonthlyReport.Delivery;
 import com.emie.designpm.performance.service.DesignerMonthlyReport.Item;
 import com.emie.designpm.performance.service.PerformanceImageLoader.LoadedImage;
 import java.io.IOException;
@@ -12,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
+import org.apache.poi.common.usermodel.HyperlinkType;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.util.Units;
@@ -35,7 +37,7 @@ final class DesignerPerformanceWorkbook {
     static final double WEIGHT_ATTENDANCE = 0.10;
     static final double WEIGHT_WEEKLY_REPORT = 0.10;
 
-    private static final int IMAGE_COLUMN = 9;
+    private static final int IMAGE_COLUMN = 10;
     private static final int IMAGE_COLUMN_WIDTH_CHARS = 28;
     private static final float IMAGE_ROW_HEIGHT_PT = 150f;
     private static final DateTimeFormatter SHORT_DATE = DateTimeFormatter.ofPattern("M.d");
@@ -59,6 +61,7 @@ final class DesignerPerformanceWorkbook {
         try (XSSFWorkbook workbook = book.workbook) {
             book.appraisalSheet();
             book.detailSheet();
+            book.deliverySheet();
             workbook.write(out);
         }
     }
@@ -102,7 +105,7 @@ final class DesignerPerformanceWorkbook {
                 "1",
                 "个人目标\n70%",
                 "设计任务完成率",
-                "目标：\n原创*1+外采*8，或者原创0+外采10，只核算单月设立的任务",
+                "目标：\n原创*1+外采*8，或者原创0+外采10，只核算单月接单/指派的任务；直接指派以创建时间估算",
                 "完成率=每月按时完成任务数/当月设计任务总数，150%封顶",
                 "产品管理系统",
                 completionResult(),
@@ -203,7 +206,7 @@ final class DesignerPerformanceWorkbook {
     private String completionResult() {
         StringBuilder text = new StringBuilder();
         text.append(report.month().getMonthValue()).append("月份绩效\n");
-        text.append("本月设立 ")
+        text.append("本月接单/指派 ")
                 .append(report.createdCount())
                 .append(" 项，已完成 ")
                 .append(report.completedCount())
@@ -212,7 +215,7 @@ final class DesignerPerformanceWorkbook {
                 .append(" 项\n");
         Double rate = report.completionRate();
         text.append("按时完成率：")
-                .append(rate == null ? "本月无设立任务，请人工评定" : String.format("%.1f%%", rate * 100))
+                .append(rate == null ? "本月无任务，请人工评定" : String.format("%.1f%%", rate * 100))
                 .append('\n');
         for (Category category : Category.values()) {
             List<Item> items = report.createdItems().stream()
@@ -245,10 +248,12 @@ final class DesignerPerformanceWorkbook {
 
     private void detailSheet() {
         XSSFSheet sheet = workbook.createSheet("任务详情");
-        int[] widths = {6, 40, 16, 12, 12, 12, 18, 18, 24};
+        int[] widths = {6, 40, 16, 16, 12, 12, 18, 24, 48, 24};
         for (int i = 0; i < widths.length; i++) sheet.setColumnWidth(i, widths[i] * 256);
         int maxImages = report.items().stream()
-                .mapToInt(item -> item.images().size())
+                .mapToInt(item -> (int) item.attachments().stream()
+                        .filter(Attachment::embeddableImage)
+                        .count())
                 .max()
                 .orElse(0);
         for (int i = 0; i < Math.max(maxImages, 1); i++)
@@ -267,12 +272,13 @@ final class DesignerPerformanceWorkbook {
                 sheet,
                 r,
                 lastColumn,
-                "本月设立任务：" + report.createdCount() + " 项；已完成 " + report.completedCount() + " 项；按时完成 "
-                        + report.onTimeCount() + " 项；往月设立、本月完成 "
+                "本月接单/指派任务：" + report.createdCount() + " 项；已完成 " + report.completedCount() + " 项；未完成 "
+                        + (report.createdCount() - report.completedCount()) + " 项；按时完成 "
+                        + report.onTimeCount() + " 项；往月接单/指派、本月完成 "
                         + report.carriedOverCompleted().size() + " 项");
         r++;
 
-        String[] headers = {"序号", "任务名称", "类别", "设立日期", "计划完成", "实际完成", "状态", "统计归属", "其他附件（非图片）"};
+        String[] headers = {"序号", "任务名称", "类别", "接单/指派日期", "计划完成", "实际完成", "当前状态", "统计归属", "交付成果描述", "附件"};
         Row head = sheet.createRow(r++);
         for (int i = 0; i < headers.length; i++) cell(head, i, headers[i], styles.header);
         for (int i = 0; i < Math.max(maxImages, 1); i++) cell(head, IMAGE_COLUMN + i, "交付图片 " + (i + 1), styles.header);
@@ -305,20 +311,132 @@ final class DesignerPerformanceWorkbook {
         return r + 1;
     }
 
+    private void deliverySheet() {
+        XSSFSheet sheet = workbook.createSheet("交付成果明细");
+        List<DeliveryRow> deliveries = report.items().stream()
+                .flatMap(item -> item.deliveryVersions().stream().map(delivery -> new DeliveryRow(item, delivery)))
+                .toList();
+        int maxImages = deliveries.stream()
+                .mapToInt(row -> (int) row.delivery().attachments().stream()
+                        .filter(Attachment::embeddableImage)
+                        .count())
+                .max()
+                .orElse(0);
+        int imageColumn = 10;
+        int lastColumn = imageColumn + Math.max(maxImages, 1) - 1;
+        int[] widths = {6, 18, 38, 10, 22, 20, 18, 32, 52, 28};
+        for (int i = 0; i < widths.length; i++) sheet.setColumnWidth(i, widths[i] * 256);
+        for (int i = 0; i < Math.max(maxImages, 1); i++)
+            sheet.setColumnWidth(imageColumn + i, IMAGE_COLUMN_WIDTH_CHARS * 256);
+
+        text(sheet, 0, 0, report.month() + "交付成果明细 — " + report.name(), styles.title);
+        merge(sheet, 0, 0, 0, lastColumn);
+        text(sheet, 1, 0, "包含本月接单/指派任务及往月接单、本月完成任务的全部已保存交付版本。", styles.note);
+        merge(sheet, 1, 1, 0, lastColumn);
+        String[] headers = {"序号", "类别", "子任务", "版本", "提交类型", "提交时间", "提交人", "修改说明", "交付成果描述", "附件下载"};
+        Row head = sheet.createRow(2);
+        for (int i = 0; i < headers.length; i++) cell(head, i, headers[i], styles.header);
+        for (int i = 0; i < Math.max(maxImages, 1); i++) cell(head, imageColumn + i, "交付图片 " + (i + 1), styles.header);
+
+        if (deliveries.isEmpty()) {
+            text(sheet, 3, 0, "本月任务暂无已保存的交付成果", styles.left);
+            merge(sheet, 3, 3, 0, lastColumn);
+            return;
+        }
+        XSSFDrawing drawing = sheet.createDrawingPatriarch();
+        int rowIndex = 3;
+        int sequence = 1;
+        for (DeliveryRow deliveryRow : deliveries) {
+            Item item = deliveryRow.item();
+            Delivery delivery = deliveryRow.delivery();
+            Row row = sheet.createRow(rowIndex);
+            cell(row, 0, String.valueOf(sequence++), styles.center);
+            cell(row, 1, item.category().label(), styles.center);
+            cell(row, 2, item.name(), styles.leftWrap);
+            cell(row, 3, delivery.versionNo() == null ? "—" : String.valueOf(delivery.versionNo()), styles.center);
+            cell(row, 4, delivery.submissionType(), styles.center);
+            cell(row, 5, delivery.submittedAt() == null ? "—" : STAMP.format(delivery.submittedAt()), styles.center);
+            cell(row, 6, delivery.submittedBy(), styles.center);
+            cell(row, 7, delivery.changeSummary(), styles.leftWrap);
+            cell(row, 8, delivery.deliverables(), styles.leftWrap);
+            List<Attachment> links = delivery.attachments().stream()
+                    .filter(a -> !a.embeddableImage())
+                    .toList();
+            cell(
+                    row,
+                    9,
+                    links.stream().map(Attachment::name).collect(java.util.stream.Collectors.joining("\n")),
+                    styles.leftWrap);
+            for (int i = 0; i < Math.max(maxImages, 1); i++) cell(row, imageColumn + i, "", styles.body);
+
+            int placed = 0;
+            List<String> unreadable = new ArrayList<>();
+            for (Attachment attachment : delivery.attachments()) {
+                if (!attachment.embeddableImage()) continue;
+                Optional<LoadedImage> image = images.apply(attachment.url());
+                if (image.isEmpty()) {
+                    unreadable.add(attachment.name());
+                    continue;
+                }
+                placePicture(drawing, image.get(), imageColumn + placed++, rowIndex);
+            }
+            if (links.size() == 1) {
+                Hyperlink link = workbook.getCreationHelper().createHyperlink(HyperlinkType.URL);
+                link.setAddress(links.getFirst().url());
+                row.getCell(9).setHyperlink(link);
+            }
+            if (!unreadable.isEmpty()) {
+                String existing = row.getCell(9).getStringCellValue();
+                String note = "图片无法读取：" + String.join("、", unreadable);
+                row.getCell(9).setCellValue(existing.isBlank() ? note : existing + "\n" + note);
+            }
+            int wrappedLines = Math.max(
+                    lineCount(item.name()),
+                    Math.max(
+                            lineCount(delivery.changeSummary()),
+                            Math.max(
+                                    estimatedLines(delivery.deliverables()),
+                                    estimatedLines(links.stream()
+                                            .map(Attachment::name)
+                                            .collect(java.util.stream.Collectors.joining(" "))))));
+            row.setHeightInPoints(placed > 0 ? IMAGE_ROW_HEIGHT_PT : Math.min(409f, Math.max(30f, wrappedLines * 15f)));
+            rowIndex++;
+        }
+        sheet.createFreezePane(3, 3);
+    }
+
+    private record DeliveryRow(Item item, Delivery delivery) {}
+
+    private static int estimatedLines(String value) {
+        return value == null || value.isBlank() ? 1 : Math.max(lineCount(value), (value.length() + 39) / 40);
+    }
+
     private int taskRow(XSSFSheet sheet, XSSFDrawing drawing, int r, int seq, Item item, int maxImages) {
         Row row = sheet.createRow(r);
         cell(row, 0, String.valueOf(seq), styles.center);
         cell(row, 1, item.name(), styles.left);
         cell(row, 2, item.category().label(), styles.center);
-        cell(row, 3, date(item.createdAt()), styles.center);
+        cell(row, 3, date(item.receivedAt()) + (item.receivedAtEstimated() ? "（估算）" : ""), styles.center);
         cell(row, 4, item.plannedDate() == null ? "—" : item.plannedDate().format(FULL_DATE), styles.center);
         cell(row, 5, date(item.completedAt()), styles.center);
         cell(row, 6, item.statusLabel(), styles.center);
-        cell(row, 7, item.createdIn(report.month()) ? "本月设立" : "往月设立·本月完成", styles.center);
-        cell(row, 8, String.join("\n", item.otherFiles()), styles.left);
+        cell(
+                row,
+                7,
+                item.createdIn(report.month()) ? (item.receivedAtEstimated() ? "本月指派·时间估算" : "本月接单") : "往月接单·本月完成",
+                styles.center);
+        cell(row, 8, item.deliverables(), styles.leftWrap);
+        List<Attachment> links =
+                item.attachments().stream().filter(a -> !a.embeddableImage()).toList();
+        cell(
+                row,
+                9,
+                links.stream().map(Attachment::name).collect(java.util.stream.Collectors.joining("\n")),
+                styles.left);
         for (int i = 0; i < Math.max(maxImages, 1); i++) cell(row, IMAGE_COLUMN + i, "", styles.body);
 
-        List<Attachment> attachments = item.images();
+        List<Attachment> attachments =
+                item.attachments().stream().filter(Attachment::embeddableImage).toList();
         List<String> unreadable = new ArrayList<>();
         int placed = 0;
         for (Attachment attachment : attachments) {
@@ -331,11 +449,16 @@ final class DesignerPerformanceWorkbook {
             placed++;
         }
         if (!unreadable.isEmpty()) {
-            String existing = row.getCell(8).getStringCellValue();
+            String existing = row.getCell(9).getStringCellValue();
             String note = "图片无法读取：" + String.join("、", unreadable);
-            row.getCell(8).setCellValue(existing.isBlank() ? note : existing + "\n" + note);
+            row.getCell(9).setCellValue(existing.isBlank() ? note : existing + "\n" + note);
         }
-        row.setHeightInPoints(placed > 0 ? IMAGE_ROW_HEIGHT_PT : Math.max(30f, lineCount(item.name()) * 15f));
+        int deliverableLines =
+                item.deliverables() == null ? 1 : (item.deliverables().length() + 39) / 40;
+        row.setHeightInPoints(
+                placed > 0
+                        ? IMAGE_ROW_HEIGHT_PT
+                        : Math.min(409f, Math.max(30f, Math.max(lineCount(item.name()), deliverableLines) * 15f)));
         return r + 1;
     }
 
@@ -399,7 +522,19 @@ final class DesignerPerformanceWorkbook {
 
     /** 统一样式，避免逐格新建（xlsx 样式数有上限）。 */
     private static final class Styles {
-        final CellStyle title, plain, note, header, section, body, center, left, percent, score, scoreBold, manual;
+        final CellStyle title,
+                plain,
+                note,
+                header,
+                section,
+                body,
+                center,
+                left,
+                leftWrap,
+                percent,
+                score,
+                scoreBold,
+                manual;
 
         Styles(XSSFWorkbook wb) {
             Font bold = wb.createFont();
@@ -421,6 +556,9 @@ final class DesignerPerformanceWorkbook {
             center.setAlignment(HorizontalAlignment.CENTER);
             left = bordered(wb);
             left.setAlignment(HorizontalAlignment.LEFT);
+            leftWrap = bordered(wb);
+            leftWrap.setAlignment(HorizontalAlignment.LEFT);
+            leftWrap.setWrapText(true);
             header = bordered(wb);
             header.setAlignment(HorizontalAlignment.CENTER);
             header.setFont(bold);

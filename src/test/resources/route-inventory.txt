@@ -72,6 +72,7 @@ GET /api/performance/designer-monthly-report
 GET /api/performance/designer-monthly-report.xlsx
 GET /api/performance/designer-targets
 GET /api/performance/exports
+GET /api/performance/exports/{month}
 GET /api/performance/exports/{month}/files/{userId}
 GET /api/performance/exports/{month}/zip
 GET /api/performance/leaderboard

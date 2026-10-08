@@ -10,9 +10,9 @@ import java.util.Objects;
  * 单个设计师单月绩效底稿。全部字段来自系统数据，指标口径集中喺呢度定义：
  *
  * <ul>
- *   <li><b>本月设立</b>：{@code created_at} 落喺当月嘅任务（「只核算单月设立的任务」）。
+ *   <li><b>本月任务</b>：设计师接单时间落在当月；直接指派没有接单时间，按创建时间估算。
  *   <li><b>按时完成</b>：已完成，且完成日期唔迟过计划完成日期；冇计划日期嘅当按时，但会喺表入面标明。
- *   <li><b>设计任务完成率</b>：本月设立任务中按时完成数 ÷ 本月设立任务数，150% 封顶。
+ *   <li><b>设计任务完成率</b>：本月接单/指派任务中按时完成数 ÷ 本月接单/指派任务数，150% 封顶。
  * </ul>
  */
 public record DesignerMonthlyReport(
@@ -42,19 +42,40 @@ public record DesignerMonthlyReport(
         }
     }
 
-    public record Attachment(String name, String url) {}
+    public record Attachment(String name, String url, boolean embeddableImage) {}
+
+    public record Delivery(
+            Integer versionNo,
+            String submissionType,
+            String changeSummary,
+            LocalDateTime submittedAt,
+            String submittedBy,
+            String deliverables,
+            List<Attachment> attachments) {
+        public Delivery {
+            attachments = attachments == null ? List.of() : List.copyOf(attachments);
+        }
+    }
 
     public record Item(
             Category category,
             String name,
             LocalDateTime createdAt,
+            LocalDateTime receivedAt,
+            boolean receivedAtEstimated,
             LocalDate plannedDate,
             LocalDateTime completedAt,
-            List<Attachment> images,
-            List<String> otherFiles) {
+            String deliverables,
+            List<Attachment> attachments,
+            List<Delivery> deliveryVersions) {
+
+        public Item {
+            attachments = attachments == null ? List.of() : List.copyOf(attachments);
+            deliveryVersions = deliveryVersions == null ? List.of() : List.copyOf(deliveryVersions);
+        }
 
         public boolean createdIn(YearMonth month) {
-            return createdAt != null && YearMonth.from(createdAt).equals(month);
+            return receivedAt != null && YearMonth.from(receivedAt).equals(month);
         }
 
         public boolean completedIn(YearMonth month) {
@@ -81,7 +102,7 @@ public record DesignerMonthlyReport(
         return items.stream().filter(item -> item.createdIn(month)).toList();
     }
 
-    /** 往月设立、本月完成：不计入当月新设任务的完成率。 */
+    /** 往月接单、本月完成：不计入当月任务完成率。 */
     public List<Item> carriedOverCompleted() {
         return items.stream()
                 .filter(item -> !item.createdIn(month) && item.completedIn(month))
@@ -100,7 +121,7 @@ public record DesignerMonthlyReport(
         return createdItems().stream().filter(Item::onTime).count();
     }
 
-    /** 按时完成率（0–1.5）；本月冇设立任务时返回 null，由人工判断。 */
+    /** 按时完成率（0–1.5）；本月冇接单/指派任务时返回 null，由人工判断。 */
     public Double completionRate() {
         long created = createdCount();
         if (created == 0) return null;

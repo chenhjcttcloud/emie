@@ -17,11 +17,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executor;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -44,16 +48,29 @@ public class DesignerPerformanceExportService {
     private final PerformanceImageLoader images;
     private final Path root;
     private final boolean autoEnabled;
+    private final Executor taskExecutor;
+    private final ConcurrentMap<YearMonth, GenerationStatus> generations = new ConcurrentHashMap<>();
 
+    @Autowired
     public DesignerPerformanceExportService(
             DesignerMonthlyReportService reports,
             PerformanceImageLoader images,
             @Value("${app.upload.dir:./uploads}") String uploadDir,
             @Value("${app.performance-export.auto-enabled:true}") boolean autoEnabled) {
+        this(reports, images, uploadDir, autoEnabled, Thread::startVirtualThread);
+    }
+
+    DesignerPerformanceExportService(
+            DesignerMonthlyReportService reports,
+            PerformanceImageLoader images,
+            String uploadDir,
+            boolean autoEnabled,
+            Executor taskExecutor) {
         this.reports = reports;
         this.images = images;
         this.root = Path.of(uploadDir).toAbsolutePath().normalize().resolve("performance-exports");
         this.autoEnabled = autoEnabled;
+        this.taskExecutor = taskExecutor;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -69,10 +86,41 @@ public class DesignerPerformanceExportService {
 
     public record Manifest(String month, String generatedAt, String generatedBy, List<Entry> designers) {}
 
+    public record GenerationStatus(String month, String status, String message) {}
+
+    public synchronized GenerationStatus startGeneration(YearMonth month, String generatedBy) {
+        if (month.isAfter(YearMonth.now())) throw new IllegalArgumentException("不能生成未来月份的绩效表");
+        GenerationStatus current = generations.get(month);
+        if (current != null && "RUNNING".equals(current.status())) return current;
+        GenerationStatus running = new GenerationStatus(month.toString(), "RUNNING", "正在生成绩效表");
+        generations.put(month, running);
+        taskExecutor.execute(() -> {
+            try {
+                generate(month, generatedBy);
+                generations.put(month, new GenerationStatus(month.toString(), "READY", "生成完成"));
+            } catch (Exception e) {
+                log.error("生成 {} 绩效表失败", month, e);
+                generations.put(month, new GenerationStatus(month.toString(), "FAILED", "生成失败，请重试"));
+            }
+        });
+        return running;
+    }
+
+    public GenerationStatus generationStatus(YearMonth month) {
+        GenerationStatus current = generations.get(month);
+        if (current != null) return current;
+        return new GenerationStatus(month.toString(), manifest(month).isPresent() ? "READY" : "NOT_STARTED", "");
+    }
+
     @Scheduled(cron = "${app.performance-export.cron:0 30 2 1 * ?}")
     public void generatePreviousMonth() {
         if (!autoEnabled) return;
         YearMonth month = YearMonth.now().minusMonths(1);
+        if (generations.containsKey(month)
+                && "RUNNING".equals(generations.get(month).status())) {
+            log.info("绩效表 {} 正在手动生成，自动任务跳过", month);
+            return;
+        }
         if (manifest(month).isPresent()) {
             log.info("绩效表 {} 已存在快照，自动任务跳过", month);
             return;
@@ -107,7 +155,9 @@ public class DesignerPerformanceExportService {
                         report.onTimeCount(),
                         report.completionRate(),
                         report.items().stream()
-                                .mapToInt(item -> item.images().size())
+                                .mapToInt(item -> (int) item.attachments().stream()
+                                        .filter(DesignerMonthlyReport.Attachment::embeddableImage)
+                                        .count())
                                 .sum()));
             }
             Manifest manifest =

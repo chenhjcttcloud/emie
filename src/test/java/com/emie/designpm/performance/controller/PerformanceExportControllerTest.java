@@ -3,6 +3,7 @@ package com.emie.designpm.performance.controller;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.emie.designpm.auth.AuthSession;
@@ -15,6 +16,25 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class PerformanceExportControllerTest {
+    @Test
+    void generationReturnsQuicklyAndExposesStatus() throws Exception {
+        DesignerPerformanceExportService exports = mock(DesignerPerformanceExportService.class);
+        when(exports.startGeneration(YearMonth.of(2026, 9), "管理员"))
+                .thenReturn(new DesignerPerformanceExportService.GenerationStatus("2026-09", "RUNNING", "正在生成绩效表"));
+        when(exports.generationStatus(YearMonth.of(2026, 9)))
+                .thenReturn(new DesignerPerformanceExportService.GenerationStatus("2026-09", "READY", "生成完成"));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new PerformanceExportController(exports))
+                .build();
+        var admin = new AuthSession("admin", "admin", "管理员");
+
+        mvc.perform(post("/api/performance/exports/2026-09").requestAttr("authSession", admin))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("RUNNING"));
+        mvc.perform(get("/api/performance/exports/2026-09").requestAttr("authSession", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("READY"));
+    }
+
     @Test
     void zipEndpointStreamsZipInsteadOfPassingLambdaToMessageConverter() throws Exception {
         DesignerPerformanceExportService exports = mock(DesignerPerformanceExportService.class);

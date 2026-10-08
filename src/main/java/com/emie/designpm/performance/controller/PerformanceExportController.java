@@ -40,11 +40,19 @@ public class PerformanceExportController {
         AuthSession session = (AuthSession) request.getAttribute("authSession");
         if (session == null || !"admin".equals(session.role())) return forbidden();
         try {
-            return ResponseEntity.ok(exports.generate(parse(month), session.name()));
+            return ResponseEntity.accepted().body(exports.startGeneration(parse(month), session.name()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        } catch (java.io.IOException e) {
-            return ResponseEntity.internalServerError().body(Map.of("error", "生成绩效表失败：" + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{month}")
+    public ResponseEntity<?> generationStatus(@PathVariable String month, HttpServletRequest request) {
+        if (!admin(request)) return forbidden();
+        try {
+            return ResponseEntity.ok(exports.generationStatus(parse(month)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 

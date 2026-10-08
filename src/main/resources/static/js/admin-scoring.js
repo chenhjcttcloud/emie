@@ -127,7 +127,8 @@ async function renderAdminPoints(container) {
       apiGet('/point-governance/po/progress'), apiGet('/admin/configs'),
       apiGet('/performance/designer-monthly-report?month=' + encodeURIComponent(targetMonth)),
     ]);
-    const ruleList = (Array.isArray(rules) ? rules : []).slice().sort(compareRuleCodes);
+    const ruleList = (Array.isArray(rules) ? rules : []).slice().sort((left, right) =>
+      Number(left.enabled === false) - Number(right.enabled === false) || compareRuleCodes(left, right));
     // 复核区只展示待处理异议，已通过/已驳回记录保留在数据库审计链中，不再占用待办列表。
     const appealList = Array.isArray(appeals) ? appeals.filter(item => ['SUBMITTED', 'PLANNER_PROCESSED'].includes(item.status)) : [];
     const poProgressList = Array.isArray(poProgress) ? poProgress : [];
@@ -170,9 +171,11 @@ async function reloadDesignerMonthlyReport() {
   } catch (error) { window.EMIE.actions.showSystemAlert('月度绩效表加载失败：' + (error.message || '')); }
 }
 
-async function exportDesignerMonthlyReport() {
+async function exportDesignerMonthlyReport(button) {
   const month = document.getElementById('designerPerformanceMonth')?.value;
   if (!month) return;
+  const originalText = button?.textContent;
+  if (button) { button.disabled = true; button.textContent = '正在生成…'; button.setAttribute('aria-busy', 'true'); }
   try {
     const token = localStorage.getItem('design_pm_token');
     const headers = token ? { 'X-Auth-Token': token } : {};
@@ -183,6 +186,16 @@ async function exportDesignerMonthlyReport() {
       const error = await generated.json().catch(() => ({}));
       throw new Error(error.error || `生成失败（HTTP ${generated.status}）`);
     }
+    let status = await generated.json();
+    for (let attempt = 0; status.status === 'RUNNING' && attempt < 200; attempt++) {
+      button && (button.textContent = `正在生成 ${month}…`);
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      const response = await fetch('/api/performance/exports/' + encodeURIComponent(month), { headers, credentials: 'same-origin' });
+      if (!response.ok) throw new Error(`查询生成状态失败（HTTP ${response.status}）`);
+      status = await response.json();
+    }
+    if (status.status === 'FAILED') throw new Error(status.message || '生成失败，请重试');
+    if (status.status !== 'READY') throw new Error('生成仍在进行；稍后再次点击可继续下载');
     const response = await fetch('/api/performance/exports/' + encodeURIComponent(month) + '/zip', {
       headers,
       credentials: 'same-origin',
@@ -196,9 +209,11 @@ async function exportDesignerMonthlyReport() {
     link.href = blobUrl;
     link.download = `${month}_设计师绩效考评表.zip`;
     link.click();
-    URL.revokeObjectURL(blobUrl);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   } catch (error) {
     window.EMIE.actions.showSystemAlert(error.message || 'Excel 导出失败');
+  } finally {
+    if (button) { button.disabled = false; button.textContent = originalText || '↓ 导出 Excel'; button.removeAttribute('aria-busy'); }
   }
 }
 
@@ -598,7 +613,7 @@ if (registerEventAction) {
   registerEventAction('scoring-delete-rule', (_event, el) => deletePointRule(el.dataset.ruleCode));
   registerEventAction('scoring-save-target', (_event, el) => saveDesignerTarget(Number(el.dataset.targetIndex)));
   registerEventAction('scoring-performance-month', () => reloadDesignerMonthlyReport());
-  registerEventAction('scoring-export-performance', () => exportDesignerMonthlyReport());
+  registerEventAction('scoring-export-performance', (_event, el) => exportDesignerMonthlyReport(el));
   registerEventAction('scoring-create-rule', () => createPointRule());
   registerEventAction('scoring-close-adjustment', () => closeM('manualAdjustmentModal'));
   registerEventAction('scoring-submit-adjustment', (_event, el) => submitManualAdjustment(el));

@@ -93,7 +93,7 @@ function renderPointRulePicker(rules, selectedCode = '', disabled = false) {
   return `<div class="point-rule-picker" data-rules="${escHtml(JSON.stringify(active))}" data-category="${escHtml(category)}" data-subcategory="${escHtml(subcategory)}" data-page="${initial.page}">${initial.html}</div>`;
 }
 
-function updatePointRulePicker(element) {
+function updatePointRulePicker(element, resetListScroll = false) {
   const picker = element.closest('.point-rule-picker');
   const rules = JSON.parse(picker.dataset.rules);
   const category = picker.dataset.category || '';
@@ -112,7 +112,9 @@ function updatePointRulePicker(element) {
     : '';
   picker.querySelector('[data-point-subcategory-tabs]').hidden = !view.subcategories.length;
   picker.querySelector('[name="pointRuleCode"]').value = view.selectedCode;
-  picker.querySelector('.point-rule-list').innerHTML = view.ruleRows;
+  const ruleList = picker.querySelector('.point-rule-list');
+  ruleList.innerHTML = view.ruleRows;
+  if (resetListScroll) ruleList.scrollTop = 0;
   picker.querySelector('.point-rule-pagination').outerHTML = view.paginationHtml;
   const rule = rules.find(item => String(item.ruleCode) === view.selectedCode);
   const selected = picker.querySelector('.point-rule-selected');
@@ -1184,23 +1186,23 @@ if (registerEventAction) {
     picker.dataset.category = element.dataset.pointCategoryTab;
     picker.dataset.subcategory = '';
     picker.dataset.page = '0';
-    updatePointRulePicker(element);
+    updatePointRulePicker(element, true);
   });
   registerEventAction('task-point-subcategory-tab', (_event, element) => {
     const picker = element.closest('.point-rule-picker');
     picker.dataset.subcategory = element.dataset.pointSubcategoryTab;
     picker.dataset.page = '0';
-    updatePointRulePicker(element);
+    updatePointRulePicker(element, true);
   });
   registerEventAction('task-point-search', (_event, element) => {
     const picker = element.closest('.point-rule-picker');
     picker.dataset.page = '0';
-    updatePointRulePicker(element);
+    updatePointRulePicker(element, true);
   });
   registerEventAction('task-point-page', (_event, element) => {
     const picker = element.closest('.point-rule-picker');
     picker.dataset.page = element.dataset.page;
-    updatePointRulePicker(element);
+    updatePointRulePicker(element, true);
   });
   registerEventAction('task-point-select', (_event, element) => {
     const picker = element.closest('.point-rule-picker');

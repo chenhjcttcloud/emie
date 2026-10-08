@@ -3,9 +3,11 @@ package com.emie.designpm.performance.service;
 import com.emie.designpm.admin.repository.UserRepository;
 import com.emie.designpm.entity.DesignRequirement;
 import com.emie.designpm.entity.SubTask;
+import com.emie.designpm.entity.SubTaskDeliveryVersion;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.performance.service.DesignerMonthlyReport.Attachment;
 import com.emie.designpm.performance.service.DesignerMonthlyReport.Category;
+import com.emie.designpm.performance.service.DesignerMonthlyReport.Delivery;
 import com.emie.designpm.performance.service.DesignerMonthlyReport.Item;
 import com.emie.designpm.reference.repository.DepartmentRepository;
 import com.emie.designpm.util.SecurityUtil;
@@ -59,10 +61,11 @@ public class DesignerMonthlyReportService {
 
         Map<String, List<Item>> itemsByDesigner = new java.util.HashMap<>();
         List<SubTask> tasks = loadSubTasks(ids, from, to);
+        Map<Long, List<Delivery>> deliveryHistory = loadDeliveryHistory(tasks);
         for (SubTask task : tasks) {
             itemsByDesigner
                     .computeIfAbsent(task.getDesignerId(), key -> new ArrayList<>())
-                    .add(toItem(task));
+                    .add(toItem(task, deliveryHistory.getOrDefault(task.getId(), List.of())));
         }
         List<DesignRequirement> requirements = loadRequirements(ids, from, to);
         for (DesignRequirement requirement : requirements) {
@@ -75,7 +78,7 @@ public class DesignerMonthlyReportService {
         for (User designer : designers) {
             List<Item> items = itemsByDesigner.getOrDefault(designer.getUserId(), List.of()).stream()
                     .sorted(Comparator.comparing(Item::category)
-                            .thenComparing(item -> item.completedAt() == null ? item.createdAt() : item.completedAt()))
+                            .thenComparing(item -> item.completedAt() == null ? item.receivedAt() : item.completedAt()))
                     .toList();
             reports.add(new DesignerMonthlyReport(
                     designer.getUserId(),
@@ -89,13 +92,34 @@ public class DesignerMonthlyReportService {
         return reports;
     }
 
-    /** 本月设立，或本月完成（任务详情包含往月设立、本月完成的任务）。 */
+    private Map<Long, List<Delivery>> loadDeliveryHistory(List<SubTask> tasks) {
+        List<Long> taskIds = tasks.stream()
+                .map(SubTask::getId)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        if (taskIds.isEmpty()) return Map.of();
+        return entityManager
+                .createQuery(
+                        "SELECT v FROM SubTaskDeliveryVersion v WHERE v.subTask.id IN :taskIds "
+                                + "ORDER BY v.subTask.id, v.versionNo",
+                        SubTaskDeliveryVersion.class)
+                .setParameter("taskIds", taskIds)
+                .getResultList()
+                .stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        version -> version.getSubTask().getId(),
+                        java.util.LinkedHashMap::new,
+                        java.util.stream.Collectors.mapping(this::toDelivery, java.util.stream.Collectors.toList())));
+    }
+
+    /** 本月接单/指派，或本月完成（也包含往月接单、本月完成的任务）。 */
     private List<SubTask> loadSubTasks(List<String> designerIds, LocalDateTime from, LocalDateTime to) {
         return entityManager
                 .createQuery(
                         "SELECT t FROM SubTask t JOIN FETCH t.project p "
                                 + "WHERE t.designerId IN :ids AND (p.status IS NULL OR p.status <> 'terminated') "
-                                + "AND ((t.createdAt >= :from AND t.createdAt < :to) "
+                                + "AND (((t.allocationStatus = 'claimed' AND t.claimedAt >= :from AND t.claimedAt < :to) "
+                                + "OR ((t.allocationStatus IS NULL OR t.allocationStatus <> 'claimed') AND t.createdAt >= :from AND t.createdAt < :to)) "
                                 + "OR (t.completedAt >= :from AND t.completedAt < :to))",
                         SubTask.class)
                 .setParameter("ids", designerIds)
@@ -119,19 +143,25 @@ public class DesignerMonthlyReportService {
                 .getResultList();
     }
 
-    private Item toItem(SubTask task) {
+    private Item toItem(SubTask task, List<Delivery> history) {
         String product = task.getProject().getProductName();
         String name = product == null || product.isBlank() ? task.getName() : product + "－" + task.getName();
         boolean done = "completed".equals(task.getStatus()) || "approved".equals(task.getStatus());
-        List<Map<String, Object>> files = parseFiles(task.getAttachmentsJson());
+        boolean claimedFromMarket = "claimed".equals(task.getAllocationStatus()) && task.getClaimedAt() != null;
+        List<Map<String, Object>> files = new ArrayList<>(parseFiles(task.getAttachmentsJson()));
+        files.addAll(parseFiles(task.getReferenceImagesJson()));
+        List<Delivery> deliveries = history.isEmpty() ? List.of(currentDelivery(task)) : history;
         return new Item(
                 "channel_custom".equals(task.getProject().getType()) ? Category.CHANNEL : Category.REGULAR,
                 name,
                 task.getCreatedAt(),
+                claimedFromMarket ? task.getClaimedAt() : task.getCreatedAt(),
+                !claimedFromMarket,
                 parseDate(task.getPlannedDate()),
                 done ? task.getCompletedAt() : null,
-                images(files),
-                otherFiles(files));
+                task.getDeliverables(),
+                attachments(files),
+                deliveries);
     }
 
     private Item toItem(DesignRequirement requirement) {
@@ -142,10 +172,46 @@ public class DesignerMonthlyReportService {
                 Category.REQUIREMENT,
                 requirement.getName(),
                 requirement.getCreatedAt(),
+                requirement.getCreatedAt(),
+                false,
                 parseDate(requirement.getDeadline()),
                 done ? requirement.getUpdatedAt() : null,
-                images(files),
-                otherFiles(files));
+                requirement.getDeliveryContent(),
+                attachments(files),
+                List.of(new Delivery(
+                        null,
+                        "设计/送审需求交付",
+                        "",
+                        requirement.getDeliveredAt(),
+                        requirement.getDesignerName(),
+                        requirement.getDeliveryContent(),
+                        attachments(files))));
+    }
+
+    private Delivery toDelivery(SubTaskDeliveryVersion version) {
+        List<Map<String, Object>> files = new ArrayList<>(parseFiles(version.getReferenceImagesJson()));
+        files.addAll(parseFiles(version.getAttachmentsJson()));
+        return new Delivery(
+                version.getVersionNo(),
+                version.getSubmissionType(),
+                version.getChangeSummary(),
+                version.getSubmittedAt(),
+                version.getSubmittedByName(),
+                version.getDeliverables(),
+                attachments(files));
+    }
+
+    private Delivery currentDelivery(SubTask task) {
+        List<Map<String, Object>> files = new ArrayList<>(parseFiles(task.getReferenceImagesJson()));
+        files.addAll(parseFiles(task.getAttachmentsJson()));
+        return new Delivery(
+                null,
+                "当前记录（历史无交付版本）",
+                "",
+                task.getSubmittedForReviewAt(),
+                task.getDesignerName(),
+                task.getDeliverables(),
+                attachments(files));
     }
 
     private String departmentName(Long departmentId) {
@@ -171,19 +237,17 @@ public class DesignerMonthlyReportService {
         }
     }
 
-    private static List<Attachment> images(List<Map<String, Object>> files) {
+    private static List<Attachment> attachments(List<Map<String, Object>> files) {
         return files.stream()
-                .filter(file -> SecurityUtil.isValidImageFile(fileName(file)))
                 .filter(file -> file.get("url") instanceof String url && !url.isBlank())
-                .map(file -> new Attachment(fileName(file), (String) file.get("url")))
-                .distinct()
-                .toList();
-    }
-
-    private static List<String> otherFiles(List<Map<String, Object>> files) {
-        return files.stream()
-                .map(DesignerMonthlyReportService::fileName)
-                .filter(name -> name != null && !name.isBlank() && !SecurityUtil.isValidImageFile(name))
+                .map(file -> {
+                    String name = fileName(file);
+                    String url = (String) file.get("url");
+                    return new Attachment(
+                            name == null || name.isBlank() ? url.substring(url.lastIndexOf('/') + 1) : name,
+                            url,
+                            SecurityUtil.isValidImageFile(name));
+                })
                 .distinct()
                 .toList();
     }
