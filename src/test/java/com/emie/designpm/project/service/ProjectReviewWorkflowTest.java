@@ -218,6 +218,10 @@ class ProjectReviewWorkflowTest {
         second.setId(12L);
         SubTaskDeliveryVersion newer = deliveryVersion(first, 2);
         SubTaskDeliveryVersion older = deliveryVersion(first, 1);
+        newer.setExpectedPoints(6d);
+        newer.setPointRuleCode("B2");
+        newer.setPointRuleDescription("复杂设计");
+        newer.setConfirmedAt(java.time.LocalDateTime.of(2026, 9, 3, 10, 0));
         SubTaskDeliveryVersion other = deliveryVersion(second, 1);
         when(deliveryVersions.findBySubTaskIdInOrderBySubTaskIdAscVersionNoDesc(List.of(11L, 12L)))
                 .thenReturn(List.of(newer, older, other));
@@ -228,6 +232,10 @@ class ProjectReviewWorkflowTest {
                 List.of(2, 1),
                 result.get(11L).stream().map(item -> item.get("versionNo")).toList());
         assertEquals(1, result.get(12L).size());
+        assertEquals(6d, result.get(11L).getFirst().get("expectedPoints"));
+        assertEquals("B2", result.get(11L).getFirst().get("pointRuleCode"));
+        assertEquals("复杂设计", result.get(11L).getFirst().get("pointRuleDescription"));
+        assertNotNull(result.get(11L).getFirst().get("confirmedAt"));
         verify(deliveryVersions).findBySubTaskIdInOrderBySubTaskIdAscVersionNoDesc(List.of(11L, 12L));
     }
 

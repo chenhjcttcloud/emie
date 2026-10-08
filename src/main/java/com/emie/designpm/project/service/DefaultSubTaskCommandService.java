@@ -1143,6 +1143,14 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                     item.put("submittedByName", version.getSubmittedByName());
                     item.put("submittedByRole", version.getSubmittedByRole());
                     item.put("submittedAt", version.getSubmittedAt().toString());
+                    item.put("expectedPoints", version.getExpectedPoints());
+                    item.put("pointRuleCode", version.getPointRuleCode());
+                    item.put("pointRuleDescription", version.getPointRuleDescription());
+                    item.put(
+                            "confirmedAt",
+                            version.getConfirmedAt() == null
+                                    ? null
+                                    : version.getConfirmedAt().toString());
                     return item;
                 })
                 .toList();
