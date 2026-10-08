@@ -75,11 +75,12 @@ async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.
     ${endpoint === '/projects/department-subtasks' ? '<div id="designerTaskPagination" class="project-pagination"></div>' : ''}
   `;
   EMIE.dashboardState.designerTaskCache = myTasks;
+  EMIE.dashboardState.designerTaskFilteredCache = myTasks;
   EMIE.dashboardState.designerTaskPage = 0;
   if (endpoint === '/projects/department-subtasks') renderDesignerTaskPage();
 }
 
-function renderDesignerTaskPage(list = EMIE.dashboardState.designerTaskCache || []) {
+function renderDesignerTaskPage(list = EMIE.dashboardState.designerTaskFilteredCache || EMIE.dashboardState.designerTaskCache || []) {
   const pageSize = 10;
   const pages = Math.max(1, Math.ceil(list.length / pageSize));
   const page = Math.min(Math.max(EMIE.dashboardState.designerTaskPage || 0, 0), pages - 1);
@@ -118,6 +119,7 @@ function applyFilterDesignerTasks() {
 
   if (q) list = list.filter(t => matchesSearchText(q, t.id, t.projectId, t.name, t.projectName, t.details, t.designerName));
   list = list.filter(t => isDateInRange(t.plannedDate, dateStart, dateEnd));
+  EMIE.dashboardState.designerTaskFilteredCache = list;
 
   const c = document.getElementById('designerTaskContainer');
   if (EMIE.dashboardState.designerTasksReadOnly && document.getElementById('designerTaskPagination')) {
