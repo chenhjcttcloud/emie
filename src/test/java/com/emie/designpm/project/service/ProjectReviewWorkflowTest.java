@@ -460,6 +460,8 @@ class ProjectReviewWorkflowTest {
                         "BONUS"));
         assertEquals("BONUS", task.getPendingChangeRuleCode());
         assertEquals(3d, task.getPendingChangeBonusPoints());
+        assertTrue(project.getLogs().get(0).getAfterData().contains("\"withPoints\":true"));
+        assertTrue(project.getLogs().get(0).getAfterData().contains("\"points\":3.0"));
         SubTaskRejectionCycle cycle = mockingDetails(rejectionCycles).getInvocations().stream()
                 .filter(i -> i.getMethod().getName().equals("save"))
                 .map(i -> (SubTaskRejectionCycle) i.getArgument(0))
@@ -716,6 +718,8 @@ class ProjectReviewWorkflowTest {
         assertEquals(2.5d, task.getBasePointSnapshot());
         assertEquals("D30_8", task.getPendingChangeRuleCode());
         assertEquals(15d, task.getPendingChangeBonusPoints());
+        assertTrue(project.getLogs().get(0).getAfterData().contains("\"pointRequestId\":\"" + request + "\""));
+        assertTrue(project.getLogs().get(0).getAfterData().contains("\"points\":15.0"));
         assertThrows(RuntimeException.class, () -> service.taskRedeliver(1L, 11L, deliveryBody()));
         service.taskConfirmRevision(1L, 11L, deliveryBody());
         service.taskRedeliver(1L, 11L, deliveryBody());

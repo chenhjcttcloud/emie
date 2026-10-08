@@ -781,8 +781,25 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
 
         String currentUser = (String) body.getOrDefault("currentUser", "");
         String currentRole = (String) body.getOrDefault("currentRole", "");
-        saveDeliveryVersion(task, "initial", "首次交付", submittedActualDate, currentUserId, currentUser, currentRole);
-        p.getLogs().add(new ActivityLog("子任务交付：" + task.getName(), currentUser, currentRole, p));
+        SubTaskDeliveryVersion submittedVersion = saveDeliveryVersion(
+                task, "initial", "首次交付", submittedActualDate, currentUserId, currentUser, currentRole);
+        p.getLogs()
+                .add(new ActivityLog(
+                        "子任务交付：" + task.getName(),
+                        currentUser,
+                        currentRole,
+                        p,
+                        "sub_task",
+                        taskId,
+                        null,
+                        AuditJson.toJson(Map.of(
+                                "deliveryVersionId",
+                                submittedVersion == null || submittedVersion.getId() == null
+                                        ? 0L
+                                        : submittedVersion.getId(),
+                                "pointRequestId",
+                                "")),
+                        "status,deliverables"));
 
         Project saved = projectRepository.saveAndFlush(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
@@ -846,7 +863,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         String currentRole = (String) body.getOrDefault("currentRole", "");
         String changeSummary =
                 SecurityUtil.sanitizeText((String) body.getOrDefault("changeSummary", "根据修改要求重新交付"), 500);
-        saveDeliveryVersion(
+        SubTaskDeliveryVersion submittedVersion = saveDeliveryVersion(
                 task,
                 task.getPendingChangeBonusRequestId() == null ? "redelivery" : "revision",
                 changeSummary,
@@ -854,7 +871,23 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                 currentUserId,
                 currentUser,
                 currentRole);
-        p.getLogs().add(new ActivityLog("子任务重新交付：" + task.getName(), currentUser, currentRole, p));
+        p.getLogs()
+                .add(new ActivityLog(
+                        "子任务重新交付：" + task.getName(),
+                        currentUser,
+                        currentRole,
+                        p,
+                        "sub_task",
+                        taskId,
+                        null,
+                        AuditJson.toJson(Map.of(
+                                "deliveryVersionId",
+                                submittedVersion == null || submittedVersion.getId() == null
+                                        ? 0L
+                                        : submittedVersion.getId(),
+                                "pointRequestId",
+                                Objects.toString(task.getPendingChangeBonusRequestId(), ""))),
+                        "status,deliverables"));
 
         Project saved = projectRepository.save(p);
         fileArchiveService.bindFilesFromJson(task.getReferenceImagesJson(), "sub_task", task.getId());
@@ -939,7 +972,21 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                         "发起子任务修改：" + task.getName(),
                         String.valueOf(body.getOrDefault("currentUser", "")),
                         role,
-                        project));
+                        project,
+                        "sub_task",
+                        task.getId(),
+                        null,
+                        AuditJson.toJson(Map.of(
+                                "reason", reason,
+                                "withPoints", withPoints,
+                                "pointRuleCode", revisionRuleCode == null ? "" : revisionRuleCode,
+                                "pointRuleDescription",
+                                        revisionRuleCode == null
+                                                ? ""
+                                                : Objects.toString(pointsService.ruleDescription(revisionRuleCode), ""),
+                                "points", points,
+                                "pointRequestId", requestId)),
+                        "status,reviewComments,pendingChangeBonus"));
         Project saved = projectRepository.saveAndFlush(project);
         notifier.safeNotifyAfterCommit(
                 "TASK_REVISION_REQUESTED",
@@ -1016,7 +1063,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         return saved;
     }
 
-    private void saveDeliveryVersion(
+    private SubTaskDeliveryVersion saveDeliveryVersion(
             SubTask task,
             String submissionType,
             String changeSummary,
@@ -1052,7 +1099,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         version.setPointRuleCode(ruleCode);
         version.setPointRequestId(task.getPendingChangeBonusRequestId());
         if (pointsService != null) version.setPointRuleDescription(pointsService.ruleDescription(ruleCode));
-        deliveryVersionRepository.save(version);
+        return deliveryVersionRepository.save(version);
     }
 
     @Transactional(readOnly = true)
@@ -1125,13 +1172,48 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         }
         if (pointsService == null && "designer".equals(task.getAssigneeRole()))
             throw new IllegalStateException("积分服务暂不可用，确认已取消");
+        var priorLedgerIds = pointLedgerRepository == null
+                ? java.util.Set.<Long>of()
+                : pointLedgerRepository.findBySubTaskId(taskId).stream()
+                        .map(com.emie.designpm.entity.PointLedger::getId)
+                        .collect(java.util.stream.Collectors.toSet());
         if (pointsService != null) {
             pointsService.awardBaseSubmission(
                     task, task.getPendingChangeBonusRequestId() == null ? version : null, currentUserId);
             if (task.getPendingChangeBonusRequestId() != null)
                 pointsService.awardPendingChangeBonus(task, version, currentUserId);
         }
-        p.getLogs().add(new ActivityLog("产品企划确认成果：" + task.getName(), currentUser, currentRole, p));
+        Map<String, Object> confirmation = new LinkedHashMap<>();
+        confirmation.put("deliveryVersionId", version == null ? null : version.getId());
+        confirmation.put("pointRequestId", version == null ? null : version.getPointRequestId());
+        confirmation.put("pointRuleCode", version == null ? task.getPointRuleCode() : version.getPointRuleCode());
+        confirmation.put("points", version == null ? task.getBasePointSnapshot() : version.getExpectedPoints());
+        if (pointLedgerRepository != null) {
+            var awardedLedgers = pointLedgerRepository.findBySubTaskId(taskId).stream()
+                    .filter(ledger -> !priorLedgerIds.contains(ledger.getId()))
+                    .toList();
+            confirmation.put(
+                    "ledgerIds",
+                    awardedLedgers.stream()
+                            .map(com.emie.designpm.entity.PointLedger::getId)
+                            .toList());
+            confirmation.put(
+                    "awardedPoints",
+                    awardedLedgers.stream()
+                            .mapToDouble(com.emie.designpm.entity.PointLedger::getPoints)
+                            .sum());
+        }
+        p.getLogs()
+                .add(new ActivityLog(
+                        "产品企划确认成果：" + task.getName(),
+                        currentUser,
+                        currentRole,
+                        p,
+                        "sub_task",
+                        task.getId(),
+                        null,
+                        AuditJson.toJson(confirmation),
+                        "status,points"));
         checkTaskCompletion(task, p);
         Project saved = projectRepository.save(p);
         Map<String, String> notifyContext = notifier.context(saved, task, currentUser, comments);
@@ -1253,6 +1335,13 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         rejectionSnapshot.put("rejectionReferenceImagesJson", rejectionReferenceImagesJson);
         rejectionSnapshot.put("rejectionAttachmentsJson", rejectionAttachmentsJson);
         rejectionSnapshot.put("rejectionCycleId", cycle.getId());
+        rejectionSnapshot.put("withPoints", withPoints);
+        rejectionSnapshot.put("pointRuleCode", withPoints ? task.getPendingChangeRuleCode() : "");
+        rejectionSnapshot.put(
+                "pointRuleDescription",
+                withPoints ? pointsService.ruleDescription(task.getPendingChangeRuleCode()) : "");
+        rejectionSnapshot.put("points", withPoints ? task.getPendingChangeBonusPoints() : 0d);
+        rejectionSnapshot.put("pointRequestId", bonusRequestId);
         p.getLogs()
                 .add(new ActivityLog(
                         "子任务驳回：" + task.getName() + "（意见：" + comments + "）",

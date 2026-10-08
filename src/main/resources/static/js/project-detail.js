@@ -192,9 +192,27 @@ function renderProjectDetailContent(detail) {
     <div class="detail-section">
       <div class="detail-section-title">📜 操作日志</div>
       <div class="timeline">${detail.logs.map(l => `
-        <div class="timeline-item"><div class="timeline-dot done"></div><div class="timeline-content"><div class="timeline-title">${escHtml(cleanLogAction(l.action))}</div><div class="timeline-time">${renderLogLabel(l)} · ${fmtDT(l.time)}</div></div></div>
+        <div class="timeline-item"><div class="timeline-dot done"></div><div class="timeline-content"><div class="timeline-title">${escHtml(cleanLogAction(l.action))}</div><div class="timeline-time">${renderLogLabel(l)} · ${fmtDT(l.time)}</div>${renderSubTaskAuditDetail(l)}</div></div>
       `).join('')}</div>
     </div>`;
+}
+
+function renderSubTaskAuditDetail(log) {
+  if (log.entityType !== 'sub_task' || !log.afterData) return '';
+  let data;
+  try { data = JSON.parse(log.afterData); } catch (_) { return ''; }
+  if (!data || typeof data !== 'object') return '';
+  const parts = [];
+  if (data.reason) parts.push(`原因：${data.reason}`);
+  if (typeof data.withPoints === 'boolean') {
+    parts.push(`本次修改加分：${data.withPoints ? '是' : '否'}`);
+    if (data.withPoints) parts.push(`积分规则：${data.pointRuleDescription || data.pointRuleCode || '未知'}（${data.pointRuleCode || '未知'}） · ${Number(data.points || 0)} 分`);
+  }
+  if (data.deliveryVersionId) parts.push(`交付版本 ID：${data.deliveryVersionId}`);
+  if (Array.isArray(data.ledgerIds)) parts.push(`本次确认规则：${data.pointRuleCode || '无'}；预期积分：${Number(data.points || 0)} 分`);
+  if (Array.isArray(data.ledgerIds)) parts.push(`实际入账：${Number(data.awardedPoints || 0)} 分；积分流水 ID：${data.ledgerIds.length ? data.ledgerIds.join('、') : '本次无新增积分'}`);
+  if (data.pointRequestId) parts.push(`修改请求 ID：${data.pointRequestId}`);
+  return parts.length ? `<div class="timeline-time" style="margin-top:4px;white-space:pre-wrap;">${parts.map(escHtml).join('<br>')}</div>` : '';
 }
 
 function renderProductArchiveSection(detail) {
