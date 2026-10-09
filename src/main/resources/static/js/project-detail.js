@@ -295,7 +295,7 @@ function renderSubTaskCard(detail, task, idx) {
     ${task.reviewComments ? `<div class="review-box ${task.status === 'rejected' ? 'rejected' : 'approved'}"><strong>${task.status === 'revision_requested' || task.pendingChangeBonusRequestId ? '修改意见' : task.status === 'rejected' ? '驳回意见' : '验收意见'}：</strong>${escHtml(task.reviewComments)}</div>` : ''}
 
 
-    <div class="subtask-actions">
+    <div class="subtask-actions${task.pendingChangeBonusRequestId ? ' has-change-note' : ''}">
       ${/* 企划验收（首轮）：常规品直接通过；渠道定制单进入企划确认状态 */''}
       ${isPlanner && String(getCurrentUserId()) === String(detail.plannerId || '') && ['delivered', 'submitted_for_review', 'planner_approved'].includes(task.status) ? `
         <button class="btn btn-success btn-sm" data-emie-action="click:detail-task-approve" data-project-id="${detail.id}" data-task-id="${task.id}" data-project-type="${escHtml(detail.type)}">✅ 确认</button>
@@ -303,7 +303,7 @@ function renderSubTaskCard(detail, task, idx) {
       ` : ''}
       ${/* 渠道定制单：销售第二轮确认 */''}
       ${isPlanner && String(getCurrentUserId()) === String(detail.plannerId || '') && (!task.assigneeRole || task.assigneeRole === 'designer') && task.status === 'completed' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-change-bonus" data-project-id="${detail.id}" data-task-id="${task.id}">修改</button>` : ''}
-      ${task.pendingChangeBonusRequestId ? `<span class="subtask-meta-item">本次修改 ${task.pendingChangeRuleCode ? Number(task.pendingChangeBonusPoints || 0) + ' 分，企划确认后入账' : '无积分'}</span>` : ''}
+      ${task.pendingChangeBonusRequestId ? `<span class="subtask-action-note">本次修改 ${task.pendingChangeRuleCode ? Number(task.pendingChangeBonusPoints || 0) + ' 分，企划确认后入账' : '无积分'}</span>` : ''}
       ${myTask && task.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-accept" data-project-id="${detail.id}" data-task-id="${task.id}">✅ 接单</button>` : ''}
       ${myTask && task.status === 'accepted' ? (isRedelivering ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-redeliver" data-project-id="${detail.id}" data-task-id="${task.id}">📤 重新交付</button>` : `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-deliver" data-project-id="${detail.id}" data-task-id="${task.id}">📤 交付成果</button>`) : ''}
       ${task.status === 'rejected' && task.activeRejectionCycleId && task.activeRejectionRole === EMIE.state.currentRole && (
