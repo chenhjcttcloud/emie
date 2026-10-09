@@ -126,6 +126,7 @@ public class ProjectViewSupport {
                     item.put("projectName", projectDisplayName(project));
                     item.put("plannerId", project.getPlannerId());
                     item.put("plannerName", project.getPlannerName());
+                    item.put("salesId", project.getSalesId());
                     item.put("scoringRecords", scoringByTask.getOrDefault(task.getId(), List.of()));
                     item.put("rejectionRecords", rejectionRecords(project, task, projectLogs));
                     item.put("deliveryVersions", deliveriesByTask.getOrDefault(task.getId(), List.of()));

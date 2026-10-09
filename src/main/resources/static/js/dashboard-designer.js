@@ -11,6 +11,7 @@ const taskDeliver = (...args) => EMIE.actions.taskDeliver(...args);
 const taskRedeliver = (...args) => EMIE.actions.taskRedeliver(...args);
 const taskCorrectDelivery = (...args) => EMIE.actions.taskCorrectDelivery(...args);
 const taskConfirmRevision = (...args) => EMIE.actions.taskConfirmRevision(...args);
+const taskCancelReject = (...args) => EMIE.actions.taskCancelReject(...args);
 const taskApprove = (...args) => EMIE.actions.taskApprove(...args);
 const closeM = (...args) => EMIE.actions.closeM(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
@@ -167,7 +168,13 @@ function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
         const deliveryVersions = Array.isArray(t.deliveryVersions) ? t.deliveryVersions : [];
         const latestDelivery = deliveryVersions[0];
         const rejectionRecords = Array.isArray(t.rejectionRecords) ? t.rejectionRecords : [];
+        const activeRejection = [...rejectionRecords].reverse().find(record => !record.cancelled && record.cycleId);
         const isRedelivering = t.status === 'accepted' && (t.pendingChangeBonusRequestId || rejectionRecords.some(record => !record.cancelled));
+        const canCancelRejection = !readOnly && t.status === 'rejected' && activeRejection?.reviewerRole === EMIE.state.currentRole && (
+          (EMIE.state.currentRole === 'planner' && String(t.plannerId || '') === String(getCurrentUserId()))
+          || (EMIE.state.currentRole === 'sales' && t.projectType === 'channel_custom' && String(t.salesId || '') === String(getCurrentUserId()))
+          || (EMIE.state.currentRole === 'admin' && t.projectType !== 'channel_custom')
+        );
         return `<div class="subtask-card" style="${t._unassigned ? 'border-left:3px solid var(--warning);' : ''}">
           <div class="subtask-header">
             <div class="subtask-name">${t._unassigned ? '📋' : tsi.icon} 子任务：${escHtml(t.name || '-')} <span class="subtask-project-inline">（所属项目：${escHtml(t.projectName || '未命名项目')}）</span> <span style="font-size:11px;color:var(--gray-400);font-weight:400;">#${t.id}</span></div>
@@ -189,7 +196,8 @@ function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
             ${!readOnly && t.status === 'pending' && !t._unassigned ? `<button class="btn btn-primary btn-sm" data-emie-action="click:designer-accept" data-project-id="${t.projectId}" data-task-id="${t.id}">✅ 接单</button>` : ''}
             ${!readOnly && t._unassigned ? `<button class="btn btn-success btn-sm" data-emie-action="click:designer-accept-market" data-project-id="${t.projectId}" data-task-id="${t.id}" data-task-snapshot="${escHtml(JSON.stringify(t))}">⚡ 抢单</button>` : ''}
             ${!readOnly && t.status === 'accepted' && t.designerId === getCurrentUserId() ? (isRedelivering ? `<button class="btn btn-primary btn-sm" data-emie-action="click:designer-redeliver" data-project-id="${t.projectId}" data-task-id="${t.id}">📤 重新交付</button>` : `<button class="btn btn-warning btn-sm" data-emie-action="click:designer-withdraw" data-project-id="${t.projectId}" data-task-id="${t.id}">↩️ 退单</button><button class="btn btn-primary btn-sm" data-emie-action="click:designer-deliver" data-project-id="${t.projectId}" data-task-id="${t.id}">📤 交付成果</button>`) : ''}
-            ${!readOnly && ['rejected', 'revision_requested'].includes(t.status) ? `<button class="btn btn-warning btn-sm" data-emie-action="click:designer-revision" data-project-id="${t.projectId}" data-task-id="${t.id}">🛠️ 确认修改</button>` : ''}
+            ${!readOnly && EMIE.state.currentRole === 'designer' && String(t.designerId || '') === String(getCurrentUserId()) && ['rejected', 'revision_requested'].includes(t.status) ? `<button class="btn btn-warning btn-sm" data-emie-action="click:designer-revision" data-project-id="${t.projectId}" data-task-id="${t.id}">🛠️ 确认修改</button>` : ''}
+            ${canCancelRejection ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-cancel-reject" data-project-id="${t.projectId}" data-task-id="${t.id}" data-cycle-id="${activeRejection.cycleId}">↩️ 撤销驳回</button>` : ''}
         ${!readOnly && t.status === 'delivered' && t.designerId === getCurrentUserId() ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-correct" data-project-id="${t.projectId}" data-task-id="${t.id}">📝 更正当前交付</button>` : ''}
             ${plannerView && String(t.plannerId || '') === String(getCurrentUserId()) && (!t.assigneeRole || t.assigneeRole === 'designer') && t.status === 'completed' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-request-change" data-project-id="${t.projectId}" data-task-id="${t.id}">修改</button>` : ''}
             ${deliveryVersions.length ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-history" data-task-id="${t.id}">📚 提交历史</button>` : ''}
@@ -368,6 +376,7 @@ if (registerEventAction) {
   registerEventAction('designer-deliver', (_event, el) => taskDeliver(Number(el.dataset.projectId), Number(el.dataset.taskId)));
   registerEventAction('designer-redeliver', (_event, el) => taskRedeliver(Number(el.dataset.projectId), Number(el.dataset.taskId)));
   registerEventAction('designer-revision', (_event, el) => taskConfirmRevision(Number(el.dataset.projectId), Number(el.dataset.taskId)));
+  registerEventAction('designer-cancel-reject', (_event, el) => taskCancelReject(Number(el.dataset.projectId), Number(el.dataset.taskId), Number(el.dataset.cycleId)));
   registerEventAction('designer-detail-close', () => closeM('publishedSubTaskDetailModal'));
   registerEventAction('designer-history-close', () => closeM('deliveryHistoryModal'));
   registerEventAction('designer-request-change', (_event, el) => EMIE.actions.openTaskChangeBonus(Number(el.dataset.projectId), Number(el.dataset.taskId)));

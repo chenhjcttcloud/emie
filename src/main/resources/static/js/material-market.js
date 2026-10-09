@@ -8,6 +8,7 @@ const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const fmtSize = (...args) => EMIE.actions.fmtSize(...args);
 const handleFileUpload = (...args) => EMIE.actions.handleFileUpload(...args);
 const renderFileList = (...args) => EMIE.actions.renderFileList(...args);
+let marketBannerTimer;
 
 function fileLabel(file) { return file?.originalName || file?.name || file?.fileName || file?.storedName || '文件'; }
 function fileJson(file) { return JSON.stringify(file || {}); }
@@ -164,16 +165,41 @@ function resetMaterialFilters() {
 
 async function renderMaterialMarket(main) {
   const role = EMIE.state.currentRole;
+  clearInterval(marketBannerTimer);
   main.innerHTML = `<section class="market-hero"><div class="market-hero-copy"><span class="market-eyebrow">EMIE CREATIVE MARKET</span><h1>让好创意，被看见</h1><p>发现团队里的灵感宝藏，把优秀设计快速变成产品。</p><div class="market-hero-actions">${role === 'designer' ? '<button class="btn market-primary-btn" data-emie-action="click:market-upload-modal">＋ 发布我的创意</button>' : '<span class="market-hint">浏览灵感，寻找下一个爆款</span>'}</div></div><div class="market-hero-art"><span>✦</span><span>◇</span><span>✧</span></div></section><div class="market-filter-tabs"><input type="hidden" id="materialAdoptionFilter" value="all"><input type="hidden" id="materialCategoryFilter" value="all"><div class="market-filter-tab-row"><span>采纳方式</span><div class="market-tab-list"><button class="is-active" data-emie-action="click:market-adoption-filter" data-market-adoption-filter="all">全部</button><button data-emie-action="click:market-adoption-filter" data-market-adoption-filter="available">待采纳</button><button data-emie-action="click:market-adoption-filter" data-market-adoption-filter="design">设计采纳</button><button data-emie-action="click:market-adoption-filter" data-market-adoption-filter="direct">直接采纳</button></div></div><div class="market-filter-tab-row"><span>作品分类</span><div class="market-tab-list"><button class="is-active" data-emie-action="click:market-category-filter" data-market-category-filter="all">全部分类</button><button data-emie-action="click:market-category-filter" data-market-category-filter="id">ID</button><button data-emie-action="click:market-category-filter" data-market-category-filter="visual">视觉</button><button data-emie-action="click:market-category-filter" data-market-category-filter="graphic">平面</button></div></div></div><div class="market-toolbar-row"><div class="market-filter-card"><div class="market-stats"><button type="button" data-emie-action="click:market-status-all"><strong id="marketTotal">—</strong><span>全部素材</span></button><button type="button" data-emie-action="click:market-status-available"><strong id="marketAvailable">—</strong><span>待采纳创意</span></button></div><div class="market-filter-fields"><label><span>IP</span><select id="materialIpFilter" class="form-select" data-emie-action="change:market-filter"><option value="">全部 IP</option></select></label><button class="btn btn-outline btn-sm market-filter-reset" data-emie-action="click:market-reset-filters">重置</button></div></div><div class="material-toolbar"><div class="market-search-wrap"><span>⌕</span><input id="materialSearch" class="form-input" placeholder="搜索标题、分类、IP、作者或设计构思" data-emie-action="input:market-filter"><button class="btn market-search-btn" data-emie-action="click:market-filter">搜索</button></div></div></div><div id="materialGrid" class="material-grid"><div class="market-empty"><div class="market-empty-icon">✦</div><h3>正在寻找灵感…</h3><p>素材广场马上为你呈现最新创意</p></div></div>`;
   document.querySelector('.market-filter-card')?.insertAdjacentHTML('afterbegin', '<div class="market-filter-intro"><span>⌘</span><div><strong>筛选素材</strong><small>按 IP 快速定位</small></div></div>');
   document.querySelector('.market-search-btn')?.remove();
-  const items = await loadMaterials();
+  const [items, publicConfig] = await Promise.all([loadMaterials(), apiGet('/admin/public-config')]);
+  let banners = [];
+  try { banners = JSON.parse(publicConfig['market.bannerImages'] || '[]'); } catch (_) { banners = []; }
+  if (Array.isArray(banners) && banners.length) initMarketBanners(banners);
   EMIE.materialState.items = items;
   document.getElementById('marketTotal').textContent = items.length;
   document.getElementById('marketAvailable').textContent = items.filter(m => materialStatus(m) === 'available').length;
   const ipFilter = document.getElementById('materialIpFilter');
   if (ipFilter) ipFilter.insertAdjacentHTML('beforeend', [...new Set(items.map(m => m.ipName).filter(Boolean))].sort().map(ip => `<option value="${escHtml(ip)}">${escHtml(ip)}</option>`).join(''));
   filterMaterials();
+}
+
+function initMarketBanners(banners) {
+  const hero = document.querySelector('.market-hero');
+  if (!hero) return;
+  hero.classList.add('market-hero-slides');
+  hero.innerHTML = `${banners.map((url, index) => `<img class="market-banner-slide ${index === 0 ? 'is-active' : ''}" src="${escHtml(authenticatedFileUrl(url))}" alt="素材广场指引 ${index + 1}" ${index ? 'aria-hidden="true"' : ''}>`).join('')}${banners.length > 1 ? `<div class="market-banner-dots">${banners.map((_, index) => `<button type="button" class="${index === 0 ? 'is-active' : ''}" aria-label="第 ${index + 1} 张 Banner" data-index="${index}"></button>`).join('')}</div>` : ''}`;
+  if (banners.length < 2) return;
+  let current = 0;
+  const show = (index) => {
+    current = index % banners.length;
+    hero.querySelectorAll('.market-banner-slide').forEach((slide, i) => { slide.classList.toggle('is-active', i === current); slide.setAttribute('aria-hidden', i === current ? 'false' : 'true'); });
+    hero.querySelectorAll('.market-banner-dots button').forEach((dot, i) => dot.classList.toggle('is-active', i === current));
+  };
+  const start = () => { clearInterval(marketBannerTimer); marketBannerTimer = setInterval(() => show((current + 1) % banners.length), 5000); };
+  hero.querySelectorAll('.market-banner-dots button').forEach(dot => dot.addEventListener('click', () => { show(Number(dot.dataset.index)); start(); }));
+  hero.addEventListener('mouseenter', () => clearInterval(marketBannerTimer));
+  hero.addEventListener('mouseleave', start);
+  hero.addEventListener('focusin', () => clearInterval(marketBannerTimer));
+  hero.addEventListener('focusout', start);
+  start();
 }
 
 function filterMaterials() {

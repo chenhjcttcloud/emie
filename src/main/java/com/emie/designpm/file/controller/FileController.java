@@ -51,9 +51,9 @@ public class FileController {
 
     private static final Logger log = LoggerFactory.getLogger(FileController.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    /** 仅放行 AdminService.uploadAdminImage 生成的管理图片（admin_{logo|login-bg}_{8位hex}.{图片扩展名}）。 */
+    /** 仅放行 AdminService.uploadAdminImage 生成的管理图片。 */
     private static final Pattern ADMIN_MANAGED_IMAGE =
-            Pattern.compile("admin_(logo|login-bg)_[0-9a-f]{8}\\.(jpg|jpeg|png|gif|bmp|webp)");
+            Pattern.compile("admin_(logo|login-bg|market-banner)_[0-9a-f]{8}\\.(jpg|jpeg|png|gif|bmp|webp)");
 
     @Value("${app.upload.dir:./uploads}")
     private String uploadDir;

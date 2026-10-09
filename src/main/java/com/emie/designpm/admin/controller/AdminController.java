@@ -161,12 +161,12 @@ public class AdminController {
         }
     }
 
-    /** 上传管理图片（logo / login-bg） */
+    /** 上传管理图片（logo / login-bg / market-banner） */
     @PostMapping("/upload-image")
     public ResponseEntity<Map<String, Object>> uploadImage(
             @RequestParam("file") MultipartFile file, @RequestParam("type") String type) {
-        if (!type.equals("logo") && !type.equals("login-bg")) {
-            return ResponseEntity.badRequest().body(Map.of("error", "type 参数必须为 logo 或 login-bg"));
+        if (!type.equals("logo") && !type.equals("login-bg") && !type.equals("market-banner")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "type 参数无效"));
         }
         try {
             Map<String, Object> result = adminService.uploadAdminImage(file, type);

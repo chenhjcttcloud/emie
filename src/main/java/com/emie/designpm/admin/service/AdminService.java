@@ -141,6 +141,14 @@ public class AdminService {
                         .valueType("text")
                         .sortOrder(6)
                         .build(),
+                SystemConfig.builder()
+                        .configKey("market.bannerImages")
+                        .configValue("[]")
+                        .configGroup("appearance")
+                        .description("素材广场顶部 Banner 图片列表")
+                        .valueType("textarea")
+                        .sortOrder(7)
+                        .build(),
 
                 // ===== 安全配置 =====
                 SystemConfig.builder()
@@ -615,6 +623,7 @@ public class AdminService {
                     "app.subtitle",
                     "login.bg",
                     "login.bgColor",
+                    "market.bannerImages",
                     "system.version",
                     "feishu.enabled",
                     "feishu.ssoAppId")) {
@@ -698,7 +707,7 @@ public class AdminService {
         publicConfigCacheAt = 0L;
     }
 
-    /** 上传管理员图片（logo / 登录背景） */
+    /** 上传管理员图片（logo / 登录背景 / 素材广场 Banner） */
     public Map<String, Object> uploadAdminImage(MultipartFile file, String type) {
         if (file.isEmpty()) {
             throw new IllegalArgumentException("文件为空");
@@ -731,12 +740,14 @@ public class AdminService {
             String urlPath = "/api/files/download/admin/" + storedName;
 
             // 自动更新配置
-            String configKey = type.equals("logo") ? "app.logo" : "login.bg";
-            configRepository.findByConfigKey(configKey).ifPresent(config -> {
-                config.setConfigValue(urlPath);
-                config.setUpdatedAt(LocalDateTime.now());
-                configRepository.save(config);
-            });
+            if (!type.equals("market-banner")) {
+                String configKey = type.equals("logo") ? "app.logo" : "login.bg";
+                configRepository.findByConfigKey(configKey).ifPresent(config -> {
+                    config.setConfigValue(urlPath);
+                    config.setUpdatedAt(LocalDateTime.now());
+                    configRepository.save(config);
+                });
+            }
 
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("url", urlPath);

@@ -681,6 +681,9 @@ async function renderAdminAppearance(container) {
     const item = appearanceItems.find(i => i.configKey === key);
     return item ? (item.configValue || '') : '';
   };
+  let bannerImages = [];
+  try { bannerImages = JSON.parse(getVal('market.bannerImages') || '[]'); } catch (_) { bannerImages = []; }
+  if (!Array.isArray(bannerImages)) bannerImages = [];
 
   container.innerHTML = `
     <div class="config-card">
@@ -734,6 +737,13 @@ async function renderAdminAppearance(container) {
             <span class="config-desc">无背景图片时使用的颜色</span>
             <input type="text" class="config-input" data-key="login.bgColor" value="${escHtml(getVal('login.bgColor'))}" placeholder="#F3F4F6">
           </div>
+          <div class="config-item full">
+            <label>素材广场 Banner</label>
+            <span class="config-desc">上传或移除后自动保存；一张静态展示，多张自动轮播。建议使用横版图片。</span>
+            <input type="hidden" class="config-input" data-key="market.bannerImages" id="marketBannerImages" value="${escHtml(JSON.stringify(bannerImages))}">
+            <div id="marketBannerImageList" class="admin-image-upload">${bannerImages.map((url, index) => `<div class="market-banner-admin-item"><img src="${escHtml(url)}" class="admin-image-preview" style="width:180px;height:64px;object-fit:cover"><button type="button" class="btn btn-sm btn-outline" data-emie-action="click:admin-banner-remove" data-index="${index}">移除</button></div>`).join('') || '<span class="config-desc">还没有 Banner 图片</span>'}</div>
+            <label class="admin-image-upload-btn">📁 添加 Banner 图片<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple style="display:none" data-emie-action="change:admin-banner-upload"></label>
+          </div>
         </div>
       </div>
     </div>
@@ -783,6 +793,40 @@ async function uploadAdminImage(input, type) {
   }
 }
 
+async function uploadMarketBanners(input) {
+  if (!input.files?.length) return;
+  const field = document.getElementById('marketBannerImages');
+  const images = JSON.parse(field?.value || '[]');
+  try {
+    for (const file of input.files) {
+      if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) throw new Error('请上传 5MB 以内的 PNG/JPG/GIF/WebP 图片');
+      const body = new FormData(); body.append('file', file); body.append('type', 'market-banner');
+      const token = localStorage.getItem('design_pm_token');
+      const response = await fetch('/api/admin/upload-image', { method: 'POST', headers: token ? { 'X-Auth-Token': token } : {}, body });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '上传失败');
+      images.push(result.url);
+    }
+    field.value = JSON.stringify(images);
+    document.getElementById('marketBannerImageList').innerHTML = images.map((url, index) => `<div class="market-banner-admin-item"><img src="${escHtml(url)}" class="admin-image-preview" style="width:180px;height:64px;object-fit:cover"><button type="button" class="btn btn-sm btn-outline" data-emie-action="click:admin-banner-remove" data-index="${index}">移除</button></div>`).join('');
+    await apiPut('/admin/configs', { configs: { 'market.bannerImages': field.value } });
+    showAdminToast('✅ Banner 图片已保存', 'success');
+  } catch (e) { showAdminToast('❌ ' + e.message, 'error'); }
+  input.value = '';
+}
+
+async function removeMarketBanner(index) {
+  const field = document.getElementById('marketBannerImages');
+  const images = JSON.parse(field?.value || '[]');
+  images.splice(index, 1);
+  field.value = JSON.stringify(images);
+  document.getElementById('marketBannerImageList').innerHTML = images.map((url, i) => `<div class="market-banner-admin-item"><img src="${escHtml(url)}" class="admin-image-preview" style="width:180px;height:64px;object-fit:cover"><button type="button" class="btn btn-sm btn-outline" data-emie-action="click:admin-banner-remove" data-index="${i}">移除</button></div>`).join('') || '<span class="config-desc">还没有 Banner 图片</span>';
+  try {
+    await apiPut('/admin/configs', { configs: { 'market.bannerImages': field.value } });
+    showAdminToast('✅ Banner 列表已保存', 'success');
+  } catch (e) { showAdminToast('❌ 保存失败：' + e.message, 'error'); }
+}
+
 // 移除管理图片
 async function removeAdminImage(configKey, imgId) {
   if (!await EMIE.actions.showSystemConfirm('确定移除该图片？')) return;
@@ -797,7 +841,7 @@ async function removeAdminImage(configKey, imgId) {
 
 // 保存外观配置
 async function saveAppearanceConfig() {
-  const inputs = document.querySelectorAll('.config-input[data-key^="app."], .config-input[data-key^="login."]');
+  const inputs = document.querySelectorAll('.config-input[data-key^="app."], .config-input[data-key^="login."], .config-input[data-key="market.bannerImages"]');
   const configs = {};
   inputs.forEach(inp => {
     configs[inp.dataset.key] = inp.value;
@@ -864,6 +908,8 @@ if (registerEventAction) {
   registerEventAction('admin-logo-remove', () => removeAdminImage('app.logo', 'logoPreviewImg'));
   registerEventAction('admin-bg-input', () => document.getElementById('bgUploadInput')?.click());
   registerEventAction('admin-bg-upload', (_event, el) => uploadAdminImage(el, 'login-bg'));
+  registerEventAction('admin-banner-upload', (_event, el) => uploadMarketBanners(el));
+  registerEventAction('admin-banner-remove', (_event, el) => removeMarketBanner(Number(el.dataset.index)));
   registerEventAction('admin-bg-remove', () => removeAdminImage('login.bg', 'bgPreviewImg'));
 }
 
