@@ -316,7 +316,7 @@ public class ProjectViewSupport {
                     taskDto.setRejectionRecords(rejectionRecords(p, t, effectiveLogs, cycles));
                     cycles.stream()
                             .filter(c -> "ACTIVE".equals(c.getStatus()))
-                            .findFirst()
+                            .max(Comparator.comparing(SubTaskRejectionCycle::getSequenceNo))
                             .ifPresent(c -> {
                                 taskDto.setActiveRejectionCycleId(c.getId());
                                 taskDto.setActiveRejectionRole(c.getRejectionRole());
