@@ -27,8 +27,17 @@ public class MaterialMarketItem {
     @Column(nullable = false, length = 200)
     private String creatorName;
 
-    @Column(nullable = false, length = 100)
+    @Column(length = 100)
     private String ipName;
+
+    @Column(nullable = false, length = 20)
+    private String postType = "idea";
+
+    @Column(length = 30)
+    private String freeCategory;
+
+    @Column(columnDefinition = "LONGTEXT")
+    private String freeContentJson;
 
     @Column(nullable = false, length = 20)
     private String category = "visual";

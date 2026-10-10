@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class MaterialMarketService {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Set<String> MATERIAL_CATEGORIES = Set.of("id", "visual", "graphic");
+    private static final Set<String> FREE_CATEGORIES = Set.of("product_concept", "packaging_concept", "brainstorming");
     private final MaterialMarketItemRepository materials;
     private final ProjectRepository projects;
     private final UserRepository users;
@@ -131,6 +132,9 @@ public class MaterialMarketService {
 
     public MaterialMarketItem publish(Map<String, Object> b, String creatorId) {
         User u = users.findByUserId(creatorId).orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+        String postType = Objects.toString(b.get("postType"), "idea");
+        if (!Set.of("idea", "free").contains(postType)) throw new IllegalArgumentException("请选择创意单或自由单");
+        if ("free".equals(postType)) return publishFree(b, creatorId, u);
         if (!"designer".equals(u.getRole())) throw new SecurityException("仅设计师可以发布素材");
         String title = Objects.toString(b.get("title"), "").trim(),
                 desc =
@@ -155,6 +159,7 @@ public class MaterialMarketService {
                 Objects.toString(b.getOrDefault("referenceImagesJson", "[]"), "[]"), true, 6, true, creatorId);
         MaterialMarketItem m = new MaterialMarketItem();
         m.setTitle(title);
+        m.setPostType("idea");
         m.setCategory(category);
         m.setCreatorId(creatorId);
         m.setCreatorName(u.getName());
@@ -170,6 +175,92 @@ public class MaterialMarketService {
         fileArchive.bindFilesFromJson(files, "material_market", m.getId());
         fileArchive.bindFilesFromJson(referenceImages, "material_market", m.getId());
         return m;
+    }
+
+    private MaterialMarketItem publishFree(Map<String, Object> b, String creatorId, User creator) {
+        String title = Objects.toString(b.get("title"), "").trim();
+        String category = Objects.toString(b.get("freeCategory"), "").trim();
+        Map<String, Object> content;
+        try {
+            content = MAPPER.readValue(Objects.toString(b.get("freeContentJson"), "{}"), new TypeReference<>() {});
+        } catch (Exception e) {
+            throw new IllegalArgumentException("自由单内容格式不正确");
+        }
+        if (content == null) throw new IllegalArgumentException("自由单内容格式不正确");
+        String inspiration =
+                Objects.toString(content.get("inspirationSource"), "").trim();
+        String links = Objects.toString(content.get("relatedLinks"), "").trim();
+        if (title.isBlank() || inspiration.isBlank()) throw new IllegalArgumentException("标题和灵感来源不能为空");
+        if (!FREE_CATEGORIES.contains(category)) throw new IllegalArgumentException("请选择自由单类型");
+        if ("product_concept".equals(category)
+                && Objects.toString(content.get("configurationFeatures"), "").isBlank())
+            throw new IllegalArgumentException("配置和产品特性不能为空");
+        if ("brainstorming".equals(category)
+                && Objects.toString(content.get("materialType"), "").isBlank())
+            throw new IllegalArgumentException("类型素材不能为空");
+        if (!links.isBlank()) {
+            for (String link : links.split("\\s+")) {
+                if (!link.matches("https?://[^\\s]+")) throw new IllegalArgumentException("相关链接请使用 http 或 https 地址");
+            }
+        }
+        String references;
+        if ("packaging_concept".equals(category)) {
+            String flat = validateFiles(
+                    Objects.toString(b.getOrDefault("packagingFlatImageJson", "[]"), "[]"), true, 1, true, creatorId);
+            String folded = validateFiles(
+                    Objects.toString(b.getOrDefault("packagingFoldedImageJson", "[]"), "[]"), true, 1, true, creatorId);
+            references = MAPPER.valueToTree(List.of(parseFile(flat), parseFile(folded)))
+                    .toString();
+        } else {
+            references = validateFiles(
+                    Objects.toString(b.getOrDefault("referenceImagesJson", "[]"), "[]"),
+                    true,
+                    6,
+                    "product_concept".equals(category),
+                    creatorId);
+        }
+        String files = validateFiles(
+                Objects.toString(b.getOrDefault("filesJson", "[]"), "[]"),
+                false,
+                5,
+                "brainstorming".equals(category),
+                creatorId);
+        if ("brainstorming".equals(category) && parseFileCount(files) == 0)
+            throw new IllegalArgumentException("集思广益类需上传素材");
+        MaterialMarketItem item = new MaterialMarketItem();
+        item.setTitle(title);
+        item.setCreatorId(creatorId);
+        item.setCreatorName(creator.getName());
+        item.setPostType("free");
+        item.setFreeCategory(category);
+        item.setFreeContentJson(Objects.toString(b.get("freeContentJson"), "{}"));
+        item.setIpName(null);
+        item.setCategory("visual");
+        item.setProductDescription(inspiration);
+        item.setMaterialFilesJson(files);
+        item.setReferenceImagesJson(references);
+        item = materials.save(item);
+        fileArchive.bindFilesFromJson(files, "material_market", item.getId());
+        fileArchive.bindFilesFromJson(references, "material_market", item.getId());
+        return item;
+    }
+
+    private int parseFileCount(String json) {
+        try {
+            return MAPPER.readValue(json, new TypeReference<List<Map<String, Object>>>() {})
+                    .size();
+        } catch (Exception e) {
+            throw new IllegalArgumentException("文件信息格式不正确");
+        }
+    }
+
+    private Map<String, Object> parseFile(String json) {
+        try {
+            return MAPPER.readValue(json, new TypeReference<List<Map<String, Object>>>() {})
+                    .get(0);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("文件信息格式不正确");
+        }
     }
 
     public MaterialMarketItem update(Long id, Map<String, Object> b, String actorId) {
@@ -227,7 +318,7 @@ public class MaterialMarketService {
 
     public MaterialMarketItem withdraw(Long id, String actorId) {
         MaterialMarketItem m = materials.findById(id).orElseThrow(() -> new NoSuchElementException("素材不存在"));
-        ensureDesignerOwner(m, actorId);
+        ensureMaterialOwner(m, actorId);
         if (!"available".equals(m.getStatus())) throw new IllegalStateException("已采纳的素材不能下架");
         m.setStatus("withdrawn");
         return materials.save(m);
@@ -235,7 +326,7 @@ public class MaterialMarketService {
 
     public void delete(Long id, String actorId) {
         MaterialMarketItem m = materials.findById(id).orElseThrow(() -> new NoSuchElementException("素材不存在"));
-        ensureDesignerOwner(m, actorId);
+        ensureMaterialOwner(m, actorId);
         if (adoptions.existsByMaterialId(id) || m.getProjectId() != null)
             throw new IllegalStateException("已有采纳项目的素材不能删除，请保留项目关联记录");
         likes.deleteAllByMaterialId(id);
@@ -250,16 +341,28 @@ public class MaterialMarketService {
                 .orElseThrow(() -> new SecurityException("仅设计师可以操作素材"));
     }
 
+    private void ensureMaterialOwner(MaterialMarketItem m, String actorId) {
+        if ("free".equals(m.getPostType())) {
+            if (!Objects.equals(m.getCreatorId(), actorId)) throw new SecurityException("仅发布者可以操作");
+            return;
+        }
+        ensureDesignerOwner(m, actorId);
+    }
+
     public MaterialMarketItem adopt(Long id, String actorId, String role, String plannerId, String adoptionType) {
         String adoption = Objects.toString(adoptionType, "").trim().toLowerCase(Locale.ROOT);
         if (!Set.of("direct", "design").contains(adoption)) throw new IllegalArgumentException("请选择直接采纳或设计采纳");
         MaterialMarketItem m = materials.lockById(id).orElseThrow(() -> new IllegalArgumentException("素材不存在"));
+        if ("free".equals(m.getPostType())) throw new IllegalStateException("自由单仅用于分享，不能采纳成立项目");
         if ("withdrawn".equals(m.getStatus())) throw new IllegalStateException("已下架素材不能采纳");
         if (adoptions.existsByMaterialIdAndAdoptionType(id, adoption))
             throw new IllegalStateException("该素材已完成过" + ("direct".equals(adoption) ? "直接采纳" : "设计采纳"));
         User actor = users.findByUserId(actorId).orElseThrow();
         String type = "sales".equals(role) ? "channel_custom" : "regular";
-        if (!Set.of("sales", "planner", "admin").contains(role)) throw new SecurityException("当前角色不能采纳素材");
+        if (!("admin".equals(role)
+                || ("sales".equals(role) && "direct".equals(adoption))
+                || ("planner".equals(role) && "design".equals(adoption))))
+            throw new SecurityException("当前角色不能进行该类型的采纳");
         String planner = "";
         String plannerName = "";
         if ("planner".equals(role)) {

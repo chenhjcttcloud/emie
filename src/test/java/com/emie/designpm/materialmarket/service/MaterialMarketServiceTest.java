@@ -30,6 +30,77 @@ import org.junit.jupiter.api.Test;
 
 class MaterialMarketServiceTest {
     @Test
+    void anySignedInRoleCanPublishAValidatedFreeProductConcept() {
+        MaterialMarketItemRepository materials = mock(MaterialMarketItemRepository.class);
+        UserRepository users = mock(UserRepository.class);
+        FileRecordRepository records = mock(FileRecordRepository.class);
+        FileArchiveService archive = mock(FileArchiveService.class);
+        User sales = User.builder().userId("sales_01").name("销售").role("sales").build();
+        FileRecord reference = FileRecord.builder()
+                .storedName("concept.png")
+                .originalName("概念图.png")
+                .fileSize(24L)
+                .ownerUserId("sales_01")
+                .build();
+        when(users.findByUserId("sales_01")).thenReturn(Optional.of(sales));
+        when(records.findByStoredName("concept.png")).thenReturn(Optional.of(reference));
+        when(materials.save(any(MaterialMarketItem.class))).thenAnswer(call -> call.getArgument(0));
+
+        MaterialMarketItem result = new MaterialMarketService(
+                        materials,
+                        mock(ProjectRepository.class),
+                        users,
+                        records,
+                        archive,
+                        mock(IpOptionRepository.class),
+                        mock(PointAdjustmentLedgerRepository.class),
+                        mock(NotificationWorkflowService.class),
+                        mock(MaterialMarketLikeRepository.class),
+                        mock(MaterialMarketAdoptionRepository.class))
+                .publish(
+                        Map.of(
+                                "postType", "free",
+                                "freeCategory", "product_concept",
+                                "title", "便携咖啡杯",
+                                "freeContentJson", "{\"inspirationSource\":\"通勤\",\"configurationFeatures\":\"可折叠\"}",
+                                "referenceImagesJson", "[{\"storedName\":\"concept.png\"}]"),
+                        "sales_01");
+
+        assertEquals("free", result.getPostType());
+        assertEquals("product_concept", result.getFreeCategory());
+        assertEquals("通勤", result.getProductDescription());
+        verify(archive)
+                .bindFilesFromJson(org.mockito.ArgumentMatchers.contains("concept.png"), eq("material_market"), any());
+    }
+
+    @Test
+    void freePostCannotBeAdoptedIntoAProject() {
+        MaterialMarketItem material = new MaterialMarketItem();
+        material.setId(91L);
+        material.setPostType("free");
+        whenFreeMaterialIsAdoptedThenReject(material);
+    }
+
+    private void whenFreeMaterialIsAdoptedThenReject(MaterialMarketItem material) {
+        MaterialMarketItemRepository materials = mock(MaterialMarketItemRepository.class);
+        when(materials.lockById(91L)).thenReturn(Optional.of(material));
+        MaterialMarketService service = new MaterialMarketService(
+                materials,
+                mock(ProjectRepository.class),
+                mock(UserRepository.class),
+                mock(FileRecordRepository.class),
+                mock(FileArchiveService.class),
+                mock(IpOptionRepository.class),
+                mock(PointAdjustmentLedgerRepository.class),
+                mock(NotificationWorkflowService.class),
+                mock(MaterialMarketLikeRepository.class),
+                mock(MaterialMarketAdoptionRepository.class));
+        var error = assertThrows(
+                IllegalStateException.class, () -> service.adopt(91L, "sales_01", "sales", null, "direct"));
+        assertEquals("自由单仅用于分享，不能采纳成立项目", error.getMessage());
+    }
+
+    @Test
     void publishCanonicalizesOwnedUploadsAndBindsBothFileGroups() {
         MaterialMarketItemRepository materials = mock(MaterialMarketItemRepository.class);
         UserRepository users = mock(UserRepository.class);
@@ -318,6 +389,34 @@ class MaterialMarketServiceTest {
     }
 
     @Test
+    void adoptionTypeMustMatchRoleBeforeProjectCreation() {
+        MaterialMarketItemRepository materials = mock(MaterialMarketItemRepository.class);
+        ProjectRepository projects = mock(ProjectRepository.class);
+        UserRepository users = mock(UserRepository.class);
+        MaterialMarketItem material = new MaterialMarketItem();
+        material.setId(7L);
+        material.setStatus("available");
+        when(materials.lockById(7L)).thenReturn(Optional.of(material));
+        when(users.findByUserId(any()))
+                .thenReturn(Optional.of(User.builder().userId("actor").build()));
+        MaterialMarketService service = new MaterialMarketService(
+                materials,
+                projects,
+                users,
+                mock(FileRecordRepository.class),
+                mock(FileArchiveService.class),
+                mock(IpOptionRepository.class),
+                mock(PointAdjustmentLedgerRepository.class),
+                mock(NotificationWorkflowService.class),
+                mock(MaterialMarketLikeRepository.class),
+                mock(MaterialMarketAdoptionRepository.class));
+
+        assertThrows(SecurityException.class, () -> service.adopt(7L, "actor", "sales", null, "design"));
+        assertThrows(SecurityException.class, () -> service.adopt(7L, "actor", "planner", null, "direct"));
+        verify(projects, org.mockito.Mockito.never()).save(any());
+    }
+
+    @Test
     void sameAdoptionTypeCanOnlyBeUsedOncePerMaterial() {
         MaterialMarketItemRepository materials = mock(MaterialMarketItemRepository.class);
         MaterialMarketAdoptionRepository adoptions = mock(MaterialMarketAdoptionRepository.class);
@@ -359,10 +458,11 @@ class MaterialMarketServiceTest {
         if ("design".equals(adoptionType)) material.setProjectId(77L);
         material.setReferenceImagesJson("[]");
         material.setMaterialFilesJson("[]");
-        User planner =
-                User.builder().userId("planner_01").name("企划").role("planner").build();
+        String role = "direct".equals(adoptionType) ? "sales" : "planner";
+        String actorId = role + "_01";
+        User actor = User.builder().userId(actorId).name("企划").role(role).build();
         when(materials.lockById(7L)).thenReturn(Optional.of(material));
-        when(users.findByUserId("planner_01")).thenReturn(Optional.of(planner));
+        when(users.findByUserId(actorId)).thenReturn(Optional.of(actor));
         when(projects.save(any())).thenAnswer(call -> {
             var project = call.getArgument(0, com.emie.designpm.entity.Project.class);
             project.setId(88L);
@@ -380,7 +480,7 @@ class MaterialMarketServiceTest {
                         mock(NotificationWorkflowService.class),
                         mock(MaterialMarketLikeRepository.class),
                         adoptions)
-                .adopt(7L, "planner_01", "planner", null, adoptionType);
+                .adopt(7L, actorId, role, null, adoptionType);
 
         var ledger = org.mockito.ArgumentCaptor.forClass(com.emie.designpm.entity.PointAdjustmentLedger.class);
         verify(adjustments).save(ledger.capture());

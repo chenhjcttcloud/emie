@@ -604,6 +604,8 @@ function resolveFileListContext(list, isImage) {
   if (list === EMIE.projectState.rejectionImages) return { listKey: 'rejectionImage', containerId: 'rejectImageList' };
   if (list === EMIE.projectState.rejectionAttachments) return { listKey: 'rejectionAttachment', containerId: 'rejectAttachmentList' };
   if (list === EMIE.projectState.materialRefImages) return { listKey: 'materialRefImage', containerId: 'materialRefImageList' };
+  if (list === window.EMIE.materialMarket?.packagingFlatImage) return { listKey: 'materialPackagingFlat', containerId: 'packagingFlatList' };
+  if (list === window.EMIE.materialMarket?.packagingFoldedImage) return { listKey: 'materialPackagingFolded', containerId: 'packagingFoldedList' };
   if (list === EMIE.projectState.materialAttachments) return { listKey: 'materialAttachment', containerId: 'materialAttachmentList' };
   return {
     listKey: isImage ? 'createRef' : 'createAttachment',
@@ -626,6 +628,8 @@ function removeFileItem(listKey, idx) {
     rejectionImage: [EMIE.projectState.rejectionImages, '驳回参考图'],
     rejectionAttachment: [EMIE.projectState.rejectionAttachments, '驳回附件'],
     materialRefImage: [EMIE.projectState.materialRefImages, '参考图片'],
+    materialPackagingFlat: [window.EMIE.materialMarket?.packagingFlatImage, '包装展开图'],
+    materialPackagingFolded: [window.EMIE.materialMarket?.packagingFoldedImage, '折叠效果图'],
     materialAttachment: [EMIE.projectState.materialAttachments, '附件']
   };
   const context = contexts[listKey];
