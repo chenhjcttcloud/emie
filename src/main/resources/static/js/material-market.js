@@ -9,7 +9,7 @@ const fmtSize = (...args) => EMIE.actions.fmtSize(...args);
 const handleFileUpload = (...args) => EMIE.actions.handleFileUpload(...args);
 const renderFileList = (...args) => EMIE.actions.renderFileList(...args);
 let marketBannerTimer;
-let marketPostType = 'idea';
+let marketPostType = 'all';
 let packagingFlatImage = [];
 let packagingFoldedImage = [];
 
@@ -243,7 +243,7 @@ function setMaterialCategoryFilter(category) {
 }
 
 function setMarketPostTypeFilter(type) {
-  marketPostType = ['all', 'free'].includes(type) ? type : 'idea';
+  marketPostType = ['all', 'idea', 'free'].includes(type) ? type : 'all';
   document.querySelectorAll('[data-market-post-type]').forEach(button => button.classList.toggle('is-active', button.dataset.marketPostType === marketPostType));
   document.querySelectorAll('.market-filter-tab-row:not(.market-post-type-row):not(#marketFreeCategoryFilters)').forEach(row => { row.hidden = marketPostType === 'free'; });
   const freeRow = document.getElementById('marketFreeCategoryFilters');
@@ -288,7 +288,7 @@ function resetMaterialFilters() {
   if (freeCategory) freeCategory.value = 'all';
   document.querySelectorAll('[data-market-adoption-filter],[data-market-category-filter]').forEach(button => button.classList.toggle('is-active', button.dataset.marketAdoptionFilter === 'all' || button.dataset.marketCategoryFilter === 'all'));
   document.querySelectorAll('[data-market-free-category]').forEach(button => button.classList.toggle('is-active', button.dataset.marketFreeCategory === 'all'));
-  filterMaterials();
+  setMarketPostTypeFilter('all');
 }
 
 async function renderMaterialMarket(main) {
@@ -319,18 +319,13 @@ function initMarketBanners(banners) {
   const hero = document.querySelector('.market-hero');
   if (!hero) return;
   hero.classList.add('market-hero-slides');
-  hero.innerHTML = `${banners.map((url, index) => `<img class="market-banner-slide ${index === 0 ? 'is-active' : ''}" src="${escHtml(authenticatedFileUrl(url))}" alt="素材广场指引 ${index + 1}" ${index ? 'aria-hidden="true"' : ''}>`).join('')}${banners.length > 1 ? `<div class="market-banner-dots">${banners.map((_, index) => `<button type="button" class="${index === 0 ? 'is-active' : ''}" aria-label="第 ${index + 1} 张 Banner" data-index="${index}"></button>`).join('')}</div>` : ''}`;
-  const setBannerRatio = () => {
-    const first = hero.querySelector('.market-banner-slide');
-    if (first?.naturalWidth && first?.naturalHeight) hero.style.setProperty('--market-banner-ratio', `${first.naturalWidth} / ${first.naturalHeight}`);
-  };
-  hero.querySelector('.market-banner-slide')?.addEventListener('load', setBannerRatio, { once: true });
-  setBannerRatio();
+  hero.innerHTML = `${banners.map((url, index) => `<img class="market-banner-backdrop ${index === 0 ? 'is-active' : ''}" src="${escHtml(authenticatedFileUrl(url))}" alt="" aria-hidden="true"><img class="market-banner-slide ${index === 0 ? 'is-active' : ''}" src="${escHtml(authenticatedFileUrl(url))}" alt="素材广场指引 ${index + 1}" ${index ? 'aria-hidden="true"' : ''}>`).join('')}${banners.length > 1 ? `<div class="market-banner-dots">${banners.map((_, index) => `<button type="button" class="${index === 0 ? 'is-active' : ''}" aria-label="第 ${index + 1} 张 Banner" data-index="${index}"></button>`).join('')}</div>` : ''}`;
   if (banners.length < 2) return;
   let current = 0;
   const show = (index) => {
     current = index % banners.length;
     hero.querySelectorAll('.market-banner-slide').forEach((slide, i) => { slide.classList.toggle('is-active', i === current); slide.setAttribute('aria-hidden', i === current ? 'false' : 'true'); });
+    hero.querySelectorAll('.market-banner-backdrop').forEach((backdrop, i) => backdrop.classList.toggle('is-active', i === current));
     hero.querySelectorAll('.market-banner-dots button').forEach((dot, i) => dot.classList.toggle('is-active', i === current));
   };
   const start = () => { clearInterval(marketBannerTimer); marketBannerTimer = setInterval(() => show((current + 1) % banners.length), 5000); };
