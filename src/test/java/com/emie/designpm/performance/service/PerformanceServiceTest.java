@@ -15,11 +15,12 @@ import com.emie.designpm.points.repository.StandardPointConfigRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
 import java.time.LocalDateTime;
 import java.util.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 
 class PerformanceServiceTest {
     @Test
-    void monthlyDesignerReportUsesCompletionMonthAndTaskSnapshots() {
+    void monthlyDesignerReportUsesAccountingMonthIncludingAdjustmentsAndKeepsCompletionDetails() throws Exception {
         PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
         PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
         UserRepository users = mock(UserRepository.class);
@@ -31,7 +32,19 @@ class PerformanceServiceTest {
                 .role("designer")
                 .status("active")
                 .build();
-        when(users.findByRole("designer")).thenReturn(List.of(designer));
+        User noCompletedTasks = User.builder()
+                .userId("d2")
+                .name("无完成任务")
+                .role("designer")
+                .status("active")
+                .build();
+        User noPoints = User.builder()
+                .userId("d3")
+                .name("无积分")
+                .role("designer")
+                .status("active")
+                .build();
+        when(users.findByRole("designer")).thenReturn(List.of(designer, noCompletedTasks, noPoints));
         Project project = new Project();
         project.setProductName("项目 A");
         project.setType("regular");
@@ -50,7 +63,24 @@ class PerformanceServiceTest {
         ledger.setSubTaskId(10L);
         ledger.setPoints(12d);
         ledger.setCountInPerformance(true);
+        ledger.setAccountingMonth("2025-12");
         when(ledgers.findBySubTaskIdIn(List.of(10L))).thenReturn(List.of(ledger));
+        PointLedger january = new PointLedger();
+        january.setUserId("d1");
+        january.setPoints(100d);
+        january.setCountInPerformance(true);
+        january.setAccountingMonth("2026-01");
+        january.setCreatedAt(LocalDateTime.of(2026, 2, 5, 10, 0));
+        when(ledgers.findAll()).thenReturn(List.of(ledger, january));
+        PointAdjustmentLedger deduction = new PointAdjustmentLedger();
+        deduction.setUserId("d1");
+        deduction.setAccountingMonth("2026-01");
+        deduction.setPoints(-5);
+        PointAdjustmentLedger bonus = new PointAdjustmentLedger();
+        bonus.setUserId("d2");
+        bonus.setAccountingMonth("2026-01");
+        bonus.setPoints(7);
+        when(adjustments.findAll()).thenReturn(List.of(deduction, bonus));
         PointRule rule = new PointRule();
         rule.setRuleCode("A1");
         rule.setCategory("A");
@@ -69,12 +99,31 @@ class PerformanceServiceTest {
         Map<String, Object> row = ((List<Map<String, Object>>) report.get("designers")).getFirst();
 
         assertEquals(1, row.get("completedCount"));
-        assertEquals(12d, row.get("score"));
+        assertEquals(95d, row.get("score"));
+        assertEquals(12d, ((Map<?, ?>) ((List<?>) row.get("tasks")).getFirst()).get("score"));
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) report.get("designers");
+        assertEquals(0, rows.get(1).get("completedCount"));
+        assertEquals(7d, rows.get(1).get("score"));
+        assertEquals(0d, rows.get(2).get("score"));
+        assertEquals(service.leaderboard("2026-01").getFirst().get("points"), row.get("score"));
         assertEquals(1, ((Map<?, ?>) row.get("categoryCounts")).get("A"));
         assertEquals("regular", ((Map<?, ?>) ((List<?>) row.get("tasks")).getFirst()).get("projectType"));
         byte[] workbook = service.designerMonthlyReportExcel("2026-01");
         assertEquals('P', workbook[0]);
         assertEquals('K', workbook[1]);
+        try (XSSFWorkbook exported = new XSSFWorkbook(new java.io.ByteArrayInputStream(workbook))) {
+            assertEquals(
+                    "当月归属积分（含调账）", exported.getSheetAt(0).getRow(0).getCell(4).getStringCellValue());
+            assertEquals(95d, exported.getSheetAt(0).getRow(1).getCell(4).getNumericCellValue());
+            assertEquals(7d, exported.getSheetAt(0).getRow(2).getCell(4).getNumericCellValue());
+            assertEquals("任务累计积分", exported.getSheetAt(1).getRow(0).getCell(8).getStringCellValue());
+            assertEquals(12d, exported.getSheetAt(1).getRow(1).getCell(8).getNumericCellValue());
+        }
+        when(subTasks.findDesignerTasksCompletedBetween(any(), any())).thenReturn(List.of());
+        List<Map<String, Object>> withoutCompletedTasks = (List<Map<String, Object>>)
+                service.designerMonthlyReport("2026-01").get("designers");
+        assertEquals(0, withoutCompletedTasks.getFirst().get("completedCount"));
+        assertEquals(95d, withoutCompletedTasks.getFirst().get("score"));
     }
 
     @Test

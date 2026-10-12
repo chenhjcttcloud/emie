@@ -109,6 +109,9 @@ public class PerformanceService {
         List<User> designers = users.findByRole("designer").stream()
                 .filter(user -> user.getStatus() == null || "active".equalsIgnoreCase(user.getStatus()))
                 .toList();
+        Map<String, Double> monthlyPoints = leaderboard(month).stream()
+                .collect(Collectors.toMap(
+                        row -> (String) row.get("userId"), row -> ((Number) row.get("points")).doubleValue()));
         Map<String, Map<String, Object>> reports = new LinkedHashMap<>();
         designers.forEach(user -> {
             Map<String, Object> row = new LinkedHashMap<>();
@@ -116,7 +119,7 @@ public class PerformanceService {
             row.put("designer", TextEncodingUtil.repairUtf8Mojibake(user.getName()));
             row.put("month", month);
             row.put("completedCount", 0);
-            row.put("score", 0d);
+            row.put("score", monthlyPoints.getOrDefault(user.getUserId(), 0d));
             row.put("categoryCounts", new LinkedHashMap<String, Integer>());
             row.put("tasks", new ArrayList<Map<String, Object>>());
             reports.put(user.getUserId(), row);
@@ -149,7 +152,6 @@ public class PerformanceService {
                 categoryCounts.merge(category, 1, Integer::sum);
                 double score = taskPoints.getOrDefault(task.getId(), Map.of()).getOrDefault(task.getDesignerId(), 0d);
                 report.put("completedCount", (Integer) report.get("completedCount") + 1);
-                report.put("score", (Double) report.get("score") + score);
                 ((List<Map<String, Object>>) report.get("tasks"))
                         .add(Map.of(
                                 "id",
@@ -184,7 +186,7 @@ public class PerformanceService {
             bold.setBold(true);
             header.setFont(bold);
             Sheet summary = workbook.createSheet("设计师月度绩效");
-            String[] summaryHeaders = {"设计师", "月份", "完成子任务数", "类别数量占比", "分数（积分）", "完成子任务"};
+            String[] summaryHeaders = {"设计师", "月份", "完成子任务数", "类别数量占比", "当月归属积分（含调账）", "完成子任务"};
             Row headerRow = summary.createRow(0);
             for (int i = 0; i < summaryHeaders.length; i++) {
                 Cell cell = headerRow.createCell(i);
@@ -192,7 +194,7 @@ public class PerformanceService {
                 cell.setCellStyle(header);
             }
             Sheet details = workbook.createSheet("完成子任务明细");
-            String[] detailHeaders = {"设计师", "月份", "完成时间", "子任务", "项目", "项目类型", "类别", "规则编号", "分数（积分）"};
+            String[] detailHeaders = {"设计师", "完成月份", "完成时间", "子任务", "项目", "项目类型", "类别", "规则编号", "任务累计积分"};
             Row detailHeader = details.createRow(0);
             for (int i = 0; i < detailHeaders.length; i++) {
                 Cell cell = detailHeader.createCell(i);
