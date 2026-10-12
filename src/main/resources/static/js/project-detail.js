@@ -98,7 +98,7 @@ async function openProjectDetail(pid, taskId) {
     <button class="modal-close-float" data-emie-action="click:detail-close">✕</button>
       <div class="modal modal-lg">
         <div class="modal-header">
-          <div class="modal-header-left"><div class="modal-title">${detail.type === 'channel_custom' ? '📦 渠道定制项目' : '🏭 常规品设计项目'} ${escHtml(detail.projectCode || ('#' + detail.id))}</div></div>
+          <div class="modal-header-left"><div class="modal-title">#${detail.id} ${detail.type === 'channel_custom' ? '📦 渠道定制项目' : '🏭 常规品设计项目'}${detail.projectCode ? ' ' + escHtml(detail.projectCode) : ''}</div></div>
         </div>
         <div class="modal-body">${renderProjectDetailContent(detail)}</div>
         <div class="modal-footer" id="detailActions">${renderProjectActions(detail)}</div>

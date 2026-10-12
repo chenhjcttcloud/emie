@@ -262,6 +262,14 @@ class FrontendModuleLayoutTest {
         assertTrue(lists.contains("/projects/page?${params}"), "项目列表默认应使用服务端分页接口，避免进入页面时读取全部项目");
         assertTrue(lists.contains("size: '15'"), "全部项目、渠道定制单和公司常规品列表应固定每页 15 条");
         assertTrue(lists.contains("function changeProjectListPage(page)"), "项目列表应提供翻页入口");
+        String projectRows = readResource("/static/js/dashboard-projects.js");
+        assertTrue(projectRows.contains("<td><strong>#${o.id}</strong></td>"), "项目列表应显示原有 #ID 内部编号");
+        assertTrue(lists.contains("<th class=\"col-id\">编号</th>"), "列表编号列应标注为编号");
+        assertTrue(
+                readResource("/static/js/project-detail.js")
+                        .contains(
+                                "${detail.type === 'channel_custom' ? '📦 渠道定制项目' : '🏭 常规品设计项目'}${detail.projectCode ? ' ' + escHtml(detail.projectCode) : ''}"),
+                "详情标题应按 #ID、项目类型、合同号的顺序显示");
         assertFalse(
                 lists.contains("state.allOrders = await apiGet(`/projects?${params}`)"), "项目筛选不得回退到全量项目接口，应复用服务端分页筛选");
         assertTrue(designer.contains("id=\"designerTaskStatusFilter\""));
