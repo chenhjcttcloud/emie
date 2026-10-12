@@ -49,6 +49,8 @@ public class DesignerPerformanceExportService {
     private final Path root;
     private final boolean autoEnabled;
     private final Executor taskExecutor;
+    private final Object generationLock = new Object();
+    private final Object snapshotLock = new Object();
     private final ConcurrentMap<YearMonth, GenerationStatus> generations = new ConcurrentHashMap<>();
 
     @Autowired
@@ -86,7 +88,11 @@ public class DesignerPerformanceExportService {
 
     public record Manifest(String month, String generatedAt, String generatedBy, List<Entry> designers) {}
 
-    public record GenerationStatus(String month, String status, String message, int progress) {}
+    public record GenerationStatus(String month, String status, String message, int progress, String generatedAt) {
+        public GenerationStatus(String month, String status, String message, int progress) {
+            this(month, status, message, progress, null);
+        }
+    }
 
     public synchronized GenerationStatus startGeneration(YearMonth month, String generatedBy) {
         if (month.isAfter(YearMonth.now())) throw new IllegalArgumentException("不能生成未来月份的绩效表");
@@ -108,9 +114,17 @@ public class DesignerPerformanceExportService {
 
     public GenerationStatus generationStatus(YearMonth month) {
         GenerationStatus current = generations.get(month);
-        if (current != null) return current;
-        boolean ready = manifest(month).isPresent();
-        return new GenerationStatus(month.toString(), ready ? "READY" : "NOT_STARTED", "", ready ? 100 : 0);
+        Optional<Manifest> saved = manifest(month);
+        if (current == null) {
+            boolean ready = saved.isPresent();
+            current = new GenerationStatus(month.toString(), ready ? "READY" : "NOT_STARTED", "", ready ? 100 : 0);
+        }
+        return new GenerationStatus(
+                current.month(),
+                current.status(),
+                current.message(),
+                current.progress(),
+                saved.map(Manifest::generatedAt).orElse(null));
     }
 
     @Scheduled(cron = "${app.performance-export.cron:0 30 2 1 * ?}")
@@ -127,13 +141,19 @@ public class DesignerPerformanceExportService {
             return;
         }
         try {
-            generate(month, "系统自动");
+            startGeneration(month, "系统自动");
         } catch (Exception e) {
             log.error("自动生成 {} 绩效表失败", month, e);
         }
     }
 
-    public synchronized Manifest generate(YearMonth month, String generatedBy) throws IOException {
+    public Manifest generate(YearMonth month, String generatedBy) throws IOException {
+        synchronized (generationLock) {
+            return generateFiles(month, generatedBy);
+        }
+    }
+
+    private Manifest generateFiles(YearMonth month, String generatedBy) throws IOException {
         if (month.isAfter(YearMonth.now())) throw new IllegalArgumentException("不能生成未来月份的绩效表");
         List<DesignerMonthlyReport> monthReports = reports.buildMonth(month);
         updateProgress(month, "正在生成设计师绩效表", monthReports.isEmpty() ? 90 : 5);
@@ -173,14 +193,44 @@ public class DesignerPerformanceExportService {
                     new Manifest(month.toString(), LocalDateTime.now().format(STAMP), generatedBy, entries);
             MAPPER.writerWithDefaultPrettyPrinter()
                     .writeValue(staging.resolve(MANIFEST).toFile(), manifest);
-            Path target = monthDir(month);
-            deleteRecursively(target);
-            Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
+            synchronized (snapshotLock) {
+                replaceSnapshot(staging, monthDir(month));
+            }
             updateProgress(month, "生成完成", 100);
             log.info("已生成 {} 绩效表，共 {} 位设计师（{}）", month, entries.size(), generatedBy);
             return manifest;
         } finally {
-            deleteRecursively(staging);
+            try {
+                deleteRecursively(staging);
+            } catch (IOException e) {
+                log.warn("清理绩效表临时目录失败 {}", staging, e);
+            }
+        }
+    }
+
+    static void replaceSnapshot(Path staging, Path target) throws IOException {
+        Path backup = target.resolveSibling(target.getFileName() + ".backup-" + UUID.randomUUID());
+        boolean previousExists = Files.exists(target);
+        if (previousExists) Files.move(target, backup, StandardCopyOption.ATOMIC_MOVE);
+        try {
+            Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException publishFailure) {
+            if (previousExists) {
+                try {
+                    Files.move(backup, target, StandardCopyOption.ATOMIC_MOVE);
+                } catch (IOException restoreFailure) {
+                    publishFailure.addSuppressed(restoreFailure);
+                    log.error("恢复绩效表失败，旧快照保留在 {}", backup, restoreFailure);
+                }
+            }
+            throw publishFailure;
+        }
+        if (previousExists) {
+            try {
+                deleteRecursively(backup);
+            } catch (IOException e) {
+                log.warn("新绩效表已保存，清理旧快照失败 {}", backup, e);
+            }
         }
     }
 
@@ -192,6 +242,12 @@ public class DesignerPerformanceExportService {
     }
 
     public Optional<Manifest> manifest(YearMonth month) {
+        synchronized (snapshotLock) {
+            return readManifest(month);
+        }
+    }
+
+    private Optional<Manifest> readManifest(YearMonth month) {
         Path file = monthDir(month).resolve(MANIFEST);
         if (!Files.isRegularFile(file)) return Optional.empty();
         try {
@@ -226,11 +282,17 @@ public class DesignerPerformanceExportService {
     }
 
     public void writeZip(YearMonth month, OutputStream out) throws IOException {
+        synchronized (snapshotLock) {
+            writeSnapshotZip(month, out);
+        }
+    }
+
+    private void writeSnapshotZip(YearMonth month, OutputStream out) throws IOException {
         Manifest manifest = manifest(month).orElseThrow(() -> new IllegalArgumentException("该月份尚未生成绩效表"));
         try (ZipOutputStream zip = new ZipOutputStream(out)) {
             for (Entry entry : manifest.designers()) {
                 Path file = monthDir(month).resolve(entry.fileName());
-                if (!Files.isRegularFile(file)) continue;
+                if (!Files.isRegularFile(file)) throw new IOException("绩效表文件缺失：" + entry.fileName());
                 zip.putNextEntry(new ZipEntry(entry.fileName()));
                 Files.copy(file, zip);
                 zip.closeEntry();

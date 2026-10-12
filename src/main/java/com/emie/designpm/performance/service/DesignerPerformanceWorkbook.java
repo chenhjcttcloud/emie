@@ -10,7 +10,9 @@ import java.io.OutputStream;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import org.apache.poi.common.usermodel.HyperlinkType;
@@ -47,11 +49,13 @@ final class DesignerPerformanceWorkbook {
     private final DesignerMonthlyReport report;
     private final Function<String, Optional<LoadedImage>> images;
     private final XSSFWorkbook workbook = new XSSFWorkbook();
+    private final Map<LoadedImage, Integer> pictureIndexes = new HashMap<>();
     private final Styles styles;
 
     private DesignerPerformanceWorkbook(DesignerMonthlyReport report, Function<String, Optional<LoadedImage>> images) {
         this.report = report;
-        this.images = images;
+        Map<String, Optional<LoadedImage>> loadedImages = new HashMap<>();
+        this.images = url -> loadedImages.computeIfAbsent(url, images);
         this.styles = new Styles(workbook);
     }
 
@@ -465,7 +469,8 @@ final class DesignerPerformanceWorkbook {
 
     /** 喺单个格仔入面按比例摆放图片（锚点起止同一格，用 EMU 偏移控制尺寸）；图片本身保留原分辨率。 */
     private void placePicture(XSSFDrawing drawing, LoadedImage image, int column, int row) {
-        int pictureIndex = workbook.addPicture(image.jpeg(), Workbook.PICTURE_TYPE_JPEG);
+        int pictureIndex = pictureIndexes.computeIfAbsent(
+                image, value -> workbook.addPicture(value.jpeg(), Workbook.PICTURE_TYPE_JPEG));
         int pad = 4;
         int boxWidth = IMAGE_COLUMN_WIDTH_CHARS * 7 + 5 - pad * 2;
         int boxHeight = Math.round(IMAGE_ROW_HEIGHT_PT * 96 / 72) - pad * 2;

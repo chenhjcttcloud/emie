@@ -45,12 +45,22 @@ class DesignerPerformanceWorkbookTest {
         var report = new DesignerMonthlyReport(
                 "designer-1", "设计师", "设计部", "设计师", YearMonth.of(2026, 9), LocalDateTime.now(), List.of(item));
         var bytes = new ByteArrayOutputStream();
+        var loads = new java.util.concurrent.atomic.AtomicInteger();
         DesignerPerformanceWorkbook.write(
-                report, url -> url.endsWith("image.png") ? Optional.of(loadedImage) : Optional.empty(), bytes);
+                report,
+                url -> {
+                    loads.incrementAndGet();
+                    return url.endsWith("image.png") ? Optional.of(loadedImage) : Optional.empty();
+                },
+                bytes);
+        assertEquals(1, loads.get(), "同一图片只读取和编码一次");
 
         try (var workbook = new XSSFWorkbook(new ByteArrayInputStream(bytes.toByteArray()))) {
             var sheet = workbook.getSheet("交付成果明细");
-            assertEquals(2, workbook.getAllPictures().size());
+            assertEquals(1, workbook.getAllPictures().size());
+            assertEquals(
+                    1,
+                    workbook.getSheet("任务详情").getDrawingPatriarch().getShapes().size());
             assertEquals(1, sheet.getDrawingPatriarch().getShapes().size());
             assertEquals("源文件.ai", sheet.getRow(3).getCell(9).getStringCellValue());
             assertNotNull(sheet.getRow(3).getCell(9).getHyperlink());
