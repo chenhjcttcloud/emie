@@ -70,8 +70,6 @@ final class DesignerPerformanceWorkbook {
         }
     }
 
-    // ==================== 绩效考评表 ====================
-
     private void appraisalSheet() {
         XSSFSheet sheet = workbook.createSheet("绩效考评表");
         int[] widths = {6, 10, 14, 34, 40, 14, 52, 8, 10, 10};
@@ -247,8 +245,6 @@ final class DesignerPerformanceWorkbook {
                 ? "（" + date + "）"
                 : "（" + date + " 逾期，计划" + item.plannedDate().format(SHORT_DATE) + "）";
     }
-
-    // ==================== 任务详情 ====================
 
     private void detailSheet() {
         XSSFSheet sheet = workbook.createSheet("任务详情");
@@ -489,8 +485,6 @@ final class DesignerPerformanceWorkbook {
         anchor.setAnchorType(ClientAnchor.AnchorType.MOVE_AND_RESIZE);
         drawing.createPicture(anchor, pictureIndex);
     }
-
-    // ==================== 工具 ====================
 
     private static String date(LocalDateTime value) {
         return value == null ? "—" : value.toLocalDate().format(FULL_DATE);
