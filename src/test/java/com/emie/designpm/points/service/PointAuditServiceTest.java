@@ -55,6 +55,45 @@ class PointAuditServiceTest {
     }
 
     @Test
+    void manualAdjustmentUsesBookingTimeAndOperatorAsConfirmation() {
+        jdbc.execute("INSERT INTO users VALUES('admin-1','管理员')");
+        jdbc.execute(
+                "INSERT INTO point_adjustment_ledgers(id,user_id,source_type,source_id,points,created_by,created_at) VALUES(1,'d','MANUAL',1,-0.25,'admin-1','2026-10-12 15:00:00'),(2,'d','MANUAL',2,1.5,'removed-admin','2026-10-12 16:00:00')");
+        var rows = (List<Map<String, Object>>)
+                service.logs(Map.of("source", "MANUAL"), 0, 20).get("items");
+        assertEquals(2, rows.size());
+        for (var row : rows) {
+            assertEquals(row.get("CREATEDAT"), row.get("CONFIRMEDAT"));
+            assertEquals(row.get("CREATEDBY"), row.get("CONFIRMEDBY"));
+            assertEquals(row.get("CREATEDBYNAME"), row.get("CONFIRMEDBYNAME"));
+            assertNull(row.get("SUBMITTEDAT"));
+        }
+        assertEquals("管理员", rows.get(1).get("CONFIRMEDBYNAME"));
+        assertEquals("removed-admin", rows.get(0).get("CONFIRMEDBY"));
+    }
+
+    @Test
+    void otherAdjustmentSourcesKeepTheirOwnConfirmationDetails() {
+        jdbc.execute("INSERT INTO users VALUES('admin-1','管理员')");
+        jdbc.execute("INSERT INTO point_appeals VALUES(1,NULL,'2026-10-10 10:00:00','p')");
+        jdbc.execute("INSERT INTO po_monthly_progress VALUES(1,NULL,'2026-10-11 11:00:00','p')");
+        jdbc.execute(
+                "INSERT INTO point_adjustment_ledgers(id,user_id,source_type,source_id,points,created_by,created_at) VALUES(1,'d','APPEAL',1,1,'admin-1','2026-10-12 15:00:00'),(2,'d','PO_PROGRESS',1,1,'admin-1','2026-10-12 15:00:00'),(3,'d','MATERIAL_MARKET',1,1,'admin-1','2026-10-12 15:00:00')");
+        for (String source : List.of("APPEAL", "PO_PROGRESS")) {
+            var rows = (List<Map<String, Object>>)
+                    service.logs(Map.of("source", source), 0, 20).get("items");
+            assertEquals("p", rows.get(0).get("CONFIRMEDBY"));
+            assertEquals("企划", rows.get(0).get("CONFIRMEDBYNAME"));
+            assertNotEquals(rows.get(0).get("CREATEDAT"), rows.get(0).get("CONFIRMEDAT"));
+        }
+        var rows = (List<Map<String, Object>>)
+                service.logs(Map.of("source", "MATERIAL_MARKET"), 0, 20).get("items");
+        assertNull(rows.get(0).get("CONFIRMEDAT"));
+        assertNull(rows.get(0).get("CONFIRMEDBY"));
+        assertNull(rows.get(0).get("CONFIRMEDBYNAME"));
+    }
+
+    @Test
     void auditDistinguishesHistoricalZeroMissingAndMismatch() {
         jdbc.execute(
                 "INSERT INTO sub_task_delivery_versions(id,sub_task_id,version_no,expected_points,submitted_at,confirmed_at) VALUES(1,1,1,NULL,'2026-10-08 10:00:00',NULL),(2,1,2,0,'2026-10-08 11:00:00','2026-10-08 12:00:00'),(3,1,3,2,'2026-10-08 13:00:00','2026-10-08 14:00:00'),(4,1,4,3,'2026-10-08 15:00:00','2026-10-08 16:00:00')");
