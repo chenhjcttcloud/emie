@@ -29,7 +29,7 @@ public class PointAuditService {
         UNION ALL
         SELECT CONCAT('A-',l.id),l.user_id,u.name,l.source_type,COALESCE(bt.id,l.source_id),
         CASE WHEN l.source_type='DESIGN_REQUIREMENT' THEN 'design_requirement' ELSE LOWER(l.source_type) END,
-        COALESCE(bt.name,dr.name,mp.product_name,pp.name) /*! COLLATE utf8mb4_unicode_ci */,COALESCE(bt.project_id,mp.id),l.rule_code,l.rule_description,l.points,l.reason,l.created_by,a.name,l.created_at,l.submitted_at,CASE WHEN l.source_type='PO_PROGRESS' THEN progress.confirmed_at WHEN l.source_type='APPEAL' THEN ap.admin_reviewed_at WHEN l.source_type='MANUAL' THEN l.created_at ELSE NULL END,NULL,CASE WHEN l.source_type='MANUAL' THEN l.created_by ELSE COALESCE(progress.confirmed_by,ap.admin_user_id) END,CASE WHEN l.source_type='MANUAL' THEN a.name ELSE c.name END,'historical'
+        COALESCE(bt.name,dr.name,mp.product_name,pp.name) /*! COLLATE utf8mb4_unicode_ci */,COALESCE(bt.project_id,mp.id),l.rule_code,l.rule_description,l.points,l.reason,l.created_by,a.name,l.created_at,CASE WHEN l.source_type='MANUAL' THEN l.created_at ELSE l.submitted_at END,CASE WHEN l.source_type='PO_PROGRESS' THEN progress.confirmed_at WHEN l.source_type='APPEAL' THEN ap.admin_reviewed_at WHEN l.source_type='MANUAL' THEN l.created_at ELSE NULL END,NULL,CASE WHEN l.source_type='MANUAL' THEN l.created_by ELSE COALESCE(progress.confirmed_by,ap.admin_user_id) END,CASE WHEN l.source_type='MANUAL' THEN a.name ELSE c.name END,'historical'
         FROM point_adjustment_ledgers l
             LEFT JOIN task_withdrawals w ON l.source_type='TASK_WITHDRAWAL' AND w.id=l.source_id
             LEFT JOIN point_appeals ap ON l.source_type='APPEAL' AND ap.id=l.source_id

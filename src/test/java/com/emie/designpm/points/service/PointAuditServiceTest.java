@@ -55,7 +55,7 @@ class PointAuditServiceTest {
     }
 
     @Test
-    void manualAdjustmentUsesBookingTimeAndOperatorAsConfirmation() {
+    void manualAdjustmentUsesBookingTimeForSubmissionAndConfirmation() {
         jdbc.execute("INSERT INTO users VALUES('admin-1','管理员')");
         jdbc.execute(
                 "INSERT INTO point_adjustment_ledgers(id,user_id,source_type,source_id,points,created_by,created_at) VALUES(1,'d','MANUAL',1,-0.25,'admin-1','2026-10-12 15:00:00'),(2,'d','MANUAL',2,1.5,'removed-admin','2026-10-12 16:00:00')");
@@ -66,7 +66,8 @@ class PointAuditServiceTest {
             assertEquals(row.get("CREATEDAT"), row.get("CONFIRMEDAT"));
             assertEquals(row.get("CREATEDBY"), row.get("CONFIRMEDBY"));
             assertEquals(row.get("CREATEDBYNAME"), row.get("CONFIRMEDBYNAME"));
-            assertNull(row.get("SUBMITTEDAT"));
+            assertNotNull(row.get("SUBMITTEDAT"));
+            assertEquals(row.get("CREATEDAT"), row.get("SUBMITTEDAT"));
         }
         assertEquals("管理员", rows.get(1).get("CONFIRMEDBYNAME"));
         assertEquals("removed-admin", rows.get(0).get("CONFIRMEDBY"));
@@ -79,15 +80,18 @@ class PointAuditServiceTest {
         jdbc.execute("INSERT INTO po_monthly_progress VALUES(1,NULL,'2026-10-11 11:00:00','p')");
         jdbc.execute(
                 "INSERT INTO point_adjustment_ledgers(id,user_id,source_type,source_id,points,created_by,created_at) VALUES(1,'d','APPEAL',1,1,'admin-1','2026-10-12 15:00:00'),(2,'d','PO_PROGRESS',1,1,'admin-1','2026-10-12 15:00:00'),(3,'d','MATERIAL_MARKET',1,1,'admin-1','2026-10-12 15:00:00')");
+        jdbc.execute("UPDATE point_adjustment_ledgers SET submitted_at='2026-10-09 09:00:00'");
         for (String source : List.of("APPEAL", "PO_PROGRESS")) {
             var rows = (List<Map<String, Object>>)
                     service.logs(Map.of("source", source), 0, 20).get("items");
+            assertEquals("2026-10-09T09:00", rows.get(0).get("SUBMITTEDAT"));
             assertEquals("p", rows.get(0).get("CONFIRMEDBY"));
             assertEquals("企划", rows.get(0).get("CONFIRMEDBYNAME"));
             assertNotEquals(rows.get(0).get("CREATEDAT"), rows.get(0).get("CONFIRMEDAT"));
         }
         var rows = (List<Map<String, Object>>)
                 service.logs(Map.of("source", "MATERIAL_MARKET"), 0, 20).get("items");
+        assertEquals("2026-10-09T09:00", rows.get(0).get("SUBMITTEDAT"));
         assertNull(rows.get(0).get("CONFIRMEDAT"));
         assertNull(rows.get(0).get("CONFIRMEDBY"));
         assertNull(rows.get(0).get("CONFIRMEDBYNAME"));
