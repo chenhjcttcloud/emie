@@ -724,6 +724,30 @@ class ProjectReviewWorkflowTest {
     }
 
     @Test
+    void confirmationCompletesMissingPointSnapshotBeforeWritingLedger() {
+        Project project = projectWithTask("regular", "submitted_for_review");
+        SubTask task = project.getTasks().get(0);
+        task.setPointRuleCode("D30_45");
+        task.setBasePointSnapshot(2d);
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+        SubTaskDeliveryVersion version = deliveryVersion(task, 1);
+        version.setId(101L);
+        when(deliveryVersions.findFirstBySubTaskIdOrderByVersionNoDesc(11L)).thenReturn(Optional.of(version));
+        when(deliveryVersions.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(projects.save(any(Project.class))).thenAnswer(i -> i.getArgument(0));
+
+        service.taskApprove(1L, 11L, Map.of("currentRole", "planner", "currentUserId", "planner-1"));
+
+        assertEquals(2d, version.getExpectedPoints());
+        assertEquals("D30_45", version.getPointRuleCode());
+        assertEquals("planner-1", version.getConfirmedBy());
+        assertNotNull(version.getConfirmedAt());
+        verify(points).awardBaseSubmission(same(task), same(version), eq("planner-1"));
+        verify(deliveryVersions).save(same(version));
+    }
+
+    @Test
     void taskCreatedOnRuleStartDateKeepsRuleBasedScoring() {
         Project project = projectWithTask("regular", "submitted_for_review");
         project.getTasks().get(0).setCreatedAt(java.time.LocalDateTime.of(2026, 10, 1, 0, 0));

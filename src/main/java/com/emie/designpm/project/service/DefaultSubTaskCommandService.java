@@ -1265,9 +1265,28 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         SubTaskDeliveryVersion version = deliveryVersionRepository
                 .findFirstBySubTaskIdOrderByVersionNoDesc(taskId)
                 .orElse(null);
-        if (version != null && (version.getExpectedPoints() != null || legacyManualScoring)) {
+        if (version != null) {
             version.setConfirmedAt(task.getCompletedAt());
             version.setConfirmedBy(currentUserId);
+            if (!legacyManualScoring
+                    && "designer".equals(task.getAssigneeRole())
+                    && version.getExpectedPoints() == null) {
+                boolean change = task.getPendingChangeBonusRequestId() != null;
+                version.setExpectedPoints(
+                        change
+                                ? Optional.ofNullable(task.getPendingChangeBonusPoints())
+                                        .orElse(0d)
+                                : Optional.ofNullable(task.getBasePointSnapshot())
+                                        .orElse(0d));
+                version.setPointRuleCode(
+                        change
+                                ? Optional.ofNullable(task.getPendingChangeRuleCode())
+                                        .orElse(task.getPointRuleCode())
+                                : task.getPointRuleCode());
+                version.setPointRequestId(change ? task.getPendingChangeBonusRequestId() : null);
+                if (pointsService != null)
+                    version.setPointRuleDescription(pointsService.ruleDescription(version.getPointRuleCode()));
+            }
         }
         if (pointsService == null && "designer".equals(task.getAssigneeRole()) && !legacyManualScoring)
             throw new IllegalStateException("积分服务暂不可用，确认已取消");

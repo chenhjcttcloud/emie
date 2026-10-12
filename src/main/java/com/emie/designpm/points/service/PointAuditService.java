@@ -19,17 +19,17 @@ public class PointAuditService {
     private static final String LOGS =
             """
         SELECT CONCAT('L-',l.id) AS id,l.user_id AS userId,u.name AS userName,
-        CASE WHEN l.rule_code LIKE '%:CHANGE:%' THEN 'TASK_REVISION' WHEN l.rule_code LIKE '%:BASE' THEN 'TASK_BASE' ELSE 'TASK_QUALITY' END AS source,
+        CASE WHEN l.rule_code LIKE 'LEGACY_MANUAL:APPROVAL:%' THEN 'TASK_MANUAL' WHEN l.rule_code LIKE '%:CHANGE:%' THEN 'TASK_REVISION' WHEN l.rule_code LIKE '%:BASE' THEN 'TASK_BASE' ELSE 'TASK_QUALITY' END AS source,
         l.sub_task_id AS businessId,'sub_task' AS businessType,t.name AS businessName,t.project_id AS projectId,
         l.rule_code AS ruleCode,l.rule_description AS ruleDescription,l.points,l.reason,l.created_by AS createdBy,a.name AS createdByName,
-        l.created_at AS createdAt,l.submitted_at AS submittedAt,l.confirmed_at AS confirmedAt,v.version_no AS deliveryVersionNo,
+        l.created_at AS createdAt,l.submitted_at AS submittedAt,l.confirmed_at AS confirmedAt,v.version_no AS deliveryVersionNo,v.confirmed_by AS confirmedBy,c.name AS confirmedByName,
         CASE WHEN l.delivery_version_id IS NULL THEN 'historical' ELSE 'tracked' END AS tracking
         FROM point_ledgers l LEFT JOIN users u ON u.user_id=l.user_id LEFT JOIN users a ON a.user_id=l.created_by
-        LEFT JOIN sub_tasks t ON t.id=l.sub_task_id LEFT JOIN sub_task_delivery_versions v ON v.id=l.delivery_version_id
+        LEFT JOIN sub_tasks t ON t.id=l.sub_task_id LEFT JOIN sub_task_delivery_versions v ON v.id=l.delivery_version_id LEFT JOIN users c ON c.user_id=v.confirmed_by
         UNION ALL
         SELECT CONCAT('A-',l.id),l.user_id,u.name,l.source_type,COALESCE(bt.id,l.source_id),
         CASE WHEN l.source_type='DESIGN_REQUIREMENT' THEN 'design_requirement' ELSE LOWER(l.source_type) END,
-        COALESCE(bt.name,dr.name,mp.product_name,pp.name) /*! COLLATE utf8mb4_unicode_ci */,COALESCE(bt.project_id,mp.id),l.rule_code,l.rule_description,l.points,l.reason,l.created_by,a.name,l.created_at,l.submitted_at,NULL,NULL,'historical'
+        COALESCE(bt.name,dr.name,mp.product_name,pp.name) /*! COLLATE utf8mb4_unicode_ci */,COALESCE(bt.project_id,mp.id),l.rule_code,l.rule_description,l.points,l.reason,l.created_by,a.name,l.created_at,l.submitted_at,CASE WHEN l.source_type='PO_PROGRESS' THEN progress.confirmed_at WHEN l.source_type='APPEAL' THEN ap.admin_reviewed_at ELSE NULL END,NULL,COALESCE(progress.confirmed_by,ap.admin_user_id),c.name,'historical'
         FROM point_adjustment_ledgers l
             LEFT JOIN task_withdrawals w ON l.source_type='TASK_WITHDRAWAL' AND w.id=l.source_id
             LEFT JOIN point_appeals ap ON l.source_type='APPEAL' AND ap.id=l.source_id
@@ -40,6 +40,7 @@ public class PointAuditService {
             LEFT JOIN po_monthly_progress progress ON l.source_type='PO_PROGRESS' AND progress.id=l.source_id
             LEFT JOIN po_point_projects pp ON pp.id=progress.po_project_id
             LEFT JOIN users u ON u.user_id=l.user_id LEFT JOIN users a ON a.user_id=l.created_by
+            LEFT JOIN users c ON c.user_id=COALESCE(progress.confirmed_by,ap.admin_user_id)
         """;
     private static final String VERSIONS =
             """
@@ -49,9 +50,9 @@ public class PointAuditService {
         v.submitted_by_id AS userId,u.name AS userName,
         CASE WHEN COUNT(l.id)>0 AND (v.confirmed_at IS NULL OR MIN(l.created_at)<v.confirmed_at) THEN 'EARLY_LEDGER'
             WHEN SUM(CASE WHEN l.id IS NOT NULL AND l.user_id<>v.submitted_by_id THEN 1 ELSE 0 END)>0 THEN 'RECIPIENT_MISMATCH'
-            WHEN SUM(CASE WHEN l.id IS NOT NULL AND l.rule_code<>CONCAT(v.point_rule_code,CASE WHEN v.point_request_id IS NULL THEN ':BASE' ELSE CONCAT(':CHANGE:',v.point_request_id) END) THEN 1 ELSE 0 END)>0 THEN 'RULE_MISMATCH'
+            WHEN SUM(CASE WHEN l.id IS NOT NULL AND l.rule_code<>CASE WHEN v.point_rule_code='LEGACY_MANUAL' THEN CONCAT('LEGACY_MANUAL:APPROVAL:',v.id) ELSE CONCAT(v.point_rule_code,CASE WHEN v.point_request_id IS NULL THEN ':BASE' ELSE CONCAT(':CHANGE:',v.point_request_id) END) END THEN 1 ELSE 0 END)>0 THEN 'RULE_MISMATCH'
         WHEN v.confirmed_at IS NOT NULL AND v.expected_points>0 AND COUNT(l.id)=0 THEN 'MISSING_LEDGER'
-        WHEN v.expected_points=0 AND COUNT(l.id)>0 THEN 'UNEXPECTED_LEDGER'
+        WHEN v.expected_points=0 AND COUNT(l.id)>0 AND NOT (v.point_rule_code='LEGACY_MANUAL' AND COALESCE(SUM(l.points),0)=0) THEN 'UNEXPECTED_LEDGER'
         WHEN v.confirmed_at IS NOT NULL AND ABS(COALESCE(SUM(l.points),0)-v.expected_points)>0.005 THEN 'AMOUNT_MISMATCH'
         ELSE NULL END AS issue
         FROM sub_task_delivery_versions v JOIN sub_tasks t ON t.id=v.sub_task_id

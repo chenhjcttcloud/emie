@@ -20,10 +20,12 @@ class PointAuditServiceTest {
         jdbc = new JdbcTemplate(ds);
         service = new PointAuditService(new NamedParameterJdbcTemplate(ds));
         jdbc.execute("CREATE TABLE task_withdrawals(id BIGINT,sub_task_id BIGINT)");
-        jdbc.execute("CREATE TABLE point_appeals(id BIGINT,point_ledger_id BIGINT)");
+        jdbc.execute(
+                "CREATE TABLE point_appeals(id BIGINT,point_ledger_id BIGINT,admin_reviewed_at TIMESTAMP,admin_user_id VARCHAR(100))");
         jdbc.execute("CREATE TABLE design_requirements(id BIGINT,name VARCHAR(100))");
         jdbc.execute("CREATE TABLE projects(id BIGINT,product_name VARCHAR(100))");
-        jdbc.execute("CREATE TABLE po_monthly_progress(id BIGINT,po_project_id BIGINT)");
+        jdbc.execute(
+                "CREATE TABLE po_monthly_progress(id BIGINT,po_project_id BIGINT,confirmed_at TIMESTAMP,confirmed_by VARCHAR(100))");
         jdbc.execute("CREATE TABLE po_point_projects(id BIGINT,name VARCHAR(100))");
         jdbc.execute("CREATE TABLE users(user_id VARCHAR(100),name VARCHAR(100))");
         jdbc.execute("CREATE TABLE sub_tasks(id BIGINT,name VARCHAR(100),project_id BIGINT,designer_id VARCHAR(100))");
@@ -80,5 +82,31 @@ class PointAuditServiceTest {
         assertEquals(
                 Set.of("RECIPIENT_MISMATCH", "RULE_MISMATCH", "EARLY_LEDGER"),
                 new HashSet<>(rows.stream().map(x -> x.get("ISSUE")).toList()));
+    }
+
+    @Test
+    void legacyManualApprovalIsAuditedWithItsConfirmationDetails() {
+        jdbc.execute(
+                "INSERT INTO sub_task_delivery_versions(id,sub_task_id,version_no,submitted_by_id,expected_points,point_rule_code,submitted_at,confirmed_at,confirmed_by) VALUES(7,1,1,'d',12.5,'LEGACY_MANUAL','2026-10-08 10:00:00','2026-10-08 12:00:00','p')");
+        jdbc.execute(
+                "INSERT INTO point_ledgers(id,user_id,sub_task_id,rule_code,points,created_by,created_at,submitted_at,confirmed_at,delivery_version_id) VALUES(7,'d',1,'LEGACY_MANUAL:APPROVAL:7',12.5,'p','2026-10-08 12:00:01','2026-10-08 10:00:00','2026-10-08 12:00:00',7)");
+
+        var audit = service.audit(Map.of(), 0, 20);
+        assertEquals(0L, audit.get("total"));
+        var logs = (List<Map<String, Object>>) service.logs(Map.of(), 0, 20).get("items");
+        assertEquals("TASK_MANUAL", logs.get(0).get("SOURCE"));
+        assertEquals("p", logs.get(0).get("CONFIRMEDBY"));
+        assertEquals(
+                "2026-10-08T12:00", logs.get(0).get("CONFIRMEDAT").toString().substring(0, 16));
+    }
+
+    @Test
+    void zeroPointLegacyManualLedgerIsNotReportedAsUnexpected() {
+        jdbc.execute(
+                "INSERT INTO sub_task_delivery_versions(id,sub_task_id,version_no,submitted_by_id,expected_points,point_rule_code,submitted_at,confirmed_at,confirmed_by) VALUES(8,1,1,'d',0,'LEGACY_MANUAL','2026-10-08 10:00:00','2026-10-08 12:00:00','p')");
+        jdbc.execute(
+                "INSERT INTO point_ledgers(id,user_id,sub_task_id,rule_code,points,created_by,created_at,delivery_version_id) VALUES(8,'d',1,'LEGACY_MANUAL:APPROVAL:8',0,'p','2026-10-08 12:00:01',8)");
+
+        assertEquals(0L, service.audit(Map.of(), 0, 20).get("total"));
     }
 }
