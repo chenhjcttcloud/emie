@@ -436,7 +436,7 @@ async function openManualAdjustmentModal() {
     <div class="modal-header"><div class="modal-header-left"><div class="modal-title">手动调账</div><div class="modal-subtitle">管理员主动补分或扣分，必填备注并记入调账台账</div></div><button class="modal-close" data-emie-action="click:scoring-close-adjustment">✕</button></div>
     <div class="modal-body">
       <div class="form-group"><label class="form-label">成员 <span style="color:var(--gray-400);">（仅设计师）</span></label><select class="form-input" id="manualAdjUser"><option value="">请选择成员</option>${eligibleUsers.map(u => `<option value="${escHtml(u.userId)}">${escHtml(u.name || '未命名')}（飞书ID：${escHtml(u.feishuUserId || '待登录补齐')}）</option>`).join('')}</select></div>
-      <div class="form-group"><label class="form-label">积分 <span style="color:var(--danger);">*</span></label><input class="form-input" type="number" step="1" id="manualAdjPoints" placeholder="例如：50 或 -30"><div style="font-size:12px;color:var(--gray-400);margin-top:4px;">非零整数，绝对值不超过 100000；增加填正数，扣减填负数。</div></div>
+      <div class="form-group"><label class="form-label">积分 <span style="color:var(--danger);">*</span></label><input class="form-input" type="number" step="0.01" id="manualAdjPoints" placeholder="例如：2.5 或 -0.25"><div style="font-size:12px;color:var(--gray-400);margin-top:4px;">非零数值，最多两位小数，绝对值不超过 100000；增加填正数，扣减填负数。</div></div>
       <div class="form-group"><label class="form-label">备注 <span style="color:var(--danger);">*</span></label><textarea class="form-input" id="manualAdjReason" rows="3" maxlength="500" placeholder="必填，说明调账原因（500 字内）"></textarea></div>
       <div id="manualAdjError" style="display:none;color:var(--danger);font-size:13px;"></div>
     </div>
@@ -453,8 +453,8 @@ async function submitManualAdjustment(button) {
   const reason = document.getElementById('manualAdjReason')?.value.trim();
   if (!userId) { if (error) { error.textContent = '请选择成员。'; error.style.display = 'block'; } return; }
   const points = Number(pointsRaw);
-  if (String(pointsRaw || '').trim() === '' || !Number.isInteger(points) || points === 0 || Math.abs(points) > 100000) {
-    if (error) { error.textContent = '积分必须为非零整数，且绝对值不超过 100000。'; error.style.display = 'block'; }
+  if (String(pointsRaw || '').trim() === '' || !Number.isFinite(points) || points === 0 || Math.abs(points) > 100000 || Number(points.toFixed(2)) !== points) {
+    if (error) { error.textContent = '积分必须为非零数值，最多两位小数，且绝对值不超过 100000。'; error.style.display = 'block'; }
     return;
   }
   if (!reason) { if (error) { error.textContent = '请填写调账备注。'; error.style.display = 'block'; } return; }

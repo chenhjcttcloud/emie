@@ -57,7 +57,7 @@ public class PointGovernanceController {
     @PostMapping("/manual-adjustment")
     public ResponseEntity<?> manualAdjustment(@RequestBody Map<String, Object> b, HttpServletRequest r) {
         return call(
-                () -> manual.adjust(string(b, "userId"), integerStrict(b, "points"), string(b, "reason"), session(r)));
+                () -> manual.adjust(string(b, "userId"), doubleValue(b, "points"), string(b, "reason"), session(r)));
     }
 
     @PostMapping("/po/projects")
@@ -149,17 +149,6 @@ public class PointGovernanceController {
     private Integer integer(Map<String, Object> b, String k) {
         Object v = b.get(k);
         return v instanceof Number n ? n.intValue() : null;
-    }
-
-    private Integer integerStrict(Map<String, Object> b, String k) {
-        Object v = b.get(k);
-        if (v == null) return null;
-        if (v instanceof Number n) {
-            double d = n.doubleValue();
-            if (!Double.isFinite(d) || d != Math.rint(d)) throw new IllegalArgumentException(k + "必须为整数");
-            return n.intValue();
-        }
-        throw new IllegalArgumentException(k + "必须为整数");
     }
 
     private Double doubleValue(Map<String, Object> b, String k) {

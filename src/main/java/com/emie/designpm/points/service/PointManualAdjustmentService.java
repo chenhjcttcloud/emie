@@ -26,16 +26,19 @@ public class PointManualAdjustmentService {
     }
 
     @Transactional
-    public PointAdjustmentLedger adjust(String userId, Integer points, String reason, AuthSession s) {
+    public PointAdjustmentLedger adjust(String userId, Number rawPoints, String reason, AuthSession s) {
         requireRole(s);
         String uid = required(userId, "用户ID", 100);
         User user = users.findByUserId(uid).orElse(null);
         if (user == null) throw new IllegalArgumentException("用户不存在");
         if (!ELIGIBLE_ROLES.contains(PermissionCatalog.normalizeRole(user.getRole())))
             throw new IllegalArgumentException("只能为设计师调账");
-        if (points == null) throw new IllegalArgumentException("积分不能为空");
-        if (points == 0) throw new IllegalArgumentException("积分必须为非零整数");
-        if (Math.abs((long) points) > MAX_POINTS) throw new IllegalArgumentException("调账积分绝对值不得超过100000");
+        if (rawPoints == null) throw new IllegalArgumentException("积分不能为空");
+        double points = rawPoints.doubleValue();
+        if (!Double.isFinite(points) || points == 0) throw new IllegalArgumentException("积分必须为非零有效数值");
+        if (Math.abs(points) > MAX_POINTS) throw new IllegalArgumentException("调账积分绝对值不得超过100000");
+        if (java.math.BigDecimal.valueOf(points).stripTrailingZeros().scale() > 2)
+            throw new IllegalArgumentException("调账积分最多保留两位小数");
         String r = required(reason, "备注", MAX_REASON);
         long nextSourceId = adjustments.maxSourceIdByType(SOURCE_TYPE) + 1;
         PointAdjustmentLedger x = new PointAdjustmentLedger();

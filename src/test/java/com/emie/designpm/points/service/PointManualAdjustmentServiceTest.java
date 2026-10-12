@@ -34,6 +34,44 @@ class PointManualAdjustmentServiceTest {
     }
 
     @Test
+    void decimalAdjustmentsKeepTwoDecimalPlaces() {
+        PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
+        UserRepository users = mock(UserRepository.class);
+        PointManualAdjustmentService service = new PointManualAdjustmentService(adjustments, users);
+        when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
+        when(adjustments.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+        for (double points : new double[] {2.5, -0.25, 0.29, 0.01, -0.01, 99999.99}) {
+            assertEquals(
+                    points,
+                    service.adjust("designer-1", points, "小数调账", admin()).getPoints());
+        }
+    }
+
+    @Test
+    void invalidDecimalAdjustmentsNeverWriteLedger() {
+        PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
+        UserRepository users = mock(UserRepository.class);
+        PointManualAdjustmentService service = new PointManualAdjustmentService(adjustments, users);
+        when(users.findByUserId("designer-1")).thenReturn(Optional.of(userWithRole("designer")));
+        for (double points : new double[] {
+            0,
+            -0.0,
+            0.001,
+            -1.005,
+            100000.01,
+            -100000.01,
+            Double.NaN,
+            Double.POSITIVE_INFINITY,
+            Double.NEGATIVE_INFINITY,
+            4294967297d
+        }) {
+            assertThrows(IllegalArgumentException.class, () -> service.adjust("designer-1", points, "非法调账", admin()));
+        }
+        assertThrows(IllegalArgumentException.class, () -> service.adjust("designer-1", null, "备注", admin()));
+        verify(adjustments, never()).saveAndFlush(any());
+    }
+
+    @Test
     void nonAdminIsRejected() {
         PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
         UserRepository users = mock(UserRepository.class);
