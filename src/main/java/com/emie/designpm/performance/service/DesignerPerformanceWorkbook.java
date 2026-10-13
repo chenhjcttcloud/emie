@@ -18,7 +18,6 @@ import java.util.function.Function;
 import org.apache.poi.common.usermodel.HyperlinkType;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
-import org.apache.poi.util.Units;
 import org.apache.poi.xssf.usermodel.*;
 
 /**
@@ -268,7 +267,7 @@ final class DesignerPerformanceWorkbook {
         int[] widths = {6, 40, 16, 16, 12, 12, 18, 24, 48, 24};
         for (int i = 0; i < widths.length; i++) sheet.setColumnWidth(i, widths[i] * 256);
         int maxImages = report.items().stream()
-                .mapToInt(item -> imageSlots(item.attachments()))
+                .mapToInt(item -> DesignerPerformanceImageLayout.slots(item.attachments(), multiImages))
                 .max()
                 .orElse(0);
         for (int i = 0; i < Math.max(maxImages, 1); i++)
@@ -333,7 +332,8 @@ final class DesignerPerformanceWorkbook {
                 .flatMap(item -> item.deliveryVersions().stream().map(delivery -> new DeliveryRow(item, delivery)))
                 .toList();
         int maxImages = deliveries.stream()
-                .mapToInt(row -> imageSlots(row.delivery().attachments()))
+                .mapToInt(row ->
+                        DesignerPerformanceImageLayout.slots(row.delivery().attachments(), multiImages))
                 .max()
                 .orElse(0);
         int imageColumn = 10;
@@ -387,13 +387,15 @@ final class DesignerPerformanceWorkbook {
             List<String> unreadable = new ArrayList<>();
             for (Attachment attachment : delivery.attachments()) {
                 if (!attachment.embeddableImage()) continue;
-                List<LoadedImage> attachmentImages = loadImages(attachment);
+                List<LoadedImage> attachmentImages =
+                        DesignerPerformanceImageLayout.load(attachment, images, multiImages);
                 if (attachmentImages.isEmpty()) {
                     unreadable.add(attachment.name());
                     continue;
                 }
                 for (LoadedImage image : attachmentImages) {
-                    placePicture(drawing, image, imageColumn + placed++, rowIndex);
+                    DesignerPerformanceImageLayout.picture(
+                            workbook, drawing, pictureIndexes, image, imageColumn + placed++, rowIndex);
                 }
             }
             if (links.size() == 1) {
@@ -411,22 +413,17 @@ final class DesignerPerformanceWorkbook {
                     Math.max(
                             lineCount(delivery.changeSummary()),
                             Math.max(
-                                    estimatedLines(delivery.deliverables()),
-                                    estimatedLines(links.stream()
+                                    DesignerPerformanceImageLayout.estimatedLines(delivery.deliverables()),
+                                    DesignerPerformanceImageLayout.estimatedLines(links.stream()
                                             .map(Attachment::name)
                                             .collect(java.util.stream.Collectors.joining(" "))))));
-            row.setHeightInPoints(
-                    placed > 0 ? imageRowHeight(placed) : Math.min(409f, Math.max(30f, wrappedLines * 15f)));
+            row.setHeightInPoints(placed > 0 ? IMAGE_ROW_HEIGHT_PT : Math.min(409f, Math.max(30f, wrappedLines * 15f)));
             rowIndex++;
         }
         sheet.createFreezePane(3, 3);
     }
 
     private record DeliveryRow(Item item, Delivery delivery) {}
-
-    private static int estimatedLines(String value) {
-        return value == null || value.isBlank() ? 1 : Math.max(lineCount(value), (value.length() + 39) / 40);
-    }
 
     private int taskRow(XSSFSheet sheet, XSSFDrawing drawing, int r, int seq, Item item, int maxImages) {
         Row row = sheet.createRow(r);
@@ -457,13 +454,14 @@ final class DesignerPerformanceWorkbook {
         List<String> unreadable = new ArrayList<>();
         int placed = 0;
         for (Attachment attachment : attachments) {
-            List<LoadedImage> attachmentImages = loadImages(attachment);
+            List<LoadedImage> attachmentImages = DesignerPerformanceImageLayout.load(attachment, images, multiImages);
             if (attachmentImages.isEmpty()) {
                 unreadable.add(attachment.name());
                 continue;
             }
             for (LoadedImage image : attachmentImages) {
-                placePicture(drawing, image, IMAGE_COLUMN + placed++, r);
+                DesignerPerformanceImageLayout.picture(
+                        workbook, drawing, pictureIndexes, image, IMAGE_COLUMN + placed++, r);
             }
         }
         if (!unreadable.isEmpty()) {
@@ -475,54 +473,9 @@ final class DesignerPerformanceWorkbook {
                 item.deliverables() == null ? 1 : (item.deliverables().length() + 39) / 40;
         row.setHeightInPoints(
                 placed > 0
-                        ? imageRowHeight(placed)
+                        ? IMAGE_ROW_HEIGHT_PT
                         : Math.min(409f, Math.max(30f, Math.max(lineCount(item.name()), deliverableLines) * 15f)));
         return r + 1;
-    }
-
-    private List<LoadedImage> loadImages(Attachment attachment) {
-        if (attachment.name().toLowerCase(java.util.Locale.ROOT).endsWith(".ai")) {
-            return multiImages.apply(attachment.url());
-        }
-        return images.apply(attachment.url()).stream().toList();
-    }
-
-    private int imageSlots(List<Attachment> attachments) {
-        return attachments.stream()
-                .filter(Attachment::embeddableImage)
-                .mapToInt(attachment ->
-                        attachment.name().toLowerCase(java.util.Locale.ROOT).endsWith(".ai")
-                                ? Math.max(
-                                        1, multiImages.apply(attachment.url()).size())
-                                : 1)
-                .sum();
-    }
-
-    private static float imageRowHeight(int images) {
-        return Math.min(409f, Math.max(IMAGE_ROW_HEIGHT_PT, ((images + 3) / 4) * IMAGE_ROW_HEIGHT_PT));
-    }
-
-    /** 喺单个格仔入面按比例摆放图片（锚点起止同一格，用 EMU 偏移控制尺寸）；图片本身保留原分辨率。 */
-    private void placePicture(XSSFDrawing drawing, LoadedImage image, int column, int row) {
-        int pictureIndex = pictureIndexes.computeIfAbsent(
-                image, value -> workbook.addPicture(value.jpeg(), Workbook.PICTURE_TYPE_JPEG));
-        int pad = 4;
-        int boxWidth = IMAGE_COLUMN_WIDTH_CHARS * 7 + 5 - pad * 2;
-        int boxHeight = Math.round(IMAGE_ROW_HEIGHT_PT * 96 / 72) - pad * 2;
-        double scale = Math.min((double) boxWidth / image.width(), (double) boxHeight / image.height());
-        int width = Math.max(1, (int) Math.floor(image.width() * scale));
-        int height = Math.max(1, (int) Math.floor(image.height() * scale));
-        XSSFClientAnchor anchor = new XSSFClientAnchor(
-                pad * Units.EMU_PER_PIXEL,
-                pad * Units.EMU_PER_PIXEL,
-                (pad + width) * Units.EMU_PER_PIXEL,
-                (pad + height) * Units.EMU_PER_PIXEL,
-                column,
-                row,
-                column,
-                row);
-        anchor.setAnchorType(ClientAnchor.AnchorType.MOVE_AND_RESIZE);
-        drawing.createPicture(anchor, pictureIndex);
     }
 
     private static String date(LocalDateTime value) {
