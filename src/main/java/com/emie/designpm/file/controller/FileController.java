@@ -165,6 +165,8 @@ public class FileController {
             Path cacheRoot = uploadPath.resolve("thumbnail-cache");
             Path thumbnail = fileThumbnailService.cached(fileName, cacheRoot).orElse(null);
             if (thumbnail == null) {
+                if (fileName.matches("(?i).*\\.ai"))
+                    return ResponseEntity.unprocessableEntity().build();
                 fileThumbnailService.enqueue(fileName, cacheRoot);
                 return ResponseEntity.accepted()
                         .header(HttpHeaders.RETRY_AFTER, "1")
@@ -230,7 +232,6 @@ public class FileController {
             if (file.getSize() > maxBytes) {
                 return ResponseEntity.status(413).body(Map.of("error", "文件超过当前角色允许的大小限制"));
             }
-
             String originalName = file.getOriginalFilename();
             if (originalName == null || !SecurityUtil.isValidAttachmentFile(originalName)) {
                 return ResponseEntity.badRequest().body(Map.of("error", "不允许上传此类型文件"));

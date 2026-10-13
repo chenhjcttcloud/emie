@@ -16,9 +16,6 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import javax.imageio.ImageIO;
-import org.apache.pdfbox.Loader;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.rendering.PDFRenderer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -28,7 +25,6 @@ import org.springframework.stereotype.Service;
 public class FileThumbnailService {
     private static final Logger log = LoggerFactory.getLogger(FileThumbnailService.class);
     private static final int MAX_SIDE = 640;
-    private static final int AI_MAX_SIDE = 560;
     private static final int THUMBNAIL_CONCURRENCY = resolveThumbnailConcurrency();
     private static final Semaphore THUMBNAIL_SLOTS = new Semaphore(THUMBNAIL_CONCURRENCY);
     private final FileArchiveService fileArchiveService;
@@ -88,6 +84,7 @@ public class FileThumbnailService {
                         >= Files.getLastModifiedTime(source).toMillis()) {
             return target;
         }
+        if (aiFile) throw new IOException("AI 缩略图生成暂不可用，请预览或下载原文件");
         boolean acquired = false;
         try {
             // 批量打开任务详情/图档库时允许生成任务排队，避免前端收到 429/失败占位图。
@@ -100,16 +97,12 @@ public class FileThumbnailService {
                             >= Files.getLastModifiedTime(source).toMillis()) {
                 return target;
             }
-            if (aiFile) {
-                renderPdfCompatibleAi(source, cacheRoot, safeName);
-            } else {
-                BufferedImage input = ImageIO.read(source.toFile());
-                if (input == null) throw new IOException("无法读取图片");
-                try {
-                    writeThumbnail(input, target, MAX_SIDE);
-                } finally {
-                    input.flush();
-                }
+            BufferedImage input = ImageIO.read(source.toFile());
+            if (input == null) throw new IOException("无法读取图片");
+            try {
+                writeThumbnail(input, target, MAX_SIDE);
+            } finally {
+                input.flush();
             }
             return target;
         } catch (InterruptedException e) {
@@ -190,29 +183,6 @@ public class FileThumbnailService {
         return cacheRoot
                 .resolve(safeName + (aiFile ? ".ai-page-1.png" : ".png"))
                 .normalize();
-    }
-
-    private void renderPdfCompatibleAi(Path source, Path cacheRoot, String safeName) throws IOException {
-        try (var cached = Files.list(cacheRoot)) {
-            for (Path path : cached.filter(path -> path.getFileName().toString().startsWith(safeName + ".ai-page-"))
-                    .toList()) {
-                Files.deleteIfExists(path);
-            }
-        }
-        try (PDDocument document = Loader.loadPDF(source.toFile())) {
-            if (document.getNumberOfPages() == 0) throw new IOException("AI 文件没有可预览页面");
-            PDFRenderer renderer = new PDFRenderer(document);
-            for (int page = 0; page < document.getNumberOfPages(); page++) {
-                BufferedImage image = renderer.renderImageWithDPI(page, 72);
-                try {
-                    writeThumbnail(image, cacheRoot.resolve(safeName + ".ai-page-" + (page + 1) + ".png"), AI_MAX_SIDE);
-                } finally {
-                    image.flush();
-                }
-            }
-        } catch (IOException e) {
-            throw new IOException("AI 文件未包含 PDF 兼容预览", e);
-        }
     }
 
     private void writeThumbnail(BufferedImage input, Path target, int maxSide) throws IOException {

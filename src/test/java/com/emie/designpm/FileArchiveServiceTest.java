@@ -1,6 +1,7 @@
 package com.emie.designpm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -11,6 +12,7 @@ import com.emie.designpm.file.repository.FileRecordRepository;
 import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.file.service.FileThumbnailService;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -98,5 +100,17 @@ class FileArchiveServiceTest {
 
         assertEquals(thumbnail, new FileThumbnailService(archiveService).getOrCreate(storedName, cache));
         assertEquals("cached thumbnail", Files.readString(thumbnail));
+    }
+
+    @Test
+    void uncachedAiThumbnailDoesNotRenderInsideApplication() throws Exception {
+        FileArchiveService archiveService = mock(FileArchiveService.class);
+        Path aiFile = Files.writeString(uploadDir.resolve("large.ai"), "AI source");
+        when(archiveService.resolveFile("large.ai")).thenReturn(aiFile);
+
+        IOException error = assertThrows(IOException.class, () -> new FileThumbnailService(archiveService)
+                .getOrCreate("large.ai", uploadDir.resolve("thumbnail-cache")));
+
+        assertTrue(error.getMessage().contains("AI 缩略图生成暂不可用"));
     }
 }
