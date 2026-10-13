@@ -5,6 +5,7 @@ import static org.mockito.Mockito.*;
 
 import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.admin.repository.UserRepository;
+import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.performance.repository.MonthlyPerformanceConfigRepository;
 import com.emie.designpm.performance.repository.MonthlyUserPointTargetRepository;
@@ -15,10 +16,85 @@ import com.emie.designpm.points.repository.StandardPointConfigRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
 import java.time.LocalDateTime;
 import java.util.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 
 class PerformanceServiceTest {
+    @Test
+    void monthlyReportIncludesCompletedDesignRequirementsAndTheirDeliveryPoints() {
+        PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
+        PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
+        UserRepository users = mock(UserRepository.class);
+        SubTaskRepository subTasks = mock(SubTaskRepository.class);
+        PointRuleRepository rules = mock(PointRuleRepository.class);
+        DesignRequirementRepository requirements = mock(DesignRequirementRepository.class);
+        User designer = User.builder()
+                .userId("d1")
+                .name("设计师")
+                .role("designer")
+                .status("active")
+                .build();
+        when(users.findByRole("designer")).thenReturn(List.of(designer));
+        DesignRequirement requirement = new DesignRequirement();
+        requirement.setId(21L);
+        requirement.setName("送审方案");
+        requirement.setDesignerId("d1");
+        requirement.setPointRuleCode("A1");
+        requirement.setUpdatedAt(LocalDateTime.of(2026, 9, 18, 12, 0));
+        requirement.setDeliveredAt(LocalDateTime.of(2026, 9, 10, 12, 0));
+        when(requirements.findCompletedDesignerRequirementsBetween(any(), any()))
+                .thenReturn(List.of(requirement));
+        PointAdjustmentLedger award = new PointAdjustmentLedger();
+        award.setUserId("d1");
+        award.setSourceId(21L);
+        award.setSourceType("DESIGN_REQUIREMENT");
+        award.setPoints(12);
+        award.setAccountingMonth("2026-09");
+        PointAdjustmentLedger formerDesignerAward = new PointAdjustmentLedger();
+        formerDesignerAward.setUserId("former-designer");
+        formerDesignerAward.setSourceId(21L);
+        formerDesignerAward.setPoints(7);
+        when(adjustments.findAll()).thenReturn(List.of(award));
+        when(adjustments.findBySourceTypeAndSourceIdIn(eq("DESIGN_REQUIREMENT"), any()))
+                .thenReturn(List.of(award, formerDesignerAward));
+        PerformanceService service = new PerformanceService(
+                ledgers,
+                adjustments,
+                users,
+                mock(StandardPointConfigRepository.class),
+                mock(MonthlyPerformanceConfigRepository.class),
+                mock(SystemConfigRepository.class),
+                subTasks,
+                rules);
+        service.designRequirements(requirements);
+
+        Map<String, Object> row = ((List<Map<String, Object>>)
+                        service.designerMonthlyReport("2026-09").get("designers"))
+                .getFirst();
+        assertEquals(12d, row.get("score"));
+        assertEquals(1, row.get("completedCount"));
+        assertEquals(
+                LocalDateTime.of(2026, 9, 10, 12, 0),
+                ((List<Map<String, Object>>) row.get("tasks")).getFirst().get("completedAt"));
+        assertEquals(
+                12d, ((List<Map<String, Object>>) row.get("tasks")).getFirst().get("score"));
+        assertEquals(
+                "requirement",
+                ((List<Map<String, Object>>) row.get("tasks")).getFirst().get("kind"));
+        when(ledgers.sumPerformancePointsBetweenMonths("2026-01", "2026-12"))
+                .thenReturn(Collections.singletonList(new Object[] {"d1", 100d}));
+        when(adjustments.sumPointsBetweenMonths("2026-01", "2026-12"))
+                .thenReturn(Collections.singletonList(new Object[] {"d1", 12d}));
+        Map<String, Object> annual = service.designerMonthlyReport("2026");
+        assertEquals(LocalDateTime.of(2026, 1, 1, 0, 0), annual.get("from"));
+        assertEquals(LocalDateTime.of(2027, 1, 1, 0, 0), annual.get("to"));
+        Map<String, Object> annualRow = ((List<Map<String, Object>>) annual.get("designers")).getFirst();
+        assertEquals(112d, annualRow.get("score"));
+        assertEquals(1, annualRow.get("completedCount"));
+        verify(requirements)
+                .findCompletedDesignerRequirementsBetween(
+                        LocalDateTime.of(2026, 1, 1, 0, 0), LocalDateTime.of(2027, 1, 1, 0, 0));
+    }
+
     @Test
     void monthlyDesignerReportUsesAccountingMonthIncludingAdjustmentsAndKeepsCompletionDetails() throws Exception {
         PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
@@ -108,17 +184,6 @@ class PerformanceServiceTest {
         assertEquals(service.leaderboard("2026-01").getFirst().get("points"), row.get("score"));
         assertEquals(1, ((Map<?, ?>) row.get("categoryCounts")).get("A"));
         assertEquals("regular", ((Map<?, ?>) ((List<?>) row.get("tasks")).getFirst()).get("projectType"));
-        byte[] workbook = service.designerMonthlyReportExcel("2026-01");
-        assertEquals('P', workbook[0]);
-        assertEquals('K', workbook[1]);
-        try (XSSFWorkbook exported = new XSSFWorkbook(new java.io.ByteArrayInputStream(workbook))) {
-            assertEquals(
-                    "当月归属积分（含调账）", exported.getSheetAt(0).getRow(0).getCell(4).getStringCellValue());
-            assertEquals(95d, exported.getSheetAt(0).getRow(1).getCell(4).getNumericCellValue());
-            assertEquals(7d, exported.getSheetAt(0).getRow(2).getCell(4).getNumericCellValue());
-            assertEquals("任务累计积分", exported.getSheetAt(1).getRow(0).getCell(8).getStringCellValue());
-            assertEquals(12d, exported.getSheetAt(1).getRow(1).getCell(8).getNumericCellValue());
-        }
         when(subTasks.findDesignerTasksCompletedBetween(any(), any())).thenReturn(List.of());
         List<Map<String, Object>> withoutCompletedTasks = (List<Map<String, Object>>)
                 service.designerMonthlyReport("2026-01").get("designers");
@@ -194,7 +259,7 @@ class PerformanceServiceTest {
         target.setMonthKey("PERMANENT");
         target.setUserId("designer-1");
         target.setTargetPoints(160);
-        when(targets.findByUserId("designer-1")).thenReturn(Optional.of(target));
+        when(targets.findByMonthKeyAndUserId("PERMANENT", "designer-1")).thenReturn(Optional.of(target));
         when(configs.findByConfigKey(anyString())).thenReturn(Optional.empty());
         PerformanceService service = new PerformanceService(
                 ledgers,
@@ -207,6 +272,37 @@ class PerformanceServiceTest {
                 mock(PointRuleRepository.class));
         service.monthlyUserTargets(targets);
         assertEquals(160, service.preview("designer-1", "2026-08").get("targetPoints"));
+    }
+
+    @Test
+    void savingPermanentTargetDoesNotChangeHistoricalMonthlyTarget() {
+        MonthlyUserPointTargetRepository targets = mock(MonthlyUserPointTargetRepository.class);
+        UserRepository users = mock(UserRepository.class);
+        User designer =
+                User.builder().userId("designer-1").name("设计师").role("designer").build();
+        when(users.findByUserId("designer-1")).thenReturn(Optional.of(designer));
+        MonthlyUserPointTarget historical = new MonthlyUserPointTarget();
+        historical.setMonthKey("2026-09");
+        historical.setTargetPoints(80);
+        when(targets.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        PerformanceService service = new PerformanceService(
+                mock(PointLedgerRepository.class),
+                mock(PointAdjustmentLedgerRepository.class),
+                users,
+                mock(StandardPointConfigRepository.class),
+                mock(MonthlyPerformanceConfigRepository.class),
+                mock(SystemConfigRepository.class),
+                mock(SubTaskRepository.class),
+                mock(PointRuleRepository.class));
+        service.monthlyUserTargets(targets);
+
+        MonthlyUserPointTarget saved = service.saveDesignerTarget("2026-10", "designer-1", 100, "admin");
+
+        assertEquals("PERMANENT", saved.getMonthKey());
+        assertEquals(100, saved.getTargetPoints());
+        assertEquals("2026-09", historical.getMonthKey());
+        assertEquals(80, historical.getTargetPoints());
+        verify(targets).findByMonthKeyAndUserId("PERMANENT", "designer-1");
     }
 
     @Test

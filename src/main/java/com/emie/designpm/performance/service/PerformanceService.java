@@ -2,6 +2,7 @@ package com.emie.designpm.performance.service;
 
 import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.admin.repository.UserRepository;
+import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.performance.repository.MonthlyPerformanceConfigRepository;
 import com.emie.designpm.performance.repository.MonthlyUserPointTargetRepository;
@@ -14,8 +15,6 @@ import com.emie.designpm.util.TextEncodingUtil;
 import java.time.*;
 import java.util.*;
 import java.util.stream.Collectors;
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +30,7 @@ public class PerformanceService {
     private final SubTaskRepository subTasks;
     private final PointRuleRepository rules;
     private MonthlyUserPointTargetRepository userTargets;
+    private DesignRequirementRepository requirements;
 
     public PerformanceService(
             PointLedgerRepository ledgers,
@@ -54,6 +54,11 @@ public class PerformanceService {
     @org.springframework.beans.factory.annotation.Autowired
     void monthlyUserTargets(MonthlyUserPointTargetRepository userTargets) {
         this.userTargets = userTargets;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void designRequirements(DesignRequirementRepository requirements) {
+        this.requirements = requirements;
     }
 
     @Transactional(readOnly = true)
@@ -103,15 +108,25 @@ public class PerformanceService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> designerMonthlyReport(String month) {
-        YearMonth selected = YearMonth.parse(month);
+        boolean annual = month.length() == 4;
+        YearMonth selected = annual ? Year.parse(month).atMonth(1) : YearMonth.parse(month);
         LocalDateTime from = selected.atDay(1).atStartOfDay();
-        LocalDateTime to = selected.plusMonths(1).atDay(1).atStartOfDay();
+        LocalDateTime to = selected.plusMonths(annual ? 12 : 1).atDay(1).atStartOfDay();
         List<User> designers = users.findByRole("designer").stream()
                 .filter(user -> user.getStatus() == null || "active".equalsIgnoreCase(user.getStatus()))
                 .toList();
-        Map<String, Double> monthlyPoints = leaderboard(month).stream()
-                .collect(Collectors.toMap(
-                        row -> (String) row.get("userId"), row -> ((Number) row.get("points")).doubleValue()));
+        Map<String, Double> monthlyPoints = new HashMap<>();
+        if (annual) {
+            ledgers.sumPerformancePointsBetweenMonths(month + "-01", month + "-12")
+                    .forEach(row -> monthlyPoints.put((String) row[0], ((Number) row[1]).doubleValue()));
+            adjustments
+                    .sumPointsBetweenMonths(month + "-01", month + "-12")
+                    .forEach(row -> monthlyPoints.merge((String) row[0], ((Number) row[1]).doubleValue(), Double::sum));
+        } else {
+            leaderboard(month)
+                    .forEach(row ->
+                            monthlyPoints.put((String) row.get("userId"), ((Number) row.get("points")).doubleValue()));
+        }
         Map<String, Map<String, Object>> reports = new LinkedHashMap<>();
         designers.forEach(user -> {
             Map<String, Object> row = new LinkedHashMap<>();
@@ -127,6 +142,13 @@ public class PerformanceService {
         List<SubTask> completed = subTasks.findDesignerTasksCompletedBetween(from, to).stream()
                 .filter(task -> task.getDesignerId() != null && reports.containsKey(task.getDesignerId()))
                 .toList();
+        Map<String, String> categories = rules.findAll().stream()
+                .collect(Collectors.toMap(
+                        rule -> rule.getRuleCode().toUpperCase(Locale.ROOT),
+                        rule -> Optional.ofNullable(rule.getCategory())
+                                .filter(value -> !value.isBlank())
+                                .orElse("未分类"),
+                        (first, ignored) -> first));
         if (!completed.isEmpty()) {
             Map<Long, Map<String, Double>> taskPoints = new HashMap<>();
             ledgers.findBySubTaskIdIn(completed.stream().map(SubTask::getId).toList()).stream()
@@ -137,13 +159,6 @@ public class PerformanceService {
                                     ledger.getUserId(),
                                     Optional.ofNullable(ledger.getPoints()).orElse(0d),
                                     Double::sum));
-            Map<String, String> categories = rules.findAll().stream()
-                    .collect(Collectors.toMap(
-                            rule -> rule.getRuleCode().toUpperCase(Locale.ROOT),
-                            rule -> Optional.ofNullable(rule.getCategory())
-                                    .filter(value -> !value.isBlank())
-                                    .orElse("未分类"),
-                            (first, ignored) -> first));
             for (SubTask task : completed) {
                 Map<String, Object> report = reports.get(task.getDesignerId());
                 String category = categories.getOrDefault(
@@ -156,6 +171,8 @@ public class PerformanceService {
                         .add(Map.of(
                                 "id",
                                 task.getId(),
+                                "kind",
+                                "task",
                                 "name",
                                 task.getName(),
                                 "completedAt",
@@ -173,78 +190,60 @@ public class PerformanceService {
                                 score));
             }
         }
-        return Map.of("month", month, "from", from, "to", to, "designers", new ArrayList<>(reports.values()));
-    }
-
-    public byte[] designerMonthlyReportExcel(String month) {
-        Map<String, Object> report = designerMonthlyReport(month);
-        List<Map<String, Object>> designers = (List<Map<String, Object>>) report.get("designers");
-        try (Workbook workbook = new XSSFWorkbook();
-                java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
-            CellStyle header = workbook.createCellStyle();
-            Font bold = workbook.createFont();
-            bold.setBold(true);
-            header.setFont(bold);
-            Sheet summary = workbook.createSheet("设计师月度绩效");
-            String[] summaryHeaders = {"设计师", "月份", "完成子任务数", "类别数量占比", "当月归属积分（含调账）", "完成子任务"};
-            Row headerRow = summary.createRow(0);
-            for (int i = 0; i < summaryHeaders.length; i++) {
-                Cell cell = headerRow.createCell(i);
-                cell.setCellValue(summaryHeaders[i]);
-                cell.setCellStyle(header);
+        if (requirements != null) {
+            List<DesignRequirement> completedRequirements =
+                    requirements.findCompletedDesignerRequirementsBetween(from, to).stream()
+                            .filter(item -> reports.containsKey(item.getDesignerId()))
+                            .toList();
+            Map<String, Double> requirementPoints = completedRequirements.isEmpty()
+                    ? Map.of()
+                    : Optional.ofNullable(adjustments.findBySourceTypeAndSourceIdIn(
+                                    "DESIGN_REQUIREMENT",
+                                    completedRequirements.stream()
+                                            .map(DesignRequirement::getId)
+                                            .toList()))
+                            .orElse(List.of())
+                            .stream()
+                            .collect(Collectors.groupingBy(
+                                    item -> item.getSourceId() + ":" + item.getUserId(),
+                                    Collectors.summingDouble(
+                                            item -> item.getPoints() == null ? 0d : item.getPoints())));
+            for (DesignRequirement requirement : completedRequirements) {
+                Map<String, Object> report = reports.get(requirement.getDesignerId());
+                String category = categories.getOrDefault(
+                        Optional.ofNullable(requirement.getPointRuleCode())
+                                .orElse("")
+                                .toUpperCase(Locale.ROOT),
+                        "未分类");
+                ((Map<String, Integer>) report.get("categoryCounts")).merge(category, 1, Integer::sum);
+                report.put("completedCount", (Integer) report.get("completedCount") + 1);
+                ((List<Map<String, Object>>) report.get("tasks"))
+                        .add(Map.of(
+                                "id",
+                                requirement.getId(),
+                                "kind",
+                                "requirement",
+                                "name",
+                                requirement.getName(),
+                                "completedAt",
+                                requirement.getDeliveredAt() != null
+                                        ? requirement.getDeliveredAt()
+                                        : requirement.getUpdatedAt(),
+                                "category",
+                                category,
+                                "ruleCode",
+                                Optional.ofNullable(requirement.getPointRuleCode())
+                                        .orElse(""),
+                                "project",
+                                "设计/送审需求",
+                                "projectType",
+                                "requirement",
+                                "score",
+                                requirementPoints.getOrDefault(
+                                        requirement.getId() + ":" + requirement.getDesignerId(), 0d)));
             }
-            Sheet details = workbook.createSheet("完成子任务明细");
-            String[] detailHeaders = {"设计师", "完成月份", "完成时间", "子任务", "项目", "项目类型", "类别", "规则编号", "任务累计积分"};
-            Row detailHeader = details.createRow(0);
-            for (int i = 0; i < detailHeaders.length; i++) {
-                Cell cell = detailHeader.createCell(i);
-                cell.setCellValue(detailHeaders[i]);
-                cell.setCellStyle(header);
-            }
-            int detailRow = 1;
-            for (int i = 0; i < designers.size(); i++) {
-                Map<String, Object> designer = designers.get(i);
-                List<Map<String, Object>> tasks = (List<Map<String, Object>>) designer.get("tasks");
-                Row row = summary.createRow(i + 1);
-                row.createCell(0).setCellValue(String.valueOf(designer.get("designer")));
-                row.createCell(1).setCellValue(month);
-                row.createCell(2).setCellValue(((Number) designer.get("completedCount")).intValue());
-                row.createCell(3)
-                        .setCellValue(reportRatio((Map<String, Integer>) designer.get("categoryCounts"), tasks.size()));
-                row.createCell(4).setCellValue(((Number) designer.get("score")).doubleValue());
-                row.createCell(5)
-                        .setCellValue(tasks.stream()
-                                .map(task -> String.valueOf(task.get("name")))
-                                .collect(Collectors.joining("、")));
-                for (Map<String, Object> task : tasks) {
-                    Row item = details.createRow(detailRow++);
-                    item.createCell(0).setCellValue(String.valueOf(designer.get("designer")));
-                    item.createCell(1).setCellValue(month);
-                    item.createCell(2)
-                            .setCellValue(
-                                    String.valueOf(task.get("completedAt")).replace('T', ' '));
-                    item.createCell(3).setCellValue(String.valueOf(task.get("name")));
-                    item.createCell(4).setCellValue(String.valueOf(task.get("project")));
-                    item.createCell(5).setCellValue(String.valueOf(task.get("projectType")));
-                    item.createCell(6).setCellValue(String.valueOf(task.get("category")));
-                    item.createCell(7).setCellValue(String.valueOf(task.get("ruleCode")));
-                    item.createCell(8).setCellValue(((Number) task.get("score")).doubleValue());
-                }
-            }
-            for (int i = 0; i < summaryHeaders.length; i++) summary.autoSizeColumn(i);
-            for (int i = 0; i < detailHeaders.length; i++) details.autoSizeColumn(i);
-            workbook.write(output);
-            return output.toByteArray();
-        } catch (java.io.IOException e) {
-            throw new IllegalStateException("生成月度绩效 Excel 失败", e);
         }
-    }
-
-    private String reportRatio(Map<String, Integer> counts, int total) {
-        return counts.entrySet().stream()
-                .map(entry -> entry.getKey() + " " + entry.getValue() + " ("
-                        + (total == 0 ? 0 : Math.round(entry.getValue() * 100f / total)) + "%)")
-                .collect(Collectors.joining("、"));
+        return Map.of("month", month, "from", from, "to", to, "designers", new ArrayList<>(reports.values()));
     }
 
     private boolean within(LocalDateTime created, LocalDateTime from, LocalDateTime to) {
@@ -264,8 +263,9 @@ public class PerformanceService {
                 .findByConfigCode(userId)
                 .filter(StandardPointConfig::isEnabled)
                 .orElse(null);
-        MonthlyUserPointTarget assignedTarget =
-                userTargets == null ? null : userTargets.findByUserId(userId).orElse(null);
+        MonthlyUserPointTarget assignedTarget = userTargets == null
+                ? null
+                : userTargets.findByMonthKeyAndUserId("PERMANENT", userId).orElse(null);
         int target =
                 assignedTarget != null ? assignedTarget.getTargetPoints() : personal != null ? personal.getPoints() : 0;
         double companyCoefficient = 1d;
@@ -381,6 +381,7 @@ public class PerformanceService {
     @Transactional(readOnly = true)
     public List<Map<String, Object>> designerTargets(String month) {
         Map<String, MonthlyUserPointTarget> configured = userTargets.findAll().stream()
+                .filter(item -> "PERMANENT".equals(item.getMonthKey()))
                 .collect(Collectors.toMap(MonthlyUserPointTarget::getUserId, item -> item, (a, b) -> b));
         return users.findByRole("designer").stream()
                 .filter(user -> user.getStatus() == null || "active".equalsIgnoreCase(user.getStatus()))
@@ -401,11 +402,12 @@ public class PerformanceService {
     public MonthlyUserPointTarget saveDesignerTarget(
             String month, String userId, Integer targetPoints, String adminId) {
         if (userId == null || userId.isBlank()) throw new IllegalArgumentException("设计师不能为空");
-        if (targetPoints == null || targetPoints < 0) throw new IllegalArgumentException("目标积分不能小于0");
+        if (targetPoints == null || targetPoints <= 0) throw new IllegalArgumentException("目标积分必须大于0");
         User user = users.findByUserId(userId)
                 .filter(item -> "designer".equalsIgnoreCase(item.getRole()))
                 .orElseThrow(() -> new IllegalArgumentException("请选择有效的设计师"));
-        MonthlyUserPointTarget target = userTargets.findByUserId(userId).orElseGet(MonthlyUserPointTarget::new);
+        MonthlyUserPointTarget target =
+                userTargets.findByMonthKeyAndUserId("PERMANENT", userId).orElseGet(MonthlyUserPointTarget::new);
         target.setMonthKey("PERMANENT");
         target.setUserId(userId);
         target.setUserName(user.getName());

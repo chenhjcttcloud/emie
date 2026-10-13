@@ -102,7 +102,6 @@ EMIE.projectState = Object.assign({
 EMIE.adminState = Object.assign({
   currentTab: 'dashboard',
   workloadRange: EMIE.savedWorkloadRange('emie_admin_workload_range'),
-  scoringWeights: null,
 }, EMIE.adminState || {});
 EMIE.fileState = Object.assign({ previewSequence: 0, currentPreview: null }, EMIE.fileState || {});
 

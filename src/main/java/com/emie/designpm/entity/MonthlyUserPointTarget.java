@@ -19,7 +19,7 @@ public class MonthlyUserPointTarget {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "month_key", nullable = false, length = 7)
+    @Column(name = "month_key", nullable = false, length = 12)
     private String monthKey;
 
     @Column(name = "user_id", nullable = false, length = 100)

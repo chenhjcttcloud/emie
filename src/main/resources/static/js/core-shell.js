@@ -15,6 +15,7 @@ const NAV_DEFINITIONS = [
   { view: 'materials', icon: '🧺', label: '素材广场', permission: 'page.material_market.view' },
   { view: 'image-library', icon: '🖼️', label: '图档库', permission: 'page.image_library.view' },
   { view: 'points', icon: '🏅', label: '积分', permission: 'page.points.view' },
+  { view: 'designer-performance', icon: '📈', label: '设计师绩效', permission: 'page.admin.view' },
   { view: 'admin', icon: '⚙️', label: '系统管理', permission: 'page.admin.view' },
 ];
 
@@ -22,6 +23,7 @@ function canNavigateTo(view) {
   const nav = NAV_DEFINITIONS.find(item => item.view === view);
   if (!nav || !hasPermission(nav.permission)) return false;
   if (view === 'points' && !['planner', 'designer', 'admin'].includes(EMIE.state.currentRole)) return false;
+  if (view === 'designer-performance' && EMIE.state.currentRole !== 'admin') return false;
   if (view === 'image-library' && !['admin', 'planner', 'designer'].includes(EMIE.state.currentRole)) return false;
   return view !== 'other-tasks' || canViewOtherTasksNav();
 }

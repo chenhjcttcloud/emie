@@ -68,13 +68,11 @@ GET /api/material-market
 GET /api/material-market/{id}
 GET /api/materials
 GET /api/materials/{id}
+GET /api/performance/designer-evaluations
+GET /api/performance/designer-evaluations/completion
 GET /api/performance/designer-monthly-report
-GET /api/performance/designer-monthly-report.xlsx
+GET /api/performance/designer-monthly-report/{kind}/{taskId}/deliveries
 GET /api/performance/designer-targets
-GET /api/performance/exports
-GET /api/performance/exports/{month}
-GET /api/performance/exports/{month}/files/{userId}
-GET /api/performance/exports/{month}/zip
 GET /api/performance/leaderboard
 GET /api/performance/monthly
 GET /api/performance/preview
@@ -164,7 +162,6 @@ POST /api/materials/{id}/adopt
 POST /api/materials/{id}/like
 POST /api/materials/{id}/select
 POST /api/materials/{id}/withdraw
-POST /api/performance/exports/{month}
 POST /api/point-governance/appeals
 POST /api/point-governance/appeals/{id}/admin-review
 POST /api/point-governance/appeals/{id}/planner-process
@@ -225,6 +222,7 @@ PUT /api/image-library/{id}
 PUT /api/ip-options/{id}
 PUT /api/material-market/{id}
 PUT /api/materials/{id}
+PUT /api/performance/designer-evaluations/{month}/{userId}
 PUT /api/performance/designer-targets/{userId}
 PUT /api/performance/monthly/{month}
 PUT /api/performance/standard

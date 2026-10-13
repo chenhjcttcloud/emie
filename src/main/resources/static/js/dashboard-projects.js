@@ -224,6 +224,8 @@ async function render() {
       await renderScoringView(main, role, uid);
     } else if (view === 'points') {
       await renderPointsView(main);
+    } else if (view === 'designer-performance') {
+      await EMIE.actions.renderAdminDesignerPerformance(main);
     } else if (view === 'admin' || view === 'logs') {
       await renderAdmin(main, role, uid);
     }

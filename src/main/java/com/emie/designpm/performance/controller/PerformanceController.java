@@ -2,6 +2,7 @@ package com.emie.designpm.performance.controller;
 
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.*;
+import com.emie.designpm.performance.service.DesignerMonthlyDeliveryService;
 import com.emie.designpm.performance.service.PerformanceService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.*;
@@ -12,9 +13,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/performance")
 public class PerformanceController {
     private final PerformanceService service;
+    private final DesignerMonthlyDeliveryService deliveries;
 
-    public PerformanceController(PerformanceService s) {
+    public PerformanceController(PerformanceService s, DesignerMonthlyDeliveryService deliveries) {
         service = s;
+        this.deliveries = deliveries;
     }
 
     @GetMapping("/leaderboard")
@@ -26,34 +29,33 @@ public class PerformanceController {
     public ResponseEntity<?> designerMonthlyReport(@RequestParam String month, HttpServletRequest r) {
         if (!admin(r)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可查看设计师月度绩效表"));
         try {
-            java.time.YearMonth.parse(month);
+            if (month.length() == 4) java.time.Year.parse(month);
+            else java.time.YearMonth.parse(month);
             return ResponseEntity.ok(service.designerMonthlyReport(month));
         } catch (java.time.format.DateTimeParseException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", "月份格式应为 YYYY-MM"));
+            return ResponseEntity.badRequest().body(Map.of("error", "时间格式应为 YYYY-MM 或 YYYY"));
         } catch (RuntimeException e) {
-            return ResponseEntity.internalServerError().body(Map.of("error", "Excel 生成失败，请稍后重试"));
+            return ResponseEntity.internalServerError().body(Map.of("error", "月度绩效加载失败，请稍后重试"));
         }
     }
 
-    @GetMapping("/designer-monthly-report.xlsx")
-    public ResponseEntity<?> exportDesignerMonthlyReport(@RequestParam String month, HttpServletRequest r) {
-        if (!admin(r)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可导出设计师月度绩效表"));
+    @GetMapping("/designer-monthly-report/{kind}/{taskId}/deliveries")
+    public ResponseEntity<?> designerTaskDeliveries(
+            @PathVariable String kind, @PathVariable Long taskId, @RequestParam String month, HttpServletRequest r) {
+        if (!admin(r)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可查看设计师交付成果"));
         try {
-            java.time.YearMonth.parse(month);
-            return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(
-                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
-                    .header(
-                            HttpHeaders.CONTENT_DISPOSITION,
-                            ContentDisposition.attachment()
-                                    .filename("designer-performance-" + month + ".xlsx")
-                                    .build()
-                                    .toString())
-                    .body(service.designerMonthlyReportExcel(month));
+            java.time.YearMonth selected = java.time.YearMonth.parse(month);
+            return ResponseEntity.ok(Map.of(
+                    "versions",
+                    switch (kind) {
+                        case "task" -> deliveries.forCompletedTask(selected, taskId);
+                        case "requirement" -> deliveries.forCompletedRequirement(selected, taskId);
+                        default -> throw new IllegalArgumentException("不支持的交付类型");
+                    }));
         } catch (java.time.format.DateTimeParseException e) {
             return ResponseEntity.badRequest().body(Map.of("error", "月份格式应为 YYYY-MM"));
-        } catch (RuntimeException e) {
-            return ResponseEntity.internalServerError().body(Map.of("error", "Excel 生成失败，请稍后重试"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 

@@ -1,5 +1,11 @@
 # EMIE 开发交接状态
 
+## 2026-10-13 设计师月度评分与绩效页
+
+- 月度评分保存后在设计师绩效页显示综合分、四项分数、扣分与评语；年度视图按已评分月份计算平均分。页面增加区分色与手机布局检查，交付成果按需加载。
+- 设计师目标积分改为读取和保存 `PERMANENT` 记录，保留历史月度目标；V90–V92 新增评分表、说明字段并扩展目标月份键。绩效模块原有 Excel 生成、下载接口、定时任务、页面按钮及专用实现已移除，磁盘上的历史导出文件未清理。
+- 本地完整测试和容器检查见本次发布记录。发布前预检曾发现生产 SSH 可连接，但当时容器虽运行，服务器本机 `127.0.0.1:8080` 与公网请求超时；待重新确认生产健康后才能部署。
+
 ## 2026-10-12 绩效 Excel 复用与后台生成
 
 - “导出 Excel”优先下载已有月度快照，并显示生成时间；没有快照才启动后台生成。数据调整后使用“重新生成”更新文件；重生成失败时，默认导出仍可下载已有快照。
@@ -37,7 +43,7 @@
 - 定向 `ProjectReviewWorkflowTest`、`PointsServiceSnapshotTest` 通过；`./scripts/test-update.sh` 本地测试容器、数据库/Redis/应用健康、首页/静态资源和浏览器弹窗回归通过。
 - 提交 `2962846e878ee535ca627d8de741fff78c9779c5` 已推送至 Gitee `master` 与 GitHub `main`，并从生产旧 SHA `49a45dcd969b9c7a546381354355c5ce45f7c531` 原子切换到版本 1.15.1。生产应用 SHA、release-sha、JAR 校验和一致；备份 `/home/emie/emie-deploy-backups/20261008_181722`（711385 字节），旧容器 `emie-app-old-20261008_181722` 保留。
 - Java 21 全量 371 项测试通过（0 失败、0 错误、1 项既有规则跳过）；生产应用与预览容器均 running、重启数 0、OOM false；发布后预检公网 HTTP 200、版本 1.15.1、运行 SHA 一致。无数据库迁移。
-- 月报图片导出试验文件 `DesignerPerformanceWorkbook.java`、`PerformanceImageLoader.java`、`DesignerPerformanceWorkbookTest.java` 及未跟踪 `test-results/` 已单独 stash 保留，未纳入本次生产提交。
+- 当次发布时，月报图片导出试验文件 `DesignerPerformanceWorkbook.java`、`PerformanceImageLoader.java`、`DesignerPerformanceWorkbookTest.java` 及未跟踪 `test-results/` 曾单独 stash，未纳入 1.15.1 提交；文件后来进入仓库，并在 2026-10-13 的绩效 Excel 移除中删除。
 
 ## 2026-09-24 月度绩效 Excel 导出修复（已发布）
 

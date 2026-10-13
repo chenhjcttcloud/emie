@@ -40,4 +40,10 @@ public interface PointLedgerRepository extends JpaRepository<PointLedger, Long> 
             + "group by l.userId")
     List<Object[]> sumPerformancePointsByMonth(
             @Param("month") String month, @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    @Query("select l.userId, coalesce(sum(l.points), 0) from PointLedger l "
+            + "where l.countInPerformance = true and l.accountingMonth between :fromMonth and :toMonth "
+            + "group by l.userId")
+    List<Object[]> sumPerformancePointsBetweenMonths(
+            @Param("fromMonth") String fromMonth, @Param("toMonth") String toMonth);
 }

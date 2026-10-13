@@ -378,6 +378,135 @@ async function assertEventually(page, predicate, message) {
   });
 }
 
+async function runDesignerEvaluationChecks(page) {
+  await page.evaluate(async () => {
+    const e = window.EMIE;
+    window.evaluationMocks = { get: e.actions.apiGet, put: e.actions.apiPut, permission: e.actions.hasPermission, role: e.state.currentRole };
+    window.evaluationStore = [];
+    window.evaluationWrites = [];
+    e.actions.apiGet = async url => {
+      const params = new URL(url, location.origin).searchParams;
+      if (url.startsWith('/performance/designer-targets')) return [{ userId: 'e2e-designer', userName: '测试设计师', targetPoints: window.evaluationTarget || 0, configured: !!window.evaluationTarget }];
+      if (url.startsWith('/performance/designer-evaluations/completion')) return { completionScore: window.evaluationNoTasks ? null : 100, earnedPoints: 100, targetPoints: window.evaluationNoTasks ? 0 : 100, completionReason: window.evaluationNoTasks ? '目标积分未配置' : '月度所得积分 100 ÷ 目标积分 100 × 100 = 100 分。' };
+      if (url.startsWith('/performance/designer-evaluations')) return window.evaluationStore.filter(row => row.monthKey.startsWith(params.get('period')));
+      if (url.startsWith('/performance/designer-monthly-report')) return { month: params.get('month'), designers: [{ userId: 'e2e-designer', designer: '测试设计师', completedCount: 0, score: 12, tasks: [] }] };
+      return [];
+    };
+    e.actions.apiPut = async (url, body) => {
+      if (url.startsWith('/performance/designer-targets/')) { window.evaluationTarget = body.targetPoints; return body; }
+      if (window.evaluationConflict) throw new Error('评分已被修改，请关闭评分窗口，刷新页面后重试');
+      window.evaluationWrites.push({ url, body });
+      const monthKey = url.split('/').at(-2);
+      const row = { ...body, monthKey, userId: 'e2e-designer', version: body.version == null ? 0 : body.version + 1, updatedAt: '2026-10-13T10:00:00', totalScore: body.completionScore * 0.7 + (body.collaborationScore + body.attendanceScore + body.weeklyReportScore) * 0.1 - body.weeklyReportDeduction };
+      window.evaluationStore = [row];
+      return row;
+    };
+    const host = document.createElement('div'); host.id = 'evaluationTestHost'; document.body.append(host);
+    await e.actions.renderAdminDesignerPerformance(host);
+  });
+  const host = page.locator('#evaluationTestHost');
+  const initialViewport = page.viewportSize();
+  try {
+    assert.match(await host.innerText(), /综合绩效：待评分/);
+    await host.locator('.designer-target-settings summary').click();
+    await host.locator('#dt_points_0').fill('100');
+    await host.locator('[data-emie-action="click:scoring-save-target"]').click();
+    await page.waitForFunction(() => document.querySelector('#evaluationTestHost .designer-target-settings')?.textContent.includes('已配置'));
+    await page.waitForFunction(() => document.querySelector('#evaluationTestHost .designer-evaluation-preview')?.textContent.includes('100.0 分'));
+    await host.locator('[data-emie-action="click:designer-evaluation-edit"]').click();
+    const modal = page.locator('#designerEvaluationModal');
+    await modal.waitFor({ state: 'visible' });
+    await modal.locator('[name="completionScore"]').waitFor();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForFunction(() => {
+      const box = document.querySelector('#designerEvaluationModal .modal').getBoundingClientRect();
+      return box.left >= -1 && box.right <= innerWidth + 1;
+    });
+    const box = await modal.locator('.modal').boundingBox();
+    assert(box.x >= -1 && box.x + box.width <= 391, '评分说明弹窗应适配手机宽度');
+    assert(await modal.locator('.modal-body').evaluate(element => element.scrollHeight > element.clientHeight), '长评分说明应在弹窗内滚动');
+    assert.equal(await modal.locator('[name="completionScore"]').getAttribute('readonly'), '');
+    assert.equal(await modal.locator('[name="completionScore"]').inputValue(), '100');
+    assert.equal(await modal.locator('.designer-evaluation-fields input').count(), 4);
+    const fields = ['collaborationScore', 'attendanceScore', 'weeklyReportScore'];
+    for (const name of fields) await modal.locator(`[name="${name}"]`).fill('100');
+    assert.equal(await modal.locator('[name$="Reason"]').count(), 0, '评分只解释标准，不要求填写逐项说明');
+    assert.match(await modal.innerText(), /100 ÷ 目标积分 100/);
+    assert.match(await modal.innerText(), /90–100 分：积极主动/);
+    await modal.locator('[name="weeklyReportDeduction"]').fill('4');
+    await modal.locator('[data-emie-action="click:designer-evaluation-save"]').click();
+    assert.equal(await page.evaluate(() => window.evaluationWrites.length), 0, '非法扣分不得保存');
+    await modal.locator('[name="weeklyReportDeduction"]').fill('5');
+    await modal.locator('[name="comment"]').fill('<img src=x onerror=alert(1)>');
+    assert.match(await modal.locator('#designerEvaluationTotal').innerText(), /95\.00/);
+    await modal.locator('[data-emie-action="click:designer-evaluation-save"]').click();
+    await modal.waitFor({ state: 'detached' });
+    await page.waitForFunction(() => document.querySelector('#evaluationTestHost').textContent.includes('综合绩效：95.00'));
+    assert.equal(await host.locator('.designer-evaluation-summary img').count(), 0, '评语需转义');
+    assert.equal(await host.locator('.designer-evaluation-result').count(), 4, '保存后显示四项评分');
+    assert.match(await host.locator('.designer-performance-summary').innerText(), /1 \/ 1/);
+    assert.equal(await host.locator('.designer-evaluation-basis').getAttribute('open'), null, '评分依据默认收起');
+    await host.locator('.designer-evaluation-basis summary').click();
+    assert.match(await host.locator('.designer-evaluation-basis').innerText(), /90–100 分：积极主动/);
+    await host.locator('.designer-evaluation-basis summary').click();
+    const performanceBox = await host.locator('.designer-performance').boundingBox();
+    assert(performanceBox.x >= -1 && performanceBox.x + performanceBox.width <= 391, '绩效卡片应适配手机宽度');
+    assert(await host.locator('.designer-performance').evaluate(element => element.scrollWidth <= element.clientWidth + 1), '绩效卡片不能水平溢出');
+    await host.screenshot({ path: path.join(artifactRoot, 'designer-performance-mobile.png') });
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await host.screenshot({ path: path.join(artifactRoot, 'designer-performance-desktop.png') });
+
+    const payload = await page.evaluate(() => window.evaluationWrites[0].body);
+    assert.equal(payload.version, null);
+    assert.equal(payload.completionScore, 100);
+    assert.equal(payload.aestheticScore, undefined);
+    assert.equal(payload.weeklyReportDeduction, 5);
+    assert.equal(payload.collaborationReason, undefined);
+    await host.locator('[data-emie-action="click:designer-evaluation-edit"]').click();
+    assert.equal(await modal.locator('[name="collaborationScore"]').inputValue(), '100');
+    await page.evaluate(() => { window.evaluationConflict = true; });
+    await modal.locator('[data-emie-action="click:designer-evaluation-save"]').click();
+    await page.waitForFunction(() => document.getElementById('designerEvaluationError').textContent.includes('刷新'));
+    assert.equal(await modal.isVisible(), true, '冲突应保留填写内容');
+    await modal.locator('[data-emie-action="click:designer-evaluation-close"]').first().click();
+    await page.evaluate(() => { window.evaluationConflict = false; window.evaluationNoTasks = true; });
+    await host.locator('[data-emie-action="click:designer-evaluation-edit"]').click();
+    await modal.locator('[name="completionScore"]').waitFor();
+    assert.equal(await modal.locator('[name="completionScore"]').getAttribute('readonly'), '');
+    assert.match(await modal.innerText(), /目标积分未配置/);
+    assert.equal(await modal.locator('[data-emie-action="click:designer-evaluation-save"]').isDisabled(), true);
+    await modal.locator('[data-emie-action="click:designer-evaluation-close"]').first().click();
+    await page.evaluate(() => {
+      window.evaluationNoTasks = false;
+      window.evaluationConflict = false;
+      window.evaluationStore = [{ userId: 'e2e-designer', monthKey: '2026-01', totalScore: 100.01, version: 0 }, { userId: 'e2e-designer', monthKey: '2026-02', totalScore: 100, version: 0 }];
+    });
+    await host.locator('#designerPerformanceScope').selectOption('year');
+    await host.locator('#designerPerformanceMonth').fill('2026');
+    await host.locator('#designerPerformanceMonth').dispatchEvent('change');
+    await page.waitForFunction(() => document.querySelector('#evaluationTestHost').textContent.includes('已评分 2/12'));
+    assert.match(await host.innerText(), /年度平均绩效：100\.01/);
+    await host.locator('.designer-evaluation-summary summary').click();
+    assert.equal(await host.locator('.designer-evaluation-months > div').count(), 12);
+    assert.equal(await host.locator('.designer-evaluation-months > div').filter({ hasText: '待评分' }).count(), 10);
+    const permissions = await page.evaluate(() => {
+      const e = window.EMIE; e.actions.hasPermission = () => true;
+      e.state.currentRole = 'admin'; const admin = e.actions.canNavigateTo('designer-performance');
+      e.state.currentRole = 'designer'; const designer = e.actions.canNavigateTo('designer-performance');
+      return { admin, designer };
+    });
+    assert.deepEqual(permissions, { admin: true, designer: false });
+    console.log('  designer-monthly-evaluation-save-conflict-and-annual-average ok');
+  } finally {
+    if (initialViewport) await page.setViewportSize(initialViewport);
+    await page.evaluate(() => {
+      const e = window.EMIE; const mocks = window.evaluationMocks;
+      e.actions.apiGet = mocks.get; e.actions.apiPut = mocks.put; e.actions.hasPermission = mocks.permission; e.state.currentRole = mocks.role;
+      e.actions.closeM('designerEvaluationModal'); document.getElementById('evaluationTestHost')?.remove();
+    });
+  }
+}
+
 await fs.mkdir(artifactRoot, { recursive: true });
 const browser = await chromium.launch({ headless: true, executablePath: await executablePath() });
 let failed = false;
@@ -401,6 +530,7 @@ try {
       await runPointRuleChecks(page);
       await runAdminSubcategoryChecks(page);
       await runPointLogChecks(page);
+      await runDesignerEvaluationChecks(page);
       assert.deepEqual(browserErrors, [], `页面脚本错误: ${browserErrors.join('; ')}`);
       await context.tracing.stop();
       process.stdout.write(`modal_e2e run=${run}/${repeat} ok\n`);

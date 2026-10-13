@@ -11,6 +11,12 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface DesignRequirementRepository extends JpaRepository<DesignRequirement, Long> {
+    @Query("SELECT d FROM DesignRequirement d WHERE d.status = 'completed' "
+            + "AND d.designerId IS NOT NULL AND COALESCE(d.deliveredAt, d.updatedAt) >= :from "
+            + "AND COALESCE(d.deliveredAt, d.updatedAt) < :to")
+    java.util.List<DesignRequirement> findCompletedDesignerRequirementsBetween(
+            @Param("from") java.time.LocalDateTime from, @Param("to") java.time.LocalDateTime to);
+
     /** 行锁读取（PESSIMISTIC_WRITE）：评分提交时串行化对同一需求的并发复评。 */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT d FROM DesignRequirement d WHERE d.id = :id")

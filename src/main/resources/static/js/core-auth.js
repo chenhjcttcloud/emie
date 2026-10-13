@@ -118,7 +118,8 @@ async function initApp() {
           : { ...EMIE.state.authUser };
         // 恢复上次浏览的页面（默认工作台）
         EMIE.state.currentView = localStorage.getItem('design_pm_lastView') || 'dashboard';
-        EMIE.adminState.currentTab = localStorage.getItem('design_pm_lastAdminTab') || 'dashboard';
+        const savedAdminTab = localStorage.getItem('design_pm_lastAdminTab');
+        EMIE.adminState.currentTab = savedAdminTab === 'scoring' ? 'points' : savedAdminTab || 'dashboard';
         EMIE.state.cache = { orders: [] };
         // 重置 viewport 缩放
         const vp = document.querySelector('meta[name="viewport"]');

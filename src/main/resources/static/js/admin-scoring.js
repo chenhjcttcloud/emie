@@ -17,115 +17,83 @@ function compareRuleCodes(left, right) {
 
 function displayPointRuleCode(code) { return ({ MATERIAL_MARKET_LAUNCH: 'M3', TASK_APPROVED: 'T1' }[String(code || '').toUpperCase()] || String(code || '')); }
 function localMonth() { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; }
+function designerPerformancePeriodControls(period) {
+  const annual = period.length === 4;
+  return `<div class="designer-performance-period"><label class="form-label">查看方式<select class="form-select" id="designerPerformanceScope" data-emie-action="change:scoring-performance-scope"><option value="month" ${annual ? '' : 'selected'}>按月</option><option value="year" ${annual ? 'selected' : ''}>按年</option></select></label><label class="form-label">${annual ? '年份' : '月份'}<input class="form-input" type="${annual ? 'number' : 'month'}" ${annual ? 'min="1" max="9999" step="1"' : ''} id="designerPerformanceMonth" value="${escHtml(period)}" data-emie-action="change:scoring-performance-month"></label></div>`;
+}
+
+function changeDesignerPerformanceScope() {
+  const input = document.getElementById('designerPerformanceMonth');
+  if (!input) return;
+  const annual = document.getElementById('designerPerformanceScope')?.value === 'year';
+  const period = annual ? input.value.slice(0, 4) : input.value.slice(0, 4) + localMonth().slice(4);
+  const card = input.closest('.card');
+  card.outerHTML = renderDesignerMonthlyReport({ month: period, designers: [] });
+  reloadDesignerMonthlyReport();
+}
+
 function renderDesignerMonthlyReport(report) {
+  const annual = report.month.length === 4;
+  const periodLabel = annual ? '全年' : '当月';
   const rows = report?.designers || [];
-  const mix = (counts, total) => Object.entries(counts || {}).map(([label, count]) => `${escHtml(label)} ${count} (${total ? Math.round(count * 100 / total) : 0}%)`).join('、') || '—';
-  const typeLabel = type => ({ channel_custom: '渠道定制', regular: '公司常规品' }[type] || type || '未设置');
-  return `<div class="card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>设计师月度绩效表</h3><p class="admin-section-hint">完成时间：${escHtml(report.from.replace('T', ' '))} 至 ${escHtml(report.to.replace('T', ' '))}（含起点，不含终点）；积分按所选月份的归属月份汇总，含调账加减分，与积分看板一致；任务明细显示任务累计积分，不等于当月积分。</p></div><div style="display:flex;align-items:end;gap:6px;"><label class="form-label">月份 <input class="form-input" type="month" id="designerPerformanceMonth" value="${escHtml(report.month)}" data-emie-action="change:scoring-performance-month"></label><button type="button" aria-label="导出当前月份 Excel" title="导出当前月份 Excel" style="height:38px;padding:0 6px;border:0;background:transparent;color:var(--gray-500);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;" data-emie-action="click:scoring-export-performance">↓ 导出 Excel</button><button type="button" class="btn btn-sm" title="按最新数据重新生成该月 Excel" data-emie-action="click:scoring-regenerate-performance">重新生成</button></div></div><div id="designerPerformanceExportProgress" hidden role="status" aria-live="polite" style="margin:0 0 16px;"><div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;color:var(--gray-600);"><span data-export-message>正在准备月报</span><span data-export-percent>0%</span></div><div class="progress-bar" style="height:8px;margin-top:6px;"><div class="progress-fill" data-export-fill style="width:0%;"></div></div></div><div class="table-wrap"><table><thead><tr><th>设计师</th><th>月份</th><th>完成子任务</th><th>类别数量占比</th><th>当月归属积分</th><th>完成任务明细</th></tr></thead><tbody>${rows.map(row => `<tr><td><strong>${escHtml(row.designer)}</strong></td><td>${escHtml(row.month)}</td><td>${row.completedCount}</td><td>${mix(row.categoryCounts, row.completedCount)}</td><td>${Number(row.score || 0).toFixed(2)}</td><td><details><summary>查看 ${row.tasks.length} 项</summary><div style="min-width:480px;padding:8px 0;">${row.tasks.map(task => `<div style="padding:7px 0;border-bottom:1px solid var(--gray-100);"><strong>${escHtml(task.name)}</strong> · ${escHtml(task.project)}（${escHtml(typeLabel(task.projectType))}）<br><span style="color:var(--gray-500);font-size:12px;">${escHtml(task.completedAt.replace('T', ' '))} · ${escHtml(task.category)} · ${escHtml(task.ruleCode || '无规则')} · 任务累计积分 ${Number(task.score || 0).toFixed(2)} 分</span></div>`).join('') || '本月暂无完成任务'}</div></details></td></tr>`).join('') || '<tr><td colspan="6">暂无在职设计师</td></tr>'}</tbody></table></div></div>`;
+  const total = rows.reduce((sum, row) => sum + Number(row.completedCount || 0), 0);
+  const mix = (counts, count) => Object.entries(counts || {}).map(([label, value]) => `${escHtml(label)} ${value} (${count ? Math.round(value * 100 / count) : 0}%)`).join('、') || '—';
+  return `<section class="card designer-performance">
+    <div class="card-header"><div><h3>设计师${annual ? '年度' : '月度'}绩效与交付成果</h3><p class="admin-section-hint">${periodLabel}归属积分含调账；完成任务显示任务累计积分。展开任务后加载交付成果。</p></div>${designerPerformancePeriodControls(report.month)}</div>
+    <div class="designer-performance-summary"><span><strong>${rows.length}</strong> 位设计师</span><span><strong>${total}</strong> 项完成任务与需求</span><span><strong>${rows.reduce((sum, row) => sum + Number(row.score || 0), 0).toFixed(2)}</strong> ${periodLabel}归属积分</span><span><strong>${rows.filter(row => (row.evaluations || []).some(item => item.totalScore != null)).length} / ${rows.length}</strong> ${annual ? '已有月度评分' : '已完成月度评分'}</span></div>
+    <div class="designer-performance-list">${rows.map(row => `<article class="designer-performance-person"><div class="designer-performance-person-head"><div><strong>${escHtml(row.designer)}</strong><small>${escHtml(mix(row.categoryCounts, row.completedCount))}</small></div><div class="designer-performance-score"><strong>${Number(row.score || 0).toFixed(2)}</strong><span>${periodLabel}归属积分</span></div></div>${EMIE.actions.renderDesignerEvaluationSummary(row, report.month)}<div class="designer-performance-count">完成 ${Number(row.completedCount || 0)} 项任务与需求</div><div class="designer-performance-tasks">${(row.tasks || []).map(task => `<div class="designer-performance-task"><div class="designer-performance-task-head"><div><strong>${escHtml(task.name)}</strong><small>${escHtml(task.project || '')} · ${escHtml(String(task.completedAt || '').replace('T', ' '))} · ${escHtml(task.category || '未分类')}</small></div><div><span>累计 ${Number(task.score || 0).toFixed(2)} 分</span><button type="button" class="btn btn-outline btn-sm" data-emie-action="click:scoring-task-deliveries" data-task-id="${Number(task.id)}" data-task-kind="${escHtml(task.kind || 'task')}" data-month="${escHtml(String(task.completedAt || '').slice(0, 7))}">查看成果</button></div></div><div class="designer-performance-deliveries" data-delivery-panel hidden></div></div>`).join('') || '<p class="admin-section-hint">所选时间内暂无完成任务或需求</p>'}</div></article>`).join('') || '<div class="empty-state">暂无在职设计师</div>'}</div>
+  </section>`;
 }
 
-// ==================== 评分权重管理 ====================
-async function renderAdminScoring(container) {
-  container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--gray-400);">加载中...</div>`;
+async function renderAdminDesignerPerformance(container) {
+  if (!container) return;
+  container.innerHTML = `<div class="admin-section-heading" style="margin-bottom:16px;"><span>📈</span><div><h3>设计师绩效</h3><p>按月或按年查看设计师积分、完成事项与交付成果</p></div></div><details class="card designer-target-settings"><summary>设置设计师目标积分</summary><p class="admin-section-hint">目标积分用于计算“设计任务完成率”；设置后适用于后续月度评分。</p><div class="table-responsive"><table class="data-table"><thead><tr><th>设计师</th><th>飞书 ID</th><th>目标积分</th><th>状态</th><th>操作</th></tr></thead><tbody id="designerTargetBody"><tr><td colspan="5">正在加载…</td></tr></tbody></table></div></details>${renderDesignerMonthlyReport({ month: localMonth(), designers: [] })}`;
+  await loadDesignerTargetMonth(localMonth());
+  await reloadDesignerMonthlyReport();
+}
+
+function renderDesignerDeliveryFiles(files) {
+  const authUrl = path => EMIE.actions.authenticatedFileUrl ? EMIE.actions.authenticatedFileUrl(path) : path;
+  return (files || []).map(file => {
+    const storedName = String(file.storedName || '');
+    const kind = String(file.kind || 'other');
+    if (!/^[^/\\]+\.[a-z0-9]+$/i.test(storedName) || storedName.includes('..')) return '';
+    if (kind === 'other') return `<span class="designer-performance-other-file">${escHtml(file.name || storedName)}（无图片预览）</span>`;
+    const thumb = authUrl(`/api/files/thumbnail/${encodeURIComponent(storedName)}`);
+    return `<button type="button" class="designer-performance-file" data-emie-action="click:scoring-preview-delivery" data-file-name="${escHtml(file.name || storedName)}" data-stored-name="${escHtml(storedName)}" data-file-kind="${escHtml(kind)}"><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(thumb)}" alt="${escHtml(file.name || storedName)}" loading="lazy"><span>${escHtml(file.name || storedName)}${kind === 'ai' ? ' · 查看全部页面' : ''}</span></button>`;
+  }).join('') || '<span class="admin-section-hint">此版本没有图片或 AI 文件</span>';
+}
+
+async function loadDesignerTaskDeliveries(button) {
+  const panel = button.closest('.designer-performance-task')?.querySelector('[data-delivery-panel]');
+  if (!panel) return;
+  if (panel.dataset.loaded === 'true') { panel.hidden = !panel.hidden; button.textContent = panel.hidden ? '查看成果' : '收起成果'; return; }
+  panel.hidden = false; panel.textContent = '正在加载交付版本…'; button.disabled = true;
   try {
-    const data = await apiGet('/admin/scoring-weights');
-    const types = data.types || [];
-    container.innerHTML = `
-      <div style="max-width:760px;margin:0 auto;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-          <div>
-            <h2 style="font-size:18px;margin:0 0 4px;">⭐ 评分权重管理</h2>
-            <p style="font-size:13px;color:var(--gray-400);margin:0;">按项目类型分别设置各角色评分权重（百分比）</p>
-          </div>
-          <button class="btn btn-outline btn-sm" data-emie-action="click:scoring-reset-weights" style="color:var(--gray-500);">↺ 重置默认</button>
-        </div>
-        ${types.map((t, ti) => `
-          <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:20px;margin-bottom:16px;">
-            <h3 style="font-size:14px;font-weight:500;margin:0 0 16px;">${t.label}</h3>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              ${t.weights.map(w => `
-                <div style="background:var(--bg-secondary,#F9FAFB);border-radius:8px;padding:12px;">
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                    <span style="font-size:13px;font-weight:500;">${w.label}</span>
-                    <span style="font-size:20px;font-weight:600;" id="sd_${t.type}_${w.role}">${Math.round(w.weight)}</span>
-                    <span style="font-size:12px;color:var(--gray-400);">%</span>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:8px;">
-                    <input type="range" min="0" max="100" step="1" value="${Math.round(w.weight)}" style="flex:1;" data-emie-action="input:scoring-pct" data-score-type="${t.type}" data-score-role="${w.role}">
-                    <input type="number" class="form-input" value="${Math.round(w.weight)}" min="0" max="100" step="1" style="width:55px;text-align:center;padding:4px 6px;" data-emie-action="change:scoring-pct" data-score-type="${t.type}" data-score-role="${w.role}">
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-            <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;font-size:12px;">
-              <span style="color:var(--gray-400);">合计：<strong style="font-size:16px;" id="sum_${t.type}">${t.weights.reduce((s,w) => s + Math.round(w.weight), 0)}</strong>%</span>
-            </div>
-          </div>
-        `).join('')}
-        <div style="text-align:right;">
-          <button class="btn btn-primary" data-emie-action="click:scoring-save-weights">💾 保存权重</button>
-        </div>
-        <div style="margin-top:16px;padding:12px;background:var(--warning-light,#FFFBEB);border-radius:8px;font-size:12px;color:#92400E;">
-          💡 权重为百分比（0~100%），建议各项目类型的权重合计为 100%。综合分 = Σ(角色评分 × 权重%) ÷ Σ(权重%)。修改仅影响新建评分，历史评分不受影响。
-        </div>
-      </div>`;
-    EMIE.adminState.scoringWeights = {};
-    types.forEach(t => {
-      EMIE.adminState.scoringWeights[t.type] = {};
-      t.weights.forEach(w => { EMIE.adminState.scoringWeights[t.type][w.role] = Math.round(w.weight); });
-    });
-  } catch (e) {
-    container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger);">加载失败: ${escHtml(e.message || '未知错误')}</div>`;
-  }
+    const data = await apiGet(`/performance/designer-monthly-report/${encodeURIComponent(button.dataset.taskKind)}/${encodeURIComponent(button.dataset.taskId)}/deliveries?month=${encodeURIComponent(button.dataset.month)}`);
+    panel.innerHTML = (data.versions || []).map(version => `<section class="designer-performance-version"><div class="designer-performance-version-head"><strong>${version.versionNo == null ? '当前交付' : `第 ${Number(version.versionNo)} 版`}</strong><span>${escHtml(String(version.submittedAt || '').replace('T', ' '))} ${escHtml(version.submittedBy || '')}</span></div>${version.changeSummary ? `<p>${escHtml(version.changeSummary)}</p>` : ''}${version.deliverables ? `<p>${escHtml(version.deliverables)}</p>` : ''}<div class="designer-performance-files">${renderDesignerDeliveryFiles(version.files)}</div></section>`).join('') || '<p class="admin-section-hint">暂无交付版本</p>';
+    panel.dataset.loaded = 'true'; button.textContent = '收起成果';
+  } catch (error) { panel.textContent = `交付成果加载失败：${error.message || '请稍后重试'}`; }
+  finally { button.disabled = false; }
 }
 
-function roleColor(role) {
-  const colors = { planner: '#534AB7', sales: '#378ADD', designer: '#639922', admin: '#D85A30' };
-  return colors[role] || '#888780';
+function previewDesignerDeliveryFile(button) {
+  const storedName = button.dataset.storedName;
+  const url = `/api/files/download/${encodeURIComponent(storedName)}`;
+  const name = button.dataset.fileName || storedName;
+  if (button.dataset.fileKind === 'ai') return EMIE.actions.openFilePreview(url, name, 0, false, true);
+  const authUrl = EMIE.actions.authenticatedFileUrl ? EMIE.actions.authenticatedFileUrl(url) : url;
+  return EMIE.actions.previewImage(authUrl, name);
 }
-
-const updateScoringPct = function(type, role, val) {
-  const num = Math.round(parseFloat(val || 0));
-  const clamped = Math.max(0, Math.min(100, num));
-  if (!EMIE.adminState.scoringWeights) EMIE.adminState.scoringWeights = {};
-  if (!EMIE.adminState.scoringWeights[type]) EMIE.adminState.scoringWeights[type] = {};
-  EMIE.adminState.scoringWeights[type][role] = clamped;
-  const display = document.getElementById('sd_' + type + '_' + role);
-  if (display) display.textContent = clamped;
-  const weights = EMIE.adminState.scoringWeights[type] || {};
-  const sum = Object.values(weights).reduce((a, b) => a + b, 0);
-  const sumEl = document.getElementById('sum_' + type);
-  if (sumEl) {
-    sumEl.textContent = sum;
-    sumEl.style.color = sum === 100 ? 'var(--success,#059669)' : sum > 100 ? 'var(--danger)' : 'var(--warning,#D97706)';
-  }
-};
-
-const saveScoringWeights = async function() {
-  if (!EMIE.adminState.scoringWeights) return;
-  try {
-    await apiPut('/admin/scoring-weights', EMIE.adminState.scoringWeights);
-    window.EMIE.actions.showSystemAlert('评分权重已保存');
-  } catch (e) {
-    window.EMIE.actions.showSystemAlert('保存失败: ' + e.message);
-  }
-};
-
-const resetScoringWeights = async function() {
-  if (!await EMIE.actions.showSystemConfirm('确定重置所有权重为默认值？')) return;
-  window.location.reload();
-};
 
 async function renderAdminPoints(container) {
   if (!container) return;
   container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--gray-400);">加载积分规则…</div>';
   try {
-    const targetMonth = localMonth();
-    const [rules, appeals, poProgress, systemConfigs, performanceReport] = await Promise.all([
+    const [rules, appeals, poProgress, systemConfigs] = await Promise.all([
       apiGet('/points/rules'),
       apiGet('/point-governance/appeals'),
       apiGet('/point-governance/po/progress'), apiGet('/admin/configs'),
-      apiGet('/performance/designer-monthly-report?month=' + encodeURIComponent(targetMonth)),
     ]);
     const ruleList = (Array.isArray(rules) ? rules : []).slice().sort((left, right) =>
       Number(left.enabled === false) - Number(right.enabled === false) || compareRuleCodes(left, right));
@@ -135,7 +103,6 @@ async function renderAdminPoints(container) {
     const governanceConfig = Object.fromEntries((systemConfigs?.business || []).filter(x => String(x.configKey || '').startsWith('points.withdrawal.')).map(x => [x.configKey, x.configValue || '']));
     container.innerHTML = `<div class="admin-points-config" style="max-width:1100px;margin:0 auto;">
       <div class="admin-points-page-head" style="margin-bottom:18px;"><div><h2 style="font-size:18px;margin:0 0 4px;">🏅 积分与绩效配置</h2><p style="color:var(--gray-500);font-size:13px;margin:0;">规则修改只影响后续入账，历史积分台账不会重算。</p></div></div>
-      ${renderDesignerMonthlyReport(performanceReport)}
       <div class="card admin-point-rules-card" style="padding:16px;margin-bottom:18px;"><div class="card-header"><div><h3>积分规则</h3><p class="admin-section-hint">共 ${ruleList.length} 条，列表显示 5 条，可滚动查看</p></div><button class="btn btn-primary btn-sm" data-emie-action="click:scoring-create-rule">＋ 新增规则</button></div>
         <div class="admin-point-rule-filters"><div class="admin-filter-card"><span class="admin-filter-title">筛选规则</span><input class="form-input" id="adminPointRuleSearch" placeholder="搜索规则编号或说明"><select class="form-select" id="adminPointRuleCategory"><option value="">全部类别</option>${[...new Set(ruleList.map(rule => String(rule.category || '').trim()).filter(Boolean))].sort().map(category => `<option value="${escHtml(category)}">${escHtml(category)}</option>`).join('')}</select><select class="form-select" id="adminPointRuleStatus"><option value="">全部状态</option><option value="enabled">已启用</option><option value="disabled">已停用</option></select><button class="btn btn-primary btn-sm" data-emie-action="click:scoring-filter-rules">查询</button><button class="btn btn-outline btn-sm" data-emie-action="click:scoring-reset-rules">重置</button></div></div>
         ${ruleList.length ? `<div class="admin-point-rules-scroll">${ruleList.map((rule, index) => `<div class="admin-point-rule-item" data-rule-code="${escHtml(String(rule.ruleCode || '').toLowerCase())}" data-rule-description="${escHtml(String(rule.description || '').toLowerCase())}" data-rule-category="${escHtml(String(rule.category || ''))}" data-rule-enabled="${rule.enabled === false ? 'disabled' : 'enabled'}" style="${index ? 'border-top:1px solid var(--gray-200);' : ''}">
@@ -161,82 +128,30 @@ async function renderAdminPoints(container) {
   } catch (e) { container.innerHTML = `<div class="empty">积分规则加载失败：${escHtml(e.message || '')}</div>`; }
 }
 
+let designerPerformanceRequest = 0;
 async function reloadDesignerMonthlyReport() {
   const month = document.getElementById('designerPerformanceMonth')?.value;
-  if (!month) return;
+  if (!/^\d{4}(-\d{2})?$/.test(month || '')) return;
+  const requestId = ++designerPerformanceRequest;
   const card = document.getElementById('designerPerformanceMonth')?.closest('.card');
+  const hint = card?.querySelector('.admin-section-hint');
+  if (hint) hint.textContent = '正在加载积分与完成事项…';
+  const list = card?.querySelector('.designer-performance-list');
+  if (list) list.hidden = true;
   try {
-    const report = await apiGet('/performance/designer-monthly-report?month=' + encodeURIComponent(month));
-    card?.outerHTML && (card.outerHTML = renderDesignerMonthlyReport(report));
-  } catch (error) { window.EMIE.actions.showSystemAlert('月度绩效表加载失败：' + (error.message || '')); }
+    const [report, evaluations] = await Promise.all([
+      apiGet('/performance/designer-monthly-report?month=' + encodeURIComponent(month)),
+      apiGet('/performance/designer-evaluations?period=' + encodeURIComponent(month)),
+    ]);
+    for (const row of report.designers || []) row.evaluations = evaluations.filter(item => item.userId === row.userId);
+    if (month.length === 7) {
+      const previews = await Promise.allSettled((report.designers || []).map(row => apiGet('/performance/designer-evaluations/completion?month=' + encodeURIComponent(month) + '&userId=' + encodeURIComponent(row.userId))));
+      previews.forEach((result, index) => { if (result.status === 'fulfilled') report.designers[index].completionPreview = result.value; });
+    }
+    if (requestId === designerPerformanceRequest && card?.isConnected && document.getElementById('designerPerformanceMonth')?.value === month) card.outerHTML = renderDesignerMonthlyReport(report);
+  } catch (error) { if (requestId === designerPerformanceRequest && card?.isConnected) card.querySelector('.admin-section-hint').textContent = '绩效加载失败：' + (error.message || '请稍后重试'); }
 }
 
-async function exportDesignerMonthlyReport(button, regenerate = false) {
-  const month = document.getElementById('designerPerformanceMonth')?.value;
-  if (!month) return;
-  const originalText = button?.textContent;
-  const progress = document.getElementById('designerPerformanceExportProgress');
-  const setProgress = status => {
-    if (!progress) return;
-    const percent = Math.max(0, Math.min(100, Number(status.progress || 0)));
-    progress.hidden = false;
-    progress.querySelector('[data-export-message]').textContent = status.message || '正在生成绩效表';
-    progress.querySelector('[data-export-percent]').textContent = `${percent}%`;
-    progress.querySelector('[data-export-fill]').style.width = `${percent}%`;
-  };
-  if (button) { button.disabled = true; button.textContent = '正在生成…'; button.setAttribute('aria-busy', 'true'); }
-  try {
-    const token = localStorage.getItem('design_pm_token');
-    const headers = token ? { 'X-Auth-Token': token } : {};
-    const endpoint = '/api/performance/exports/' + encodeURIComponent(month);
-    const existing = await fetch(endpoint, { headers, credentials: 'same-origin' });
-    if (!existing.ok) throw new Error(`查询生成状态失败（HTTP ${existing.status}）`);
-    let status = await existing.json();
-    if (!regenerate && status.generatedAt && status.status !== 'RUNNING') {
-      status = { ...status, status: 'READY', progress: 100 };
-    } else if (status.status !== 'RUNNING' && (regenerate || status.status !== 'READY')) {
-      const generated = await fetch(endpoint, { method: 'POST', headers, credentials: 'same-origin' });
-      if (!generated.ok) {
-        const error = await generated.json().catch(() => ({}));
-        throw new Error(error.error || `生成失败（HTTP ${generated.status}）`);
-      }
-      status = await generated.json();
-    }
-    setProgress(status);
-    for (let attempt = 0; status.status === 'RUNNING' && attempt < 200; attempt++) {
-      button && (button.textContent = `生成中 ${Number(status.progress || 0)}%`);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const response = await fetch('/api/performance/exports/' + encodeURIComponent(month), { headers, credentials: 'same-origin' });
-      if (!response.ok) throw new Error(`查询生成状态失败（HTTP ${response.status}）`);
-      status = await response.json();
-      setProgress(status);
-    }
-    if (status.status === 'FAILED') throw new Error(status.message || '生成失败，请重试');
-    if (status.status !== 'READY') throw new Error('生成仍在进行；稍后再次点击可继续下载');
-    setProgress({ ...status, message: status.generatedAt
-      ? `正在下载已生成文件（生成时间：${status.generatedAt}）；数据更新后可点击“重新生成”`
-      : '生成完成，正在下载' });
-    const response = await fetch('/api/performance/exports/' + encodeURIComponent(month) + '/zip', {
-      headers,
-      credentials: 'same-origin',
-    });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.error || `导出失败（HTTP ${response.status}）`);
-    }
-    const blobUrl = URL.createObjectURL(await response.blob());
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = `${month}_设计师绩效考评表.zip`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-  } catch (error) {
-    if (progress) { progress.querySelector('[data-export-message]').textContent = error.message || '生成失败'; progress.querySelector('[data-export-percent]').textContent = '失败'; }
-    window.EMIE.actions.showSystemAlert(error.message || 'Excel 导出失败');
-  } finally {
-    if (button) { button.disabled = false; button.textContent = originalText || '↓ 导出 Excel'; button.removeAttribute('aria-busy'); }
-  }
-}
 
 function filterAdminPointRules() {
   const search = String(document.getElementById('adminPointRuleSearch')?.value || '').trim().toLowerCase();
@@ -264,7 +179,7 @@ async function saveWithdrawalGovernanceConfig() {
 }
 
 function renderDesignerTargetRows(rows) {
-  return rows.length ? rows.map((item, index) => `<tr><td><strong>${escHtml(item.userName || '-')}</strong></td><td>飞书ID：${escHtml(item.feishuUserId || '待登录补齐')}</td><td><input class="form-input" type="number" min="0" id="dt_points_${index}" value="${Number(item.targetPoints || 0)}"></td><td>${item.configured ? '<span class="badge badge-completed">已配置</span>' : '<span class="badge badge-pending">待配置</span>'}</td><td><button class="btn btn-primary btn-sm" data-emie-action="click:scoring-save-target" data-target-index="${index}">保存</button></td></tr>`).join('') : '<tr><td colspan="5"><div class="empty-state">暂无在职设计师</div></td></tr>';
+  return rows.length ? rows.map((item, index) => `<tr><td><strong>${escHtml(item.userName || '-')}</strong></td><td>${escHtml(item.feishuUserId || '待登录补齐')}</td><td><input class="form-input" type="number" min="1" step="1" id="dt_points_${index}" aria-label="${escHtml(item.userName || '设计师')}的目标积分" value="${Number(item.targetPoints || 0)}"></td><td>${item.configured ? '<span class="badge badge-completed">已配置</span>' : '<span class="badge badge-pending">待配置</span>'}</td><td><button class="btn btn-primary btn-sm" data-emie-action="click:scoring-save-target" data-target-index="${index}">保存</button></td></tr>`).join('') : '<tr><td colspan="5"><div class="empty-state">暂无在职设计师</div></td></tr>';
 }
 
 function renderProposalDesignFiles(value) {
@@ -297,11 +212,13 @@ async function loadDesignerTargetMonth(month) {
 
 async function saveDesignerTarget(index) {
   const item = (EMIE.adminState.designerTargets || [])[index];
-  const monthKey = document.getElementById('designerTargetMonth')?.value;
-  if (!item || !monthKey) return;
+  const input = document.getElementById('dt_points_' + index);
+  const targetPoints = Number(input?.value);
+  if (!item || !input?.reportValidity() || !Number.isInteger(targetPoints) || targetPoints <= 0) return;
   try {
-    await apiPut('/performance/designer-targets/' + encodeURIComponent(item.userId), { monthKey, targetPoints: Number(document.getElementById('dt_points_' + index)?.value || 0) });
-    await loadDesignerTargetMonth(monthKey);
+    await apiPut('/performance/designer-targets/' + encodeURIComponent(item.userId), { monthKey: localMonth(), targetPoints });
+    await loadDesignerTargetMonth(localMonth());
+    await reloadDesignerMonthlyReport();
   } catch (e) { window.EMIE.actions.showSystemAlert('目标保存失败：' + e.message); }
 }
 
@@ -595,12 +512,9 @@ async function savePointArchiveDraft() {
 
 
 EMIE.registerActions({
-  renderAdminScoring,
-  roleColor,
-  updateScoringPct,
-  saveScoringWeights,
-  resetScoringWeights,
   renderAdminPoints,
+  renderAdminDesignerPerformance,
+  reloadDesignerMonthlyReport,
   filterAdminPointRules,
   resetAdminPointRuleFilters,
   savePointRule,
@@ -624,18 +538,16 @@ EMIE.registerActions({
 
 const registerEventAction = EMIE.actions.registerEventAction;
 if (registerEventAction) {
-  registerEventAction('scoring-reset-weights', () => resetScoringWeights());
-  registerEventAction('scoring-save-weights', () => saveScoringWeights());
   registerEventAction('scoring-filter-rules', () => filterAdminPointRules());
   registerEventAction('scoring-reset-rules', () => resetAdminPointRuleFilters());
-  registerEventAction('scoring-pct', (_event, el) => updateScoringPct(el.dataset.scoreType, el.dataset.scoreRole, el.value));
   registerEventAction('scoring-rule-toggle', (_event, el) => el.closest('.checkbox-item')?.classList.toggle('checked', el.checked));
   registerEventAction('scoring-save-rule', (_event, el) => savePointRule(el.dataset.ruleCode, Number(el.dataset.ruleIndex)));
   registerEventAction('scoring-delete-rule', (_event, el) => deletePointRule(el.dataset.ruleCode));
   registerEventAction('scoring-save-target', (_event, el) => saveDesignerTarget(Number(el.dataset.targetIndex)));
+  registerEventAction('scoring-performance-scope', () => changeDesignerPerformanceScope());
   registerEventAction('scoring-performance-month', () => reloadDesignerMonthlyReport());
-  registerEventAction('scoring-export-performance', (_event, el) => exportDesignerMonthlyReport(el));
-  registerEventAction('scoring-regenerate-performance', (_event, el) => exportDesignerMonthlyReport(el, true));
+  registerEventAction('scoring-task-deliveries', (_event, el) => loadDesignerTaskDeliveries(el));
+  registerEventAction('scoring-preview-delivery', (_event, el) => previewDesignerDeliveryFile(el));
   registerEventAction('scoring-create-rule', () => createPointRule());
   registerEventAction('scoring-close-adjustment', () => closeM('manualAdjustmentModal'));
   registerEventAction('scoring-submit-adjustment', (_event, el) => submitManualAdjustment(el));
@@ -644,11 +556,6 @@ if (registerEventAction) {
 }
 
 EMIE.registerModule('adminScoring', {
-  renderAdminScoring,
-  roleColor,
-  updateScoringPct,
-  saveScoringWeights,
-  resetScoringWeights,
   renderAdminPoints,
   filterAdminPointRules,
   resetAdminPointRuleFilters,

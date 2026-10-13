@@ -7,6 +7,13 @@ import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
 public interface PointAdjustmentLedgerRepository extends JpaRepository<PointAdjustmentLedger, Long> {
+    @Query("select a.userId, coalesce(sum(a.points), 0) from PointAdjustmentLedger a "
+            + "where a.accountingMonth between :fromMonth and :toMonth group by a.userId")
+    List<Object[]> sumPointsBetweenMonths(@Param("fromMonth") String fromMonth, @Param("toMonth") String toMonth);
+
+    java.util.List<PointAdjustmentLedger> findBySourceTypeAndSourceIdIn(
+            String sourceType, java.util.Collection<Long> sourceIds);
+
     Optional<PointAdjustmentLedger> findBySourceTypeAndSourceId(String type, Long sourceId);
 
     List<PointAdjustmentLedger> findByUserIdOrderByCreatedAtDescIdDesc(String userId);

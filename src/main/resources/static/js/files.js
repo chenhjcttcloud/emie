@@ -20,7 +20,7 @@ function closeFilePreview() {
 function retryFilePreview() {
   const current = EMIE.fileState.currentPreview;
   if (!current) return;
-  openFilePreview(current.fileUrl, current.fileName, current.fileSize, true);
+  openFilePreview(current.fileUrl, current.fileName, current.fileSize, true, current.previewOnly);
 }
 
 function authenticatedFileUrl(url) {
@@ -40,7 +40,7 @@ function authenticatedFileUrl(url) {
   }
 }
 
-async function openFilePreview(fileUrl, fileName, fileSize, retry = false) {
+async function openFilePreview(fileUrl, fileName, fileSize, retry = false, previewOnly = false) {
   if (!isPreviewableFile(fileName)) {
     showDownloadOptions(fileUrl, fileName, fileSize);
     return;
@@ -50,7 +50,7 @@ async function openFilePreview(fileUrl, fileName, fileSize, retry = false) {
   const requestSequence = ++EMIE.fileState.previewSequence;
   const normalizedUrl = normalizeFileUrl(fileUrl);
   const storedName = storedNameFromFile(normalizedUrl);
-  EMIE.fileState.currentPreview = { fileUrl: normalizedUrl, fileName, fileSize, storedName };
+  EMIE.fileState.currentPreview = { fileUrl: normalizedUrl, fileName, fileSize, storedName, previewOnly };
 
   const overlay = document.createElement('div');
   overlay.id = 'filePreviewOverlay';
@@ -71,8 +71,7 @@ async function openFilePreview(fileUrl, fileName, fileSize, retry = false) {
       <div class="file-preview-footer">
         <span class="file-preview-tip">PPT/PPTX 以静态幻灯片形式预览</span>
         <div class="file-preview-footer-actions">
-          <button class="btn btn-outline btn-sm" id="openPreviewWindowBtn" data-emie-action="click:file-open-preview-window" disabled>↗ 新窗口打开</button>
-          <button class="btn btn-primary btn-sm" data-emie-action="click:file-direct-preview-download" data-file-url="${escHtml(authenticatedFileUrl(normalizedUrl))}" data-file-name="${escHtml(fileName || storedName)}">⬇ 下载原文件</button>
+          ${previewOnly ? '' : `<button class="btn btn-outline btn-sm" id="openPreviewWindowBtn" data-emie-action="click:file-open-preview-window" disabled>↗ 新窗口打开</button><button class="btn btn-primary btn-sm" data-emie-action="click:file-direct-preview-download" data-file-url="${escHtml(authenticatedFileUrl(normalizedUrl))}" data-file-name="${escHtml(fileName || storedName)}">⬇ 下载原文件</button>`}
         </div>
       </div>
     </div>`;
@@ -102,7 +101,7 @@ async function openFilePreview(fileUrl, fileName, fileSize, retry = false) {
       }
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
-    showFilePreviewError('预览任务仍在排队，请稍后重试或直接下载', true);
+    showFilePreviewError(previewOnly ? '预览任务仍在排队，请稍后重试' : '预览任务仍在排队，请稍后重试或直接下载', true);
   } catch (error) {
     if (requestSequence === EMIE.fileState.previewSequence) {
       showFilePreviewError(error.message || '文件预览加载失败', true);

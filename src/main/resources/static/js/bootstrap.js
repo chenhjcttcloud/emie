@@ -1,11 +1,11 @@
-import './core-runtime.js?v=300';
+import './core-runtime.js?v=324';
 import './event-runtime.js?v=269';
-import './core-auth.js?v=398';
+import './core-auth.js?v=422';
 import './core-identity.js?v=496';
-import './core-shell.js?v=500';
+import './core-shell.js?v=517';
 import './core-ui.js?v=521';
 import './core.js?v=147';
-import './dashboard-projects.js?v=476';
+import './dashboard-projects.js?v=493';
 import './dashboard-home.js?v=623';
 import './dashboard-lists.js?v=429';
 import './dashboard-scoring.js?v=345';
@@ -20,25 +20,26 @@ import './project-detail.js?v=660';
 import './project-tasks.js?v=691';
 import './project-sharing.js?v=264';
 import './projects.js?v=148';
-import './admin-shell.js?v=423';
+import './admin-shell.js?v=447';
 import './admin-users.js?v=279';
 import './admin-roles.js?v=229';
 import './admin-catalog.js?v=276';
 import './admin-org.js?v=292';
-import './admin-scoring.js?v=631';
+import './designer-evaluation.js?v=16';
+import './admin-scoring.js?v=653';
 import './admin-audit.js?v=384';
 import './admin-point-logs.js?v=14';
 import './admin-storage.js?v=321';
 import './admin-workload.js?v=526';
 import './admin.js?v=147';
-import './files.js?v=282';
+import './files.js?v=302';
 
 const EMIE = window.EMIE;
 const requiredEmieModules = [
   'coreRuntime', 'eventRuntime', 'coreAuth', 'coreIdentity', 'coreShell', 'coreUi', 'core',
   'dashboardProjects', 'dashboardHome', 'dashboardLists', 'dashboardScoring', 'dashboardPoints', 'dashboardDesigner', 'dashboard',
   'projectUploads', 'projectForm', 'projectDetail', 'projectTasks', 'projectSharing', 'projects', 'materialMarket', 'imageLibrary',
-  'adminShell', 'adminUsers', 'adminRoles', 'adminCatalog', 'adminOrg', 'adminScoring', 'adminAudit',
+  'adminShell', 'adminUsers', 'adminRoles', 'adminCatalog', 'adminOrg', 'adminScoring', 'designerEvaluation', 'adminAudit',
   'adminStorage', 'adminWorkload', 'admin', 'files',
 ];
 const missingEmieModules = requiredEmieModules.filter(name => !EMIE.modules[name]);
