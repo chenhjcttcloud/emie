@@ -1045,13 +1045,25 @@ async function openTaskChangeBonus(pid, tid) {
   if (document.getElementById('taskChangeBonusModal')) return;
   try {
     const rules = await apiGet('/points/rules');
+    EMIE.projectState.changeBonusImages = [];
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
     modal.id = 'taskChangeBonusModal';
-    modal.dataset.requestId = crypto.randomUUID();
-    modal.innerHTML = `<div class="modal" style="max-width:600px;"><div class="modal-header"><div class="modal-title">修改子任务</div><button class="modal-close" type="button" data-emie-action="click:task-change-bonus-close">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">修改意见</label><textarea class="form-textarea" name="reason" required maxlength="500"></textarea></div><div class="form-group"><label class="checkbox-item"><input type="checkbox" name="withPoints" data-emie-action="change:task-change-bonus-mode"> 本次修改有积分</label></div><div data-change-point-rules hidden>${renderPointRulePicker(rules)}</div></div><div class="modal-footer"><button class="btn btn-outline" type="button" data-emie-action="click:task-change-bonus-close">取消</button><button class="btn btn-primary" type="button" data-emie-action="click:task-change-bonus-submit" data-project-id="${Number(pid)}" data-task-id="${Number(tid)}">发起修改</button></div></div>`;
+    modal.dataset.requestId = createChangeRequestId();
+    modal.innerHTML = `<div class="modal" style="max-width:600px;"><div class="modal-header"><div class="modal-title">修改子任务</div><button class="modal-close" type="button" data-emie-action="click:task-change-bonus-close">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">修改意见</label><textarea class="form-textarea" name="reason" required maxlength="500"></textarea></div><div class="form-group"><label class="form-label">修改参考图片（可选）</label><div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="changeBonusImageInput"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="changeBonusImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-change-bonus-images"></div><div class="file-list" id="changeBonusImageList"></div></div><div class="form-group"><label class="checkbox-item"><input type="checkbox" name="withPoints" data-emie-action="change:task-change-bonus-mode"> 本次修改有积分</label></div><div data-change-point-rules hidden>${renderPointRulePicker(rules)}</div></div><div class="modal-footer"><button class="btn btn-outline" type="button" data-emie-action="click:task-change-bonus-close">取消</button><button class="btn btn-primary" type="button" data-emie-action="click:task-change-bonus-submit" data-project-id="${Number(pid)}" data-task-id="${Number(tid)}">发起修改</button></div></div>`;
     document.body.appendChild(modal);
   } catch (error) { window.EMIE.actions.showSystemAlert('加载积分规则失败：' + error.message); }
+}
+
+function createChangeRequestId() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (typeof globalThis.crypto?.getRandomValues === 'function') globalThis.crypto.getRandomValues(bytes);
+  else bytes.forEach((_, index, values) => { values[index] = Math.floor(Math.random() * 256); });
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map(value => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 function updateTaskChangeBonusMode(input) {
@@ -1060,15 +1072,21 @@ function updateTaskChangeBonusMode(input) {
 
 async function submitTaskChangeBonus(pid, tid) {
   const modal = document.getElementById('taskChangeBonusModal');
+  if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
   const withPoints = modal.querySelector('[name="withPoints"]').checked;
   const pointRuleCode = modal.querySelector('[name="pointRuleCode"]').value;
   const reason = modal.querySelector('[name="reason"]').value.trim();
   if (!reason || (withPoints && !pointRuleCode)) { window.EMIE.actions.showSystemAlert('请填写修改意见，有积分时请选择积分规则'); return; }
   try {
-    await apiPost(`/projects/${pid}/subtasks/${tid}/change-bonus`, { withPoints, pointRuleCode: withPoints ? pointRuleCode : null, reason, requestId: modal.dataset.requestId });
+    await apiPost(`/projects/${pid}/subtasks/${tid}/change-bonus`, { withPoints, pointRuleCode: withPoints ? pointRuleCode : null, reason, requestId: modal.dataset.requestId, changeReferenceImagesJson: JSON.stringify(EMIE.projectState.changeBonusImages) });
     modal.remove();
     await refreshAfterMutation(pid);
   } catch (error) { window.EMIE.actions.showSystemAlert('发起修改失败：' + error.message); }
+}
+
+function handleChangeBonusImages(input) {
+  handleFileUpload(input, EMIE.projectState.changeBonusImages, 6, '修改参考图', true);
+  setTimeout(() => renderFileList(EMIE.projectState.changeBonusImages, '修改参考图'), 0);
 }
 
 EMIE.registerActions({
@@ -1103,6 +1121,7 @@ EMIE.registerActions({
   submitTaskChangeBonus,
   handleRejectImages,
   handleRejectAttachments,
+  handleChangeBonusImages,
   submitTaskReject,
   toggleSubTaskMarketMode,
 });
@@ -1138,6 +1157,7 @@ EMIE.registerModule('projectTasks', {
   submitTaskChangeBonus,
   handleRejectImages,
   handleRejectAttachments,
+  handleChangeBonusImages,
   submitTaskReject,
   toggleSubTaskMarketMode,
 });
@@ -1227,6 +1247,7 @@ if (registerEventAction) {
   });
   registerEventAction('task-change-bonus-close', () => closeM('taskChangeBonusModal'));
   registerEventAction('task-change-bonus-mode', (_event, element) => updateTaskChangeBonusMode(element));
+  registerEventAction('task-change-bonus-images', (_event, element) => handleChangeBonusImages(element));
   registerEventAction('task-change-bonus-submit', (_event, element) => submitGuard(element, () => submitTaskChangeBonus(Number(element.dataset.projectId), Number(element.dataset.taskId))));
   registerEventAction('task-reject-images', (_event, element) => handleRejectImages(element));
   registerEventAction('task-reject-attachments', (_event, element) => handleRejectAttachments(element));

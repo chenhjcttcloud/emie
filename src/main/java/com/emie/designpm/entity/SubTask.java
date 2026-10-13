@@ -92,6 +92,10 @@ public class SubTask {
     @Column(length = 100)
     private String pendingChangeBonusCreatedBy;
 
+    /** 需求变化时给设计师的参考图片，重新交付确认后清空。 */
+    @Column(columnDefinition = "LONGTEXT")
+    private String pendingChangeReferenceImagesJson = "[]";
+
     /** 接单所需能力标签，JSON 字符串数组。 */
     @Column(columnDefinition = "TEXT")
     private String requiredSkillTagsJson;

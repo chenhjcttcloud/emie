@@ -823,6 +823,8 @@ class ProjectReviewWorkflowTest {
                 request,
                 "reason",
                 "增加原创设计",
+                "changeReferenceImagesJson",
+                "[{\"name\":\"修改参考.png\",\"url\":\"/api/files/download/change.png\",\"storedName\":\"change.png\"}]",
                 "withPoints",
                 true,
                 "pointRuleCode",
@@ -837,6 +839,7 @@ class ProjectReviewWorkflowTest {
         assertEquals(2.5d, task.getBasePointSnapshot());
         assertEquals("D30_8", task.getPendingChangeRuleCode());
         assertEquals(15d, task.getPendingChangeBonusPoints());
+        assertTrue(task.getPendingChangeReferenceImagesJson().contains("修改参考.png"));
         assertTrue(project.getLogs().get(0).getAfterData().contains("\"pointRequestId\":\"" + request + "\""));
         assertTrue(project.getLogs().get(0).getAfterData().contains("\"points\":15.0"));
         assertThrows(RuntimeException.class, () -> service.taskRedeliver(1L, 11L, deliveryBody()));
@@ -862,6 +865,7 @@ class ProjectReviewWorkflowTest {
         service.taskApprove(1L, 11L, Map.of("currentRole", "planner", "currentUserId", "planner-1"));
         service.taskApprove(1L, 11L, Map.of("currentRole", "planner", "currentUserId", "planner-1"));
         assertEquals("completed", task.getStatus());
+        assertEquals("[]", task.getPendingChangeReferenceImagesJson());
         verify(points, times(1))
                 .awardPendingChangeBonus(same(task), nullable(SubTaskDeliveryVersion.class), anyString());
         verify(points, times(1)).awardBaseSubmission(same(task), isNull(), anyString());

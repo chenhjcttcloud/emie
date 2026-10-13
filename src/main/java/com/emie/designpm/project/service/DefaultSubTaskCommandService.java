@@ -467,6 +467,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         task.setPendingChangeBonusPoints(null);
         task.setPendingChangeBonusReason(null);
         task.setPendingChangeBonusCreatedBy(null);
+        // 只清空当前待处理引用，上传文件记录留给审计与归档链路追溯。
+        task.setPendingChangeReferenceImagesJson("[]");
     }
 
     private Map<String, Object> snapshotSubTask(SubTask task) {
@@ -480,6 +482,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         data.put("allocationStatus", task.getAllocationStatus());
         data.put("pointRuleCode", task.getPointRuleCode());
         data.put("pendingChangeRuleCode", task.getPendingChangeRuleCode());
+        data.put("pendingChangeReferenceImagesJson", task.getPendingChangeReferenceImagesJson());
         data.put("basePointSnapshot", task.getBasePointSnapshot());
         data.put("difficultyMultiplierSnapshot", task.getDifficultyMultiplierSnapshot());
         data.put("conceptReserveExempt", task.isConceptReserveExempt());
@@ -1035,6 +1038,9 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                 .doubleValue());
         task.setPendingChangeBonusReason(reason);
         task.setPendingChangeBonusCreatedBy(actorId);
+        String changeReferenceImagesJson = inputValidator.validateAndCleanFiles(
+                (String) body.getOrDefault("changeReferenceImagesJson", "[]"), true);
+        task.setPendingChangeReferenceImagesJson(changeReferenceImagesJson);
         task.setStatus("revision_requested");
         task.setActualDate(null);
         task.setCompletedAt(null);
@@ -1061,9 +1067,11 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                                                 ? ""
                                                 : Objects.toString(pointsService.ruleDescription(revisionRuleCode), ""),
                                 "points", points,
-                                "pointRequestId", requestId)),
-                        "status,reviewComments,pendingChangeBonus"));
+                                "pointRequestId", requestId,
+                                "changeReferenceImagesJson", changeReferenceImagesJson)),
+                        "status,reviewComments,pendingChangeBonus,changeReferenceImagesJson"));
         Project saved = projectRepository.saveAndFlush(project);
+        fileArchiveService.bindFilesFromJson(changeReferenceImagesJson, "sub_task", task.getId());
         notifier.safeNotifyAfterCommit(
                 "TASK_REVISION_REQUESTED",
                 task.getDesignerId(),
@@ -1301,8 +1309,10 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         } else if (pointsService != null) {
             pointsService.awardBaseSubmission(
                     task, task.getPendingChangeBonusRequestId() == null ? version : null, currentUserId);
-            if (task.getPendingChangeBonusRequestId() != null)
+            if (task.getPendingChangeBonusRequestId() != null) {
                 pointsService.awardPendingChangeBonus(task, version, currentUserId);
+                clearPendingChangeBonus(task);
+            }
         }
         if (version != null && (version.getExpectedPoints() != null || legacyManualScoring))
             deliveryVersionRepository.save(version);
@@ -1538,6 +1548,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             task.setPendingChangeBonusPoints(null);
             task.setPendingChangeBonusReason(null);
             task.setPendingChangeBonusCreatedBy(null);
+            task.setPendingChangeReferenceImagesJson("[]");
         }
 
         String currentUser = (String) body.getOrDefault("currentUser", "");

@@ -112,6 +112,7 @@ public class ProjectViewSupport {
                     item.put("pendingChangeRuleCode", task.getPendingChangeRuleCode());
                     item.put("pendingChangeBonusRequestId", task.getPendingChangeBonusRequestId());
                     item.put("pendingChangeBonusPoints", task.getPendingChangeBonusPoints());
+                    item.put("pendingChangeReferenceImagesJson", task.getPendingChangeReferenceImagesJson());
                     item.put("details", task.getDetails());
                     item.put("deliverables", task.getDeliverables());
                     item.put("referenceImagesJson", task.getReferenceImagesJson());
@@ -176,6 +177,8 @@ public class ProjectViewSupport {
                     item.put("publisherName", task.getPublisherName());
                     item.put("publisherRole", task.getPublisherRole());
                     item.put("assigneeRole", task.getAssigneeRole());
+                    item.put("pendingChangeBonusRequestId", task.getPendingChangeBonusRequestId());
+                    item.put("pendingChangeReferenceImagesJson", task.getPendingChangeReferenceImagesJson());
                     item.put("details", task.getDetails());
                     item.put("deliverables", task.getDeliverables());
                     item.put("referenceImagesJson", task.getReferenceImagesJson());
@@ -477,6 +480,7 @@ public class ProjectViewSupport {
         dto.setPendingChangeRuleCode(task.getPendingChangeRuleCode());
         dto.setPendingChangeBonusRequestId(task.getPendingChangeBonusRequestId());
         dto.setPendingChangeBonusPoints(task.getPendingChangeBonusPoints());
+        dto.setPendingChangeReferenceImagesJson(task.getPendingChangeReferenceImagesJson());
         dto.setQualityBonusThresholdSnapshot(task.getQualityBonusThresholdSnapshot());
         dto.setQualityBonusRatioSnapshot(task.getQualityBonusRatioSnapshot());
         dto.setQualityTopThresholdSnapshot(task.getQualityTopThresholdSnapshot());

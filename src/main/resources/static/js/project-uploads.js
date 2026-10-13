@@ -604,6 +604,7 @@ function resolveFileListContext(list, isImage) {
   if (list === EMIE.projectState.editProjectAttachments) return { listKey: 'editProjectAttachment', containerId: 'editProjectAttachmentList' };
   if (list === EMIE.projectState.rejectionImages) return { listKey: 'rejectionImage', containerId: 'rejectImageList' };
   if (list === EMIE.projectState.rejectionAttachments) return { listKey: 'rejectionAttachment', containerId: 'rejectAttachmentList' };
+  if (list === EMIE.projectState.changeBonusImages) return { listKey: 'changeBonusImage', containerId: 'changeBonusImageList' };
   if (list === EMIE.projectState.materialRefImages) return { listKey: 'materialRefImage', containerId: 'materialRefImageList' };
   if (list === window.EMIE.materialMarket?.packagingFlatImage) return { listKey: 'materialPackagingFlat', containerId: 'packagingFlatList' };
   if (list === window.EMIE.materialMarket?.packagingFoldedImage) return { listKey: 'materialPackagingFolded', containerId: 'packagingFoldedList' };
@@ -628,6 +629,7 @@ function removeFileItem(listKey, idx) {
     editProjectAttachment: [EMIE.projectState.editProjectAttachments, '编辑项目附件'],
     rejectionImage: [EMIE.projectState.rejectionImages, '驳回参考图'],
     rejectionAttachment: [EMIE.projectState.rejectionAttachments, '驳回附件'],
+    changeBonusImage: [EMIE.projectState.changeBonusImages, '修改参考图'],
     materialRefImage: [EMIE.projectState.materialRefImages, '参考图片'],
     materialPackagingFlat: [window.EMIE.materialMarket?.packagingFlatImage, '包装展开图'],
     materialPackagingFolded: [window.EMIE.materialMarket?.packagingFoldedImage, '折叠效果图'],
@@ -663,6 +665,7 @@ function handleUploadDrop(input, files) {
     deliverAttachmentInput: [EMIE.projectState.deliverAttachments, 5, '交付附件', false],
     rejectImageInput: [EMIE.projectState.rejectionImages, 6, '驳回参考图', true],
     rejectAttachmentInput: [EMIE.projectState.rejectionAttachments, 5, '驳回附件', false],
+    changeBonusImageInput: [EMIE.projectState.changeBonusImages, 6, '修改参考图', true],
     materialRefImageInput: [EMIE.projectState.materialRefImages, 6, '参考图片', true],
     materialAttachmentInput: [EMIE.projectState.materialAttachments, 5, '附件', false],
   }[id];

@@ -293,6 +293,7 @@ function renderSubTaskCard(detail, task, idx) {
     </div>` : ''}
 
     ${task.reviewComments ? `<div class="review-box ${task.status === 'rejected' ? 'rejected' : 'approved'}"><strong>${task.status === 'revision_requested' || task.pendingChangeBonusRequestId ? '修改意见' : task.status === 'rejected' ? '驳回意见' : '验收意见'}：</strong>${escHtml(task.reviewComments)}</div>` : ''}
+    ${renderSubTaskImages(task.pendingChangeReferenceImagesJson)}
 
 
     <div class="subtask-actions${task.pendingChangeBonusRequestId ? ' has-change-note' : ''}">
@@ -366,6 +367,7 @@ function openProjectSubTaskDetail(event, taskId) {
         ${task.referenceImagesJson ? renderSubTaskImages(task.referenceImagesJson) : ''}
         ${task.attachmentsJson ? renderTaskAttachments(task.attachmentsJson) : ''}
         ${task.deliverables ? `<div class="detail-item" style="margin-top:12px;"><div class="detail-label">当前交付成果</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.deliverables)}</div></div>` : ''}
+        ${renderSubTaskImages(task.pendingChangeReferenceImagesJson)}
         <div style="margin-top:18px;">
           <div style="font-size:14px;font-weight:700;margin-bottom:8px;">修改要求记录 <span style="color:var(--gray-400);font-weight:400;">(${records.length})</span></div>
           ${records.length ? records.map(record => `
