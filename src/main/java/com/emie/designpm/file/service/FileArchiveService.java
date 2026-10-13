@@ -239,6 +239,10 @@ public class FileArchiveService {
         throw new FileNotFoundException("文件不可用: " + storedName);
     }
 
+    public Path getUploadPath() {
+        return uploadPath;
+    }
+
     /** 从 NAS 恢复到本地缓存 */
     private synchronized Path restoreFromNas(FileRecord record) throws Exception {
         // 设置恢复中状态

@@ -1,20 +1,121 @@
 package com.emie.designpm.performance.service;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.entity.FileRecord;
+import com.emie.designpm.file.repository.FileRecordRepository;
+import com.emie.designpm.file.service.FileArchiveService;
+import com.emie.designpm.file.service.FileThumbnailService;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 import javax.imageio.ImageIO;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class DesignerPerformanceWorkbookTest {
+    @TempDir
+    Path uploadDir;
+
+    @Test
+    void embedsAiPreviewWithoutExposingAiDownloadLink() throws Exception {
+        FileRecordRepository records = mock(FileRecordRepository.class);
+        SystemConfigRepository configs = mock(SystemConfigRepository.class);
+        FileArchiveService archive = new FileArchiveService(records, configs);
+        org.springframework.test.util.ReflectionTestUtils.setField(archive, "uploadDir", uploadDir.toString());
+        archive.init();
+
+        Path ai = uploadDir.resolve("source.ai");
+        try (PDDocument document = new PDDocument()) {
+            for (int pageNo = 1; pageNo <= 3; pageNo++) {
+                PDPage page = new PDPage(PDRectangle.A4);
+                document.addPage(page);
+                try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+                    content.beginText();
+                    content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), 24);
+                    content.newLineAtOffset(72, 700);
+                    content.showText("AI preview page " + pageNo);
+                    content.endText();
+                }
+            }
+            document.save(ai.toFile());
+        }
+        when(records.findByStoredName("source.ai"))
+                .thenReturn(Optional.of(FileRecord.builder()
+                        .storedName("source.ai")
+                        .storageTier("local")
+                        .build()));
+        var loader = new PerformanceImageLoader(archive, new FileThumbnailService(archive));
+        var attachment = new DesignerMonthlyReport.Attachment("source.ai", "/api/files/download/source.ai", true);
+        var delivery = new DesignerMonthlyReport.Delivery(
+                1, "initial", "", LocalDateTime.now(), "设计师", "", List.of(attachment));
+        var item = new DesignerMonthlyReport.Item(
+                DesignerMonthlyReport.Category.REGULAR,
+                "任务",
+                LocalDateTime.now(),
+                LocalDateTime.now(),
+                true,
+                null,
+                null,
+                "",
+                List.of(attachment),
+                List.of(delivery));
+        var report = new DesignerMonthlyReport(
+                "designer-1", "设计师", "设计部", "设计师", YearMonth.now(), LocalDateTime.now(), List.of(item));
+        var bytes = new ByteArrayOutputStream();
+        DesignerPerformanceWorkbook.write(report, loader, bytes);
+
+        try (var workbook = new XSSFWorkbook(new ByteArrayInputStream(bytes.toByteArray()))) {
+            var sheet = workbook.getSheet("交付成果明细");
+            assertEquals(6, workbook.getAllPictures().size());
+            assertEquals("", sheet.getRow(3).getCell(9).getStringCellValue());
+            assertNull(sheet.getRow(3).getCell(9).getHyperlink());
+            assertEquals(3, sheet.getDrawingPatriarch().getShapes().size());
+            assertEquals("交付图片 1", sheet.getRow(2).getCell(10).getStringCellValue());
+            assertEquals("交付图片 3", sheet.getRow(2).getCell(12).getStringCellValue());
+            assertEquals(
+                    10,
+                    ((org.apache.poi.xssf.usermodel.XSSFPicture)
+                                    sheet.getDrawingPatriarch().getShapes().get(0))
+                            .getClientAnchor()
+                            .getCol1());
+            assertEquals(
+                    12,
+                    ((org.apache.poi.xssf.usermodel.XSSFPicture)
+                                    sheet.getDrawingPatriarch().getShapes().get(2))
+                            .getClientAnchor()
+                            .getCol1());
+        }
+
+        Files.writeString(ai, "not a PDF compatible AI");
+        Files.deleteIfExists(uploadDir.resolve("thumbnail-cache/source.ai.ai-page-1.png"));
+        assertTrue(loader.load("/api/files/download/source.ai").isEmpty());
+        var unavailable = new ByteArrayOutputStream();
+        DesignerPerformanceWorkbook.write(report, loader, unavailable);
+        try (var workbook = new XSSFWorkbook(new ByteArrayInputStream(unavailable.toByteArray()))) {
+            var row = workbook.getSheet("交付成果明细").getRow(3);
+            assertTrue(row.getCell(9).getStringCellValue().contains("预览不可用：source.ai"));
+            assertNull(row.getCell(9).getHyperlink());
+        }
+    }
+
     @Test
     void embedsDeliveryImagesAndAddsDownloadLinkForOtherAttachments() throws Exception {
         var imageBytes = new ByteArrayOutputStream();

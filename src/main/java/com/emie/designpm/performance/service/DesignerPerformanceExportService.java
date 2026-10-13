@@ -167,7 +167,7 @@ public class DesignerPerformanceExportService {
             for (DesignerMonthlyReport report : monthReports) {
                 String fileName = fileName(report, usedNames);
                 try (OutputStream out = Files.newOutputStream(staging.resolve(fileName))) {
-                    DesignerPerformanceWorkbook.write(report, images::load, out);
+                    DesignerPerformanceWorkbook.write(report, images, out);
                 }
                 entries.add(new Entry(
                         report.userId(),

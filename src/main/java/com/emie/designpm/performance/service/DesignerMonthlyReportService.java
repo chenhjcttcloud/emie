@@ -246,7 +246,10 @@ public class DesignerMonthlyReportService {
                     return new Attachment(
                             name == null || name.isBlank() ? url.substring(url.lastIndexOf('/') + 1) : name,
                             url,
-                            SecurityUtil.isValidImageFile(name));
+                            SecurityUtil.isValidImageFile(name)
+                                    || (name != null
+                                            && name.toLowerCase(java.util.Locale.ROOT)
+                                                    .endsWith(".ai")));
                 })
                 .distinct()
                 .toList();

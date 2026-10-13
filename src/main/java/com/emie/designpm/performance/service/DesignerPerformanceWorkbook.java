@@ -48,20 +48,37 @@ final class DesignerPerformanceWorkbook {
 
     private final DesignerMonthlyReport report;
     private final Function<String, Optional<LoadedImage>> images;
+    private final Function<String, List<LoadedImage>> multiImages;
     private final XSSFWorkbook workbook = new XSSFWorkbook();
     private final Map<LoadedImage, Integer> pictureIndexes = new HashMap<>();
     private final Styles styles;
 
-    private DesignerPerformanceWorkbook(DesignerMonthlyReport report, Function<String, Optional<LoadedImage>> images) {
+    private DesignerPerformanceWorkbook(
+            DesignerMonthlyReport report,
+            Function<String, Optional<LoadedImage>> images,
+            Function<String, List<LoadedImage>> multiImages) {
         this.report = report;
         Map<String, Optional<LoadedImage>> loadedImages = new HashMap<>();
         this.images = url -> loadedImages.computeIfAbsent(url, images);
+        this.multiImages = multiImages;
         this.styles = new Styles(workbook);
     }
 
     static void write(DesignerMonthlyReport report, Function<String, Optional<LoadedImage>> images, OutputStream out)
             throws IOException {
-        DesignerPerformanceWorkbook book = new DesignerPerformanceWorkbook(report, images);
+        DesignerPerformanceWorkbook book = new DesignerPerformanceWorkbook(
+                report, images, url -> images.apply(url).stream().toList());
+        try (XSSFWorkbook workbook = book.workbook) {
+            book.appraisalSheet();
+            book.detailSheet();
+            book.deliverySheet();
+            workbook.write(out);
+        }
+    }
+
+    static void write(DesignerMonthlyReport report, PerformanceImageLoader images, OutputStream out)
+            throws IOException {
+        DesignerPerformanceWorkbook book = new DesignerPerformanceWorkbook(report, images::load, images::loadAll);
         try (XSSFWorkbook workbook = book.workbook) {
             book.appraisalSheet();
             book.detailSheet();
@@ -251,9 +268,7 @@ final class DesignerPerformanceWorkbook {
         int[] widths = {6, 40, 16, 16, 12, 12, 18, 24, 48, 24};
         for (int i = 0; i < widths.length; i++) sheet.setColumnWidth(i, widths[i] * 256);
         int maxImages = report.items().stream()
-                .mapToInt(item -> (int) item.attachments().stream()
-                        .filter(Attachment::embeddableImage)
-                        .count())
+                .mapToInt(item -> imageSlots(item.attachments()))
                 .max()
                 .orElse(0);
         for (int i = 0; i < Math.max(maxImages, 1); i++)
@@ -318,9 +333,7 @@ final class DesignerPerformanceWorkbook {
                 .flatMap(item -> item.deliveryVersions().stream().map(delivery -> new DeliveryRow(item, delivery)))
                 .toList();
         int maxImages = deliveries.stream()
-                .mapToInt(row -> (int) row.delivery().attachments().stream()
-                        .filter(Attachment::embeddableImage)
-                        .count())
+                .mapToInt(row -> imageSlots(row.delivery().attachments()))
                 .max()
                 .orElse(0);
         int imageColumn = 10;
@@ -374,12 +387,14 @@ final class DesignerPerformanceWorkbook {
             List<String> unreadable = new ArrayList<>();
             for (Attachment attachment : delivery.attachments()) {
                 if (!attachment.embeddableImage()) continue;
-                Optional<LoadedImage> image = images.apply(attachment.url());
-                if (image.isEmpty()) {
+                List<LoadedImage> attachmentImages = loadImages(attachment);
+                if (attachmentImages.isEmpty()) {
                     unreadable.add(attachment.name());
                     continue;
                 }
-                placePicture(drawing, image.get(), imageColumn + placed++, rowIndex);
+                for (LoadedImage image : attachmentImages) {
+                    placePicture(drawing, image, imageColumn + placed++, rowIndex);
+                }
             }
             if (links.size() == 1) {
                 Hyperlink link = workbook.getCreationHelper().createHyperlink(HyperlinkType.URL);
@@ -388,7 +403,7 @@ final class DesignerPerformanceWorkbook {
             }
             if (!unreadable.isEmpty()) {
                 String existing = row.getCell(9).getStringCellValue();
-                String note = "图片无法读取：" + String.join("、", unreadable);
+                String note = "预览不可用：" + String.join("、", unreadable);
                 row.getCell(9).setCellValue(existing.isBlank() ? note : existing + "\n" + note);
             }
             int wrappedLines = Math.max(
@@ -400,7 +415,8 @@ final class DesignerPerformanceWorkbook {
                                     estimatedLines(links.stream()
                                             .map(Attachment::name)
                                             .collect(java.util.stream.Collectors.joining(" "))))));
-            row.setHeightInPoints(placed > 0 ? IMAGE_ROW_HEIGHT_PT : Math.min(409f, Math.max(30f, wrappedLines * 15f)));
+            row.setHeightInPoints(
+                    placed > 0 ? imageRowHeight(placed) : Math.min(409f, Math.max(30f, wrappedLines * 15f)));
             rowIndex++;
         }
         sheet.createFreezePane(3, 3);
@@ -441,26 +457,49 @@ final class DesignerPerformanceWorkbook {
         List<String> unreadable = new ArrayList<>();
         int placed = 0;
         for (Attachment attachment : attachments) {
-            Optional<LoadedImage> image = images.apply(attachment.url());
-            if (image.isEmpty()) {
+            List<LoadedImage> attachmentImages = loadImages(attachment);
+            if (attachmentImages.isEmpty()) {
                 unreadable.add(attachment.name());
                 continue;
             }
-            placePicture(drawing, image.get(), IMAGE_COLUMN + placed, r);
-            placed++;
+            for (LoadedImage image : attachmentImages) {
+                placePicture(drawing, image, IMAGE_COLUMN + placed++, r);
+            }
         }
         if (!unreadable.isEmpty()) {
             String existing = row.getCell(9).getStringCellValue();
-            String note = "图片无法读取：" + String.join("、", unreadable);
+            String note = "预览不可用：" + String.join("、", unreadable);
             row.getCell(9).setCellValue(existing.isBlank() ? note : existing + "\n" + note);
         }
         int deliverableLines =
                 item.deliverables() == null ? 1 : (item.deliverables().length() + 39) / 40;
         row.setHeightInPoints(
                 placed > 0
-                        ? IMAGE_ROW_HEIGHT_PT
+                        ? imageRowHeight(placed)
                         : Math.min(409f, Math.max(30f, Math.max(lineCount(item.name()), deliverableLines) * 15f)));
         return r + 1;
+    }
+
+    private List<LoadedImage> loadImages(Attachment attachment) {
+        if (attachment.name().toLowerCase(java.util.Locale.ROOT).endsWith(".ai")) {
+            return multiImages.apply(attachment.url());
+        }
+        return images.apply(attachment.url()).stream().toList();
+    }
+
+    private int imageSlots(List<Attachment> attachments) {
+        return attachments.stream()
+                .filter(Attachment::embeddableImage)
+                .mapToInt(attachment ->
+                        attachment.name().toLowerCase(java.util.Locale.ROOT).endsWith(".ai")
+                                ? Math.max(
+                                        1, multiImages.apply(attachment.url()).size())
+                                : 1)
+                .sum();
+    }
+
+    private static float imageRowHeight(int images) {
+        return Math.min(409f, Math.max(IMAGE_ROW_HEIGHT_PT, ((images + 3) / 4) * IMAGE_ROW_HEIGHT_PT));
     }
 
     /** 喺单个格仔入面按比例摆放图片（锚点起止同一格，用 EMU 偏移控制尺寸）；图片本身保留原分辨率。 */

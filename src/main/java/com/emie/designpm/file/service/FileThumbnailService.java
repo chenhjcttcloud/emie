@@ -100,31 +100,16 @@ public class FileThumbnailService {
                             >= Files.getLastModifiedTime(source).toMillis()) {
                 return target;
             }
-            BufferedImage input = aiFile ? renderPdfCompatibleAi(source) : ImageIO.read(source.toFile());
-            if (input == null) throw new IOException("无法读取图片");
-            try {
-                int maxSide = aiFile ? AI_MAX_SIDE : MAX_SIDE;
-                double scale = Math.min(1d, (double) maxSide / Math.max(input.getWidth(), input.getHeight()));
-                int width = Math.max(1, (int) Math.round(input.getWidth() * scale));
-                int height = Math.max(1, (int) Math.round(input.getHeight() * scale));
-                BufferedImage output = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+            if (aiFile) {
+                renderPdfCompatibleAi(source, cacheRoot, safeName);
+            } else {
+                BufferedImage input = ImageIO.read(source.toFile());
+                if (input == null) throw new IOException("无法读取图片");
                 try {
-                    Graphics2D graphics = output.createGraphics();
-                    try {
-                        graphics.setColor(Color.WHITE);
-                        graphics.fillRect(0, 0, width, height);
-                        graphics.setRenderingHint(
-                                RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-                        graphics.drawImage(input, 0, 0, width, height, null);
-                    } finally {
-                        graphics.dispose();
-                    }
-                    writePngAtomically(output, target);
+                    writeThumbnail(input, target, MAX_SIDE);
                 } finally {
-                    output.flush();
+                    input.flush();
                 }
-            } finally {
-                input.flush();
             }
             return target;
         } catch (InterruptedException e) {
@@ -139,6 +124,43 @@ public class FileThumbnailService {
         boolean aiFile = storedName.toLowerCase(java.util.Locale.ROOT).endsWith(".ai");
         Path target = thumbnailPath(storedName.replaceAll("[^a-zA-Z0-9._-]", "_"), aiFile, cacheRoot);
         return Files.isRegularFile(target) ? Optional.of(target) : Optional.empty();
+    }
+
+    public java.util.List<Path> getOrCreateAiPages(String storedName, Path cacheRoot) throws IOException {
+        if (!storedName.toLowerCase(java.util.Locale.ROOT).endsWith(".ai")) {
+            throw new IOException("仅支持 AI 文件多页预览");
+        }
+        Path source;
+        try {
+            source = fileArchiveService.resolveFile(storedName);
+        } catch (Exception e) {
+            throw new IOException("文件不存在", e);
+        }
+        Files.createDirectories(cacheRoot);
+        String safeName = storedName.replaceAll("[^a-zA-Z0-9._-]", "_");
+        Path first = thumbnailPath(safeName, true, cacheRoot);
+        if (!Files.exists(first)
+                || Files.getLastModifiedTime(first).toMillis()
+                        < Files.getLastModifiedTime(source).toMillis()) {
+            getOrCreate(storedName, cacheRoot);
+        }
+        try (var files = Files.list(cacheRoot)) {
+            return files.filter(path -> path.getFileName().toString().startsWith(safeName + ".ai-page-"))
+                    .filter(Files::isRegularFile)
+                    .sorted(java.util.Comparator.comparingInt(FileThumbnailService::aiPageNumber))
+                    .toList();
+        }
+    }
+
+    private static int aiPageNumber(Path path) {
+        String name = path.getFileName().toString();
+        int start = name.lastIndexOf(".ai-page-") + 9;
+        int end = name.lastIndexOf(".png");
+        try {
+            return Integer.parseInt(name.substring(start, end));
+        } catch (RuntimeException e) {
+            return Integer.MAX_VALUE;
+        }
     }
 
     public void enqueue(String storedName, Path cacheRoot) {
@@ -166,16 +188,52 @@ public class FileThumbnailService {
 
     private static Path thumbnailPath(String safeName, boolean aiFile, Path cacheRoot) {
         return cacheRoot
-                .resolve(safeName + (aiFile ? ".ai-preview-v4.png" : ".png"))
+                .resolve(safeName + (aiFile ? ".ai-page-1.png" : ".png"))
                 .normalize();
     }
 
-    private BufferedImage renderPdfCompatibleAi(Path source) throws IOException {
+    private void renderPdfCompatibleAi(Path source, Path cacheRoot, String safeName) throws IOException {
+        try (var cached = Files.list(cacheRoot)) {
+            for (Path path : cached.filter(path -> path.getFileName().toString().startsWith(safeName + ".ai-page-"))
+                    .toList()) {
+                Files.deleteIfExists(path);
+            }
+        }
         try (PDDocument document = Loader.loadPDF(source.toFile())) {
             if (document.getNumberOfPages() == 0) throw new IOException("AI 文件没有可预览页面");
-            return new PDFRenderer(document).renderImageWithDPI(0, 72);
+            PDFRenderer renderer = new PDFRenderer(document);
+            for (int page = 0; page < document.getNumberOfPages(); page++) {
+                BufferedImage image = renderer.renderImageWithDPI(page, 72);
+                try {
+                    writeThumbnail(image, cacheRoot.resolve(safeName + ".ai-page-" + (page + 1) + ".png"), AI_MAX_SIDE);
+                } finally {
+                    image.flush();
+                }
+            }
         } catch (IOException e) {
             throw new IOException("AI 文件未包含 PDF 兼容预览", e);
+        }
+    }
+
+    private void writeThumbnail(BufferedImage input, Path target, int maxSide) throws IOException {
+        double scale = Math.min(1d, (double) maxSide / Math.max(input.getWidth(), input.getHeight()));
+        int width = Math.max(1, (int) Math.round(input.getWidth() * scale));
+        int height = Math.max(1, (int) Math.round(input.getHeight() * scale));
+        BufferedImage output = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        try {
+            Graphics2D graphics = output.createGraphics();
+            try {
+                graphics.setColor(Color.WHITE);
+                graphics.fillRect(0, 0, width, height);
+                graphics.setRenderingHint(
+                        RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                graphics.drawImage(input, 0, 0, width, height, null);
+            } finally {
+                graphics.dispose();
+            }
+            writePngAtomically(output, target);
+        } finally {
+            output.flush();
         }
     }
 

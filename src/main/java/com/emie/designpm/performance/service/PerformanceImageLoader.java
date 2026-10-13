@@ -1,6 +1,7 @@
 package com.emie.designpm.performance.service;
 
 import com.emie.designpm.file.service.FileArchiveService;
+import com.emie.designpm.file.service.FileThumbnailService;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -8,6 +9,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -32,18 +34,54 @@ public class PerformanceImageLoader {
     private static final String DOWNLOAD_PREFIX = "/api/files/download/";
 
     private final FileArchiveService files;
+    private final FileThumbnailService thumbnails;
 
-    public PerformanceImageLoader(FileArchiveService files) {
+    public PerformanceImageLoader(FileArchiveService files, FileThumbnailService thumbnails) {
         this.files = files;
+        this.thumbnails = thumbnails;
     }
 
     public record LoadedImage(byte[] jpeg, int width, int height) {}
+
+    public List<LoadedImage> loadAll(String url) {
+        String storedName = storedName(url);
+        if (storedName == null) return List.of();
+        if (!storedName.toLowerCase(java.util.Locale.ROOT).endsWith(".ai")) {
+            return load(url).stream().toList();
+        }
+        try {
+            return thumbnails
+                    .getOrCreateAiPages(storedName, files.getUploadPath().resolve("thumbnail-cache"))
+                    .stream()
+                    .map(path -> {
+                        try (var in = Files.newInputStream(path)) {
+                            BufferedImage image = ImageIO.read(in);
+                            if (image == null) return null;
+                            try {
+                                return encode(image);
+                            } finally {
+                                image.flush();
+                            }
+                        } catch (Exception e) {
+                            log.warn("绩效导出读取AI分页预览失败 {}: {}", storedName, e.getMessage());
+                            return null;
+                        }
+                    })
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("绩效导出读取AI分页预览失败 {}: {}", storedName, e.getMessage());
+            return List.of();
+        }
+    }
 
     public Optional<LoadedImage> load(String url) {
         String storedName = storedName(url);
         if (storedName == null) return Optional.empty();
         try {
-            Path path = files.resolveFile(storedName);
+            Path path = storedName.toLowerCase(java.util.Locale.ROOT).endsWith(".ai")
+                    ? thumbnails.getOrCreate(storedName, files.getUploadPath().resolve("thumbnail-cache"))
+                    : files.resolveFile(storedName);
             BufferedImage source;
             try (var in = Files.newInputStream(path)) {
                 source = ImageIO.read(in);
