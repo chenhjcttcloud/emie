@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.emie.designpm.admin.repository.SystemConfigRepository;
@@ -103,14 +105,23 @@ class FileArchiveServiceTest {
     }
 
     @Test
-    void uncachedAiThumbnailDoesNotRenderInsideApplication() throws Exception {
+    void failedAiThumbnailIsNotRetriedUntilStoredNameChanges() throws Exception {
         FileArchiveService archiveService = mock(FileArchiveService.class);
         Path aiFile = Files.writeString(uploadDir.resolve("large.ai"), "AI source");
         when(archiveService.resolveFile("large.ai")).thenReturn(aiFile);
+        FileThumbnailService thumbnails = new FileThumbnailService(archiveService);
+        Path cache = uploadDir.resolve("thumbnail-cache");
 
-        IOException error = assertThrows(IOException.class, () -> new FileThumbnailService(archiveService)
-                .getOrCreate("large.ai", uploadDir.resolve("thumbnail-cache")));
-
-        assertTrue(error.getMessage().contains("AI 缩略图生成暂不可用"));
+        assertThrows(IOException.class, () -> thumbnails.getOrCreate("large.ai", cache));
+        assertTrue(thumbnails.failed("large.ai", cache));
+        IOException repeated = assertThrows(IOException.class, () -> thumbnails.getOrCreate("large.ai", cache));
+        assertTrue(repeated.getMessage().contains("更新文件后可重试"));
+        Files.setLastModifiedTime(
+                aiFile,
+                java.nio.file.attribute.FileTime.fromMillis(
+                        Files.getLastModifiedTime(aiFile).toMillis() + 2_000));
+        assertTrue(thumbnails.failed("large.ai", cache));
+        assertTrue(!thumbnails.failed("replacement.ai", cache));
+        verify(archiveService, times(1)).resolveFile("large.ai");
     }
 }

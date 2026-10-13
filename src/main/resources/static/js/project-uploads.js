@@ -391,6 +391,7 @@ function loadProtectedImage(img) {
     })
     .catch(() => {
       img.dataset.authError = 'true';
+      if (source.includes('/api/files/thumbnail/') && /\.ai(?:\?|$)/i.test(source)) img.hidden = true;
       if (img.dataset.fullSrc && img.src !== img.dataset.fullSrc) img.src = img.dataset.fullSrc;
     })
     .finally(() => { img.dataset.authLoading = 'false'; });

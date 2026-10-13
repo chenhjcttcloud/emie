@@ -162,8 +162,8 @@ class FrontendModuleLayoutTest {
         assertTrue(
                 imageLibrary.contains("const PAGE_SIZE = 10;")
                         && imageLibrary.contains(
-                                "image-library-ai-cover\"><b>Ai</b><small>Adobe Illustrator</small></span>"),
-                "图档库应为 AI 文件显示占位图，并限制每页数量");
+                                "image-library-ai-cover\"><b>Ai</b><small>Adobe Illustrator</small><img"),
+                "图档库应显示已生成的 AI 缩略图，并限制每页数量");
         assertTrue(
                 projectUploads.contains("const originalBlob = payload.blob")
                         && projectUploads.contains("return { type: originalType, blob: originalBlob }"),

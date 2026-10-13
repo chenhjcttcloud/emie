@@ -68,6 +68,11 @@ public class FileThumbnailService {
     }
 
     public Path getOrCreate(String storedName, Path cacheRoot) throws IOException {
+        boolean aiFile = storedName.toLowerCase(java.util.Locale.ROOT).endsWith(".ai");
+        String safeName = storedName.replaceAll("[^a-zA-Z0-9._-]", "_");
+        Path target = thumbnailPath(safeName, aiFile, cacheRoot);
+        if (aiFile && Files.isRegularFile(target)) return target;
+        if (aiFile && failed(storedName, cacheRoot)) throw new IOException("AI 缩略图生成失败，更新文件后可重试");
         Path source;
         try {
             source = fileArchiveService.resolveFile(storedName);
@@ -75,16 +80,12 @@ public class FileThumbnailService {
             throw new IOException("文件不存在", e);
         }
         Files.createDirectories(cacheRoot);
-        String safeName = storedName.replaceAll("[^a-zA-Z0-9._-]", "_");
-        boolean aiFile = storedName.toLowerCase(java.util.Locale.ROOT).endsWith(".ai");
-        // AI 预览规格单独带版本，确保旧的高分辨率缓存自动失效。
-        Path target = thumbnailPath(safeName, aiFile, cacheRoot);
-        if (Files.exists(target)
+        if (!aiFile
+                && Files.exists(target)
                 && Files.getLastModifiedTime(target).toMillis()
                         >= Files.getLastModifiedTime(source).toMillis()) {
             return target;
         }
-        if (aiFile) throw new IOException("AI 缩略图生成暂不可用，请预览或下载原文件");
         boolean acquired = false;
         try {
             // 批量打开任务详情/图档库时允许生成任务排队，避免前端收到 429/失败占位图。
@@ -92,17 +93,31 @@ public class FileThumbnailService {
                 throw new IOException("缩略图生成任务繁忙，请稍后重试");
             }
             acquired = true;
-            if (Files.exists(target)
+            if (aiFile && Files.isRegularFile(target)) return target;
+            if (!aiFile
+                    && Files.exists(target)
                     && Files.getLastModifiedTime(target).toMillis()
                             >= Files.getLastModifiedTime(source).toMillis()) {
                 return target;
             }
-            BufferedImage input = ImageIO.read(source.toFile());
-            if (input == null) throw new IOException("无法读取图片");
-            try {
-                writeThumbnail(input, target, MAX_SIDE);
-            } finally {
-                input.flush();
+            if (aiFile) {
+                try {
+                    AiThumbnailRenderer.generate(source, target);
+                    Files.deleteIfExists(failureMarker(target));
+                } catch (IOException e) {
+                    if (!(e instanceof AiThumbnailRenderer.InsufficientMemoryException)) {
+                        Files.writeString(failureMarker(target), e.getMessage());
+                    }
+                    throw e;
+                }
+            } else {
+                BufferedImage input = ImageIO.read(source.toFile());
+                if (input == null) throw new IOException("无法读取图片");
+                try {
+                    writeThumbnail(input, target, MAX_SIDE);
+                } finally {
+                    input.flush();
+                }
             }
             return target;
         } catch (InterruptedException e) {
@@ -119,22 +134,21 @@ public class FileThumbnailService {
         return Files.isRegularFile(target) ? Optional.of(target) : Optional.empty();
     }
 
+    public boolean failed(String storedName, Path cacheRoot) {
+        if (!storedName.toLowerCase(java.util.Locale.ROOT).endsWith(".ai")) return false;
+        Path target = thumbnailPath(storedName.replaceAll("[^a-zA-Z0-9._-]", "_"), true, cacheRoot);
+        Path marker = failureMarker(target);
+        return Files.isRegularFile(marker);
+    }
+
     public java.util.List<Path> getOrCreateAiPages(String storedName, Path cacheRoot) throws IOException {
         if (!storedName.toLowerCase(java.util.Locale.ROOT).endsWith(".ai")) {
             throw new IOException("仅支持 AI 文件多页预览");
         }
-        Path source;
-        try {
-            source = fileArchiveService.resolveFile(storedName);
-        } catch (Exception e) {
-            throw new IOException("文件不存在", e);
-        }
         Files.createDirectories(cacheRoot);
         String safeName = storedName.replaceAll("[^a-zA-Z0-9._-]", "_");
         Path first = thumbnailPath(safeName, true, cacheRoot);
-        if (!Files.exists(first)
-                || Files.getLastModifiedTime(first).toMillis()
-                        < Files.getLastModifiedTime(source).toMillis()) {
+        if (!Files.isRegularFile(first)) {
             getOrCreate(storedName, cacheRoot);
         }
         try (var files = Files.list(cacheRoot)) {
@@ -157,7 +171,7 @@ public class FileThumbnailService {
     }
 
     public void enqueue(String storedName, Path cacheRoot) {
-        if (cached(storedName, cacheRoot).isPresent()) return;
+        if (cached(storedName, cacheRoot).isPresent() || failed(storedName, cacheRoot)) return;
         String key = cacheRoot.toAbsolutePath().normalize() + ":" + storedName;
         if (!queued.add(key)) return;
         try {
@@ -183,6 +197,10 @@ public class FileThumbnailService {
         return cacheRoot
                 .resolve(safeName + (aiFile ? ".ai-page-1.png" : ".png"))
                 .normalize();
+    }
+
+    private static Path failureMarker(Path target) {
+        return target.resolveSibling(target.getFileName() + ".failed");
     }
 
     private void writeThumbnail(BufferedImage input, Path target, int maxSide) throws IOException {

@@ -165,7 +165,7 @@ public class FileController {
             Path cacheRoot = uploadPath.resolve("thumbnail-cache");
             Path thumbnail = fileThumbnailService.cached(fileName, cacheRoot).orElse(null);
             if (thumbnail == null) {
-                if (fileName.matches("(?i).*\\.ai"))
+                if (fileThumbnailService.failed(fileName, cacheRoot))
                     return ResponseEntity.unprocessableEntity().build();
                 fileThumbnailService.enqueue(fileName, cacheRoot);
                 return ResponseEntity.accepted()
