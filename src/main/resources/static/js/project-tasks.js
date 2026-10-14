@@ -1050,7 +1050,7 @@ async function openTaskChangeBonus(pid, tid) {
     modal.className = 'modal-overlay';
     modal.id = 'taskChangeBonusModal';
     modal.dataset.requestId = createChangeRequestId();
-    modal.innerHTML = `<div class="modal" style="max-width:600px;"><div class="modal-header"><div class="modal-title">修改子任务</div><button class="modal-close" type="button" data-emie-action="click:task-change-bonus-close">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">修改意见</label><textarea class="form-textarea" name="reason" required maxlength="500"></textarea></div><div class="form-group"><label class="form-label">修改参考图片（可选）</label><div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="changeBonusImageInput"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="changeBonusImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-change-bonus-images"></div><div class="file-list" id="changeBonusImageList"></div></div><div class="form-group"><label class="checkbox-item"><input type="checkbox" name="withPoints" data-emie-action="change:task-change-bonus-mode"> 本次修改有积分</label></div><div data-change-point-rules hidden>${renderPointRulePicker(rules)}</div></div><div class="modal-footer"><button class="btn btn-outline" type="button" data-emie-action="click:task-change-bonus-close">取消</button><button class="btn btn-primary" type="button" data-emie-action="click:task-change-bonus-submit" data-project-id="${Number(pid)}" data-task-id="${Number(tid)}">发起修改</button></div></div>`;
+    modal.innerHTML = `<div class="modal" style="max-width:600px;"><div class="modal-header"><div class="modal-title">修改子任务</div><button class="modal-close" type="button" data-emie-action="click:task-change-bonus-close">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">修改意见</label><textarea class="form-textarea" name="reason" required maxlength="500"></textarea></div><div class="form-group"><label class="form-label">修改参考图片（可选）</label><div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="changeBonusImageInput"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="changeBonusImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-change-bonus-images"></div><div class="file-list" id="changeBonusImageList"></div></div><div class="form-group"><span class="form-label">本次修改是否有积分</span><div class="reject-points-choice" role="radiogroup" aria-label="本次修改是否有积分"><label><input type="radio" name="withPoints" value="false" checked data-emie-action="change:task-change-bonus-mode">否</label><label><input type="radio" name="withPoints" value="true" data-emie-action="change:task-change-bonus-mode">是</label></div></div><div data-change-point-rules hidden>${renderPointRulePicker(rules)}</div></div><div class="modal-footer"><button class="btn btn-outline" type="button" data-emie-action="click:task-change-bonus-close">取消</button><button class="btn btn-primary" type="button" data-emie-action="click:task-change-bonus-submit" data-project-id="${Number(pid)}" data-task-id="${Number(tid)}">发起修改</button></div></div>`;
     document.body.appendChild(modal);
   } catch (error) { window.EMIE.actions.showSystemAlert('加载积分规则失败：' + error.message); }
 }
@@ -1067,13 +1067,13 @@ function createChangeRequestId() {
 }
 
 function updateTaskChangeBonusMode(input) {
-  input.closest('.modal').querySelector('[data-change-point-rules]').hidden = !input.checked;
+  input.closest('.modal').querySelector('[data-change-point-rules]').hidden = input.value !== 'true';
 }
 
 async function submitTaskChangeBonus(pid, tid) {
   const modal = document.getElementById('taskChangeBonusModal');
   if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
-  const withPoints = modal.querySelector('[name="withPoints"]').checked;
+  const withPoints = modal.querySelector('[name="withPoints"]:checked').value === 'true';
   const pointRuleCode = modal.querySelector('[name="pointRuleCode"]').value;
   const reason = modal.querySelector('[name="reason"]').value.trim();
   if (!reason || (withPoints && !pointRuleCode)) { window.EMIE.actions.showSystemAlert('请填写修改意见，有积分时请选择积分规则'); return; }

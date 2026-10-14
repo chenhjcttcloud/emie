@@ -188,8 +188,8 @@ async function runPointRuleChecks(page) {
   await modal.waitFor({ state: 'visible' });
   const picker = modal.locator('[data-change-point-rules]');
   assert.equal(await picker.isVisible(), false, '默认无分修改隐藏规则');
-  await modal.locator('label').filter({ hasText: '本次修改有积分' }).click();
-  assert.equal(await modal.locator('[name="withPoints"]').isChecked(), true);
+  await modal.locator('[name="withPoints"][value="true"]').check();
+  assert.equal(await modal.locator('[name="withPoints"]:checked').inputValue(), 'true');
   await picker.waitFor({ state: 'visible' });
   const search = picker.locator('[data-point-search]');
   assert.equal(await picker.locator('[name="difficultyMultiplier"]').count(), 0, '积分选择器不再显示难度系数');
@@ -221,11 +221,11 @@ async function runPointRuleChecks(page) {
   await picker.locator('.point-rule-pagination').getByRole('button', { name: '上一页' }).click();
   assert.equal(await picker.locator('[name="pointRuleCode"]').inputValue(), 'D30_C12', '切页时保留页外的已选规则');
   await picker.locator('[data-point-rule-code="D30_C"]').click();
-  await modal.locator('label').filter({ hasText: '本次修改有积分' }).click();
-  assert.equal(await modal.locator('[name="withPoints"]').isChecked(), false);
+  await modal.locator('[name="withPoints"][value="false"]').check();
+  assert.equal(await modal.locator('[name="withPoints"]:checked').inputValue(), 'false');
   assert.equal(await picker.isVisible(), false, '切换无分修改隐藏规则');
-  await modal.locator('label').filter({ hasText: '本次修改有积分' }).click();
-  assert.equal(await modal.locator('[name="withPoints"]').isChecked(), true);
+  await modal.locator('[name="withPoints"][value="true"]').check();
+  assert.equal(await modal.locator('[name="withPoints"]:checked').inputValue(), 'true');
   assert.equal(await picker.isVisible(), true);
   await modal.locator('[data-emie-action="click:task-change-bonus-close"]').first().click();
   await modal.waitFor({ state: 'detached' });
