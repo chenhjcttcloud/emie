@@ -134,7 +134,7 @@ function renderMaterialUploadModal(existing = null) {
   </form><div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:market-close-upload">取消</button><button class="btn btn-primary" data-emie-action="click:market-submit-upload">立即发布</button></div></div>`;
   document.body.appendChild(overlay); EMIE.installUploadHints?.(overlay);
   const form = document.getElementById('materialUploadForm');
-  const selectedCategory = existing?.category || 'visual';
+  const selectedCategory = existing?.category || '';
   const categoryInput = form.querySelector(`input[name="category"][value="${selectedCategory}"]`);
   if (categoryInput) categoryInput.checked = true;
   const aiInput = form.querySelector(`input[name="aiAssisted"][value="${existing?.aiAssisted ? '是' : '否'}"]`);
