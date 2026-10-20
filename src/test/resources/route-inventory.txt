@@ -155,11 +155,13 @@ POST /api/ip-options
 POST /api/material-market
 POST /api/material-market/{id}/adopt
 POST /api/material-market/{id}/like
+POST /api/material-market/{id}/rating
 POST /api/material-market/{id}/select
 POST /api/material-market/{id}/withdraw
 POST /api/materials
 POST /api/materials/{id}/adopt
 POST /api/materials/{id}/like
+POST /api/materials/{id}/rating
 POST /api/materials/{id}/select
 POST /api/materials/{id}/withdraw
 POST /api/point-governance/appeals

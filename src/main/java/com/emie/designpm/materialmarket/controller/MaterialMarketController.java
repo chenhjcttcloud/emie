@@ -14,6 +14,9 @@ import org.springframework.web.bind.annotation.*;
 public class MaterialMarketController {
     private final MaterialMarketService service;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.emie.designpm.materialmarket.service.MaterialMarketRatingService ratings;
+
     public MaterialMarketController(MaterialMarketService s) {
         service = s;
     }
@@ -106,6 +109,13 @@ public class MaterialMarketController {
                 s.role(),
                 body == null ? null : Objects.toString(body.get("plannerId"), null),
                 body == null ? "direct" : Objects.toString(body.getOrDefault("adoptionType", "direct"), "direct")));
+    }
+
+    @PostMapping("/{id}/rating")
+    public ResponseEntity<?> rate(
+            @PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest req) {
+        var s = required(req);
+        return ResponseEntity.ok(ratings.rate(id, s.userId(), body.get("stars")));
     }
 
     @PostMapping("/{id}/like")

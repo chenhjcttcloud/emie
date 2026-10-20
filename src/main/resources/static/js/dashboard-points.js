@@ -141,6 +141,7 @@ function renderAdminPrograms(poProgress) {
 function adjustmentSourceLabel(sourceType) {
   return {
     MATERIAL_MARKET: '素材广场立项奖励',
+    MATERIAL_FREE_RATING: '自由单评星奖励',
     PO_PROGRESS: 'PO 月度履职',
     MANUAL: '管理员调账',
     TASK_WITHDRAWAL: '退单积分调整',

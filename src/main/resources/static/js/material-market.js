@@ -61,13 +61,92 @@ async function loadMaterials() {
   return items.map(normalizeMaterial);
 }
 
+function freeRatingSummary(m) {
+  if (m.ratingStars == null) return '<span class="material-rating-summary">暂无评星</span>';
+  const stars = Math.max(0, Math.min(5, Number(m.ratingStars)));
+  return `<span class="material-rating-summary" aria-label="平均评分 ${stars} 星"><span aria-hidden="true">${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}</span> ${stars} 星</span>`;
+}
+function freeRatingControls(m) {
+  if (!m.canRate) return '';
+  return `<button type="button" class="btn btn-outline btn-sm" data-emie-action="click:market-open-rating" data-material-id="${m.id}">${m.myRating == null ? '评星' : '修改评星'}</button>`;
+}
+function closeFreeRatingModal() { document.getElementById('freeRatingModal')?.remove(); }
+async function openFreeRatingModal(id) {
+  try {
+    const m = normalizeMaterial(await apiGet(`/materials/${id}`));
+    if (!m.canRate) return EMIE.actions.showSystemAlert('当前无法为这件自由单评星');
+    if (document.getElementById('freeRatingModal')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'freeRatingModal';
+    overlay.className = 'modal-overlay free-rating-overlay';
+    overlay.dataset.fromDetail = document.getElementById('materialDetailModal') ? 'true' : 'false';
+    overlay.innerHTML = `<div class="modal free-rating-modal"><div class="modal-header"><div class="modal-title">${m.myRating == null ? '为自由单评星' : '修改我的评星'}</div><button class="modal-close" data-emie-action="click:market-close-rating">✕</button></div><div class="modal-body"><h3 class="free-rating-title">${escHtml(m.title)}</h3><p class="free-rating-hint">从创意价值、完成度和参考价值出发，选择你的星级。</p><fieldset class="free-rating-picker"><legend class="sr-only">选择0至5星</legend>${[0,1,2,3,4,5].map(stars => `<label style="--star-index:${stars}" class="free-rating-choice ${m.myRating != null && (stars === 0 ? m.myRating === 0 : stars <= m.myRating) ? 'is-filled' : ''}"><input type="radio" name="freeRatingStars" value="${stars}" aria-label="${stars}星" ${m.myRating === stars ? 'checked' : ''} data-emie-action="change:market-rating-choice"><span aria-hidden="true">${stars === 0 ? '0星' : '★'}</span></label>`).join('')}</fieldset><div class="free-rating-value" aria-live="polite">${m.myRating == null ? '请选择星级' : `${m.myRating} 星`}</div><p class="free-rating-note">满5人后展示平均星级，并为作者一次性结算奖励。后续修改评星不影响已结算积分。</p><div id="freeRatingError" class="form-error" hidden></div></div><div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:market-close-rating">取消</button><button class="btn btn-primary" data-emie-action="click:market-rate" data-material-id="${m.id}">提交评星</button></div></div>`;
+    document.body.appendChild(overlay);
+    const picker = overlay.querySelector('.free-rating-picker');
+    picker.querySelectorAll('.free-rating-choice').forEach(label => {
+      label.addEventListener('pointerenter', event => {
+        if (event.pointerType === 'mouse' && !picker.disabled) previewFreeRating(overlay, Number(label.querySelector('input').value));
+      });
+    });
+    picker.addEventListener('pointerleave', () => previewFreeRating(overlay));
+    picker.addEventListener('focusin', event => {
+      if (event.target.matches('input')) previewFreeRating(overlay, Number(event.target.value));
+    });
+    picker.addEventListener('focusout', event => {
+      if (!picker.contains(event.relatedTarget)) previewFreeRating(overlay);
+    });
+  } catch (e) { EMIE.actions.showSystemAlert(e.message); }
+}
+function previewFreeRating(modal, preview = null) {
+  const selected = modal.querySelector('input[name="freeRatingStars"]:checked');
+  const value = preview ?? (selected ? Number(selected.value) : null);
+  modal.querySelectorAll('.free-rating-choice').forEach(label => {
+    const star = Number(label.querySelector('input').value);
+    label.classList.toggle('is-filled', value != null && (star === 0 ? value === 0 : star <= value));
+  });
+  modal.querySelector('.free-rating-value').textContent = value == null ? '请选择星级' : `${value} 星`;
+}
+function updateFreeRatingChoice(input) {
+  const modal = document.getElementById('freeRatingModal');
+  previewFreeRating(modal);
+  modal.querySelector('#freeRatingError').hidden = true;
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    modal.querySelectorAll('.free-rating-choice.is-filled span').forEach((star, index) => {
+      star.getAnimations().forEach(animation => animation.cancel());
+      star.animate([
+        { transform: 'scale(1)' },
+        { transform: 'translateY(-5px) scale(1.22) rotate(-8deg)', offset: .45 },
+        { transform: 'translateY(1px) scale(.96)', offset: .78 },
+        { transform: 'scale(1)' }
+      ], { duration: 360, delay: index * 30, easing: 'cubic-bezier(.2,.75,.25,1)' });
+    });
+  }
+}
+async function rateFreeMaterial(id, button) {
+  const modal = document.getElementById('freeRatingModal');
+  const selected = modal?.querySelector('input[name="freeRatingStars"]:checked');
+  const error = modal?.querySelector('#freeRatingError');
+  if (!selected) { if (error) { error.hidden = false; error.textContent = '请选择0至5星'; } return; }
+  const fromDetail = modal.dataset.fromDetail === 'true';
+  button.disabled = true;
+  modal.querySelector('fieldset').disabled = true;
+  try {
+    await apiPost(`/materials/${id}/rating`, { stars: Number(selected.value) });
+    closeFreeRatingModal();
+    if (fromDetail) closeMaterialDetail();
+    await EMIE.actions.render();
+    if (fromDetail) await openMaterialDetail(id);
+  } catch (e) { error.hidden = false; error.textContent = e.message; }
+  finally { button.disabled = false; modal.querySelector('fieldset').disabled = false; }
+}
+
 function renderMaterialCard(m) {
   const free = m.postType === 'free';
   const preview = authenticatedFileUrl(m.coverUrl || m.previewUrl || m.thumbnailUrl || m.referenceImages[0]?.downloadUrl || m.referenceImages[0]?.url);
   const adoptionFlags = free ? '' : `<div class="material-adoption-flags"><span class="${adoptionUsed(m, 'design') ? 'is-active' : ''}">设计采纳</span><span class="${adoptionUsed(m, 'direct') ? 'is-active' : ''}">直接采纳</span></div>`;
   return `<article class="material-card" tabindex="0" data-emie-action="click:market-detail" data-material-id="${m.id}" aria-label="查看素材 ${escHtml(m.title || '')}">
     <div class="material-cover">${preview ? `<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(preview)}" alt="${escHtml(m.title || '素材预览')}" loading="lazy">` : '<span aria-hidden="true">🎨</span>'}<span class="material-selected-badge ${free ? 'is-free' : 'is-idea'}">${free ? '自由单' : '创意单'}</span></div>
-    <div class="material-card-body"><h3>${escHtml(m.title || '未命名素材')}</h3><div class="material-meta-row"><span class="material-category-badge">${escHtml(free ? FREE_CATEGORY_LABELS[m.freeCategory] || '自由单' : materialCategory(m))}</span>${free ? '' : `<span class="material-meta">${escHtml(materialIp(m))}</span>`}</div><p>${escHtml(m.description || '暂无设计构思')}</p>${adoptionFlags}<div class="material-card-foot"><span>作者：${escHtml(m.authorName || m.designerName || '-')}</span></div><div class="material-card-actions">${isOwnMaterial(m) ? `<span class="material-like-own" title="不能给自己的作品点赞">♥ ${Number(m.likeCount || 0)}</span>` : `<button type="button" class="material-like-btn ${m.likedByCurrentUser ? 'is-liked' : ''}" data-emie-action="click:market-like" data-material-id="${m.id}" aria-label="${m.likedByCurrentUser ? '取消点赞' : '点赞'}">♥ <span>${Number(m.likeCount || 0)}</span></button>`}${free ? `<span class="material-like-hint">点赞表示认可</span>` : materialProjectLinks(m, true)}</div></div>
+    <div class="material-card-body"><h3>${escHtml(m.title || '未命名素材')}</h3><div class="material-meta-row"><span class="material-category-badge">${escHtml(free ? FREE_CATEGORY_LABELS[m.freeCategory] || '自由单' : materialCategory(m))}</span>${free ? '' : `<span class="material-meta">${escHtml(materialIp(m))}</span>`}</div><p>${escHtml(m.description || '暂无设计构思')}</p>${adoptionFlags}<div class="material-card-foot"><span>作者：${escHtml(m.authorName || m.designerName || '-')}</span></div><div class="material-card-actions">${free ? `${freeRatingSummary(m)}${freeRatingControls(m)}` : `${isOwnMaterial(m) ? `<span class="material-like-own" title="不能给自己的作品点赞">♥ ${Number(m.likeCount || 0)}</span>` : `<button type="button" class="material-like-btn ${m.likedByCurrentUser ? 'is-liked' : ''}" data-emie-action="click:market-like" data-material-id="${m.id}" aria-label="${m.likedByCurrentUser ? '取消点赞' : '点赞'}">♥ <span>${Number(m.likeCount || 0)}</span></button>`}${materialProjectLinks(m, true)}`}</div></div>
   </article>`;
 }
 
@@ -104,7 +183,7 @@ function openFreeMaterialDetail(m) {
   const images = refs.map((file, i) => { const url = authenticatedFileUrl(file.downloadUrl || file.url || '#'); const label = m.freeCategory === 'packaging_concept' ? packagingLabels[i] || '包装图片' : '设计平面图 / 渲染图'; return `<div><img class="img-clickable" src="${escHtml(url)}" data-full-src="${escHtml(url)}" alt="${escHtml(label)}" title="点击放大" loading="lazy"><span>${escHtml(label)}</span></div>`; }).join('');
   const links = content.relatedLinks ? content.relatedLinks.split(/\s+/).map(url => `<a class="material-file" href="${escHtml(url)}" target="_blank" rel="noopener">🔗 ${escHtml(url)}</a>`).join('') : '';
   const overlay = document.createElement('div'); overlay.className = 'modal-overlay'; overlay.id = 'materialDetailModal';
-  overlay.innerHTML = `<div class="modal modal-lg market-detail-modal is-free"><div class="modal-header"><div class="material-detail-heading"><span class="material-detail-type">自由单</span><div class="modal-title">${escHtml(m.title)}</div><p>灵感分享 · 点赞表示认可</p></div><button class="modal-close" data-emie-action="click:market-close-detail">✕</button></div><div class="modal-body"><div class="material-detail-summary"><div><div class="detail-label">自由单类型</div><div class="detail-value">${escHtml(FREE_CATEGORY_LABELS[m.freeCategory] || '自由单')}</div></div><div><div class="detail-label">发布者</div><div class="detail-value">${escHtml(m.authorName || '-')}</div></div><div><div class="detail-label">点赞</div><div class="detail-value">${Number(m.likeCount || 0)} 人认可</div></div></div>${sections.map(([label, value]) => `<section class="material-detail-section"><h3>${escHtml(label)}</h3><div class="material-detail-section-content"><div class="material-description">${escHtml(value)}</div></div></section>`).join('')}${images ? `<section class="material-detail-section"><h3>${m.freeCategory === 'packaging_concept' ? '包装图示' : '设计平面图 / 渲染图'}</h3><div class="material-detail-section-content"><div class="material-reference-images image-preview">${images}</div></div></section>` : ''}${files.length ? `<section class="material-detail-section"><h3>分享素材</h3><div class="material-detail-section-content"><div class="material-file-list">${files.map(file => `<a class="material-file" href="${escHtml(authenticatedFileUrl(file.downloadUrl || file.url || '#'))}" target="_blank" rel="noopener">📎 ${escHtml(fileLabel(file))}</a>`).join('')}</div></div></section>` : ''}${links ? `<section class="material-detail-section"><h3>相关链接</h3><div class="material-detail-section-content"><div class="material-file-list">${links}</div></div></section>` : ''}</div><div class="modal-footer">${isOwnMaterial(m) ? `<button class="btn btn-danger" data-emie-action="click:market-delete" data-material-id="${m.id}">删除</button>` : `<button class="btn btn-outline material-like-btn ${m.likedByCurrentUser ? 'is-liked' : ''}" data-emie-action="click:market-like" data-material-id="${m.id}">${m.likedByCurrentUser ? '♥ 已点赞' : '♡ 点赞'} · ${Number(m.likeCount || 0)}</button>`}<button class="btn btn-outline" data-emie-action="click:market-close-detail">关闭</button></div></div>`;
+  overlay.innerHTML = `<div class="modal modal-lg market-detail-modal is-free"><div class="modal-header"><div class="material-detail-heading"><span class="material-detail-type">自由单</span><div class="modal-title">${escHtml(m.title)}</div><p>灵感分享 · 星级评价</p></div><button class="modal-close" data-emie-action="click:market-close-detail">✕</button></div><div class="modal-body"><div class="material-detail-summary"><div><div class="detail-label">自由单类型</div><div class="detail-value">${escHtml(FREE_CATEGORY_LABELS[m.freeCategory] || '自由单')}</div></div><div><div class="detail-label">发布者</div><div class="detail-value">${escHtml(m.authorName || '-')}</div></div><div><div class="detail-label">评分</div><div class="detail-value">${freeRatingSummary(m)}</div></div><div><div class="detail-label">评星奖励</div><div class="detail-value">${m.ratingRewardPoints == null ? '待结算' : `${Number(m.ratingRewardPoints)} 分（已结算）`}</div></div></div>${sections.map(([label, value]) => `<section class="material-detail-section"><h3>${escHtml(label)}</h3><div class="material-detail-section-content"><div class="material-description">${escHtml(value)}</div></div></section>`).join('')}${images ? `<section class="material-detail-section"><h3>${m.freeCategory === 'packaging_concept' ? '包装图示' : '设计平面图 / 渲染图'}</h3><div class="material-detail-section-content"><div class="material-reference-images image-preview">${images}</div></div></section>` : ''}${files.length ? `<section class="material-detail-section"><h3>分享素材</h3><div class="material-detail-section-content"><div class="material-file-list">${files.map(file => `<a class="material-file" href="${escHtml(authenticatedFileUrl(file.downloadUrl || file.url || '#'))}" target="_blank" rel="noopener">📎 ${escHtml(fileLabel(file))}</a>`).join('')}</div></div></section>` : ''}${links ? `<section class="material-detail-section"><h3>相关链接</h3><div class="material-detail-section-content"><div class="material-file-list">${links}</div></div></section>` : ''}</div><div class="modal-footer">${freeRatingControls(m)}${isOwnMaterial(m) ? `<button class="btn btn-danger" data-emie-action="click:market-delete" data-material-id="${m.id}">删除</button>` : ''}<button class="btn btn-outline" data-emie-action="click:market-close-detail">关闭</button></div></div>`;
   document.body.appendChild(overlay);
 }
 function closeMaterialDetail() { document.getElementById('materialDetailModal')?.remove(); }
@@ -260,12 +339,12 @@ function updateMaterialStats() {
   const labels = document.querySelectorAll('.market-stats button span');
   if (total) total.textContent = items.length;
   if (other) other.textContent = marketPostType !== 'idea'
-    ? items.filter(item => item.postType === 'free').reduce((sum, item) => sum + Number(item.likeCount || 0), 0)
+    ? items.filter(item => item.postType === 'free' && item.ratingStars != null).length
     : items.filter(item => materialStatus(item) === 'available').length;
   if (labels[0]) labels[0].textContent = marketPostType === 'all' ? '全部素材' : marketPostType === 'free' ? '全部自由单' : '全部创意单';
-  if (labels[1]) labels[1].textContent = marketPostType === 'idea' ? '待采纳创意' : '自由单累计点赞';
+  if (labels[1]) labels[1].textContent = marketPostType === 'idea' ? '待采纳创意' : '已出评分自由单';
   const availableButton = document.querySelector('[data-emie-action="click:market-status-available"]');
-  if (availableButton) availableButton.disabled = marketPostType === 'free';
+  if (availableButton) availableButton.disabled = marketPostType !== 'idea';
 }
 
 function setFreeCategoryFilter(category) {
@@ -368,6 +447,10 @@ if (registerEventAction) {
   registerEventAction('market-close-upload', () => closeMaterialUpload());
   registerEventAction('market-submit-upload', () => document.getElementById('materialUploadForm')?.dataset.postType === 'free' ? submitFreeMaterial() : submitMaterialUpload());
   registerEventAction('market-free-upload-modal', () => renderFreeUploadModal());
+  registerEventAction('market-open-rating', (event, el) => { event.stopPropagation(); openFreeRatingModal(Number(el.dataset.materialId)); });
+  registerEventAction('market-close-rating', () => closeFreeRatingModal());
+  registerEventAction('market-rating-choice', (_event, el) => updateFreeRatingChoice(el));
+  registerEventAction('market-rate', (_event, el) => rateFreeMaterial(el.dataset.materialId, el));
   registerEventAction('market-free-category', () => onFreeCategoryChange());
   registerEventAction('market-type-filter', (_event, el) => setMarketPostTypeFilter(el.dataset.marketPostType));
   registerEventAction('market-free-filter', (_event, el) => setFreeCategoryFilter(el.dataset.marketFreeCategory));

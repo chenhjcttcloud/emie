@@ -82,6 +82,18 @@ public class MaterialMarketItem {
     private Integer likeCount = 0;
 
     @Transient
+    private Integer ratingStars;
+
+    @Transient
+    private Integer ratingRewardPoints;
+
+    @Transient
+    private Integer myRating;
+
+    @Transient
+    private boolean canRate;
+
+    @Transient
     private boolean likedByCurrentUser;
 
     @Transient

@@ -39,6 +39,9 @@ public class MaterialMarketService {
     private final PointRuleRepository pointRules;
     private final NotificationWorkflowService notifications;
 
+    @Autowired
+    private MaterialMarketRatingService ratingService;
+
     public MaterialMarketService(
             MaterialMarketItemRepository m,
             ProjectRepository p,
@@ -96,6 +99,7 @@ public class MaterialMarketService {
                                 items.stream().map(MaterialMarketItem::getId).toList())
                         .stream()
                         .collect(java.util.stream.Collectors.groupingBy(MaterialMarketAdoption::getMaterialId));
+        if (ratingService != null) ratingService.decorate(items, actorId);
         return items.stream()
                 .map(item -> {
                     item.setLikedByCurrentUser(likedIds.contains(item.getId()));
@@ -109,6 +113,7 @@ public class MaterialMarketService {
         MaterialMarketItem item = materials.findById(id).orElseThrow(() -> new NoSuchElementException("素材不存在"));
         item.setLikedByCurrentUser(likes.findByMaterialIdAndUserId(id, actorId).isPresent());
         item.setAdoptions(enrichAdoptions(adoptions.findByMaterialIdOrderByCreatedAtDesc(id)));
+        if (ratingService != null) ratingService.decorate(List.of(item), actorId);
         return withSelectorName(item);
     }
 
@@ -329,6 +334,7 @@ public class MaterialMarketService {
         ensureMaterialOwner(m, actorId);
         if (adoptions.existsByMaterialId(id) || m.getProjectId() != null)
             throw new IllegalStateException("已有采纳项目的素材不能删除，请保留项目关联记录");
+        if (ratingService != null) ratingService.deleteByMaterialId(id);
         likes.deleteAllByMaterialId(id);
         adoptions.deleteAllByMaterialId(id);
         materials.delete(m);
@@ -446,6 +452,7 @@ public class MaterialMarketService {
 
     public Map<String, Object> toggleLike(Long id, String actorId) {
         MaterialMarketItem m = materials.lockById(id).orElseThrow(() -> new NoSuchElementException("素材不存在"));
+        if ("free".equals(m.getPostType())) throw new IllegalStateException("自由单请使用评星");
         if (Objects.equals(m.getCreatorId(), actorId)) throw new IllegalStateException("不能给自己的作品点赞");
         Optional<MaterialMarketLike> existing = likes.findByMaterialIdAndUserId(id, actorId);
         boolean liked;
