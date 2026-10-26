@@ -1831,3 +1831,13 @@
 - 生产镜像 `emie-app-runtime:java21-cve-2026-114820-20261026_093431`；稳定 java21 标签同步更新。旧容器 `emie-app-security-old-20261026_093431` 保留，未触发回滚。
 - 发布前 mysqldump 备份已通过 gzip 完整性检查，位于 `<DEPLOY_DIR>/security-updates/java-cve-2026-114820-20261026_093431/database.sql.gz`。无数据库迁移，无数据卷删除。
 - 生产 health UP，首页及 bootstrap.js/core-runtime.js/app.css/公开配置接口正常；Chrome 公网入口 HTTP 200、app_ready=login、page_errors=0；容器运行且 RestartCount=0，预览转换服务运行，启动后未检出新增 ERROR/启动失败/OOM。未执行真实业务通知或附件上传。
+
+## 2026-10-26 09:45–09:48：Java 安全补丁入库及标准生产发布（1.17.4）
+
+- 用户明确授权提交、推送仓库并发布生产。本次只提交 Dockerfile、Dockerfile.test、docker/java-security/ 与安全修复文档；原有业务改动没有提交或部署。
+- 安全修复提交 `0f51a962f7791f3513ffef05e040c2ebe9346f38` 已推送 Gitee master 和 GitHub main，两端 SHA 已核对一致。生产旧 SHA `cbd80fd77d4b5475ac528c014d9f43534cc4ecc8`，目标及运行 SHA `0f51a962f7791f3513ffef05e040c2ebe9346f38`；系统版本 1.17.3 → 1.17.4。
+- 暂存保存原有改动后，从干净 master 使用 scripts/release-production.sh 标准构建发布。407 项测试，0 失败、0 错误、1 项既有跳过，Spotless 检查与完整构建通过。
+- 生产 JAR SHA-256 `da239d1d1bc166b20ff4575b6d1a3df14d0ef14271cb01c2f4862fc7baf0fb5e`。继续使用已修复 Java 运行时：实际 Temurin 21.0.13+9-LTS，官方 CheckCerts 未发现不安全根证书，35 张中间证书阻止检查及飞书 HTTPS 握手通过。
+- 备份 `<DEPLOY_DIR>-backups/20261026_094626`，数据库压缩备份 834654 bytes，通过完整性检查；旧容器 emie-app-old-20261026_094626 保留。无新增数据库迁移，无数据删除；容器切换 63 秒，远端共 70 秒，未触发回滚。
+- 生产 release_status=success，公网 HTTP 200、目标版本号核对通过；health UP，Chrome app_ready=login、page_errors=0，容器 running、RestartCount=0。真实业务登录/通知/附件上传未额外执行。
+- 原有 20 个本地文件已按 SHA-256 和权限逐一核对恢复，临时 stash 已移除。本发布结果以单独文档提交同步仓库，生产继续运行上述安全修复提交；文档提交不改变生产代码。
