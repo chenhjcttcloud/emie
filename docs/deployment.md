@@ -126,3 +126,16 @@ PDF 原文件直接预览；PPT/PPTX 首次访问时异步转换，结果缓存�
 ```bash
 docker compose up -d --build
 ```
+
+## 2026-10-23 Java 证书安全基线
+
+- 本地测试运行时为 Temurin 21.0.12.1+1，额外合入 OpenJDK 官方 85974eed594aa5a9e13a6a20713156ed8d9cd0ed 的证书阻止列表；Dockerfile 与 Dockerfile.test 在构建时合并列表并保留镜像已有条目。数据及来源见 `docker/java-security/`。
+- 生产本次采用官方允许的证书数据修复方案：保留 Temurin 21.0.11+10 和现有业务 JAR，只更新运行时镜像内的 blocked.certs。此项只处理 CVE-2026-91403，不代表已安装其他 JDK 安全更新。
+- 已将稳定标签 `emie-app-runtime:java21` 指向包含补丁的新镜像，避免当前发布流程再次复用未修复的运行时；后续运行时替换仍需验证 86 条官方指纹及实际 JVM 阻止行为，不能只看 Java 版本或标签。
+- 本次专用镜像：`emie-app-runtime:java21-cve-2026-91403-20261023_183332`。旧容器 `emie-app-security-old-20261023_183332` 保留用于回滚，数据库备份及受保护审计记录位于 `<DEPLOY_DIR>/security-updates/java-cve-2026-91403-20261023_183332/`。
+
+## 2026-10-26 Java 累计更新与根证书修复
+
+当前本地测试及生产均为 Temurin 21.0.13+9。因对应版本 Docker 标签尚不可用，`docker/java-security/install-runtime.sh` 使用 Adoptium 官方发布包和固定 SHA-256 安装整个 JRE，支持 Linux x64/aarch64。`apply-security.sh` 保留 86 条中间证书阻止指纹，并按官方 https://ops.java/emudhra 移除 emSign Root CA - G1、G2、emSign ECC Root CA - G3、AAA Certificate Services 四个根主体（仅删除实际存在的条目，自动适配 Temurin 别名）。对应 CVE-2026-114820，不能仅凭升级到 21.0.13 判断根证书修复完成。
+
+生产安全镜像为 `emie-app-runtime:java21-cve-2026-114820-20261026_093431`，稳定标签 `emie-app-runtime:java21` 同步指向该镜像。旧容器 `emie-app-security-old-20261026_093431` 及旧镜像保留；受保护备份/审计目录为 `<DEPLOY_DIR>/security-updates/java-cve-2026-114820-20261026_093431/`。本次只更新 Java 运行时和证书，业务 JAR、环境、挂载及资源限制保持原样。

@@ -1809,3 +1809,25 @@
 - 提交 SHA：`e69ccc75566e1a63a13d304f86b221a01bba42e3`；Gitee `master` 与 GitHub `main` 已推送同一提交。
 - 生产结果：旧 SHA `2962846e878ee535ca627d8de741fff78c9779c5` 原子切换到目标 SHA；版本 `1.15.2`，JAR SHA-256 `fbd452026791da97eddd403490db478c482d1c946258edbc62cd3571d75b5f84`；发布脚本返回成功，公网 HTTP 200。
 - 数据库：无新增迁移；发布前备份目录 `/home/emie/emie-deploy-backups/20261008_185239`，备份 713781 bytes；旧容器 `emie-app-old-20261008_185239` 保留；切换 74 秒，远端总耗时 81 秒。
+
+## 2026-10-23 18:30 后：Java 证书安全更新
+
+- 授权范围：用户明确同意本地验证通过后更新并重启生产；本次未 commit、未 push、未发布任何未提交业务代码。
+- 生产旧/新业务 SHA 均为 `cbd80fd77d4b5475ac528c014d9f43534cc4ecc8`；JAR SHA-256 均为 `5c248583f8406123af149f77b5c700370a2374f9e1467935671e5a73c8aa11be`。本地与 Gitee master 比较为 0/0；无关本地改动全部保留。
+- 本地完整 Java 测试通过；标准 test-update 已完成容器、HTTP、静态资源、Chrome 冒烟及弹窗回归。由于共享 MySQL/Redis 属于 `emie` Compose 项目，使用临时 Docker 包装器沿用 `emie_default` 网络并仅更新 test-app（--no-deps），未重建或删除数据服务。
+- 官方源为 OpenJDK jdk21u 提交 `85974eed594aa5a9e13a6a20713156ed8d9cd0ed`，使用官方转换器生成含 86 条指纹的 blocked.certs，SHA-256 `2596bb6dda83c66d96c5a252d7b2ae1f24cc1ae3f1890223b4f3591a8d52bf10`。运行时合并后保留原有条目，增加 48 条指纹。
+- 生产保留 Temurin 21.0.11+10，通过官方证书阻止列表方案处理本 CVE。新镜像 `emie-app-runtime:java21-cve-2026-91403-20261023_183332`，稳定标签 java21 同步更新。新容器完整继承原环境、挂载、命令、网络和资源限制。无数据库迁移、无业务 JAR 更新。
+- 已执行 mysqldump 一致性备份并通过 gzip 完整性检查，备份位于 `<DEPLOY_DIR>/security-updates/java-cve-2026-91403-20261023_183332/database.sql.gz`。旧容器及旧运行时镜像保留；未使用数据卷删除操作。
+- 首次镜像构建将镜像 ID 误识别为仓库名，已在停服前中止并改用本地备份镜像标签重建；该次未切换应用。成功构建后再创建候选容器、切换并检查健康；未触发应用回滚。
+- 生产验证：actuator health UP；首页、bootstrap.js、core-runtime.js、app.css、公开配置接口正常；容器运行且重启次数 0，预览转换容器运行。候选镜像 JVM 对官方源全部 35 张证书的阻止检查通过，飞书 HTTPS 握手通过（无凭据 GET 返回 404，仅验证 TLS，不代表业务上传/通知已验证）。
+
+## 2026-10-26 09:34–09:38：Java 21 累计安全更新及 CVE-2026-114820（验证通过）
+
+- 用户在最新漏洞核查后明确要求修复；执行本地验证和生产运行时更新/重启，未 commit、未 push，未部署工作区中已有业务改动。
+- 旧/新生产业务提交均为 `cbd80fd77d4b5475ac528c014d9f43534cc4ecc8`；旧/新 JAR SHA-256 均为 `5c248583f8406123af149f77b5c700370a2374f9e1467935671e5a73c8aa11be`。
+- 本地 Java 测试通过，test-update 容器、HTTP 健康、静态资源、Chrome 冒烟及弹窗回归通过。继续使用临时包装器复用 emie_default 及现有数据服务，仅重建 test-app。最初的固定 Docker 标签不存在，改用官方二进制包；已清理的临时网络覆盖文件已恢复。
+- 本地/生产均升级为 Temurin 21.0.13+9。官方 x64 包 SHA-256 为 `a535a1df9c6284d9618872984e026ae0352d1f7e9e0605425c0e6114f47351dd`；aarch64 包为 `b1734db7ade49c3f6acc6ae06233b8c2dd90e3e2f00f67000ae1c972aaa64d8c`，均在安装前强制校验。
+- 补充 CVE-2026-114820 根证书移除，仍保留 CVE-2026-91403 的 86 条阻止指纹。生产候选和运行中 JVM 均通过官方 CheckCerts：No bad root certificates found；35 张历史阻止证书检查通过。飞书 HTTPS 无凭据握手成功（GET 404，仅证明 TLS 正常）。
+- 生产镜像 `emie-app-runtime:java21-cve-2026-114820-20261026_093431`；稳定 java21 标签同步更新。旧容器 `emie-app-security-old-20261026_093431` 保留，未触发回滚。
+- 发布前 mysqldump 备份已通过 gzip 完整性检查，位于 `<DEPLOY_DIR>/security-updates/java-cve-2026-114820-20261026_093431/database.sql.gz`。无数据库迁移，无数据卷删除。
+- 生产 health UP，首页及 bootstrap.js/core-runtime.js/app.css/公开配置接口正常；Chrome 公网入口 HTTP 200、app_ready=login、page_errors=0；容器运行且 RestartCount=0，预览转换服务运行，启动后未检出新增 ERROR/启动失败/OOM。未执行真实业务通知或附件上传。

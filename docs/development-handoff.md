@@ -1357,3 +1357,11 @@
 - 操作日志留存修复已发布，提交 `e69ccc75566e1a63a13d304f86b221a01bba42e3`；Gitee `master` 与 GitHub `main` 同步，生产 SHA 一致，公网 HTTP 200。
 - 备份 `/home/emie/emie-deploy-backups/20261008_185239`（713781 bytes）；旧容器 `emie-app-old-20261008_185239` 保留；无数据库迁移。
 - Java 21 全量构建通过：372 项测试，0 失败、1 项既有跳过；发布记录补写后重跑 `./scripts/test-update.sh` 通过，测试容器、应用/MySQL/Redis、静态资源及浏览器回归正常。
+
+## 2026-10-23 Java 安全更新交接
+
+用户授权在 18:30 后更新生产。已仅对 Java 证书数据实施 CVE-2026-91403 修复，生产业务 SHA/JAR 未变，未提交或推送本地工作区。生产稳定 runtime 标签已指向安全镜像，旧容器和一致性数据库备份保留。详细来源、校验值和回滚点见 docs/deployment.md 与 docs/release-records.md。注意：生产 Java 仍为 Temurin 21.0.11+10，本地为 21.0.12.1+1；本次采用证书数据缓解方案，不应宣称升级到完整最新 JDK 安全基线。共享测试数据库/Redis 属于 emie Compose 项目，本地重建需沿用 emie_default 网络并只更新应用，避免同名容器冲突。
+
+## 2026-10-26 Java 后续漏洞修复完成
+
+核查发现 CVE-2026-114820（10/24 发布）要求移除根 CA，10/23 的中间证书列表补丁不足以覆盖后续漏洞。用户已授权修复；本地和生产实际运行 Temurin 21.0.13+9，并通过官方 CheckCerts、旧证书阻止检查、飞书 TLS 及健康/浏览器入口验证。生产业务 SHA/JAR 未变，未提交/推送，原有工作区改动保留。新增 install-runtime.sh 通过固定校验值安装官方 JRE，apply-security.sh 移除官方四个根主体。生产 stable java21 标签已更新，旧容器及数据库备份保留，具体回滚点见 deployment.md/release-records.md。后续构建需要能访问 GitHub 官方发行包；版本 Docker 标签尚未可用时不可直接改用该标签。
