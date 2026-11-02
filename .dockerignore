@@ -11,10 +11,13 @@ target/
 .git/
 .github/
 .gitignore
+.codex-build/
+.codex-output/
 *.md
 .env
 .env.*
 .server.local.env
+.server*.env
 node_modules/
 data/
 logs/

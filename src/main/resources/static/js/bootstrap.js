@@ -10,17 +10,19 @@ import './dashboard-home.js?v=623';
 import './dashboard-lists.js?v=429';
 import './dashboard-scoring.js?v=345';
 import './dashboard-points.js?v=383';
-import './dashboard-designer.js?v=601';
+import './dashboard-designer.js?v=605';
 import './dashboard.js?v=219';
 import './material-market.js?v=162';
-import './image-library.js?v=110';
+import './image-library.js?v=114';
+import './task-recommendations.js?v=5';
+import './visual-ai-settings.js?v=5';
 import './project-uploads.js?v=498';
 import './project-form.js?v=459';
-import './project-detail.js?v=664';
+import './project-detail.js?v=668';
 import './project-tasks.js?v=696';
 import './project-sharing.js?v=264';
 import './projects.js?v=148';
-import './admin-shell.js?v=447';
+import './admin-shell.js?v=451';
 import './admin-users.js?v=279';
 import './admin-roles.js?v=229';
 import './admin-catalog.js?v=276';
@@ -40,7 +42,7 @@ const requiredEmieModules = [
   'dashboardProjects', 'dashboardHome', 'dashboardLists', 'dashboardScoring', 'dashboardPoints', 'dashboardDesigner', 'dashboard',
   'projectUploads', 'projectForm', 'projectDetail', 'projectTasks', 'projectSharing', 'projects', 'materialMarket', 'imageLibrary',
   'adminShell', 'adminUsers', 'adminRoles', 'adminCatalog', 'adminOrg', 'adminScoring', 'designerEvaluation', 'adminAudit',
-  'adminStorage', 'adminWorkload', 'admin', 'files',
+  'adminStorage', 'adminWorkload', 'admin', 'files', 'taskRecommendations', 'visualAiSettings',
 ];
 const missingEmieModules = requiredEmieModules.filter(name => !EMIE.modules[name]);
 if (missingEmieModules.length) {

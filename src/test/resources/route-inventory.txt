@@ -31,6 +31,7 @@ GET /api/admin/sync/v2/status
 GET /api/admin/users
 GET /api/admin/users/page
 GET /api/admin/version/stream
+GET /api/admin/visual-ai-config
 GET /api/admin/workload
 GET /api/admin/workload/details
 GET /api/admin/workload/timeline
@@ -101,6 +102,7 @@ GET /api/projects/page
 GET /api/projects/role-status
 GET /api/projects/task-market
 GET /api/projects/{id}
+GET /api/projects/{projectId}/subtasks/{taskId}/image-recommendations
 GET /api/scoring/pending
 GET /api/share/admin/all
 GET /api/share/list
@@ -132,6 +134,8 @@ POST /api/admin/sync/v2/prepare
 POST /api/admin/sync/v2/rollback
 POST /api/admin/sync/validate-backups
 POST /api/admin/upload-image
+POST /api/admin/visual-ai-config
+POST /api/admin/visual-ai-config/index-library
 POST /api/auth/feishu/auto-login
 POST /api/auth/feishu/exchange
 POST /api/auth/impersonate
@@ -193,6 +197,7 @@ POST /api/projects/{id}/workflow/complete-execution
 POST /api/projects/{id}/workflow/review
 POST /api/projects/{id}/workflow/submit-review
 POST /api/projects/{projectId}/subtasks/{taskId}/change-bonus
+POST /api/projects/{projectId}/subtasks/{taskId}/image-recommendations/{libraryItemId}/associate
 POST /api/projects/{projectId}/tasks/{taskId}/accept
 POST /api/projects/{projectId}/tasks/{taskId}/approve
 POST /api/projects/{projectId}/tasks/{taskId}/cancel-accept

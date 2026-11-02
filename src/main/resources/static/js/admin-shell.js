@@ -333,6 +333,7 @@ async function renderAdminConfig(container) {
 
   container.innerHTML = html;
   if (EMIE.adminState.currentTab === 'config') {
+    if (EMIE.state.currentRole === 'admin') container.insertAdjacentHTML('beforeend', `<div class="config-card"><div class="config-card-header"><h3>图档 AI 识图与推荐</h3><button class="btn btn-sm btn-primary" data-emie-action="click:visual-ai-settings-open">配置 AI 服务</button></div><div class="config-card-body"><p class="form-hint">配置图片理解模型，分析图档的主题、元素和风格，为设计任务推荐可复用的图档。分析结果会缓存复用。</p></div></div>`);
     container.insertAdjacentHTML('beforeend', `<div class="config-card" data-group="session-ops">
       <div class="config-card-header"><h3>🔐 会话管理</h3><button class="btn btn-sm btn-danger" id="logoutAllSessionsButton" data-emie-action="click:admin-logout-all-sessions">🚪 强制全部用户重新登录</button></div>
       <div class="config-card-body"><p style="margin:0;color:var(--gray-500);font-size:13px;">立即撤销所有用户当前的登录状态，下次访问系统需要重新登录。用于登录信息结构变更后（例如刚补齐飞书 User ID）需要全员重新触发的场景，请仅在必要时使用。</p></div>

@@ -94,6 +94,40 @@ set_env_value() {
   done
   runtime_env+=("$key=$value")
 }
+
+# 私密 AI 配置仅用于新候选容器；不执行文件内容，也不改写旧容器环境。
+load_visual_ai_env() {
+  local file="$DEPLOY_DIR/.visual-ai.env" line key value seen_keys="|" invalid_data
+  if [[ ! -e "$file" && ! -L "$file" ]]; then
+    return
+  fi
+  [[ -f "$file" && ! -L "$file" ]] || die "AI 环境配置必须是普通文件"
+  [[ "$(stat -c %u "$file")" == "0" && "$(stat -c %a "$file")" == "600" ]] ||
+    die "AI 环境配置必须由 root 拥有且权限为 0600"
+  [[ "$(stat -c %s "$file")" -le 65536 ]] || die "AI 环境配置文件过大"
+  if IFS= read -r -d '' invalid_data < "$file"; then
+    die "AI 环境配置格式无效"
+  fi
+  unset invalid_data
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" != *$'\r'* ]] || die "AI 环境配置不得包含 CR 字符"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    [[ "$line" == *=* ]] || die "AI 环境配置必须使用 KEY=value 格式"
+    key="${line%%=*}"
+    value="${line#*=}"
+    case "$key" in
+      VISUAL_AI_ENABLED|VISUAL_AI_BASE_URL|VISUAL_AI_MODEL|VISUAL_AI_API_KEY|VISUAL_AI_ENCRYPTION_KEY)
+        ;;
+      *) die "AI 环境配置包含不允许的变量" ;;
+    esac
+    [[ "$seen_keys" != *"|$key|"* ]] || die "AI 环境配置包含重复变量"
+    [[ "$value" != *[[:cntrl:]]* ]] || die "AI 环境配置值包含控制字符"
+    seen_keys+="$key|"
+    set_env_value "$key" "$value"
+  done < "$file"
+}
+load_visual_ai_env
+
 # 双连接池配置必须随候选容器一起传递，不能依赖旧容器是否已经配置过。
 primary_jdbc_url="$(get_env_value SPRING_DATASOURCE_URL 2>/dev/null || true)"
 db_host="$(get_env_value DESIGNPM_DB_HOST 2>/dev/null || true)"

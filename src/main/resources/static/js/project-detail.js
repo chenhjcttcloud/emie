@@ -366,6 +366,7 @@ function openProjectSubTaskDetail(event, taskId) {
         </div>
         ${task.referenceImagesJson ? renderSubTaskImages(task.referenceImagesJson) : ''}
         ${task.attachmentsJson ? renderTaskAttachments(task.attachmentsJson) : ''}
+        ${EMIE.actions.taskRecommendationsPlaceholder?.() || ''}
         ${task.deliverables ? `<div class="detail-item" style="margin-top:12px;"><div class="detail-label">当前交付成果</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.deliverables)}</div></div>` : ''}
         ${renderSubTaskImages(task.pendingChangeReferenceImagesJson)}
         <div style="margin-top:18px;">
@@ -384,6 +385,7 @@ function openProjectSubTaskDetail(event, taskId) {
       <div class="modal-footer">${deliveryVersions.length ? `<button class="btn btn-outline" data-emie-action="click:designer-history" data-task-id="${task.id}">📚 提交历史</button>` : ''}<button class="btn btn-primary" data-emie-action="click:detail-subtask-close">关闭</button></div>
     </div>`;
   document.body.appendChild(modal);
+  EMIE.actions.mountTaskRecommendations?.(modal, { projectId: EMIE.projectState.currentProjectDetail.id, taskId: task.id });
 }
 
 function openTaskRejectionRecord(taskId, attemptNo) {

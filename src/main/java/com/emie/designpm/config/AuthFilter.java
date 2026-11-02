@@ -180,6 +180,9 @@ public class AuthFilter implements Filter {
         if (path.startsWith("/api/project-import/")) return "admin.project_import.execute";
         if (path.startsWith("/api/share/admin/")) return "admin.share.manage";
         if (!path.startsWith("/api/admin/") || path.equals("/api/admin/public-config")) return null;
+        if (path.startsWith("/api/admin/visual-ai-config")) {
+            return "GET".equals(method) ? "admin.config.view" : "admin.config.edit";
+        }
         if (path.startsWith("/api/admin/configs")) {
             return "GET".equals(method) ? "admin.config.view" : "admin.config.edit";
         }

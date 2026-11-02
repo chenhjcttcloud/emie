@@ -175,6 +175,8 @@ public final class PermissionCatalog {
             translated.add(permission);
             String alias = LEGACY_ALIASES.get(permission);
             if (alias != null) translated.add(alias);
+            // 旧配置管理权限同时包含读取和修改；显式 deny 仍由 PermissionService 优先处理。
+            if ("admin:config".equals(permission)) translated.add("admin.config.view");
         }
         return Set.copyOf(translated);
     }

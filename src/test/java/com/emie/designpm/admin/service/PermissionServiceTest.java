@@ -82,6 +82,39 @@ class PermissionServiceTest {
     }
 
     @Test
+    void legacyAdministratorCanReadAndChangeSystemConfiguration() {
+        RoleRepository roles = mock(RoleRepository.class);
+        RolePermissionRepository assignments = emptyAssignments();
+        Role admin = Role.builder()
+                .name("admin")
+                .displayName("系统管理员")
+                .permissions("admin:config")
+                .build();
+        when(roles.findByNameIgnoreCase("admin")).thenReturn(Optional.of(admin));
+        PermissionService service = new PermissionService(roles, assignments, emptyVersions());
+
+        assertTrue(service.has("admin", "admin.config.view"), "旧配置管理权限应允许打开配置页面");
+        assertTrue(service.has("admin", "admin.config.edit"), "旧配置管理权限应保留修改能力");
+    }
+
+    @Test
+    void explicitConfigurationReadDenialOverridesLegacyAdministratorPermission() {
+        RoleRepository roles = mock(RoleRepository.class);
+        RolePermissionRepository assignments = emptyAssignments();
+        Role admin = Role.builder()
+                .name("admin")
+                .displayName("系统管理员")
+                .permissions("admin:config")
+                .build();
+        when(roles.findByNameIgnoreCase("admin")).thenReturn(Optional.of(admin));
+        when(assignments.findDeniedPermissionCodes("admin")).thenReturn(List.of("admin.config.view"));
+        PermissionService service = new PermissionService(roles, assignments, emptyVersions());
+
+        assertFalse(service.has("admin", "admin.config.view"), "兼容映射不能覆盖明确禁止的读取权限");
+        assertTrue(service.has("admin", "admin.config.edit"));
+    }
+
+    @Test
     void normalizedAssignmentsAndExplicitDenyParticipateInResolution() {
         RoleRepository roles = mock(RoleRepository.class);
         RolePermissionRepository assignments = mock(RolePermissionRepository.class);

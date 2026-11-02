@@ -3,9 +3,12 @@
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd -P)"
+BUILD_ROOT="$(bash "$ROOT/scripts/test-build-root.sh")"
 
 echo '[1/8] 更新静态资源版本号'
-if [[ $# -gt 0 ]]; then
+if [[ "$BUILD_ROOT" != "$ROOT" ]]; then
+  printf '固定测试版本=%s，保留该版本静态资源缓存参数\n' "$(basename "$BUILD_ROOT")"
+elif [[ $# -gt 0 ]]; then
   "$ROOT/scripts/update-static-versions.sh" "$@"
 else
   "$ROOT/scripts/update-static-versions.sh"
@@ -15,13 +18,17 @@ echo '[2/8] 检查前端 JavaScript 语法'
 if command -v node >/dev/null 2>&1; then
   while IFS= read -r file; do
     node --check "$file" >/dev/null
-  done < <(find "$ROOT/src/main/resources/static/js" -type f -name '*.js' -print)
+  done < <(find "$BUILD_ROOT/src/main/resources/static/js" -type f -name '*.js' -print)
 else
   echo '未找到 Node.js，跳过前端语法检查' >&2
 fi
 
 echo '[3/8] 构建 Java 应用'
-"$ROOT/scripts/mvnw-java21.sh" clean package -DskipTests -q
+"$BUILD_ROOT/scripts/mvnw-java21.sh" clean package -DskipTests -q
+if [[ "$BUILD_ROOT" != "$ROOT" ]]; then
+  mkdir -p "$ROOT/target"
+  cp "$BUILD_ROOT/target/design-pm-1.0.0.jar" "$ROOT/target/design-pm-1.0.0.jar"
+fi
 
 echo '[4/8] 重建并启动测试容器'
 "$ROOT/scripts/test-stack.sh" rebuild >/tmp/emie-test-update.log 2>&1 || {
@@ -134,7 +141,7 @@ fi
 echo '[8/8] 弹窗交互浏览器回归'
 if command -v npm >/dev/null 2>&1; then
   (
-    cd "$ROOT/scripts/modal-e2e"
+    cd "$BUILD_ROOT/scripts/modal-e2e"
     if [[ ! -d node_modules/playwright ]]; then npm ci --silent; fi
     npm test
   )

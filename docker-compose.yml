@@ -19,6 +19,11 @@ services:
       APP_PREVIEW_MAX_SOURCE_BYTES: ${APP_PREVIEW_MAX_SOURCE_BYTES:-52428800}
       APP_PREVIEW_MAX_CACHE_BYTES: ${APP_PREVIEW_MAX_CACHE_BYTES:-2147483648}
       APP_PREVIEW_TIMEOUT_SECONDS: ${APP_PREVIEW_TIMEOUT_SECONDS:-120}
+      VISUAL_AI_ENABLED: ${VISUAL_AI_ENABLED:-false}
+      VISUAL_AI_BASE_URL: ${VISUAL_AI_BASE_URL:-https://api.moonshot.cn/v1}
+      VISUAL_AI_MODEL: ${VISUAL_AI_MODEL:-kimi-k2.6}
+      VISUAL_AI_API_KEY: ${VISUAL_AI_API_KEY:-}
+      VISUAL_AI_ENCRYPTION_KEY: ${VISUAL_AI_ENCRYPTION_KEY:-}
       TZ: Asia/Shanghai
       JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Shanghai -Xmx512m -Xms128m -XX:+UseSerialGC -Xss512k -XX:MaxMetaspaceSize=192m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/app/logs/heapdump.hprof
     mem_limit: 768m
