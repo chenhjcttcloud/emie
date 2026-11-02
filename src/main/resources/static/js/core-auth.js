@@ -3,6 +3,9 @@ const renderRoleSwitcher = (...args) => EMIE.actions.renderRoleSwitcher(...args)
 const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const renderSidebar = (...args) => EMIE.actions.renderSidebar(...args);
 const render = (...args) => EMIE.actions.render(...args);
+const VERSION_CHECK_INTERVAL_MS = 60_000;
+let versionCheckRequest = null;
+let lastVersionCheckAt = 0;
 
 function notifySystemVersion(version) {
   if (!version) return;
@@ -35,9 +38,25 @@ function connectVersionStream() {
   EMIE.state.versionStream = stream;
 }
 
-/** 页面重新可见时立即检查版本；具名以便登出时解绑。 */
+/** 后台停止轮询，回到前台时立即检查并重新计时。 */
 function onVersionVisibilityChange() {
-  if (!document.hidden) checkSystemVersion();
+  if (EMIE.state.versionCheckTimer) clearInterval(EMIE.state.versionCheckTimer);
+  EMIE.state.versionCheckTimer = null;
+  if (document.hidden || !EMIE.state.versionFocusBound || !localStorage.getItem('design_pm_token')) return;
+  checkSystemVersion();
+  EMIE.state.versionCheckTimer = setInterval(checkSystemVersion, VERSION_CHECK_INTERVAL_MS);
+}
+
+function stopVersionChecks() {
+  if (EMIE.state.versionCheckTimer) clearInterval(EMIE.state.versionCheckTimer);
+  EMIE.state.versionCheckTimer = null;
+  if (EMIE.state.versionStream) { EMIE.state.versionStream.close(); EMIE.state.versionStream = null; }
+  window.removeEventListener('focus', checkSystemVersion);
+  document.removeEventListener('visibilitychange', onVersionVisibilityChange);
+  EMIE.state.versionFocusBound = false;
+  versionCheckRequest?.abort();
+  versionCheckRequest = null;
+  lastVersionCheckAt = 0;
 }
 
 /** 清理 WebView 可控缓存后刷新；不清理 token/localStorage，避免打断用户当前登录。 */
@@ -72,10 +91,24 @@ async function forceRefreshForVersion() {
 }
 
 async function checkSystemVersion() {
+  const token = localStorage.getItem('design_pm_token');
+  if (!token || !EMIE.state.versionFocusBound || document.hidden || versionCheckRequest) return;
+  const now = Date.now();
+  // 回到前台可能同时触发 visibilitychange 和 focus，合并短时间内的重复检查。
+  if (lastVersionCheckAt && now - lastVersionCheckAt < 1000) return;
+  lastVersionCheckAt = now;
+  const request = new AbortController();
+  versionCheckRequest = request;
+  const timeout = setTimeout(() => request.abort(), 10_000);
   try {
-    const r = await fetch('/api/admin/public-config?versionCheck=' + Date.now(), { cache: 'no-store' });
-    if (r.ok) notifySystemVersion((await r.json())['system.version']);
+    const r = await fetch('/api/admin/public-config?versionCheck=' + now, { cache: 'no-store', signal: request.signal });
+    const version = r.ok ? (await r.json())['system.version'] : null;
+    if (versionCheckRequest === request && localStorage.getItem('design_pm_token') === token) notifySystemVersion(version);
   } catch (e) { /* 版本检查失败不影响当前操作 */ }
+  finally {
+    clearTimeout(timeout);
+    if (versionCheckRequest === request) versionCheckRequest = null;
+  }
 }
 
 async function initApp() {
@@ -136,6 +169,7 @@ async function initApp() {
 }
 
 function showLogin() {
+  stopVersionChecks();
   document.getElementById('loginPage').style.display = '';
   document.getElementById('appContainer').style.display = 'none';
   document.getElementById('loginError').style.display = 'none';
@@ -239,6 +273,7 @@ async function showApp() {
         const cfg = await r.json();
         if (cfg['app.title']) document.title = cfg['app.title'] + ' - EMIE';
         notifySystemVersion(cfg['system.version']);
+        lastVersionCheckAt = Date.now();
         const logoEl = document.querySelector('.logo');
         if (logoEl) {
           const rawLogo = String(cfg['app.logo'] || '');
@@ -269,14 +304,12 @@ async function showApp() {
         }
       }
     } catch(e) { /* ignore */ }
-    checkSystemVersion();
-    // 已打开的页面通过短轮询感知新版本；切回页面时另行立即检查。
-    if (!EMIE.state.versionCheckTimer) EMIE.state.versionCheckTimer = setInterval(checkSystemVersion, 10000);
     if (!EMIE.state.versionFocusBound) {
       window.addEventListener('focus', checkSystemVersion);
       document.addEventListener('visibilitychange', onVersionVisibilityChange);
       EMIE.state.versionFocusBound = true;
     }
+    onVersionVisibilityChange();
 
     document.getElementById('userDisplay').textContent = `${EMIE.state.authUser.name}（${roleLabel(EMIE.state.authUser.role)}）`;
         EMIE.state.currentRole = ['promotion', 'product_promotion', 'product-promotion'].includes(String(EMIE.state.authUser.role || '').toLowerCase())
@@ -500,14 +533,6 @@ function handleLogout() {
   idleLastActive = 0;
   const idleEl = document.getElementById('idleCountdown');
   if (idleEl) idleEl.style.display = 'none';
-  // 清理版本检查轮询、版本 SSE 流与页面事件监听，避免登出后仍在后台运行
-  if (EMIE.state.versionCheckTimer) { clearInterval(EMIE.state.versionCheckTimer); EMIE.state.versionCheckTimer = null; }
-  if (EMIE.state.versionStream) { EMIE.state.versionStream.close(); EMIE.state.versionStream = null; }
-  if (EMIE.state.versionFocusBound) {
-    window.removeEventListener('focus', checkSystemVersion);
-    document.removeEventListener('visibilitychange', onVersionVisibilityChange);
-    EMIE.state.versionFocusBound = false;
-  }
   showLogin();
 }
 
@@ -550,6 +575,7 @@ function resetIdleTimer() {
     const t = localStorage.getItem('design_pm_token');
     if (t) fetch('/api/auth/logout', { method: 'POST', headers: { 'X-Auth-Token': t } }).catch(() => {});
     localStorage.removeItem('design_pm_token');
+    stopVersionChecks();
     localStorage.removeItem('design_pm_create_draft');
     EMIE.state.authUser = null;
     EMIE.state.currentView = 'dashboard';
