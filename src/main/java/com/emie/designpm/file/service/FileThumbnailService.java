@@ -6,8 +6,11 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -16,6 +19,8 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReadParam;
+import javax.imageio.ImageReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -25,6 +30,10 @@ import org.springframework.stereotype.Service;
 public class FileThumbnailService {
     private static final Logger log = LoggerFactory.getLogger(FileThumbnailService.class);
     private static final int MAX_SIDE = 640;
+    private static final int MAX_DECODE_SIDE = 1280;
+    private static final int MAX_SOURCE_SIDE = 50_000;
+    private static final long MAX_SOURCE_PIXELS = 250_000_000L;
+    private static final long RASTER_RETRY_DELAY_MILLIS = TimeUnit.MINUTES.toMillis(5);
     private static final int THUMBNAIL_CONCURRENCY = resolveThumbnailConcurrency();
     private static final Semaphore THUMBNAIL_SLOTS = new Semaphore(THUMBNAIL_CONCURRENCY);
     private final FileArchiveService fileArchiveService;
@@ -73,6 +82,7 @@ public class FileThumbnailService {
         Path target = thumbnailPath(safeName, aiFile, cacheRoot);
         if (aiFile && Files.isRegularFile(target)) return target;
         if (aiFile && failed(storedName, cacheRoot)) throw new IOException("AI 缩略图生成失败，更新文件后可重试");
+        if (!aiFile && failed(storedName, cacheRoot)) throw new IOException("图片缩略图生成失败，稍后或更新文件后可重试");
         Path source;
         try {
             source = fileArchiveService.resolveFile(storedName);
@@ -100,6 +110,7 @@ public class FileThumbnailService {
                             >= Files.getLastModifiedTime(source).toMillis()) {
                 return target;
             }
+            if (!aiFile && failed(storedName, cacheRoot)) throw new IOException("图片缩略图生成失败，稍后或更新文件后可重试");
             if (aiFile) {
                 try {
                     AiThumbnailRenderer.generate(source, target);
@@ -111,12 +122,13 @@ public class FileThumbnailService {
                     throw e;
                 }
             } else {
-                BufferedImage input = ImageIO.read(source.toFile());
-                if (input == null) throw new IOException("无法读取图片");
                 try {
-                    writeThumbnail(input, target, MAX_SIDE);
-                } finally {
-                    input.flush();
+                    writeRasterThumbnail(source, target);
+                    Files.deleteIfExists(failureMarker(target));
+                } catch (IOException | RuntimeException | OutOfMemoryError failure) {
+                    rememberRasterFailure(source, target);
+                    if (failure instanceof IOException io) throw io;
+                    throw new IOException("图片缩略图生成失败，已暂缓重试", failure);
                 }
             }
             return target;
@@ -135,10 +147,80 @@ public class FileThumbnailService {
     }
 
     public boolean failed(String storedName, Path cacheRoot) {
-        if (!storedName.toLowerCase(java.util.Locale.ROOT).endsWith(".ai")) return false;
-        Path target = thumbnailPath(storedName.replaceAll("[^a-zA-Z0-9._-]", "_"), true, cacheRoot);
+        boolean aiFile = storedName.toLowerCase(java.util.Locale.ROOT).endsWith(".ai");
+        Path target = thumbnailPath(storedName.replaceAll("[^a-zA-Z0-9._-]", "_"), aiFile, cacheRoot);
         Path marker = failureMarker(target);
-        return Files.isRegularFile(marker);
+        if (aiFile) return Files.isRegularFile(marker);
+        if (!Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS)) return false;
+        try {
+            BasicFileAttributes marked = Files.readAttributes(marker, BasicFileAttributes.class);
+            long age = System.currentTimeMillis() - marked.lastModifiedTime().toMillis();
+            if (marked.size() <= 4096 && age >= 0 && age < RASTER_RETRY_DELAY_MILLIS) {
+                Properties value = new Properties();
+                try (var input = Files.newBufferedReader(marker)) {
+                    value.load(input);
+                }
+                Path source = Path.of(java.net.URI.create(value.getProperty("source", "")));
+                BasicFileAttributes current = Files.readAttributes(source, BasicFileAttributes.class);
+                if (current.isRegularFile()
+                        && Long.toString(current.size()).equals(value.getProperty("size"))
+                        && current.lastModifiedTime().toString().equals(value.getProperty("modified"))) return true;
+            }
+        } catch (IOException | RuntimeException ignored) {
+            // A removed/replaced local source may be restored from the archive on the next attempt.
+        }
+        try {
+            Files.deleteIfExists(marker);
+        } catch (IOException ignored) {
+            // An unreadable marker must not permanently hide a recoverable file.
+        }
+        return false;
+    }
+
+    private void rememberRasterFailure(Path source, Path target) {
+        try {
+            BasicFileAttributes attributes = Files.readAttributes(source, BasicFileAttributes.class);
+            if (!attributes.isRegularFile()) return;
+            Properties value = new Properties();
+            value.setProperty(
+                    "source", source.toAbsolutePath().normalize().toUri().toString());
+            value.setProperty("size", Long.toString(attributes.size()));
+            value.setProperty("modified", attributes.lastModifiedTime().toString());
+            try (var writer = Files.newBufferedWriter(failureMarker(target))) {
+                value.store(writer, "Raster thumbnail retry cooldown");
+            }
+        } catch (IOException | RuntimeException ignored) {
+            // Archive resolution errors are handled before this method and do not poison retry state.
+        }
+    }
+
+    private void writeRasterThumbnail(Path source, Path target) throws IOException {
+        try (var stream = ImageIO.createImageInputStream(source.toFile())) {
+            if (stream == null) throw new IOException("无法读取图片");
+            var readers = ImageIO.getImageReaders(stream);
+            if (!readers.hasNext()) throw new IOException("无法读取图片格式");
+            ImageReader reader = readers.next();
+            BufferedImage image = null;
+            try {
+                reader.setInput(stream, true, true);
+                int width = reader.getWidth(0), height = reader.getHeight(0);
+                if (width <= 0
+                        || height <= 0
+                        || width > MAX_SOURCE_SIDE
+                        || height > MAX_SOURCE_SIDE
+                        || (long) width * height > MAX_SOURCE_PIXELS) throw new IOException("图片分辨率超过缩略图限制");
+                int step = Math.max(1, (Math.max(width, height) + MAX_DECODE_SIDE - 1) / MAX_DECODE_SIDE);
+                ImageReadParam parameters = reader.getDefaultReadParam();
+                parameters.setSourceSubsampling(step, step, 0, 0);
+                image = reader.read(0, parameters);
+                if (image == null || image.getWidth() > MAX_DECODE_SIDE || image.getHeight() > MAX_DECODE_SIDE)
+                    throw new IOException("图片解码未遵循缩略图尺寸限制");
+                writeThumbnail(image, target, MAX_SIDE);
+            } finally {
+                if (image != null) image.flush();
+                reader.dispose();
+            }
+        }
     }
 
     public java.util.List<Path> getOrCreateAiPages(String storedName, Path cacheRoot) throws IOException {
