@@ -9,7 +9,7 @@ INDEX="$ROOT/src/main/resources/static/index.html"
 
 increment_import() {
   local module="$1" file="$2" current next
-  current="$(sed -n "s#^import './${module}?v=\([0-9][0-9]*\)';#\1#p" "$BOOTSTRAP" | head -1)"
+  current="$(sed -n "s#.*\./${module}?v=\([0-9][0-9]*\).*#\1#p" "$BOOTSTRAP" | head -1)"
   [[ -n "$current" ]] || return 0
   next=$((current + 1))
   sed -i '' "s#\./${module}?v=${current}'#./${module}?v=${next}'#" "$BOOTSTRAP"

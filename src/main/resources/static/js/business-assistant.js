@@ -13,12 +13,19 @@ let observerScheduled = false;
 let discoveryController = null;
 let discoveryModels = [];
 let discoverySequence = 0;
+let materialDragDepth = 0;
+let refreshAssistantPosition = () => {};
 
 function has(permission) { return !Array.isArray(EMIE.state.permissions) || EMIE.state.permissions.includes(permission); }
 
 function canSearchImages() {
   return ['admin', 'planner', 'designer'].includes(EMIE.state.currentRole)
     && has('page.image_library.view');
+}
+
+function visibleSuggestion(question) {
+  return typeof question === 'string' && question.trim()
+    && (canSearchImages() || !/(找图|(?:查找|搜索|推荐|相关|相似).*(?:图档|图片|素材))/.test(question));
 }
 
 function canUploadMaterial() {
@@ -56,6 +63,7 @@ function resetAssistant() {
   state.controller = null; state.configController = null; state.modelController = null; state.modelInfo = null; state.configSnapshot = null; state.configSelectedId = 'server'; state.configBusy = false; state.deleteProfileId = '';
   state.messages = []; state.file = null; state.busy = false; state.open = false; state.configOpen = false; state.contextKey = '';
   if (widget) {
+    clearMaterialDrop(); materialFeedback('');
     widget.querySelector('#businessAssistantInput').value = '';
     widget.querySelector('#businessAssistantFile').value = '';
     widget.querySelector('#businessAssistantConfig').replaceChildren();
@@ -89,6 +97,8 @@ function renderShell() {
   attachment.hidden = !state.file;
   attachment.querySelector('span').textContent = state.file ? `参考素材：${state.file.name}` : '';
   widget.querySelector('#businessAssistantPending').hidden = !state.busy;
+  if (state.busy || !state.open || state.configOpen || !canUploadMaterial()) clearMaterialDrop();
+  refreshAssistantPosition();
 }
 
 function syncShell() {
@@ -135,13 +145,13 @@ function renderMessages() {
   const messages = widget?.querySelector('#businessAssistantMessages');
   if (!messages) return;
   if (!state.messages.length) {
-    messages.innerHTML = `<div class="business-assistant-welcome"><div class="business-assistant-welcome-icon" aria-hidden="true">✦</div><h3>你好，我是小觅</h3><p>你的工作与设计助手。可以询问操作流程、查询自己的待办，或描述需求查找图档。打开项目或任务后，可结合当前内容提问。</p><div class="business-assistant-shortcuts">${SHORTCUTS.filter(question => canSearchImages() || question !== '帮我找相关图档').map(question => `<button type="button" data-assistant-action="suggestion" data-question="${esc(question)}">${esc(question)}</button>`).join('')}</div><small>查询沿用当前账号权限，正式业务操作在原页面完成。</small></div>`;
+    messages.innerHTML = `<div class="business-assistant-welcome"><div class="business-assistant-welcome-icon" aria-hidden="true">✦</div><h3>你好，我是小觅</h3><p>你的工作与设计助手。可以询问操作流程、查询自己的待办，或描述需求查找图档。打开项目或任务后，可结合当前内容提问。</p><div class="business-assistant-shortcuts">${SHORTCUTS.filter(visibleSuggestion).map(question => `<button type="button" data-assistant-action="suggestion" data-question="${esc(question)}">${esc(question)}</button>`).join('')}</div><small>查询沿用当前账号权限，正式业务操作在原页面完成。</small></div>`;
     return;
   }
   messages.innerHTML = state.messages.map((message, messageIndex) => {
     if (message.role === 'user') return `<div class="business-assistant-message is-user"><div>${esc(text(message.content, 2000))}${message.attachmentName ? `<small>附件：${esc(text(message.attachmentName, 255))}</small>` : ''}</div></div>`;
     const data = message.data || {}, sources = Array.isArray(data.sources) ? data.sources.slice(0, 8) : [], tasks = Array.isArray(data.tasks) ? data.tasks.slice(0, 10) : [], images = Array.isArray(data.images) ? data.images.slice(0, 8) : [];
-    return `<div class="business-assistant-message is-assistant"><div class="business-assistant-mode">${esc(MODE_LABELS[data.mode] || '系统提示')}${data.modelName ? ` · ${esc(text(data.modelName, 100))}` : ''}</div><div class="business-assistant-answer">${esc(text(message.content, 14000))}</div>${data.serviceMessage ? `<p class="business-assistant-service" role="status">${esc(text(data.serviceMessage, 800))}</p>` : ''}${tasks.length ? `<div class="business-assistant-tasks">${tasks.map(taskCard).join('')}</div>` : ''}${images.length ? `<div class="business-assistant-images">${images.map((image, imageIndex) => imageCard(image, messageIndex, imageIndex)).join('')}</div>` : ''}${sources.length ? `<div class="business-assistant-sources">${sources.map(sourceButton).join('')}</div>` : ''}${Array.isArray(data.suggestions) ? `<div class="business-assistant-shortcuts">${data.suggestions.slice(0, 4).filter(question => typeof question === 'string' && question.trim()).map(question => `<button type="button" data-assistant-action="suggestion" data-question="${esc(text(question, 200))}">${esc(text(question, 200))}</button>`).join('')}</div>` : ''}</div>`;
+    return `<div class="business-assistant-message is-assistant"><div class="business-assistant-mode">${esc(MODE_LABELS[data.mode] || '系统提示')}${data.modelName ? ` · ${esc(text(data.modelName, 100))}` : ''}</div><div class="business-assistant-answer">${esc(text(message.content, 14000))}</div>${data.serviceMessage ? `<p class="business-assistant-service" role="status">${esc(text(data.serviceMessage, 800))}</p>` : ''}${tasks.length ? `<div class="business-assistant-tasks">${tasks.map(taskCard).join('')}</div>` : ''}${images.length ? `<div class="business-assistant-images">${images.map((image, imageIndex) => imageCard(image, messageIndex, imageIndex)).join('')}</div>` : ''}${sources.length ? `<div class="business-assistant-sources">${sources.map(sourceButton).join('')}</div>` : ''}${Array.isArray(data.suggestions) ? `<div class="business-assistant-shortcuts">${data.suggestions.slice(0, 4).filter(visibleSuggestion).map(question => `<button type="button" data-assistant-action="suggestion" data-question="${esc(text(question, 200))}">${esc(text(question, 200))}</button>`).join('')}</div>` : ''}</div>`;
   }).join('');
   messages.scrollTop = messages.scrollHeight;
 }
@@ -156,7 +166,7 @@ function openBusinessAssistant() {
 function closeBusinessAssistant() {
   if (state.configOpen) closeSettings();
   else resetModelDiscovery();
-  state.open = false; renderShell();
+  state.open = false; clearMaterialDrop(); renderShell();
   widget.querySelector('#businessAssistantLauncher').focus();
 }
 
@@ -192,6 +202,7 @@ async function sendMessage(question) {
   const context = currentContext(), controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 65000);
   state.controller = controller; state.busy = true; state.file = null;
+  clearMaterialDrop(); materialFeedback('');
   state.messages.push({ role: 'user', content: message || '请根据参考素材推荐相关图档。', attachmentName: file?.name });
   state.messages = state.messages.slice(-16);
   input.value = ''; widget.querySelector('#businessAssistantFile').value = '';
@@ -633,9 +644,9 @@ function handleClick(event) {
   const action = button.dataset.assistantAction;
   if (action === 'open') state.open ? closeBusinessAssistant() : openBusinessAssistant();
   else if (action === 'close') closeBusinessAssistant();
-  else if (action === 'new') { state.controller?.abort(); state.sequence++; state.messages = []; state.file = null; state.busy = false; widget.querySelector('#businessAssistantFile').value = ''; if (state.configOpen) closeSettings(); renderMessages(); renderShell(); }
+  else if (action === 'new') { state.controller?.abort(); state.sequence++; state.messages = []; state.file = null; state.busy = false; clearMaterialDrop(); materialFeedback(''); widget.querySelector('#businessAssistantFile').value = ''; if (state.configOpen) closeSettings(); renderMessages(); renderShell(); }
   else if (action === 'suggestion') sendMessage(button.dataset.question);
-  else if (action === 'remove-file') { state.file = null; widget.querySelector('#businessAssistantFile').value = ''; renderShell(); }
+  else if (action === 'remove-file') { state.file = null; materialFeedback(''); widget.querySelector('#businessAssistantFile').value = ''; renderShell(); }
   else if (action === 'settings') openSettings();
   else if (action === 'config-back') closeSettings();
   else if (action === 'config-new' && has('admin.config.edit') && !state.configBusy) { resetModelDiscovery(); state.configSelectedId = 'new'; state.deleteProfileId = ''; renderSettings(state.configSnapshot); scrollToModelEditor(); }
@@ -658,22 +669,82 @@ function handleClick(event) {
   }
 }
 
+function materialFeedback(message) {
+  const status = widget?.querySelector('#businessAssistantFileStatus');
+  if (status) { status.textContent = message; status.hidden = !message; }
+}
+
+function clearMaterialDrop() {
+  materialDragDepth = 0;
+  widget?.querySelector('#businessAssistantPanel').classList.remove('is-file-dragover');
+  widget?.querySelector('#businessAssistantLauncher').classList.remove('is-file-dragover');
+}
+
+function canAttachMaterial() {
+  return !!currentIdentity() && canUploadMaterial() && !state.busy && !state.configOpen;
+}
+
 function setMaterialFile(file) {
-  if (!file || !canUploadMaterial() || state.busy) return;
+  if (!file || !canAttachMaterial()) return false;
   if (file.size > 15 * 1024 * 1024 || !/\.(jpg|jpeg|png|gif|bmp|webp|ai|pdf)$/i.test(file.name)) {
-    widget.querySelector('#businessAssistantFile').value = ''; state.file = null;
-    state.messages.push({ role: 'assistant', content: '参考素材支持图片、AI、PDF，单个文件不超过 15MB。', error: true }); renderMessages();
-  } else state.file = file;
+    widget.querySelector('#businessAssistantFile').value = '';
+    materialFeedback('参考素材支持图片、AI、PDF，单个文件不超过 15MB。');
+    return false;
+  }
+  state.file = file; materialFeedback('');
   renderShell();
+  return true;
+}
+
+function isMaterialDrag(event) {
+  return [...(event.dataTransfer?.types || [])].includes('Files') || !!event.dataTransfer?.files?.length;
+}
+
+function handleMaterialDrag(event) {
+  if (!isMaterialDrag(event)) return;
+  event.preventDefault(); event.stopPropagation();
+  if (event.type === 'drop') {
+    clearMaterialDrop();
+    if (!canAttachMaterial()) {
+      materialFeedback(state.busy ? '正在处理，请稍候再添加参考素材。' : state.configOpen ? '请返回对话后添加参考素材。' : state.modelInfo?.visionSupported === false ? '当前模型仅支持文字，请切换支持图片的模型后添加素材。' : '当前账号没有添加参考素材的权限。');
+      return;
+    }
+    const files = [...(event.dataTransfer?.files || [])];
+    if (files.length !== 1) { materialFeedback('每次只能添加一个参考素材，请选择一个文件。'); return; }
+    if (setMaterialFile(files[0])) {
+      if (!state.open) openBusinessAssistant();
+      widget.querySelector('#businessAssistantInput').focus();
+    }
+    return;
+  }
+  if (!canAttachMaterial()) { event.dataTransfer.dropEffect = 'none'; clearMaterialDrop(); return; }
+  event.dataTransfer.dropEffect = 'copy';
+  if (event.type === 'dragenter') materialDragDepth++;
+  widget.querySelector('#businessAssistantPanel').classList.add('is-file-dragover');
+  widget.querySelector('#businessAssistantLauncher').classList.add('is-file-dragover');
 }
 
 function mountBusinessAssistant() {
   const app = document.getElementById('appContainer');
   if (!app || widget) return;
   widget = document.createElement('div'); widget.id = 'businessAssistantRoot'; widget.hidden = true;
-  widget.innerHTML = `<button type="button" id="businessAssistantLauncher" class="business-assistant-launcher" aria-controls="businessAssistantPanel" aria-expanded="false" data-assistant-action="open"><span aria-hidden="true">✦</span><span>问问小觅</span></button><section id="businessAssistantPanel" class="business-assistant-panel" role="dialog" aria-modal="false" aria-labelledby="businessAssistantTitle" hidden><header class="business-assistant-header"><div><h2 id="businessAssistantTitle">小觅</h2><p id="businessAssistantContext"></p><p id="businessAssistantModel" class="business-assistant-model"></p></div><div><button id="businessAssistantSettings" type="button" class="business-assistant-icon" title="小觅设置" aria-label="小觅设置" data-assistant-action="settings" hidden>⚙</button><button type="button" class="business-assistant-icon" title="新对话" aria-label="新对话" data-assistant-action="new">＋</button><button type="button" class="business-assistant-icon" title="收起小觅" aria-label="收起小觅" data-assistant-action="close">✕</button></div></header><div id="businessAssistantChat" class="business-assistant-chat"><div id="businessAssistantMessages" class="business-assistant-messages" aria-live="polite" aria-relevant="additions text"></div><div id="businessAssistantPending" class="business-assistant-pending" role="status" hidden><span aria-hidden="true"></span>正在处理，请稍候…</div><form id="businessAssistantForm" class="business-assistant-composer"><p id="businessAssistantModelNotice" class="business-assistant-model-notice" hidden>当前模型仅支持文字。理解参考图需由管理员切换到支持图片的模型。</p><div id="businessAssistantAttachment" class="business-assistant-attachment" hidden><span></span><button type="button" aria-label="移除参考素材" data-assistant-action="remove-file">✕</button></div><label class="business-assistant-input-label" for="businessAssistantInput">你的问题</label><textarea id="businessAssistantInput" maxlength="2000" rows="2" placeholder="询问流程、待办，或描述想找的图档…"></textarea><div class="business-assistant-composer-actions"><label class="business-assistant-upload">＋ 参考素材<input id="businessAssistantFile" type="file" accept="image/jpeg,image/png,image/gif,image/bmp,image/webp,.ai,.pdf" aria-label="添加参考素材"></label><button id="businessAssistantSend" class="btn btn-primary btn-sm" type="submit">发送 ↗</button></div><p>按 Enter 发送，Shift + Enter 换行。可粘贴截图，素材仅在发送时上传。</p></form></div><div id="businessAssistantConfig" class="business-assistant-config" hidden></div></section>`;
+  widget.innerHTML = `<button type="button" id="businessAssistantLauncher" class="business-assistant-launcher" title="拖动调整位置，点击打开小觅" aria-controls="businessAssistantPanel" aria-expanded="false" data-assistant-action="open"><span aria-hidden="true">✦</span><span>问问小觅</span></button><section id="businessAssistantPanel" class="business-assistant-panel" role="dialog" aria-modal="false" aria-labelledby="businessAssistantTitle" hidden><header class="business-assistant-header"><div><h2 id="businessAssistantTitle">小觅</h2><p id="businessAssistantContext"></p><p id="businessAssistantModel" class="business-assistant-model"></p></div><div><button id="businessAssistantSettings" type="button" class="business-assistant-icon" title="小觅设置" aria-label="小觅设置" data-assistant-action="settings" hidden>⚙</button><button type="button" class="business-assistant-icon" title="新对话" aria-label="新对话" data-assistant-action="new">＋</button><button type="button" class="business-assistant-icon" title="收起小觅" aria-label="收起小觅" data-assistant-action="close">✕</button></div></header><div id="businessAssistantChat" class="business-assistant-chat"><div id="businessAssistantMessages" class="business-assistant-messages" aria-live="polite" aria-relevant="additions text"></div><div id="businessAssistantPending" class="business-assistant-pending" role="status" hidden><span aria-hidden="true"></span>正在处理，请稍候…</div><form id="businessAssistantForm" class="business-assistant-composer"><p id="businessAssistantModelNotice" class="business-assistant-model-notice" hidden>当前模型仅支持文字。理解参考图需由管理员切换到支持图片的模型。</p><div id="businessAssistantAttachment" class="business-assistant-attachment" hidden><span></span><button type="button" aria-label="移除参考素材" data-assistant-action="remove-file">✕</button></div><p id="businessAssistantFileStatus" class="business-assistant-file-status is-error" role="status" hidden></p><label class="business-assistant-input-label" for="businessAssistantInput">你的问题</label><textarea id="businessAssistantInput" maxlength="2000" rows="2" placeholder="询问流程、待办，或描述想找的图档…"></textarea><div class="business-assistant-composer-actions"><label class="business-assistant-upload">＋ 参考素材<input id="businessAssistantFile" type="file" accept="image/jpeg,image/png,image/gif,image/bmp,image/webp,.ai,.pdf" aria-label="添加参考素材"></label><button id="businessAssistantSend" class="btn btn-primary btn-sm" type="submit">发送 ↗</button></div><p>按 Enter 发送，Shift + Enter 换行。可拖入图片、AI、PDF 或粘贴截图，每次一个，最大 15MB；素材仅在发送时上传。</p></form></div><div id="businessAssistantConfig" class="business-assistant-config" hidden></div><div class="business-assistant-drop-hint" aria-hidden="true"><span>＋</span><strong>松开添加参考素材</strong><small>图片、AI、PDF · 单个不超过 15MB<br>素材将在点击发送后上传</small></div></section>`;
   app.appendChild(widget);
+  refreshAssistantPosition = EMIE.modules.businessAssistantPosition.attachAssistantPosition(widget);
   widget.addEventListener('click', handleClick);
+  ['dragenter', 'dragover', 'drop'].forEach(type => widget.addEventListener(type, handleMaterialDrag));
+  widget.addEventListener('dragleave', event => {
+    if (!isMaterialDrag(event)) return;
+    event.preventDefault(); event.stopPropagation();
+    materialDragDepth = Math.max(0, materialDragDepth - 1);
+    if (!materialDragDepth) clearMaterialDrop();
+  });
+  document.addEventListener('dragend', clearMaterialDrop);
+  document.addEventListener('drop', clearMaterialDrop);
+  document.addEventListener('dragleave', event => {
+    if (event.target === document.documentElement && !event.relatedTarget) clearMaterialDrop();
+  });
+  window.addEventListener('blur', clearMaterialDrop);
   widget.addEventListener('submit', event => {
     if (event.target.id === 'businessAssistantForm') { event.preventDefault(); sendMessage(); }
     else if (event.target.id === 'businessAssistantConfigForm') saveSettings(event);
@@ -699,7 +770,7 @@ function mountBusinessAssistant() {
   widget.querySelector('#businessAssistantFile').addEventListener('change', event => setMaterialFile(event.target.files?.[0]));
   widget.querySelector('#businessAssistantInput').addEventListener('paste', event => {
     const item = [...(event.clipboardData?.items || [])].find(value => value.kind === 'file' && value.type.startsWith('image/'));
-    if (item && canUploadMaterial() && !state.busy) { event.preventDefault(); setMaterialFile(item.getAsFile()); }
+    if (item) { event.preventDefault(); event.stopPropagation(); setMaterialFile(item.getAsFile()); }
   });
   renderMessages(); syncShell();
   new MutationObserver(scheduleSync).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'data-app-ready', 'data-assistant-project-id', 'data-assistant-task-id'] });

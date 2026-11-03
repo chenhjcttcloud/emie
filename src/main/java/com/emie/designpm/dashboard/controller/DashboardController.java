@@ -75,8 +75,13 @@ public class DashboardController {
                 projects.stream().map(p -> toSummary(p, taskCountMap, scoreMap)).collect(Collectors.toList());
         result.put("orders", orders);
 
+        // 同一请求复用待评分计数；企划“全部”视角保留原先的管理员统计口径。
+        Map<String, Long> badgeStats = projectService.getNavigationBadgeStats(role, userId);
+        long pendingScore = allPlanners
+                ? projectService.countPendingScoresForUser("admin", userId)
+                : badgeStats.get("pendingScoreCount");
         // 2. Dashboard stats
-        result.put("stats", computeStatsByIds(visibleProjectIds, allPlanners ? "admin" : role, userId));
+        result.put("stats", computeStatsByIds(visibleProjectIds, pendingScore));
 
         // 3. 四个角色状态看板
         if (includeRoleStatus) {
@@ -87,7 +92,7 @@ public class DashboardController {
         result.put("departments", departmentRepository.findAllByOrderBySortOrderAsc());
 
         // 5. 徽章统计
-        result.put("badgeStats", projectService.getNavigationBadgeStats(role, userId));
+        result.put("badgeStats", badgeStats);
 
         return ResponseEntity.ok(result);
     }
@@ -191,7 +196,7 @@ public class DashboardController {
         return stats;
     }
 
-    private Map<String, Object> computeStatsByIds(List<Long> projectIds, String role, String userId) {
+    private Map<String, Object> computeStatsByIds(List<Long> projectIds, long pendingScoreCount) {
         Map<String, Object> stats = new LinkedHashMap<>();
         List<ProjectRepository.DashboardProjectProjection> visibleProjects =
                 projectIds.isEmpty() ? List.of() : projectRepository.findDashboardProjectsByIdIn(projectIds);
@@ -228,25 +233,19 @@ public class DashboardController {
                         .filter(p -> isDashboardInProgress(
                                 p, tasksByProject.getOrDefault(p.getId(), List.of()), completedScoringRoles))
                         .count());
-        long allTasks = 0, approvedTasks = 0, pendingTasks = 0, pendingScore = 0;
-        long channelTasks = 0;
-        if (!projectIds.isEmpty()) {
-            Set<Long> channelProjectIds = projectRepository.findByIdInAndType(projectIds, "channel_custom").stream()
-                    .map(Project::getId)
-                    .collect(Collectors.toSet());
-            for (Object[] row : subTaskRepository.countStatusByProjectIds(projectIds)) {
-                long count = ((Number) row[1]).longValue();
-                allTasks += count;
-                if ("approved".equals(row[0]) || "completed".equals(row[0])) approvedTasks += count;
-                if ("pending".equals(row[0]) || "delivered".equals(row[0])) pendingTasks += count;
-            }
-            if (!channelProjectIds.isEmpty()) {
-                channelTasks = subTaskRepository.countTasksByProjectIds(new ArrayList<>(channelProjectIds)).stream()
-                        .mapToLong(row -> ((Number) row[1]).longValue())
-                        .sum();
-            }
-            pendingScore = projectService.countPendingScoresForUser(role, userId);
+        Set<Long> channelProjectIds = visibleProjects.stream()
+                .filter(project -> "channel_custom".equals(project.getType()))
+                .map(ProjectRepository.DashboardProjectProjection::getId)
+                .collect(Collectors.toSet());
+        long allTasks = taskFacts.size(), approvedTasks = 0, pendingTasks = 0, channelTasks = 0;
+        // 复用本轮轻量快照，避免再次加载项目实体及重复执行两次任务统计。
+        for (SubTaskRepository.DashboardTaskProjection task : taskFacts) {
+            String status = task.getStatus();
+            if ("approved".equals(status) || "completed".equals(status)) approvedTasks++;
+            if ("pending".equals(status) || "delivered".equals(status)) pendingTasks++;
+            if (channelProjectIds.contains(task.getProjectId())) channelTasks++;
         }
+        long pendingScore = projectIds.isEmpty() ? 0 : pendingScoreCount;
         stats.put("allTasks", allTasks);
         stats.put("channelTasks", channelTasks);
         stats.put("approvedTasks", approvedTasks);

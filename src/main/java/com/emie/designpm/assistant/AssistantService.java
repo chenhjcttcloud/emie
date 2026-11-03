@@ -49,7 +49,12 @@ public class AssistantService {
         Map<String, Object> context = data.context(request.context(), session);
         boolean attachment = request.attachmentStoredName() != null
                 && !request.attachmentStoredName().isBlank();
-        boolean search = attachment || message.matches("(?s).*(找图|图档|相似|参考图|素材推荐|图片推荐).*$");
+        boolean libraryAllowed = data.canSearchImages(session);
+        boolean libraryAccessQuestion = !attachment
+                && message.matches("(?s).*(图档|图库|图片|参考图).*$")
+                && message.matches(
+                        "(?s).*(权限|能否访问|能访问|能查看|能看到|能不能看|能不能访问|可以访问|可以查看|可以看到|看不到|看不见|无法查看|无法访问|不能查看|不能访问).*$");
+        boolean search = attachment || message.matches("(?s).*(找图|图档|图库|相似|参考图|素材推荐|图片推荐).*$");
         boolean todo = message.matches("(?s).*(待办|待处理|我的任务|我的子任务|今天|本周|截止|优先|先做).*$");
         List<Map<String, Object>> tasks = todo ? data.myTasks(session) : List.of();
         List<Map<String, Object>> sources = new ArrayList<>(AssistantKnowledge.baseSources());
@@ -86,7 +91,10 @@ public class AssistantService {
         } catch (Exception ignored) {
             serviceMessage = "AI配置暂不可用，当前使用系统指引或文字检索";
         }
-        if (search) {
+        if (libraryAccessQuestion) {
+            answer = AssistantKnowledge.libraryGuide(session.role(), libraryAllowed);
+            if (libraryAllowed) sources.add(Map.of("title", "图档库 · 共享图档", "view", "image-library"));
+        } else if (search) {
             // Access/ownership checks must happen before any optional external model call.
             FileRecord file = attachment ? data.ownedAttachment(request.attachmentStoredName(), session) : null;
             boolean contextualSearch = !attachment && !context.isEmpty() && message.matches("(?s).*(当前|这个|本任务|本项目).*$");
@@ -119,10 +127,10 @@ public class AssistantService {
             mode = "search";
             answer = (described
                             ? "已从本次素材提取关键词，并按图库名称、IP和标签检索。"
-                            : contextualSearch ? "已按当前任务的IP和需求文字检索图库。" : "当前按你输入的名称、IP和风格文字检索图库。")
+                            : contextualSearch ? "已按当前任务的IP和需求文字检索共享图档库。" : "当前按你输入的名称、IP和标签文字检索共享图档库。")
                     + "这不是整库视觉相似度比较。"
                     + (images.isEmpty()
-                            ? "没有找到足够相关的真实图档，请补充明确的IP、风格或元素关键词。"
+                            ? "当前账号具备图档库查看权限，但本次关键词未匹配到可展示的图档。请尝试图档名称或IP；颜色、画风需已有文字标签支持。"
                             : "下面展示最多6个真实图档，推荐理由来自实际名称、IP或标签匹配，请预览确认是否适用。");
             sources.add(Map.of("title", "图档库 · 名称/IP/标签检索", "view", "image-library"));
         } else if (config != null && config.configured()) {
@@ -130,7 +138,18 @@ public class AssistantService {
                 try {
                     String prompt = "当前用户角色：" + AssistantKnowledge.roleName(session.role()) + "。\n用户问题：" + message
                             + "\n服务器当前授权查询（仅此范围；时间" + Instant.now() + "）："
-                            + JSON.writeValueAsString(Map.of("context", context, "myTasks", tasks))
+                            + JSON.writeValueAsString(Map.of(
+                                    "context", context,
+                                    "myTasks", tasks,
+                                    "imageLibrary",
+                                            Map.of(
+                                                    "allowed",
+                                                    libraryAllowed,
+                                                    "scope",
+                                                    libraryAllowed ? "shared" : "none",
+                                                    "queried",
+                                                    false)))
+                            + "\n图档能力说明：" + AssistantKnowledge.libraryGuide(session.role(), libraryAllowed)
                             + "\n可依据的系统操作指引：" + fallback;
                     answer = client.reply(config, prompt, request.history());
                     mode = "ai";
@@ -147,7 +166,9 @@ public class AssistantService {
         result.put("sources", sources);
         result.put("tasks", tasks);
         result.put("images", images);
-        result.put("suggestions", List.of("我是新员工，从哪里开始？", "我今天应该先做什么？", "解释当前项目下一步", "按IP或风格查找图档"));
+        List<String> suggestions = new ArrayList<>(List.of("我是新员工，从哪里开始？", "我今天应该先做什么？", "解释当前项目下一步"));
+        if (libraryAllowed) suggestions.add("按IP或风格查找图档");
+        result.put("suggestions", suggestions);
         result.put("serviceMessage", serviceMessage);
         result.put("modelName", config == null ? "模型配置暂不可用" : config.displayName);
         result.put("modelId", config == null ? "" : config.profileId);

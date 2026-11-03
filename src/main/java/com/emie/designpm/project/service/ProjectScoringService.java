@@ -1,6 +1,7 @@
 package com.emie.designpm.project.service;
 
 import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.ScoringRecord;
 import com.emie.designpm.entity.SubTask;
@@ -37,12 +38,8 @@ public class ProjectScoringService {
     /** 工作台首页、导航徽章和评分中心共用的待评分条目数量。 */
     public long countPendingScoresForUser(String role, String userId) {
         if (!List.of("admin", "planner", "sales").contains(role)) return 0L;
-        // 工作台徽章必须和评分中心使用同一批聚合条目，避免旧的 SQL 口径
-        // 只统计部分任务状态、漏掉设计需求或把评分记录重复计数。
-        long projectPending = getPendingScoringTasks(role, userId).stream()
-                .filter(item -> Boolean.TRUE.equals(item.get("isPending")))
-                .count();
-        return projectPending;
+        List<Long> projectIds = projectAccessService.findVisibleProjectIds(role, userId);
+        return projectIds.isEmpty() ? 0L : scoringRepository.countPendingItemsByProjectIds(projectIds, role);
     }
 
     /** 判断子任务是否真正完成（已验收 + 所有评分角色已评分）。 */
@@ -155,6 +152,7 @@ public class ProjectScoringService {
     public List<Map<String, Object>> getPendingScoringTasks(String role, String userId) {
         List<Project> projects = getProjectsByRoleAndUser(role, userId);
         List<Map<String, Object>> result = new ArrayList<>();
+        Map<String, Map<String, Double>> weightsByType = new HashMap<>();
         List<Long> taskIds = projects.stream()
                 .flatMap(p -> p.getTasks().stream())
                 .map(SubTask::getId)
@@ -220,7 +218,12 @@ public class ProjectScoringService {
                                     m.put("score", sr.getScore());
                                     m.put("aesthetics", sr.getAesthetics());
                                     m.put("innovation", sr.getInnovation());
-                                    m.put("weight", scoringWeights.pct(p.getType(), sr.getRole()) / 100.0);
+                                    m.put(
+                                            "weight",
+                                            weightsByType
+                                                    .computeIfAbsent(p.getType(), ignored -> new HashMap<>())
+                                                    .computeIfAbsent(
+                                                            sr.getRole(), r -> scoringWeights.weight(p.getType(), r)));
                                     return m;
                                 })
                                 .collect(Collectors.toList()));
@@ -231,7 +234,11 @@ public class ProjectScoringService {
     }
 
     private List<Project> getProjectsByRoleAndUser(String role, String userId) {
-        return projectAccessService.findVisibleProjectsLight(role, userId);
+        // 执行角色的 fetch 查询会过滤任务集合，保留原有完整任务视角。
+        if (!List.of("admin", "planner", "sales").contains(role)) {
+            return projectAccessService.findVisibleProjectsLight(role, userId);
+        }
+        return projectAccessService.findVisibleProjectsWithTasks(new AuthSession(userId, role, ""));
     }
 
     private boolean isProjectPlanner(Project project, Map<String, Object> body) {

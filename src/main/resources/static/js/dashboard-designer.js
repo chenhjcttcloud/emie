@@ -185,14 +185,14 @@ function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
             ${t.relation ? `<div class="subtask-meta-item">🔗 我的关系：<strong>${t.relationLabel || (t.relation === 'publisher' ? '我发布的任务' : t.relation === 'market' ? '接单市场' : t.relation === 'department_member' ? '部门成员关联任务' : '我负责的任务')}</strong></div>` : ''}
             <div class="subtask-meta-item">🕒 发布时间：<strong>${fmtDT(t.relation === 'market' && t.marketPublishedAt ? t.marketPublishedAt : t.createdAt) || '-'}</strong></div>
             <div class="subtask-meta-item">📅 ${t.status === 'rejected' && t.rejectionRecords?.length && t.rejectionRecords[t.rejectionRecords.length - 1]?.requiredCompletionDate ? '驳回后要求完成' : '计划完成'}：<strong>${formatDate(t.status === 'rejected' && t.rejectionRecords?.length ? (t.rejectionRecords[t.rejectionRecords.length - 1].requiredCompletionDate || t.plannedDate) : t.plannedDate)}</strong></div>
-            <div class="subtask-meta-item">⭐ 积分：<strong>${t.basePointSnapshot != null ? `${Number(t.basePointSnapshot)} 分` : '未设置'}</strong></div>
             ${latestDelivery?.submittedAt || t.submittedForReviewAt ? `<div class="subtask-meta-item">成果提交：<strong>${fmtDT(latestDelivery?.submittedAt || t.submittedForReviewAt)}</strong></div>` : ''}
             ${t.actualDate ? `<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(t.actualDate)}</strong></div>` : ''}
           </div>
+          ${renderTaskPointSummary(t)}
           ${t.details ? `<div style="font-size:13px;color:var(--gray-600);margin-top:8px;">📝 ${escHtml(t.details)}</div>` : ''}
           ${t.reviewComments ? `<div class="review-box ${t.status === 'rejected' ? 'rejected' : 'approved'}">${t.status === 'revision_requested' || t.pendingChangeBonusRequestId ? '修改意见' : t.status === 'rejected' ? '驳回意见' : '验收意见'}：${escHtml(t.reviewComments)}</div>` : ''}
           ${taskDetailFiles(t.pendingChangeReferenceImagesJson, true)}
-          ${latestDelivery ? `<div style="margin-top:12px;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;background:var(--gray-50);"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><strong style="font-size:13px;">最新提交</strong><span style="font-size:11px;color:var(--gray-400);">${fmtDT(latestDelivery.submittedAt)}</span></div><div style="font-size:12px;color:var(--gray-700);white-space:pre-wrap;">${escHtml(latestDelivery.deliverables || '未填写文字交付内容')}</div>${taskDetailFiles(latestDelivery.referenceImagesJson, true)}${taskDetailFiles(latestDelivery.attachmentsJson, false)}</div>` : ''}
+          ${latestDelivery ? `<div style="margin-top:12px;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;background:var(--gray-50);"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><strong style="font-size:13px;">${escHtml(taskDeliveryRounds(deliveryVersions, rejectionRecords).at(-1)?.label || '最新提交')} · 最新成果</strong><span style="font-size:11px;color:var(--gray-400);">${fmtDT(latestDelivery.submittedAt)}</span></div><div style="font-size:12px;color:var(--gray-700);white-space:pre-wrap;">${escHtml(latestDelivery.deliverables || '未填写文字交付内容')}</div>${taskDetailFiles(latestDelivery.referenceImagesJson, true)}${taskDetailFiles(latestDelivery.attachmentsJson, false)}</div>` : ''}
           <div class="subtask-actions">
             ${!readOnly && t.status === 'pending' && !t._unassigned && String(t.designerId || '') === String(getCurrentUserId()) ? `<button class="btn btn-primary btn-sm" data-emie-action="click:designer-accept" data-project-id="${t.projectId}" data-task-id="${t.id}">✅ 接单</button>` : ''}
             ${!readOnly && t._unassigned ? `<button class="btn btn-success btn-sm" data-emie-action="click:designer-accept-market" data-project-id="${t.projectId}" data-task-id="${t.id}" data-task-snapshot="${escHtml(JSON.stringify(t))}">⚡ 抢单</button>` : ''}
@@ -201,7 +201,6 @@ function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
             ${canCancelRejection ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-cancel-reject" data-project-id="${t.projectId}" data-task-id="${t.id}" data-cycle-id="${activeRejection.cycleId}">↩️ 撤销驳回</button>` : ''}
         ${!readOnly && t.status === 'delivered' && t.designerId === getCurrentUserId() ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-correct" data-project-id="${t.projectId}" data-task-id="${t.id}">📝 更正当前交付</button>` : ''}
             ${plannerView && String(t.plannerId || '') === String(getCurrentUserId()) && (!t.assigneeRole || t.assigneeRole === 'designer') && t.status === 'completed' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-request-change" data-project-id="${t.projectId}" data-task-id="${t.id}">修改</button>` : ''}
-            ${deliveryVersions.length ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-history" data-task-id="${t.id}">📚 提交历史</button>` : ''}
             ${t.status !== 'completed' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-detail" data-task-id="${t.id}">查看子任务详情${modificationCount ? `（${modificationCount}）` : ''}</button>` : ''}
             ${t.status !== 'completed' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-detail-project" data-project-id="${t.projectId}">查看项目</button>` : ''}
           </div>
@@ -222,40 +221,150 @@ function rejectionPointInfo(record) {
   return record.withPoints === false ? '本次不加分' : '';
 }
 
-function renderDeliveryPointInfo(version) {
-  if (version.expectedPoints == null && !version.pointRuleCode) return '';
-  const rule = version.pointRuleDescription || version.pointRuleCode || '积分规则未记录';
-  const points = version.expectedPoints == null ? '分数未记录' : `${Number(version.expectedPoints)} 分`;
-  const status = version.confirmedAt ? '已确认' : '待确认';
-  return `<div style="margin-top:7px;font-size:11px;color:var(--primary);">🏅 ${escHtml(rule)}${version.pointRuleCode ? `（${escHtml(version.pointRuleCode)}）` : ''} · ${points} · ${status}</div>`;
+function deliveryPointNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? String(Math.round((number + Number.EPSILON) * 100) / 100) : '0';
 }
 
-function renderDeliveryRounds(versions, rejectionRecords = []) {
+function deliveryPointAmount(value) {
+  return `${Number(value) > 0 ? '+' : ''}${deliveryPointNumber(value)} 分`;
+}
+
+function taskDeliveryRounds(versions = [], rejectionRecords = []) {
+  const chronological = [...versions].reverse();
+  if (chronological.every(version => version.versionNo != null)) {
+    chronological.sort((left, right) => Number(left.versionNo) - Number(right.versionNo));
+  }
   const rounds = [];
-  [...versions].reverse().forEach(version => {
-    if (version.submissionType !== 'correction' || !rounds.length) rounds.push([]);
-    rounds[rounds.length - 1].push(version);
+  chronological.forEach(version => {
+    if (version.submissionType !== 'correction' || !rounds.length) rounds.push({ versions: [] });
+    rounds[rounds.length - 1].versions.push(version);
   });
-  return rounds.length ? `<div style="margin-top:12px;"><div style="font-size:13px;font-weight:700;margin-bottom:6px;">交付记录 <span style="color:var(--gray-400);font-weight:400;">(${rounds.length} 轮)</span></div>${rounds.reverse().map((revisions, index) => {
-    const roundNo = rounds.length - index;
-    const current = revisions[revisions.length - 1];
-    const history = revisions.slice(0, -1).reverse();
-    const rejection = revisions[0].submissionType === 'revision' ? null : rejectionRecords.find(record => Number(record.attemptNo) === roundNo);
-    return `<details style="border:1px solid var(--gray-200);border-radius:8px;margin-bottom:5px;overflow:hidden;background:var(--gray-50);"><summary style="display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;list-style:none;font-size:12px;"><strong>第 ${roundNo} 轮交付</strong><span class="badge ${roundNo > 1 ? 'badge-rejected' : 'badge-completed'}">${roundNo > 1 ? (rejection ? '驳回后重交' : '修改后提交') : '首次交付'}</span>${history.length ? `<span class="badge badge-pending">已修订 ${history.length} 次</span>` : ''}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray-600);">${escHtml(current.changeSummary || '')}</span><span style="color:var(--gray-400);white-space:nowrap;">${current.submittedAt ? fmtDT(current.submittedAt) : ''}</span><span style="color:var(--gray-400);">⌄</span></summary><div style="padding:10px 12px;border-top:1px solid var(--gray-200);background:#fff;"><div style="font-size:12px;color:var(--gray-700);white-space:pre-wrap;">${escHtml(current.deliverables || '未填写文字交付内容')}</div>${renderDeliveryPointInfo(current)}${rejection ? `<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#FFF8F8;color:#A32D2D;font-size:12px;"><strong>驳回意见：</strong>${escHtml(rejection.reason || '未填写驳回意见')}</div>` : ''}${taskDetailFiles(current.referenceImagesJson, true)}${taskDetailFiles(current.attachmentsJson, false)}${history.length ? `<details style="margin-top:10px;border-top:1px dashed var(--gray-200);padding-top:8px;"><summary style="cursor:pointer;color:var(--gray-500);font-size:12px;">查看修订留痕（${history.length}）</summary>${history.map(version => `<div style="margin-top:8px;padding:8px;background:var(--gray-50);border-radius:6px;"><div style="font-size:11px;color:var(--gray-500);">${escHtml(version.changeSummary || '原交付记录')} · ${version.submittedAt ? fmtDT(version.submittedAt) : ''}</div><div style="margin-top:5px;font-size:12px;white-space:pre-wrap;">${escHtml(version.deliverables || '未填写文字交付内容')}</div>${renderDeliveryPointInfo(version)}${taskDetailFiles(version.referenceImagesJson, true)}${taskDetailFiles(version.attachmentsJson, false)}</div>`).join('')}</details>` : ''}</div></details>`;
+  rounds.forEach((round, index) => {
+    round.first = round.versions[0];
+    round.current = round.versions[round.versions.length - 1];
+    round.confirmation = [...round.versions].reverse().find(version => version.confirmedAt) || round.current;
+    round.revisionNo = round.versions.find(version => Number(version.revisionNo) > 0)?.revisionNo;
+    round.origin = [...round.versions].reverse().find(version => ['initial', 'revision', 'rejection'].includes(version.submissionOrigin))?.submissionOrigin
+      || (round.revisionNo ? 'revision' : round.first.submissionType === 'initial' ? 'initial'
+        : round.first.submissionType === 'redelivery' ? 'rejection' : 'unknown');
+    const requestId = round.current.pointRequestId || round.first.pointRequestId;
+    const previousTime = rounds[index - 1]?.current.submittedAt;
+    const nextTime = rounds[index + 1]?.versions[0].submittedAt;
+    const timestamp = value => value ? Date.parse(String(value).replace(' ', 'T')) : NaN;
+    const cycleId = round.current.rejectionCycleId || round.first.rejectionCycleId;
+    const activeRecords = rejectionRecords.filter(record => !record.cancelled);
+    // Link by request or time bounds, never by a rejection count or delivery array position.
+    round.requirement = activeRecords.find(record => cycleId && String(record.cycleId) === String(cycleId))
+      || activeRecords.find(record => requestId && record.pointRequestId === requestId)
+      || (round.origin === 'rejection' ? [...activeRecords].reverse().find(record =>
+        timestamp(record.reviewedAt) <= timestamp(round.first.submittedAt)
+        && (!previousTime || timestamp(record.reviewedAt) >= timestamp(previousTime))) : null);
+    round.rejection = activeRecords.find(record => timestamp(record.reviewedAt) >= timestamp(round.current.submittedAt)
+      && (!nextTime || timestamp(record.reviewedAt) <= timestamp(nextTime)));
+    const awarded = round.versions.filter(version => version.pointStatus === 'awarded');
+    round.awardedPoints = awarded.reduce((total, version) => total + Number(version.awardedPoints || 0), 0);
+    round.pointStatus = awarded.length ? 'awarded' : round.current.pointStatus || 'unrecorded';
+    round.label = round.origin === 'revision' && round.revisionNo ? `第 ${round.revisionNo} 次修改`
+      : round.origin === 'initial' ? '首次交付'
+      : round.origin === 'rejection' ? '驳回后重交'
+      : round.origin === 'revision' ? '修改后提交' : '历史交付';
+  });
+  return rounds;
+}
+
+function deliveryRoundStatus(round) {
+  if (round.pointStatus === 'awarded') return `已入账 ${deliveryPointAmount(round.awardedPoints)}`;
+  if (round.rejection && !round.confirmation.confirmedAt) return round.pointStatus === 'no_points' ? '已驳回 · 本次无积分' : '已驳回 · 未入账';
+  if (round.pointStatus === 'no_points') return round.confirmation.confirmedAt ? '本次无积分' : '待验收 · 本次无积分';
+  if (round.pointStatus === 'missing') return '已验收 · 未查到入账';
+  if (round.pointStatus === 'unrecorded') return '历史积分未记录';
+  const expected = round.current.expectedPoints;
+  return expected == null ? '待验收 · 分数未记录'
+    : Number(expected) === 0 && !round.current.pointRuleCode ? '待验收 · 本次无积分'
+    : `待验收 · 预计 ${deliveryPointAmount(expected)}`;
+}
+
+function deliveryConfirmationText(version) {
+  if (!version.confirmedAt) return '';
+  const name = version.confirmedByName || version.confirmedBy || '确认人未记录';
+  return `${name} · ${fmtDT(version.confirmedAt)}`;
+}
+
+function renderTaskPointSummary(task, options = {}) {
+  const summary = task.pointSummary;
+  const rounds = taskDeliveryRounds(task.deliveryVersions || [], task.rejectionRecords || []);
+  const latest = rounds[rounds.length - 1];
+  const pendingRequest = task.pendingChangeBonusRequestId;
+  const pendingDelivery = latest && ['pending', 'no_points'].includes(latest.pointStatus)
+    && !latest.confirmation.confirmedAt && !latest.rejection;
+  const pendingSubmitted = pendingRequest && latest?.current.pointRequestId === pendingRequest && pendingDelivery;
+  let pending = '';
+  if (pendingRequest) {
+    const revisionNo = pendingSubmitted ? latest.revisionNo : null;
+    const label = Number(revisionNo) > 0 ? `第 ${revisionNo} 次修改` : '本次修改';
+    const expected = pendingSubmitted ? latest.current.expectedPoints : task.pendingChangeBonusPoints;
+    const points = task.pendingChangeRuleCode || (pendingSubmitted && latest.current.pointRuleCode)
+      ? (expected == null ? '积分待确认' : `预计 ${deliveryPointAmount(expected)}`) : '本次无积分';
+    const stage = pendingSubmitted ? '待验收' : task.status === 'revision_requested' || task.status === 'rejected' ? '待修改' : '修改中';
+    pending = `${label} · ${stage} · ${points}`;
+  } else if (pendingDelivery) {
+    pending = `${latest.label} · ${deliveryRoundStatus(latest)}`;
+  } else if (!rounds.length && task.basePointSnapshot != null) {
+    pending = `预计基础积分 ${deliveryPointNumber(task.basePointSnapshot)} 分 · 验收后入账`;
+  }
+  const breakdown = summary ? [
+    `首次 ${deliveryPointNumber(summary.basePoints)} 分`,
+    `修改 ${deliveryPointNumber(summary.changePoints)} 分`,
+    ...(Number(summary.otherPoints) ? [`其他 ${deliveryPointNumber(summary.otherPoints)} 分`] : []),
+  ].join(' + ') : '';
+  return `<div class="task-point-summary"${summary ? ` data-awarded-points="${deliveryPointNumber(summary.awardedPoints)}"` : ''}>
+    <div class="task-point-total"><span>累计已入账</span><strong>${summary ? `${deliveryPointNumber(summary.awardedPoints)}<small> 分</small>` : '记录待补充'}</strong>${rounds.length && options.historyLink !== false ? `<button type="button" class="task-point-history-link" data-emie-action="click:designer-history" data-task-id="${task.id}">交付与积分记录 ›</button>` : ''}</div>
+    ${breakdown ? `<div class="task-point-breakdown">${escHtml(breakdown)}</div>` : ''}
+    ${pending ? `<div class="task-point-pending">${escHtml(pending)}</div>` : latest ? `<div class="task-point-latest">最近：${escHtml(latest.label)} · ${escHtml(deliveryRoundStatus(latest))}</div>` : ''}
+    ${summary?.hasUntrackedAwards ? `<div class="task-point-note">其中历史未关联 ${deliveryPointNumber(summary.untrackedPoints)} 分，暂无法对应具体交付。</div>` : ''}
+  </div>`;
+}
+
+function renderDeliveryRounds(versions, rejectionRecords = [], task = {}) {
+  const rounds = taskDeliveryRounds(versions, rejectionRecords);
+  return rounds.length ? `<div class="delivery-round-list">${[...rounds].reverse().map((round, index) => {
+    const current = round.current;
+    const confirmation = round.confirmation;
+    const history = round.versions.slice(0, -1).reverse();
+    const requirement = current.changeReason || round.first.changeReason || current.rejectionReason
+      || round.first.rejectionReason || round.requirement?.reason;
+    const rule = current.pointRuleDescription || current.pointRuleCode;
+    const awaitingConfirmation = ['pending', 'no_points'].includes(round.pointStatus) && !confirmation.confirmedAt;
+    const confirmationText = deliveryConfirmationText(confirmation);
+    return `<details class="delivery-round" data-delivery-round="${escHtml(String(round.first.versionNo || round.first.id || index))}" data-point-status="${escHtml(round.pointStatus)}"${index === 0 ? ' open' : ''}>
+      <summary class="delivery-round-summary">
+        <div class="delivery-round-heading"><strong>${escHtml(round.label)}</strong><span class="delivery-point-status is-${escHtml(round.pointStatus)}">${escHtml(deliveryRoundStatus(round))}</span>${history.length ? `<span class="delivery-correction-count">含 ${history.length} 次更正</span>` : ''}</div>
+        <div class="delivery-round-meta"><span>提交 ${current.submittedAt ? fmtDT(current.submittedAt) : '时间未记录'}</span>${confirmationText ? `<span>确认 ${escHtml(confirmationText)}</span>` : ''}</div>
+      </summary>
+      <div class="delivery-round-body">
+        ${requirement ? `<section class="delivery-round-step"><h4>修改要求</h4><p>${escHtml(requirement)}</p>${taskDetailFiles(current.changeReferenceImagesJson || round.first.changeReferenceImagesJson || round.requirement?.rejectionReferenceImagesJson, true)}${taskDetailFiles(round.requirement?.rejectionAttachmentsJson, false)}</section>` : ''}
+        <section class="delivery-round-step"><h4>本轮成果</h4><div class="delivery-step-meta">${escHtml(current.submittedByName || task.designerName || '提交人未记录')} · ${current.submittedAt ? fmtDT(current.submittedAt) : '时间未记录'}</div><p>${escHtml(current.deliverables || '未填写文字交付内容')}</p>${taskDetailFiles(current.referenceImagesJson, true)}${taskDetailFiles(current.attachmentsJson, false)}</section>
+        <section class="delivery-round-step"><h4>验收记录</h4><div class="delivery-step-meta">${confirmationText ? escHtml(confirmationText) : round.rejection ? '已驳回，待重新交付' : awaitingConfirmation ? '等待企划验收' : '历史验收信息未记录'}</div>${confirmation.reviewComments ? `<p>${escHtml(confirmation.reviewComments)}</p>` : ''}${round.rejection ? `<p class="delivery-rejection-reason">驳回意见：${escHtml(round.rejection.reason || '未填写')}</p>` : ''}</section>
+        <section class="delivery-round-step"><h4>积分入账</h4><strong class="delivery-point-status is-${escHtml(round.pointStatus)}">${escHtml(deliveryRoundStatus(round))}</strong>${rule ? `<div class="delivery-step-meta">规则：${escHtml(rule)}${current.pointRuleCode && current.pointRuleDescription ? `（${escHtml(current.pointRuleCode)}）` : ''}</div>` : ''}${confirmation.awardedAt ? `<div class="delivery-step-meta">入账时间 ${fmtDT(confirmation.awardedAt)}</div>` : ''}${round.pointStatus === 'missing' ? '<p class="task-point-note">本轮已有验收记录，未查到关联积分流水，未计入本轮已入账。</p>' : ''}</section>
+        ${history.length ? `<details class="delivery-correction-history"><summary>查看本轮更正留痕（${history.length}）</summary>${history.map(version => `<div class="delivery-correction-item"><div class="delivery-step-meta">${escHtml(version.changeSummary || '原交付记录')} · ${version.submittedAt ? fmtDT(version.submittedAt) : ''}</div><p>${escHtml(version.deliverables || '未填写文字交付内容')}</p>${taskDetailFiles(version.referenceImagesJson, true)}${taskDetailFiles(version.attachmentsJson, false)}</div>`).join('')}</details>` : ''}
+      </div>
+    </details>`;
   }).join('')}</div>` : '';
 }
 
 function openDeliveryHistory(taskId) {
   if (document.getElementById('deliveryHistoryModal')) return;
-  const task = (EMIE.dashboardState.designerTaskCache || []).find(item => Number(item.id) === Number(taskId))
-    || EMIE.projectState.currentProjectDetail?.tasks?.find(item => Number(item.id) === Number(taskId));
+  const projectTask = EMIE.projectState.currentProjectDetail?.tasks?.find(item => Number(item.id) === Number(taskId));
+  const dashboardTask = (EMIE.dashboardState.designerTaskCache || []).find(item => Number(item.id) === Number(taskId));
+  const task = document.getElementById('projectDetailModal') ? projectTask || dashboardTask : dashboardTask || projectTask;
   if (!task) return;
   const versions = Array.isArray(task.deliveryVersions) ? task.deliveryVersions : [];
   const records = Array.isArray(task.rejectionRecords) ? task.rejectionRecords : [];
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'deliveryHistoryModal';
-  modal.innerHTML = `<div class="modal" style="max-width:820px;"><div class="modal-header"><button class="modal-close" data-emie-action="click:designer-history-close">✕</button><div class="modal-header-left"><div class="modal-title">📚 提交历史 · ${escHtml(task.name || '-')}</div><div style="font-size:12px;color:var(--gray-400);margin-top:3px;">共 ${versions.filter(version => version.submissionType !== 'correction').length} 轮交付，主动更正记录收在对应轮次内</div></div></div><div class="modal-body">${renderDeliveryRounds(versions, records) || '<div class="empty"><p>暂无提交历史</p></div>'}</div><div class="modal-footer"><button class="btn btn-primary" data-emie-action="click:designer-history-close">关闭</button></div></div>`;
+  modal.innerHTML = `<div class="modal delivery-history-modal"><div class="modal-header"><button class="modal-close" data-emie-action="click:designer-history-close">✕</button><div class="modal-header-left"><div class="modal-title">交付与积分记录 · ${escHtml(task.name || '-')}</div><div class="delivery-history-hint">每次交付、修改要求和实际入账分别留痕；主动更正收在对应交付内</div></div></div><div class="modal-body">${renderTaskPointSummary(task, { historyLink: false })}${renderDeliveryRounds(versions, records, task) || '<div class="empty"><p>暂无交付记录</p></div>'}</div><div class="modal-footer"><button class="btn btn-primary" data-emie-action="click:designer-history-close">关闭</button></div></div>`;
   document.body.appendChild(modal);
 }
 
@@ -289,13 +398,15 @@ function openPublishedSubTaskDetail(taskId) {
           <div class="detail-item"><div class="detail-label">计划完成</div><div class="detail-value">${formatDate(task.plannedDate)}</div></div>
           <div class="detail-item"><div class="detail-label">实际完成</div><div class="detail-value">${task.actualDate ? formatDate(task.actualDate) : '-'}</div></div>
           ${task.deliveryVersions?.[0]?.submittedAt || task.submittedForReviewAt ? `<div class="detail-item"><div class="detail-label">成果提交时间</div><div class="detail-value">${fmtDT(task.deliveryVersions?.[0]?.submittedAt || task.submittedForReviewAt)}</div></div>` : ''}
-          <div class="detail-item"><div class="detail-label">积分</div><div class="detail-value">${task.basePointSnapshot != null ? `${Number(task.basePointSnapshot)} 分` : '未设置'}</div></div>
         </div>
+        ${renderTaskPointSummary(task)}
         <div class="detail-item" style="margin-top:12px;"><div class="detail-label">任务要求</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.details || '未填写')}</div></div>
         ${taskDetailFiles(task.referenceImagesJson, true)}
         ${taskDetailFiles(task.attachmentsJson, false)}
         ${EMIE.actions.taskRecommendationsPlaceholder?.() || ''}
         ${task.deliverables ? `<div class="detail-item" style="margin-top:12px;"><div class="detail-label">当前交付成果</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.deliverables)}</div></div>` : ''}
+        ${deliveryVersions.length ? `<div class="delivery-section-heading">交付与积分记录</div>${renderDeliveryRounds(deliveryVersions, records, task)}` : ''}
+        <details class="delivery-all-requirements"><summary>全部修改要求（含驳回及取消记录）</summary>
         <div style="margin-top:18px;">
           <div style="font-size:14px;font-weight:700;margin-bottom:8px;">修改要求记录 <span style="color:var(--gray-400);font-weight:400;">(${records.length})</span></div>
           ${records.length ? records.map(record => `
@@ -324,10 +435,11 @@ function openPublishedSubTaskDetail(taskId) {
               </div>
             </details>`).join('') : '<div class="empty" style="padding:24px;"><p>暂无修改要求记录</p></div>'}
         </div>
+        </details>
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" data-emie-action="click:designer-detail-project" data-project-id="${task.projectId}">查看所属项目</button>
-        ${deliveryVersions.length ? `<button class="btn btn-outline" data-emie-action="click:designer-history" data-task-id="${task.id}">📚 提交历史</button>` : ''}
+        ${deliveryVersions.length ? `<button class="btn btn-outline" data-emie-action="click:designer-history" data-task-id="${task.id}">交付与积分记录</button>` : ''}
         ${EMIE.state.currentRole === 'designer' && task.status === 'pending' ? `<button class="btn btn-primary" data-emie-action="click:designer-accept" data-project-id="${task.projectId}" data-task-id="${task.id}">✅ 接单</button>` : ''}
         ${EMIE.state.currentRole === 'planner' && ['delivered', 'submitted_for_review', 'planner_approved'].includes(task.status) ? `<button class="btn btn-success" data-emie-action="click:designer-approve" data-project-id="${task.projectId}" data-task-id="${task.id}" data-project-type="${escHtml(task.projectType || 'regular')}">✅ 验收通过</button>` : ''}
         <button class="btn btn-primary" data-emie-action="click:designer-detail-close">关闭</button>
@@ -356,6 +468,8 @@ EMIE.registerActions({
   renderDesignerTaskPage,
   openPublishedSubTaskDetail,
   openDeliveryHistory,
+  renderTaskPointSummary,
+  renderDeliveryRounds,
 });
 
 EMIE.registerModule('dashboardDesigner', {

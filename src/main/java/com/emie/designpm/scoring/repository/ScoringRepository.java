@@ -48,12 +48,21 @@ public interface ScoringRepository extends JpaRepository<ScoringRecord, Long> {
     Optional<ScoringRecord> findBySubTaskIdAndRole(Long subTaskId, String role);
 
     /** 批量查询多个子任务的评分记录，减少 N+1 查询 */
-    @Query("SELECT s FROM ScoringRecord s WHERE s.subTask.id IN ?1")
+    @Query("SELECT s FROM ScoringRecord s WHERE s.subTask.id IN ?1 ORDER BY s.id")
     List<ScoringRecord> findBySubTaskIds(List<Long> subTaskIds);
 
     /** 批量查询多个项目的所有评分记录（通过 JOIN） */
     @Query("SELECT s FROM ScoringRecord s JOIN FETCH s.subTask t JOIN t.project p WHERE p.id IN ?1")
     List<ScoringRecord> findByProjectIds(List<Long> projectIds);
+
+    /** 与评分列表相同：每个任务采用该角色最早一条记录，兼容历史重复记录。 */
+    @Query("SELECT COUNT(s) FROM ScoringRecord s JOIN s.subTask t "
+            + "WHERE t.project.id IN :projectIds AND t.status <> 'rejected' AND s.role = :role "
+            + "AND (s.reviewStatus = 'pending' OR (s.reviewStatus IS NULL AND s.score IS NULL "
+            + "AND (s.aesthetics IS NULL OR s.innovation IS NULL))) "
+            + "AND NOT EXISTS (SELECT earlier.id FROM ScoringRecord earlier "
+            + "WHERE earlier.subTask = t AND earlier.role = s.role AND earlier.id < s.id)")
+    long countPendingItemsByProjectIds(@Param("projectIds") List<Long> projectIds, @Param("role") String role);
 
     void deleteBySubTaskId(Long subTaskId);
 

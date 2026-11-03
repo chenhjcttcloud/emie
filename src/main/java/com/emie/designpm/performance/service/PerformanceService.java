@@ -67,40 +67,28 @@ public class PerformanceService {
         LocalDateTime from = selected == null ? null : selected.atDay(1).atStartOfDay();
         LocalDateTime to =
                 selected == null ? null : selected.plusMonths(1).atDay(1).atStartOfDay();
+        String monthKey = selected == null ? null : selected.toString();
         Map<String, Double> sums = new HashMap<>();
-        ledgers.sumPerformancePointsByMonth(month, from, to)
+        ledgers.sumPerformancePointsByMonth(monthKey, from, to)
                 .forEach(row -> sums.put((String) row[0], ((Number) row[1]).doubleValue()));
         // P1-4：调账与流水统一按 accounting_month 归月，月度统计/排行榜口径一致。
         // 调账缺省即入账当月（APPEAL 异议调账、TASK_WITHDRAWAL 退单扣分为当月事件，
         // 实体 @PrePersist 兜底）；PO_PROGRESS 履职积分按进展所属月 month_key 落账。
         adjustments
-                .sumPointsByMonth(month, from, to)
+                .sumPointsByMonth(monthKey, from, to)
                 .forEach(row -> sums.merge((String) row[0], ((Number) row[1]).doubleValue(), Double::sum));
-        // 保留对旧仓储 mock/自定义实现的兼容；正常 JPA 实现会走上面的聚合查询。
-        if (sums.isEmpty()) {
-            ledgers.findAll().stream()
-                    .filter(PointLedger::isCountInPerformance)
-                    .filter(item -> selected == null
-                            ? within(item.getCreatedAt(), from, to)
-                            : month.equals(item.getAccountingMonth()))
-                    .forEach(item -> sums.merge(
-                            item.getUserId(), item.getPoints() == null ? 0d : item.getPoints(), Double::sum));
-            adjustments.findAll().stream()
-                    .filter(item -> selected == null
-                            ? within(item.getCreatedAt(), from, to)
-                            : month.equals(item.getAccountingMonth()))
-                    .forEach(item -> sums.merge(
-                            item.getUserId(),
-                            item.getPoints() == null ? 0d : item.getPoints().doubleValue(),
-                            Double::sum));
-        }
+        // 聚合结果为空即该月份没有积分，不回退扫描历史流水。
+        Map<String, User> rankedUsers = sums.isEmpty()
+                ? Map.of()
+                : users.findByUserIdIn(sums.keySet()).stream().collect(Collectors.toMap(User::getUserId, user -> user));
         return sums.entrySet().stream()
                 .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
                 .map(entry -> {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("userId", entry.getKey());
                     row.put("points", entry.getValue());
-                    users.findByUserId(entry.getKey()).ifPresent(user -> row.put("name", user.getName()));
+                    User user = rankedUsers.get(entry.getKey());
+                    if (user != null) row.put("name", user.getName());
                     return row;
                 })
                 .toList();
@@ -244,10 +232,6 @@ public class PerformanceService {
             }
         }
         return Map.of("month", month, "from", from, "to", to, "designers", new ArrayList<>(reports.values()));
-    }
-
-    private boolean within(LocalDateTime created, LocalDateTime from, LocalDateTime to) {
-        return from == null || (created != null && !created.isBefore(from) && created.isBefore(to));
     }
 
     @Transactional(readOnly = true)

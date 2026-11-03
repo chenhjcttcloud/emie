@@ -178,22 +178,13 @@ async function render() {
   const view = EMIE.state.currentView;
   showLoading(main);
 
-  // 页面导航时不清空缓存（依赖 mutation 操作清空），导航切换无需重新拉取
-  // 首次加载或缓存为空时才拉取
-
   try {
+    await EMIE.loadViewModules?.(view);
+    if (EMIE.state.renderId !== renderId) return;
     const role = EMIE.state.currentRole;
     const uid = getCurrentUserId();
 
-    // 三个项目列表使用服务端分页；进入时不再预加载全量项目。
-    const isPagedProjectList = ['orders', 'channel', 'regular', 'design-needs'].includes(view);
-    let orders = EMIE.state.cache.orders;
-    if (!isPagedProjectList && (!orders || !orders.length)) {
-      try { orders = await apiGet(`/projects?role=${role}&userId=${uid}`); } catch(e) {}
-      EMIE.state.cache.orders = orders || [];
-    }
-    orders = orders || [];
-
+    // 每个页面自行请求所需数据，导航不预加载未被使用的全量项目。
     if (EMIE.state.renderId !== renderId) return;
     if (view === 'dashboard') {
       await renderDashboard(main, role, uid);
@@ -234,6 +225,7 @@ async function render() {
     if (EMIE.state.renderId === renderId) await refreshNavigationBadges();
   } catch (e) {
     console.error('渲染错误:', e);
+    if (EMIE.state.renderId !== renderId) return;
     main.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${escHtml(e.message)}</p></div>`;
   }
 }

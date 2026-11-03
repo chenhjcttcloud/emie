@@ -55,6 +55,75 @@ class PointAuditServiceTest {
     }
 
     @Test
+    void personKeywordMatchesAccountOrNameAndKeepsSummaryScopedAcrossPages() {
+        jdbc.execute("INSERT INTO users VALUES('feishu_zhang','张小明'),('feishu_li','李明')");
+        jdbc.execute(
+                "INSERT INTO point_ledgers(id,user_id,sub_task_id,rule_code,points,created_at) VALUES(1,'feishu_zhang',1,'RULE:BASE',2.5,'2026-10-08 10:00:00'),(2,'feishu_li',1,'RULE:BASE',100,'2026-10-08 11:00:00')");
+        jdbc.execute(
+                "INSERT INTO point_adjustment_ledgers(id,user_id,source_type,points,created_at) VALUES(1,'feishu_zhang','MANUAL',-1,'2026-10-08 12:00:00')");
+
+        for (String keyword : List.of("张小明", "小明", "feishu_zhang", " ZHANG ")) {
+            var result = service.logs(Map.of("personKeyword", keyword), 0, 1);
+            assertEquals(2L, result.get("total"));
+            assertEquals(2L, result.get("totalPages"));
+            var rows = (List<Map<String, Object>>) result.get("items");
+            assertEquals("feishu_zhang", rows.get(0).get("USERID"));
+            var summary = (Map<?, ?>) result.get("summary");
+            assertEquals(2.5, ((Number) summary.get("POSITIVE")).doubleValue());
+            assertEquals(-1.0, ((Number) summary.get("NEGATIVE")).doubleValue());
+            assertEquals(1.5, ((Number) summary.get("NET")).doubleValue());
+        }
+        assertEquals(3L, service.logs(Map.of("personKeyword", "明"), 0, 20).get("total"));
+        assertEquals(
+                1L,
+                service.logs(Map.of("personKeyword", "张", "sign", "negative"), 0, 20)
+                        .get("total"));
+        assertEquals(
+                1L,
+                service.logs(Map.of("personKeyword", "张", "source", "TASK_BASE"), 0, 20)
+                        .get("total"));
+        assertEquals(0L, service.logs(Map.of("personKeyword", "不存在"), 0, 20).get("total"));
+        assertEquals(2L, service.logs(Map.of("userId", "feishu_zhang"), 0, 20).get("total"));
+        assertEquals(0L, service.logs(Map.of("userId", "zhang"), 0, 20).get("total"));
+    }
+
+    @Test
+    void personKeywordTreatsWildcardsLiterallyAndMatchesAccountsWithoutUserProfiles() {
+        jdbc.execute("INSERT INTO users VALUES('literal_100%!','特殊人员')");
+        jdbc.execute(
+                "INSERT INTO point_adjustment_ledgers(id,user_id,source_type,points,created_at) VALUES(1,'literal_100%!','MANUAL',1,'2026-10-08 10:00:00'),(2,'literalX100anything!','MANUAL',2,'2026-10-08 10:00:00'),(3,'removed-account','MANUAL',3,'2026-10-08 10:00:00')");
+        for (String keyword : List.of("_100%!", "%", "_")) {
+            var result = service.logs(Map.of("personKeyword", keyword), 0, 20);
+            assertEquals(1L, result.get("total"));
+            var rows = (List<Map<String, Object>>) result.get("items");
+            assertEquals("literal_100%!", rows.get(0).get("USERID"));
+        }
+        assertEquals(1L, service.logs(Map.of("personKeyword", "removed"), 0, 20).get("total"));
+    }
+
+    @Test
+    void auditPersonKeywordScopesAnomaliesAndHistoricalCountUsingSamePeopleAndDates() {
+        jdbc.execute("INSERT INTO users VALUES('designer_zhang','张小明'),('designer_li','李明')");
+        jdbc.execute(
+                "INSERT INTO sub_task_delivery_versions(id,sub_task_id,version_no,submitted_by_id,expected_points,point_rule_code,submitted_at,confirmed_at) VALUES(1,1,1,'designer_zhang',2,'RULE','2026-10-08 10:00:00','2026-10-08 11:00:00'),(2,1,2,'designer_li',2,'RULE','2026-10-08 10:00:00','2026-10-08 11:00:00'),(3,1,3,'designer_zhang',NULL,NULL,'2026-10-08 12:00:00',NULL),(4,1,4,'designer_li',NULL,NULL,'2026-10-08 12:00:00',NULL),(5,1,5,'designer_zhang',NULL,NULL,'2026-10-09 12:00:00',NULL),(6,1,6,'designer_zhang',2,'RULE','2026-10-09 10:00:00','2026-10-09 11:00:00')");
+        for (String keyword : List.of("张小明", "小明", "designer_zhang", " ZHANG ")) {
+            var result =
+                    service.audit(Map.of("personKeyword", keyword, "from", "2026-10-08", "to", "2026-10-08"), 0, 20);
+            assertEquals(1L, result.get("total"));
+            assertEquals(1L, result.get("historicalCount"));
+            var rows = (List<Map<String, Object>>) result.get("items");
+            assertEquals("designer_zhang", rows.get(0).get("USERID"));
+            assertEquals("MISSING_LEDGER", rows.get(0).get("ISSUE"));
+        }
+        var exact = service.audit(Map.of("userId", "designer_zhang"), 0, 20);
+        assertEquals(2L, exact.get("total"));
+        assertEquals(2L, exact.get("historicalCount"));
+        var noMatch = service.audit(Map.of("personKeyword", "不存在"), 0, 20);
+        assertEquals(0L, noMatch.get("total"));
+        assertEquals(0L, noMatch.get("historicalCount"));
+    }
+
+    @Test
     void manualAdjustmentUsesBookingTimeForSubmissionAndConfirmation() {
         jdbc.execute("INSERT INTO users VALUES('admin-1','管理员')");
         jdbc.execute(

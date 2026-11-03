@@ -126,26 +126,36 @@ public class AssistantDataService {
                 .filter(rank -> !rank.reasons().isEmpty())
                 .sorted(Comparator.comparingInt((Ranked rank) -> rank.reasons().size())
                         .reversed())
+                .map(rank -> new ImageMatch(rank, imageFiles(rank.item())))
+                .filter(match -> !match.images().isEmpty())
                 .limit(6)
-                .map(rank -> {
+                .map(match -> {
+                    Ranked rank = match.rank();
                     ImageLibraryItem item = rank.item();
                     Map<String, Object> view = new LinkedHashMap<>();
                     view.put("id", item.getId());
                     view.put("name", safe(item.getName(), 160));
                     view.put("ipName", safe(item.getIpName(), 100));
                     view.put("reasons", rank.reasons());
-                    view.put("images", imageFiles(item));
+                    view.put("images", match.images());
                     return view;
                 })
                 .toList();
     }
 
+    public boolean canSearchImages(AuthSession session) {
+        return session != null
+                && Set.of("admin", "planner", "designer").contains(PermissionCatalog.normalizeRole(session.role()))
+                && permissions.has(session.role(), "page.image_library.view");
+    }
+
     private void requireLibrary(AuthSession session) {
-        if (!Set.of("admin", "planner", "designer").contains(PermissionCatalog.normalizeRole(session.role()))
-                || !permissions.has(session.role(), "page.image_library.view")) throw forbidden();
+        if (!canSearchImages(session)) throw forbidden();
     }
 
     private record Ranked(ImageLibraryItem item, List<String> reasons) {}
+
+    private record ImageMatch(Ranked rank, List<Map<String, Object>> images) {}
 
     private List<String> matches(ImageLibraryItem item, List<String> terms) {
         String text = String.join(
@@ -165,21 +175,30 @@ public class AssistantDataService {
     static List<String> terms(String query) {
         String value = safe(query, 2000)
                 .toLowerCase(Locale.ROOT)
-                .replaceAll("帮我|请帮|根据这张|按这张|这张|找一下|找相似|相似|参考图|图档|图片|素材|推荐|查找|找图", " ");
+                .replaceAll(
+                        "我想要|想要|帮我|请帮|根据这张|按这张|这张|找一下|找相似|相似|参考图|图档库|图库|图档|图片|素材|推荐|查找|找图|在我的|我的|里面|筛选|展示|出来|类型|相关",
+                        " ")
+                .replaceAll("(?<=\\p{IsHan})(?=[a-z0-9])|(?<=[a-z0-9])(?=\\p{IsHan})", " ")
+                .replaceAll("\\bhello\\s+kitty\\b", "hellokitty");
         LinkedHashSet<String> terms = new LinkedHashSet<>();
         for (String term : value.split("[^\\p{L}\\p{N}]+")) {
             if (term.length() < 2
                     || Set.of("帮我", "图档", "找图", "相似", "推荐", "素材", "图片", "查找", "找一下")
                             .contains(term)) continue;
-            if (term.matches("[\\p{IsHan}]+") && term.length() > 3) {
+            if (term.matches("[\\p{IsHan}]+") && term.length() > 2) {
                 for (int i = 0; i + 1 < term.length() && terms.size() < 60; i++) terms.add(term.substring(i, i + 2));
             } else terms.add(term);
             if (terms.size() >= 60) break;
         }
+        if (terms.contains("kt") || terms.contains("hellokitty")) {
+            terms.add("kt");
+            terms.add("hellokitty");
+            terms.add("hello kitty");
+        }
         return terms.stream()
                 .filter(term -> !Set.of(
                                 "帮我", "我找", "找图", "图档", "相似", "似图", "参考", "图片", "素材", "推荐", "查找", "找一", "一下", "按这",
-                                "张图", "这个", "当前", "风格")
+                                "张图", "这个", "当前", "风格", "类型", "色系", "系的", "相关")
                         .contains(term))
                 .limit(60)
                 .toList();
@@ -198,7 +217,8 @@ public class AssistantDataService {
                                 && !name.contains("..")
                                 && files.findByStoredName(name)
                                         .filter(record -> "image_library".equals(record.getTargetType())
-                                                && Objects.equals(item.getId(), record.getTargetId()))
+                                                && (record.getTargetId() == null
+                                                        || Objects.equals(item.getId(), record.getTargetId())))
                                         .isPresent();
                     })
                     .map(file -> Map.<String, Object>of(

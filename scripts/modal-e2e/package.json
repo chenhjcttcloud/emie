@@ -2,10 +2,12 @@
   "name": "emie-modal-e2e",
   "private": true,
   "scripts": {
-    "test": "node modal-regression.mjs && node task-recommendations.mjs && node business-assistant.mjs && node sync-permissions.mjs",
+    "test": "node modal-regression.mjs && node task-recommendations.mjs && node business-assistant.mjs && node sync-permissions.mjs && node point-logs.mjs && node delivery-points.mjs",
     "test:recommendations": "node task-recommendations.mjs",
     "test:assistant": "node business-assistant.mjs",
-    "test:sync-permissions": "node sync-permissions.mjs"
+    "test:sync-permissions": "node sync-permissions.mjs",
+    "test:point-logs": "node point-logs.mjs",
+    "test:delivery-points": "node delivery-points.mjs"
   },
   "dependencies": {
     "playwright": "1.62.0"

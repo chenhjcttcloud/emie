@@ -1231,6 +1231,65 @@ html:has(.admin-page)::-webkit-scrollbar,body:has(.admin-page)::-webkit-scrollba
 @media (max-width:800px) { .admin-header { padding:18px; } .admin-header-status { display:none; } .admin-dashboard-intro { align-items:flex-start; } .admin-sync-metrics { grid-template-columns:repeat(2,1fr); } .admin-section-heading small { display:none; } .admin-log-table-wrap { height:auto; min-height:360px; max-height:65dvh; } }
 @media (max-width:560px) { .admin-header-icon { width:42px; height:42px; flex-basis:42px; } .admin-header h2 { font-size:19px; } .admin-header p { font-size:11px; } .admin-stats-grid { grid-template-columns:1fr; } .admin-dashboard-date { display:none; } .admin-stat-card { min-height:80px; } .admin-config-group-grid { grid-template-columns:1fr 1fr; } }
 
+/* Points log filters and ledger */
+.point-log-page { display:flex; flex-direction:column; gap:16px; min-width:0; }
+.point-log-page .point-log-filters { display:block; margin:0; padding:18px; container-type:inline-size; }
+.point-log-filters .admin-log-filter-title { margin-bottom:16px; }
+.point-log-filters .admin-log-filter-title strong { font-size:14px; }
+.point-log-filters .admin-log-filter-title small { margin-top:5px; font-size:12px; line-height:1.5; }
+.point-log-filters .admin-log-filter-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:end; gap:14px 12px; }
+.point-log-filters .admin-log-filter-fields label { min-width:0; gap:6px; }
+.point-log-filters .admin-log-filter-fields label span { font-size:12px; color:#687386; }
+.point-log-filters .admin-log-filter-fields .form-input { width:100%; height:38px; padding:8px 10px; font-size:13px; }
+.point-log-person-filter { grid-column:1 / -1; }
+.point-log-filter-actions { display:flex; align-items:center; justify-content:flex-end; gap:8px; }
+.point-log-filter-actions .btn { min-height:38px; padding:8px 14px; font-size:13px; }
+@container (min-width:760px) {
+  .point-log-filters .admin-log-filter-fields { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .point-log-person-filter { grid-column:span 2; }
+}
+@container (min-width:1120px) {
+  .point-log-filters .admin-log-filter-fields { grid-template-columns:minmax(210px,1.6fr) repeat(2,minmax(140px,1fr)) minmax(130px,1fr) minmax(170px,1.3fr) minmax(110px,.8fr) auto; }
+  .point-log-person-filter { grid-column:auto; }
+}
+@container (max-width:360px) {
+  .point-log-filters .admin-log-filter-fields { grid-template-columns:minmax(0,1fr); }
+  .point-log-filter-actions .btn { flex:1; }
+}
+.point-log-card { min-width:0; overflow:hidden; border:1px solid #E7E9F1; border-radius:14px; background:#fff; box-shadow:0 4px 15px rgba(30,41,59,.035); }
+.point-log-card-head { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:16px 18px; }
+.point-log-card-head h4 { margin:0; color:var(--admin-ink); font-size:14px; }
+.point-log-card-head > span { color:var(--admin-muted); font-size:12px; }
+.point-log-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:0 18px 16px; }
+.point-log-summary > div { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; min-width:0; padding:13px 16px; border:1px solid #E8E7F7; border-radius:10px; background:#F6F5FF; }
+.point-log-summary span { color:#687386; font-size:12px; }
+.point-log-summary strong { color:#4F46E5; font-size:22px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.point-log-summary .is-positive { background:#F0FAF6; border-color:#DDEFE6; }
+.point-log-summary .is-negative { background:#FFF7F5; border-color:#F6E4DF; }
+.point-log-summary .is-positive strong,.point-log-page td.is-positive { color:#15805C; }
+.point-log-summary .is-negative strong,.point-log-page td.is-negative { color:#C45347; }
+.point-log-page .admin-log-table-wrap { overflow-x:auto; overflow-y:visible; min-height:0; max-height:none; height:auto; scrollbar-gutter:auto; }
+.point-log-page .admin-log-table-wrap table { width:100%; min-width:1160px; }
+.point-log-page #pointAuditResults table { min-width:900px; }
+.point-log-page .admin-log-table-wrap th { white-space:nowrap; }
+.point-log-page .admin-log-table-wrap td { padding:12px 10px; vertical-align:top; line-height:1.6; }
+.point-log-page .point-log-person { min-width:150px; max-width:210px; overflow-wrap:anywhere; }
+.point-log-person strong,.point-log-person small,.point-log-secondary { display:block; }
+.point-log-person small,.point-log-secondary { margin-top:3px; color:#929AA9; font-size:10px; }
+.point-log-page .point-log-amount { font-weight:700; font-size:13px; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.point-log-page .point-log-empty { height:94px; text-align:center; vertical-align:middle; color:#929AA9; }
+.point-log-audit-note { margin:0 18px 16px; color:var(--admin-muted); font-size:12px; line-height:1.7; }
+.point-log-page .point-log-pagination { min-height:60px; flex-wrap:wrap; gap:10px; padding:12px 18px; background:#FCFCFE; }
+.point-log-pagination-controls { margin-left:auto; white-space:nowrap; }
+.point-log-pagination-controls > span { padding:0 4px; font-variant-numeric:tabular-nums; }
+@media (max-width:600px) {
+  .point-log-page .point-log-filters { padding:14px; }
+  .point-log-summary { gap:6px; margin-right:14px; margin-left:14px; }
+  .point-log-summary > div { display:block; padding:10px; }
+  .point-log-summary strong { display:block; margin-top:5px; font-size:19px; }
+  .point-log-page .point-log-pagination { padding:12px; }
+}
+
 /* Success toast */
 .admin-toast { position:fixed; top:20px; right:20px; z-index:9999; padding:12px 24px; border-radius:8px; font-size:14px; box-shadow:0 4px 12px rgba(0,0,0,.15); animation:slideIn .3s ease; }
 .admin-toast.success { background:#10B981; color:#fff; }
@@ -1809,3 +1868,54 @@ details.workload-provenance span{display:block;margin-top:6px}
   body:has(.admin-page) .identity-chevron { width:13px; height:13px; }
   body:has(.admin-page) .header .logout-btn { padding:6px 9px; }
 }
+
+/* 子任务交付与积分：按实际流水展示累计，预计积分单独提示。 */
+.task-point-summary { margin-top:12px; padding:12px 14px; border:1px solid #deddf2; border-radius:10px; background:#faf9ff; color:var(--gray-700); }
+.task-point-total { display:flex; align-items:baseline; flex-wrap:wrap; gap:7px 10px; font-size:12px; }
+.task-point-total > strong { color:#5b4cc4; font-size:20px; line-height:1.35; font-variant-numeric:tabular-nums; }
+.task-point-total > strong > small { font-size:12px; font-weight:500; }
+.task-point-history-link { margin-left:auto; border:0; padding:4px 0; background:transparent; color:#6958c7; font:inherit; font-size:12px; cursor:pointer; }
+.task-point-history-link:hover { text-decoration:underline; }
+.task-point-history-link:focus-visible,.delivery-round-summary:focus-visible,.delivery-all-requirements > summary:focus-visible { outline:2px solid #a291df; outline-offset:3px; border-radius:4px; }
+.task-point-breakdown { margin-top:5px; color:var(--gray-500); font-size:12px; line-height:1.7; }
+.task-point-pending { margin-top:8px; padding-top:8px; border-top:1px solid #e9e5f5; color:#94611b; font-size:12px; line-height:1.7; }
+.task-point-note { margin:6px 0 0; color:var(--gray-500); font-size:11px; line-height:1.7; }
+.delivery-history-modal { max-width:860px; }
+.delivery-history-hint { margin-top:5px; padding-right:12px; color:var(--gray-400); font-size:12px; line-height:1.7; }
+.delivery-section-heading { margin-top:20px; margin-bottom:10px; font-size:14px; font-weight:700; }
+.delivery-round-list { margin-top:14px; }
+.delivery-round { margin-bottom:10px; overflow:hidden; border:1px solid var(--gray-200); border-radius:10px; background:#fff; }
+.delivery-round[open] { border-color:#d5cdeb; }
+.delivery-round-summary { position:relative; padding:13px 34px 13px 14px; background:var(--gray-50); cursor:pointer; list-style:none; }
+.delivery-round-summary::-webkit-details-marker { display:none; }
+.delivery-round-summary::after { position:absolute; top:17px; right:14px; width:7px; height:7px; border:solid var(--gray-400); border-width:0 1.5px 1.5px 0; content:''; transform:rotate(45deg); }
+.delivery-round[open] > .delivery-round-summary::after { top:20px; transform:rotate(225deg); }
+.delivery-round-heading { display:flex; align-items:center; flex-wrap:wrap; gap:7px 10px; line-height:1.6; }
+.delivery-round-heading > strong { color:var(--gray-800); font-size:13px; }
+.delivery-point-status { display:inline-block; color:var(--gray-500); font-size:12px; font-weight:600; line-height:1.7; }
+.delivery-point-status.is-awarded { color:#19815a; }
+.delivery-point-status.is-pending { color:#94611b; }
+.delivery-point-status.is-missing { color:#bd5442; }
+.delivery-point-status.is-no_points,.delivery-point-status.is-unrecorded { color:var(--gray-500); }
+.delivery-correction-count { color:var(--gray-400); font-size:11px; }
+.delivery-round-meta { display:flex; flex-wrap:wrap; gap:4px 16px; margin-top:5px; color:var(--gray-500); font-size:11px; line-height:1.7; }
+.delivery-round-body { padding:0 14px 14px; border-top:1px solid var(--gray-200); }
+.delivery-round-step { margin-top:14px; padding-left:12px; border-left:2px solid #e9e5f5; }
+.delivery-round-step > h4 { margin:0 0 6px; color:var(--gray-700); font-size:12px; font-weight:600; }
+.delivery-round-step p,.delivery-correction-item p { margin:5px 0 0; color:var(--gray-700); font-size:12px; line-height:1.8; white-space:pre-wrap; overflow-wrap:anywhere; }
+.delivery-step-meta { margin-top:4px; color:var(--gray-500); font-size:11px; line-height:1.7; overflow-wrap:anywhere; }
+.delivery-round-step p.delivery-rejection-reason { color:#ad493f; }
+.delivery-correction-history { margin-top:15px; padding-top:10px; border-top:1px dashed var(--gray-200); }
+.delivery-correction-history > summary,.delivery-all-requirements > summary { color:var(--gray-500); font-size:12px; line-height:1.8; cursor:pointer; }
+.delivery-correction-item { margin-top:9px; padding:10px; border-radius:7px; background:var(--gray-50); }
+.delivery-all-requirements { margin-top:18px; padding-top:12px; border-top:1px solid var(--gray-200); }
+@media(max-width:600px) {
+  .task-point-summary { padding:10px 12px; }
+  .task-point-history-link { margin-left:0; }
+  .delivery-round-summary { padding-left:12px; }
+  .delivery-round-meta { flex-direction:column; gap:2px; }
+  .delivery-round-body { padding-right:12px; padding-left:12px; }
+  .delivery-round-heading { gap:4px 8px; }
+}
+.delivery-history-modal .modal-header-left { display:block; min-width:0; }
+.task-point-latest { margin-top:7px; color:var(--gray-600); font-size:12px; line-height:1.7; }

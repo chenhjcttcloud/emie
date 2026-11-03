@@ -23,6 +23,7 @@ import com.emie.designpm.reference.repository.IpOptionRepository;
 import com.emie.designpm.reference.repository.ProductCategoryRepository;
 import com.emie.designpm.scoring.repository.ScoringRepository;
 import com.emie.designpm.sync.service.SyncQueueService;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -674,6 +675,9 @@ class ProjectReviewWorkflowTest {
         Project project = projectWithTask("regular", "submitted_for_review");
         PointsService points = mock(PointsService.class);
         service.setPointsService(points);
+        SubTaskDeliveryVersion version = deliveryVersion(project.getTasks().get(0), 1);
+        version.setId(101L);
+        when(deliveryVersions.findFirstBySubTaskIdOrderByVersionNoDesc(11L)).thenReturn(Optional.of(version));
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.taskApprove(
@@ -690,6 +694,13 @@ class ProjectReviewWorkflowTest {
                         "验收通过"));
 
         assertEquals("completed", project.getTasks().get(0).getStatus());
+        assertTrue(project.getLogs().get(0).getAfterData().contains("\"reviewComments\":\"验收通过\""));
+        Map<String, Object> delivery = new LinkedHashMap<>();
+        delivery.put("id", version.getId());
+        delivery.put("expectedPoints", version.getExpectedPoints());
+        delivery.put("confirmedAt", version.getConfirmedAt().toString());
+        SubTaskPointView.enrich(11L, List.of(delivery), List.of(), Map.of(), project.getLogs());
+        assertEquals("验收通过", delivery.get("reviewComments"));
         verify(points)
                 .awardBaseSubmission(
                         same(project.getTasks().get(0)), nullable(SubTaskDeliveryVersion.class), anyString());

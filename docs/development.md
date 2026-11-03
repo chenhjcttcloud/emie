@@ -116,7 +116,7 @@ scripts/mvnw-java21.sh clean package
 - 文件预览与下载：`static/js/files.js`
 - 启动入口：`static/js/bootstrap.js`
 
-页面只加载 `bootstrap.js` 这一个 `type="module"` 入口，由它按依赖顺序导入所有业务模块。修改任一前端模块后，同步递增 `bootstrap.js` 内部 import 和 `index.html` 启动入口的 `?v=` 参数。
+页面只加载 `bootstrap.js` 这一个 `type="module"` 入口，由它按依赖顺序导入通用业务模块；管理后台模块在首次进入系统管理、工作量或设计师绩效页面时按需加载，加载失败可重新进入页面重试。修改任一前端模块后，同步递增 `bootstrap.js` 内部 import / 按需加载定义和 `index.html` 启动入口的 `?v=` 参数。
 
 缓存版本可由 `./scripts/update-static-versions.sh` 自动维护；默认根据当前工作区相对 `HEAD` 的前端改动更新，也可显式传入模块路径。该脚本只更新版本号，不会重启服务。
 

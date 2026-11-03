@@ -53,7 +53,8 @@ class PerformanceServiceTest {
         formerDesignerAward.setUserId("former-designer");
         formerDesignerAward.setSourceId(21L);
         formerDesignerAward.setPoints(7);
-        when(adjustments.findAll()).thenReturn(List.of(award));
+        when(adjustments.sumPointsByMonth(eq("2026-09"), any(), any()))
+                .thenReturn(List.<Object[]>of(new Object[] {award.getUserId(), award.getPoints()}));
         when(adjustments.findBySourceTypeAndSourceIdIn(eq("DESIGN_REQUIREMENT"), any()))
                 .thenReturn(List.of(award, formerDesignerAward));
         PerformanceService service = new PerformanceService(
@@ -147,7 +148,8 @@ class PerformanceServiceTest {
         january.setCountInPerformance(true);
         january.setAccountingMonth("2026-01");
         january.setCreatedAt(LocalDateTime.of(2026, 2, 5, 10, 0));
-        when(ledgers.findAll()).thenReturn(List.of(ledger, january));
+        when(ledgers.sumPerformancePointsByMonth(eq("2026-01"), any(), any()))
+                .thenReturn(List.<Object[]>of(new Object[] {january.getUserId(), january.getPoints()}));
         PointAdjustmentLedger deduction = new PointAdjustmentLedger();
         deduction.setUserId("d1");
         deduction.setAccountingMonth("2026-01");
@@ -156,7 +158,10 @@ class PerformanceServiceTest {
         bonus.setUserId("d2");
         bonus.setAccountingMonth("2026-01");
         bonus.setPoints(7);
-        when(adjustments.findAll()).thenReturn(List.of(deduction, bonus));
+        when(adjustments.sumPointsByMonth(eq("2026-01"), any(), any()))
+                .thenReturn(List.<Object[]>of(
+                        new Object[] {deduction.getUserId(), deduction.getPoints()},
+                        new Object[] {bonus.getUserId(), bonus.getPoints()}));
         PointRule rule = new PointRule();
         rule.setRuleCode("A1");
         rule.setCategory("A");
@@ -205,7 +210,8 @@ class PerformanceServiceTest {
         ledger.setCountInPerformance(true);
         ledger.setAccountingMonth("2026-08");
         ledger.setCreatedAt(LocalDateTime.now());
-        when(ledgers.findAll()).thenReturn(List.of(ledger));
+        when(ledgers.sumPerformancePointsByMonth(eq("2026-08"), any(), any()))
+                .thenReturn(List.<Object[]>of(new Object[] {ledger.getUserId(), ledger.getPoints()}));
         when(adjustments.findAll()).thenReturn(List.of());
         StandardPointConfig standard = new StandardPointConfig();
         standard.setConfigCode("u1");
@@ -366,14 +372,14 @@ class PerformanceServiceTest {
     }
 
     @Test
-    void leaderboardFallbackFiltersAdjustmentsByAccountingMonthWhenMonthGiven() {
+    void leaderboardUsesAggregatesForEachAccountingMonth() {
         PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
         PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
         UserRepository users = mock(UserRepository.class);
         StandardPointConfigRepository standards = mock(StandardPointConfigRepository.class);
         MonthlyPerformanceConfigRepository months = mock(MonthlyPerformanceConfigRepository.class);
         SystemConfigRepository configs = mock(SystemConfigRepository.class);
-        // 聚合查询未命中（旧仓储 mock 兼容分支）：调账按 accounting_month 而非 created_at 归月。
+        // 调账按 accounting_month 聚合，而非 created_at 归月。
         PointAdjustmentLedger july = new PointAdjustmentLedger();
         july.setUserId("u1");
         july.setPoints(30);
@@ -384,7 +390,10 @@ class PerformanceServiceTest {
         august.setPoints(20);
         august.setAccountingMonth("2026-08");
         august.setCreatedAt(LocalDateTime.of(2026, 8, 6, 10, 0));
-        when(adjustments.findAll()).thenReturn(List.of(july, august));
+        when(adjustments.sumPointsByMonth(eq("2026-07"), any(), any()))
+                .thenReturn(List.<Object[]>of(new Object[] {july.getUserId(), july.getPoints()}));
+        when(adjustments.sumPointsByMonth(eq("2026-08"), any(), any()))
+                .thenReturn(List.<Object[]>of(new Object[] {august.getUserId(), august.getPoints()}));
         when(ledgers.findAll()).thenReturn(List.of());
         PerformanceService service = new PerformanceService(
                 ledgers,
@@ -405,5 +414,7 @@ class PerformanceServiceTest {
                 .sum();
         assertEquals(30d, julyPoints, .001);
         assertEquals(20d, augustPoints, .001);
+        verify(ledgers, never()).findAll();
+        verify(adjustments, never()).findAll();
     }
 }

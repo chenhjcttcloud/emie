@@ -137,6 +137,7 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, Project
     List<Project> findBySalesIdsLight(@Param("userIds") List<String> userIds);
 
     /** 状态看板批量读取企划项目，并保留待认领的渠道定制单。 */
+    @EntityGraph(attributePaths = "tasks")
     @Query("SELECT p FROM Project p WHERE p.plannerId IN :userIds OR "
             + "(p.type = 'channel_custom' AND p.status = 'pending_planner' AND (p.plannerId IS NULL OR p.plannerId = '')) "
             + "ORDER BY p.createdAt DESC")

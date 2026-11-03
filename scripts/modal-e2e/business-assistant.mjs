@@ -26,7 +26,7 @@ await page.route('**/api/**', async route => {
   const fulfill = data => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(data) });
   if (url.pathname === '/api/assistant/chat') {
     const body = route.request().postDataJSON(); chats.push(body);
-    const response = body.attachmentStoredName ? {
+    const response = body.attachmentStoredName || body.message === '按IP或风格查找图档' ? {
       ...modelMeta(),
       mode: 'search', answer: 'UI 模拟：找到相关图档。', serviceMessage: '当前按名称、IP 与文字标签匹配，未进行参考图视觉分析。',
       images: [{ id: 601, name: 'UI模拟 · 春日包装', ipName: '春日系列', reasons: ['同系列：春日'], images: [{ storedName: 'assistant-simulation-cover.ai', name: 'UI模拟.ai' }] }],
@@ -37,7 +37,7 @@ await page.route('**/api/**', async route => {
       serviceMessage: '模型暂不可用，以下为系统规则和实时查询结果。',
       sources: [{ title: '查看我的子任务', view: 'tasks' }, { title: '拒绝任意 URL', view: 'javascript:alert(1)' }],
       tasks: [{ id: 8001, projectId: 9001, name: 'UI模拟 · 包装设计', status: 'accepted', deadline: '2026-11-20' }],
-      suggestions: ['如何交付这个任务？']
+      suggestions: ['如何交付这个任务？', '按IP或风格查找图档']
     };
     if (nextDelay) { nextDelay = false; pending.push({ route, response }); return; }
     return fulfill(response);
@@ -117,6 +117,42 @@ async function send(message) {
   await page.locator('#businessAssistantPending').waitFor({ state: 'hidden' });
 }
 
+async function fileDrag(type, files = [{ name: 'dragged-reference.png', mimeType: 'image/png' }], selector = '#businessAssistantPanel') {
+  return page.evaluate(({ type, files, selector }) => {
+    const transfer = new DataTransfer();
+    for (const file of files) transfer.items.add(new File([new Uint8Array(file.size || 4)], file.name, { type: file.mimeType || '' }));
+    const event = new DragEvent(type, { dataTransfer: transfer, bubbles: true, cancelable: true });
+    document.querySelector(selector).dispatchEvent(event);
+    return event.defaultPrevented;
+  }, { type, files, selector });
+}
+
+async function dragLauncherTo(x, y) {
+  const launcher = page.locator('#businessAssistantLauncher');
+  const before = await launcher.boundingBox();
+  await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(x, y, { steps: 12 });
+  await page.mouse.up();
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  return { before, after: await launcher.boundingBox() };
+}
+
+async function assertPanelFits() {
+  const bounds = await page.locator('#businessAssistantPanel').boundingBox(), viewport = page.viewportSize();
+  assert.ok(bounds && bounds.x >= -1 && bounds.y >= -1 && bounds.x + bounds.width <= viewport.width + 1 && bounds.y + bounds.height <= viewport.height + 1,
+    `assistant panel fits viewport: ${JSON.stringify({ bounds, viewport })}`);
+}
+
+async function assertComposerAndCloseVisible() {
+  const panel = await page.locator('#businessAssistantPanel').boundingBox();
+  for (const selector of ['#businessAssistantSend', '[data-assistant-action="close"]']) {
+    const bounds = await page.locator(selector).boundingBox();
+    assert.ok(bounds && bounds.x >= panel.x && bounds.y >= panel.y && bounds.x + bounds.width <= panel.x + panel.width && bounds.y + bounds.height <= panel.y + panel.height,
+      `${selector} remains fully inside the visible panel on a short screen: ${JSON.stringify({ bounds, panel })}`);
+  }
+}
+
 async function setConfiguredModel(model) {
   let control = page.locator('#businessAssistantConfigForm [name="model"]');
   if (await control.evaluate(element => element.tagName) === 'SELECT') {
@@ -132,8 +168,12 @@ try {
   await page.waitForFunction(() => window.EMIE?.modules?.businessAssistant && window.EMIE?.modules?.coreUi);
   assert.equal(await page.locator('#businessAssistantLauncher').isVisible(), false, 'assistant hidden before authentication');
   await setIdentity('designer', 'assistant-ui-designer');
+  const moved = await dragLauncherTo(1050, 720);
+  assert.ok(Math.hypot(moved.after.x - moved.before.x, moved.after.y - moved.before.y) >= 100, 'launcher follows a real pointer drag');
+  assert.equal(await page.locator('#businessAssistantPanel').isVisible(), false, 'dragging launcher does not open the panel');
   await page.locator('#businessAssistantLauncher').click();
   await page.locator('#businessAssistantInput').waitFor({ state: 'visible' });
+  await assertPanelFits();
   assert.equal(await page.locator('#businessAssistantSettings').isVisible(), false);
   await page.getByRole('button', { name: '我是新员工，从哪里开始？', exact: true }).click();
   await page.locator('.business-assistant-answer').waitFor();
@@ -201,6 +241,71 @@ try {
   await page.locator('[data-assistant-action="remove-file"]').click();
   assert.equal(await page.locator('#businessAssistantAttachment').isVisible(), false);
 
+  const uploadsBeforeDrag = uploads.length, urlBeforeDrop = page.url();
+  await fileDrag('dragenter');
+  assert.equal(await page.locator('#businessAssistantPanel').evaluate(element => element.classList.contains('is-file-dragover')), true, 'file drag shows a drop target');
+  await page.screenshot({ path: '/tmp/emie-business-assistant-drop-ui.png', fullPage: true });
+  assert.equal(await fileDrag('dragover'), true, 'file dragover allows drop');
+  await fileDrag('dragleave');
+  assert.equal(await page.locator('#businessAssistantPanel').evaluate(element => element.classList.contains('is-file-dragover')), false, 'leaving panel clears drop target');
+  await fileDrag('dragenter');
+  assert.equal(await fileDrag('drop'), true, 'file drop must not navigate away');
+  assert.equal(page.url(), urlBeforeDrop);
+  assert.match(await page.locator('#businessAssistantAttachment').innerText(), /dragged-reference.png/);
+  assert.equal(uploads.length, uploadsBeforeDrag, 'dropping an image waits until Send to upload');
+  assert.equal(await page.locator('#businessAssistantPanel').evaluate(element => element.classList.contains('is-file-dragover')), false, 'drop clears drag indicator');
+  await page.locator('[data-assistant-action="remove-file"]').click();
+  assert.equal(await page.locator('#businessAssistantAttachment').isVisible(), false);
+  await fileDrag('drop', [{ name: 'dragged-reference.pdf', mimeType: 'application/pdf' }]);
+  assert.match(await page.locator('#businessAssistantAttachment').innerText(), /dragged-reference.pdf/);
+  assert.equal(uploads.length, uploadsBeforeDrag);
+  await send('查找这个 PDF 相关图档');
+  assert.equal(uploads.length, uploadsBeforeDrag + 1, 'dropped PDF uploads only on Send');
+  assert.equal(chats.at(-1).attachmentStoredName, 'assistant-simulation-reference.png');
+  assert.equal(await page.locator('#businessAssistantAttachment').isVisible(), false);
+
+  await fileDrag('drop', [{ name: 'unsupported.exe', mimeType: 'application/octet-stream' }]);
+  assert.equal(await page.locator('#businessAssistantAttachment').isVisible(), false);
+  assert.match(await page.locator('#businessAssistantFileStatus').innerText(), /支持图片、AI、PDF/);
+  await fileDrag('drop', [{ name: 'too-large.pdf', mimeType: 'application/pdf', size: 15 * 1024 * 1024 + 1 }]);
+  assert.equal(await page.locator('#businessAssistantAttachment').isVisible(), false);
+  assert.match(await page.locator('#businessAssistantFileStatus').innerText(), /15\s?MB/);
+  await fileDrag('drop', [{ name: 'first.png', mimeType: 'image/png' }, { name: 'second.pdf', mimeType: 'application/pdf' }]);
+  assert.equal(await page.locator('#businessAssistantAttachment').isVisible(), false, 'multiple files are not silently truncated to one');
+  assert.match(await page.locator('#businessAssistantFileStatus').innerText(), /每次只能添加一个/);
+  assert.equal(uploads.length, uploadsBeforeDrag + 1, 'invalid files never upload');
+
+  const textDrag = await page.evaluate(() => {
+    const transfer = new DataTransfer(); transfer.setData('text/plain', '普通拖动文字');
+    return ['dragenter', 'dragover', 'drop'].map(type => {
+      const event = new DragEvent(type, { dataTransfer: transfer, bubbles: true, cancelable: true });
+      document.getElementById('businessAssistantInput').dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+  });
+  assert.deepEqual(textDrag, [false, false, false], 'ordinary text drag keeps native editing behavior');
+  assert.equal(await page.locator('#businessAssistantPanel').evaluate(element => element.classList.contains('is-file-dragover')), false);
+  await page.evaluate(() => { window.EMIE.state.permissions = window.EMIE.state.permissions.filter(permission => permission !== 'file.upload'); window.EMIE.actions.openBusinessAssistant(); });
+  await fileDrag('dragenter'); await fileDrag('drop');
+  assert.equal(await page.locator('#businessAssistantAttachment').isVisible(), false, 'drop requires upload permission');
+  assert.equal(await page.locator('#businessAssistantPanel').evaluate(element => element.classList.contains('is-file-dragover')), false);
+  assert.equal(uploads.length, uploadsBeforeDrag + 1);
+  await send('说明任务交付流程');
+  const returnedSuggestion = page.locator('#businessAssistantMessages .is-assistant').last().getByRole('button', { name: '按IP或风格查找图档', exact: true });
+  assert.equal(await returnedSuggestion.isVisible(), true, 'view-only designer can see image search suggestions without upload permission');
+  await returnedSuggestion.click();
+  await page.locator('#businessAssistantPending').waitFor({ state: 'hidden' });
+  assert.equal(chats.at(-1).message, '按IP或风格查找图档');
+  assert.equal(chats.at(-1).attachmentStoredName, undefined, 'text image search does not need an attachment');
+  assert.equal(await page.locator('#businessAssistantMessages .is-assistant').last().locator('.business-assistant-image').count(), 1, 'view-only designer can receive image search results');
+  assert.equal(uploads.length, uploadsBeforeDrag + 1, 'text image search does not upload');
+  await page.evaluate(() => { window.EMIE.state.permissions = window.EMIE.state.permissions.filter(permission => permission !== 'page.image_library.view'); });
+  await send('说明任务交付流程');
+  assert.equal(await page.locator('#businessAssistantMessages .is-assistant').last().getByRole('button', { name: '按IP或风格查找图档', exact: true }).count(), 0, 'missing library-view permission hides returned image search suggestions');
+  assert.equal(await page.locator('#businessAssistantMessages .is-assistant').last().getByRole('button', { name: '如何交付这个任务？', exact: true }).isVisible(), true);
+  await page.evaluate(() => { window.EMIE.state.permissions.push('page.image_library.view'); });
+  await page.evaluate(() => { window.EMIE.state.permissions.push('file.upload'); window.EMIE.actions.openBusinessAssistant(); });
+
 
   await page.evaluate(() => window.EMIE.actions.navigate('image-library'));
   await page.waitForFunction(() => document.querySelector('#businessAssistantContext').textContent === '图档库');
@@ -208,20 +313,46 @@ try {
   assert.match(await page.locator('#businessAssistantMessages').innerText(), /UI 模拟/);
   await page.locator('#businessAssistantInput').press('Escape');
   assert.equal(await page.locator('#businessAssistantPanel').isVisible(), false);
-  await page.locator('#businessAssistantLauncher').click();
+  await fileDrag('dragenter', undefined, '#businessAssistantLauncher');
+  assert.equal(await page.locator('#businessAssistantPanel').isVisible(), false, 'hovering a file over the launcher does not open it');
+  const uploadsBeforeLauncherDrop = uploads.length;
+  await fileDrag('drop', undefined, '#businessAssistantLauncher');
+  assert.equal(await page.locator('#businessAssistantPanel').isVisible(), true, 'dropping on the launcher opens the assistant');
+  assert.match(await page.locator('#businessAssistantAttachment').innerText(), /dragged-reference.png/);
+  assert.equal(uploads.length, uploadsBeforeLauncherDrop);
+  await page.locator('[data-assistant-action="remove-file"]').click();
+
+  await fileDrag('dragenter');
+  await page.locator('[data-assistant-action="new"]').click();
+  assert.equal(await page.locator('#businessAssistantAttachment').isVisible(), false);
+  assert.equal(await page.locator('#businessAssistantPanel').evaluate(element => element.classList.contains('is-file-dragover')), false, 'new conversation resets drag indicator');
 
   nextDelay = true;
   await page.locator('#businessAssistantInput').fill('延迟答复用于身份隔离测试');
   await page.locator('#businessAssistantSend').click();
   await page.waitForFunction(() => document.querySelector('#businessAssistantSend').disabled);
+  const uploadsBeforeBusyDrop = uploads.length;
+  await fileDrag('dragenter'); await fileDrag('drop');
+  assert.equal(await page.locator('#businessAssistantAttachment').isVisible(), false, 'drop is blocked while awaiting a response');
+  assert.equal(await page.locator('#businessAssistantPanel').evaluate(element => element.classList.contains('is-file-dragover')), false);
+  assert.equal(uploads.length, uploadsBeforeBusyDrop);
   await setIdentity('sales', 'assistant-ui-sales');
   await page.locator('#businessAssistantLauncher').click();
   assert.equal(await page.locator('#businessAssistantMessages .business-assistant-message').count(), 0, 'identity switch clears previous conversation');
   assert.equal(await page.locator('.business-assistant-upload').isVisible(), false);
+  await fileDrag('drop');
+  assert.equal(await page.locator('#businessAssistantAttachment').isVisible(), false, 'role without image search cannot attach a dropped file');
   assert.equal(await page.getByRole('button', { name: '帮我找相关图档', exact: true }).count(), 0);
   for (const held of pending.splice(0)) { try { await held.route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(held.response) }); } catch { /* request aborted after identity switch */ } }
   await page.waitForTimeout(150);
   assert.equal(await page.locator('#businessAssistantMessages .business-assistant-message').count(), 0, 'late response cannot cross identities');
+  await send('说明任务交付流程');
+  assert.equal(await page.getByRole('button', { name: '按IP或风格查找图档', exact: true }).count(), 0, 'sales cannot see returned image search suggestions');
+  const allowedSuggestion = page.locator('#businessAssistantMessages .is-assistant').last().getByRole('button', { name: '如何交付这个任务？', exact: true });
+  assert.equal(await allowedSuggestion.isVisible(), true, 'non-library suggestions remain available');
+  await allowedSuggestion.click();
+  await page.locator('#businessAssistantPending').waitFor({ state: 'hidden' });
+  assert.equal(chats.at(-1).message, '如何交付这个任务？');
 
   await setIdentity('admin', 'assistant-ui-admin');
   await page.locator('#businessAssistantLauncher').click();
@@ -275,6 +406,12 @@ try {
   assert.deepEqual(saves.at(-1), { operation: 'activate', profileId: savedProfileId });
   assert.match(await page.locator('#businessAssistantModel').innerText(), /deepseek/i);
   assert.equal(await page.locator('.business-assistant-upload').evaluate(element => element.hidden), true, 'text-only model does not accept image understanding uploads');
+  await page.locator('[data-assistant-action="config-back"]').click();
+  await fileDrag('dragenter'); await fileDrag('drop');
+  assert.equal(await page.locator('#businessAssistantAttachment').isVisible(), false, 'text-only model rejects dropped reference material');
+  assert.equal(await page.locator('#businessAssistantPanel').evaluate(element => element.classList.contains('is-file-dragover')), false);
+  await page.locator('#businessAssistantSettings').click();
+  await page.locator('#businessAssistantEnabled').waitFor();
   await page.locator('#businessAssistantEnabled').uncheck();
   await page.getByText('模型对话已停用，系统指引与文字检索仍可使用。', { exact: true }).waitFor();
   assert.deepEqual(saves.at(-1), { operation: 'setEnabled', enabled: false });
@@ -379,15 +516,50 @@ try {
   await page.waitForFunction(() => document.querySelector('#businessAssistantModel').textContent.includes('服务器 Kimi'));
   assert.equal(await page.locator('#businessAssistantSettings').isVisible(), false);
 
+  for (const [x, y] of [[20, 20], [1420, 980]]) {
+    await dragLauncherTo(x, y);
+    assert.equal(await page.locator('#businessAssistantPanel').isVisible(), true, 'dragging an open launcher keeps the panel open');
+    await assertPanelFits();
+  }
+
+  await page.setViewportSize({ width: 390, height: 600 });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await dragLauncherTo(195, 300);
+  await assertPanelFits();
+  await assertComposerAndCloseVisible();
+  await page.screenshot({ path: '/tmp/emie-business-assistant-short-screen-ui.png', fullPage: true });
+
   await page.setViewportSize({ width: 390, height: 780 });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await assertPanelFits();
+  for (const [x, y] of [[15, 15], [375, 765]]) { await dragLauncherTo(x, y); await assertPanelFits(); }
   const bounds = await page.locator('#businessAssistantPanel').boundingBox();
   assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 391, 'mobile panel fits viewport');
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
   await page.screenshot({ path: '/tmp/emie-business-assistant-ui.png', fullPage: true });
+  const persistedLauncher = await page.locator('#businessAssistantLauncher').boundingBox();
+  assert.ok(await page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('design_pm_assistant_position'));
+    return Number.isFinite(saved?.x) && Number.isFinite(saved?.y);
+  }), 'dragged position is saved locally');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.EMIE?.modules?.businessAssistant && window.EMIE?.modules?.businessAssistantPosition);
+  await setIdentity('designer', 'assistant-ui-position-reload');
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const restoredLauncher = await page.locator('#businessAssistantLauncher').boundingBox();
+  assert.ok(Math.abs(restoredLauncher.x - persistedLauncher.x) <= 1 && Math.abs(restoredLauncher.y - persistedLauncher.y) <= 1, 'launcher position survives a reload');
+  await page.locator('#businessAssistantLauncher').click();
+  await assertPanelFits();
+  await page.evaluate(() => localStorage.setItem('design_pm_assistant_position', '{broken-position'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.EMIE?.modules?.businessAssistant && window.EMIE?.modules?.businessAssistantPosition);
+  await setIdentity('designer', 'assistant-ui-invalid-position');
+  await page.locator('#businessAssistantLauncher').click();
+  await assertPanelFits();
   await page.evaluate(() => { document.dispatchEvent(new Event('emie:identity-changing')); window.EMIE.state.authUser = null; localStorage.removeItem('design_pm_token'); document.getElementById('appContainer').style.display = 'none'; });
   await page.locator('#businessAssistantLauncher').waitFor({ state: 'hidden' });
   assert.deepEqual(errors, []);
-  console.log('business assistant UI checks passed (local API simulation, real core-ui keyboard integration, identity isolation, context, material search, endpoint/key model discovery, manual fallback, stale credential cancellation, model profiles, server default, credential isolation, mobile); screenshot=/tmp/emie-business-assistant-ui.png');
+  console.log('business assistant UI checks passed (local API simulation, real core-ui keyboard integration, identity isolation, context, material search, file drop validation/permissions/deferred upload, draggable launcher/corner positioning/resize, endpoint/key model discovery, manual fallback, stale credential cancellation, model profiles, server default, credential isolation, mobile); screenshot=/tmp/emie-business-assistant-ui.png');
 } catch (error) {
   await page.screenshot({ path: '/tmp/emie-business-assistant-ui-failure.png', fullPage: true }).catch(() => {});
   throw error;

@@ -25,15 +25,11 @@ import org.mockito.InOrder;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionStatus;
 
-/**
- * SyncWorker 按条目事务：processQueue 中每条队列任务在独立的主库短事务里执行
- * 「读业务数据 + 处理 + 保存队列状态」，避免整轮 20 条横跨单个长事务持有主库连接。
- * 旧 7 参构造器让 itemTransaction=null 走非事务路径，这里同样覆盖。
- */
+/** 读取快照必须先提交，飞书请求和队列状态写入均在读取事务之外执行。 */
 class SyncWorkerTransactionTest {
 
     @Test
-    void processQueueRunsEachItemInsideItsOwnShortTransaction() throws Exception {
+    void processQueueCommitsEachSnapshotBeforeCallingFeishu() throws Exception {
         SyncQueueRepository queue = mock(SyncQueueRepository.class);
         ActivityLogRepository logs = mock(ActivityLogRepository.class);
         FeishuBaseService feishu = mock(FeishuBaseService.class);
@@ -50,15 +46,15 @@ class SyncWorkerTransactionTest {
 
         worker(queue, logs, feishu, txManager).processQueue();
 
-        // 每条任务一个独立事务：getTransaction -> [处理] -> commit 逐条成对出现，
-        // 每条任务的飞书处理必须落在各自事务边界之内。
-        InOrder order = inOrder(txManager, feishu);
+        InOrder order = inOrder(txManager, feishu, logs);
         order.verify(txManager).getTransaction(any());
+        order.verify(logs).findById(1L);
+        order.verify(txManager).commit(any());
         order.verify(feishu).syncActivityLog(eq(1L), anyString(), anyString(), anyString(), any(), any());
-        order.verify(txManager).commit(any());
         order.verify(txManager).getTransaction(any());
-        order.verify(feishu).syncActivityLog(eq(2L), anyString(), anyString(), anyString(), any(), any());
+        order.verify(logs).findById(2L);
         order.verify(txManager).commit(any());
+        order.verify(feishu).syncActivityLog(eq(2L), anyString(), anyString(), anyString(), any(), any());
 
         verify(txManager, times(2)).getTransaction(any());
         verify(txManager, times(2)).commit(any());
@@ -148,7 +144,7 @@ class SyncWorkerTransactionTest {
 
         worker(queue, logs, feishu, txManager).processQueue();
 
-        // 失败条目被单独落为 pending 等待重试，不污染同轮其它条目的独立事务
+        // 外部调用失败发生在读取事务提交之后，仍沿用原先的队列重试。
         assertEquals("pending", item1.getStatus());
         assertEquals(1, item1.getRetryCount());
         assertEquals("boom", item1.getErrorMsg());
@@ -157,6 +153,91 @@ class SyncWorkerTransactionTest {
         verify(txManager, times(2)).getTransaction(any());
         verify(txManager, times(2)).commit(any());
         verify(txManager, never()).rollback(any());
+    }
+
+    @Test
+    void failedSnapshotRollsBackAndNextItemStillRuns() throws Exception {
+        SyncQueueRepository queue = mock(SyncQueueRepository.class);
+        ActivityLogRepository logs = mock(ActivityLogRepository.class);
+        FeishuBaseService feishu = mock(FeishuBaseService.class);
+        PlatformTransactionManager manager = mock(PlatformTransactionManager.class);
+        when(manager.getTransaction(any())).thenReturn(mock(TransactionStatus.class));
+        SyncQueue missing = queueItem(1L);
+        SyncQueue valid = queueItem(2L);
+        when(queue.findTop20ByStatusAndNextRetryAtIsNullOrStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
+                        eq("pending"), eq("pending"), any()))
+                .thenReturn(List.of(missing, valid));
+        when(logs.findById(2L)).thenReturn(Optional.of(log(2L)));
+        worker(queue, logs, feishu, manager).processQueue();
+        assertEquals("pending", missing.getStatus());
+        assertEquals(1, missing.getRetryCount());
+        assertEquals("done", valid.getStatus());
+        verify(manager).rollback(any());
+        verify(manager).commit(any());
+        verify(feishu, never()).syncActivityLog(eq(1L), any(), any(), any(), any(), any());
+        verify(feishu).syncActivityLog(eq(2L), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void failedCommitNeverSendsUncommittedSnapshot() throws Exception {
+        SyncQueueRepository queue = mock(SyncQueueRepository.class);
+        ActivityLogRepository logs = mock(ActivityLogRepository.class);
+        FeishuBaseService feishu = mock(FeishuBaseService.class);
+        PlatformTransactionManager manager = mock(PlatformTransactionManager.class);
+        when(manager.getTransaction(any())).thenReturn(mock(TransactionStatus.class));
+        doThrow(new RuntimeException("commit failed")).when(manager).commit(any());
+        SyncQueue item = queueItem(1L);
+        when(queue.findTop20ByStatusAndNextRetryAtIsNullOrStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
+                        eq("pending"), eq("pending"), any()))
+                .thenReturn(List.of(item));
+        when(logs.findById(1L)).thenReturn(Optional.of(log(1L)));
+        worker(queue, logs, feishu, manager).processQueue();
+        assertEquals("pending", item.getStatus());
+        assertEquals("commit failed", item.getErrorMsg());
+        verify(feishu, never()).syncActivityLog(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void cascadeDeleteReadsIdentifiersOnceAndCommitsBeforeRemoteDeletes() throws Exception {
+        SyncQueueRepository queue = mock(SyncQueueRepository.class);
+        SubTaskRepository tasks = mock(SubTaskRepository.class);
+        ScoringRepository scores = mock(ScoringRepository.class);
+        FeishuBaseService feishu = mock(FeishuBaseService.class);
+        PlatformTransactionManager manager = mock(PlatformTransactionManager.class);
+        when(manager.getTransaction(any())).thenReturn(mock(TransactionStatus.class));
+        SyncQueue item = queueItem(1L);
+        item.setEntityType("project");
+        item.setAction("delete");
+        when(queue.findTop20ByStatusAndNextRetryAtIsNullOrStatusAndNextRetryAtLessThanEqualOrderByCreatedAtAsc(
+                        eq("pending"), eq("pending"), any()))
+                .thenReturn(List.of(item));
+        com.emie.designpm.entity.SubTask task = new com.emie.designpm.entity.SubTask();
+        task.setId(2L);
+        com.emie.designpm.entity.ScoringRecord score = new com.emie.designpm.entity.ScoringRecord();
+        score.setId(3L);
+        when(tasks.findByProjectIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(task));
+        when(scores.findBySubTaskId(2L)).thenReturn(List.of(score));
+        new SyncWorker(
+                        queue,
+                        mock(ProjectRepository.class),
+                        tasks,
+                        scores,
+                        mock(ActivityLogRepository.class),
+                        feishu,
+                        mock(SyncQueueService.class),
+                        null,
+                        manager)
+                .processQueue();
+        InOrder order = inOrder(manager, tasks, scores, feishu);
+        order.verify(manager).getTransaction(any());
+        order.verify(tasks).findByProjectIdOrderByCreatedAtAsc(1L);
+        order.verify(scores).findBySubTaskId(2L);
+        order.verify(manager).commit(any());
+        order.verify(feishu).deleteScoringRecord(3L);
+        order.verify(feishu).deleteSubTaskRecord(2L);
+        order.verify(feishu).deleteProjectRecord(1L);
+        verify(scores, times(1)).findBySubTaskId(2L);
+        assertEquals("done", item.getStatus());
     }
 
     private SyncWorker worker(

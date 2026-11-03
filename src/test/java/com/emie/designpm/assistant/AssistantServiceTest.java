@@ -28,6 +28,7 @@ class AssistantServiceTest {
         when(data.context(isNull(), any())).thenReturn(Map.of());
         when(data.myTasks(any())).thenReturn(List.of());
         when(data.searchImages(anyString(), any())).thenReturn(List.of());
+        when(data.canSearchImages(any())).thenReturn(true);
         when(settings.current()).thenReturn(config);
     }
 
@@ -41,6 +42,62 @@ class AssistantServiceTest {
         assertEquals("guide", answer.get("mode"));
         assertTrue(answer.get("answer").toString().contains("设计师"));
         assertTrue(answer.get("serviceMessage").toString().contains("未配置"));
+        verifyNoInteractions(client, reader);
+    }
+
+    @Test
+    void libraryPermissionQuestionUsesVerifiedSharedScopeWithoutModelGuessing() {
+        when(config.configured()).thenReturn(true);
+        var result = service.chat(request("为什么看不到图档，你有权限访问图库吗？", null), session);
+        assertEquals("guide", result.get("mode"));
+        assertTrue(result.get("answer").toString().contains("具备图档库查看权限"));
+        assertTrue(result.get("answer").toString().contains("共享图档"));
+        assertTrue(result.get("answer").toString().contains("不限本人上传"));
+        assertTrue(((List<Map<String, Object>>) result.get("sources"))
+                .stream().anyMatch(source -> "image-library".equals(source.get("view"))));
+        verify(data, never()).searchImages(anyString(), any());
+        verifyNoInteractions(client, reader);
+    }
+
+    @Test
+    void deniedLibraryPermissionIsExplainedWithoutReadingAssetsOrAdvertisingSearch() {
+        when(config.configured()).thenReturn(true);
+        when(data.canSearchImages(session)).thenReturn(false);
+        var result = service.chat(request("我为什么没有图档库权限？", null), session);
+        assertEquals("guide", result.get("mode"));
+        assertTrue(result.get("answer").toString().contains("没有图档库查看权限"));
+        assertFalse(((List<String>) result.get("suggestions")).contains("按IP或风格查找图档"));
+        assertTrue(((List<Map<String, Object>>) result.get("sources"))
+                .stream().noneMatch(source -> "image-library".equals(source.get("view"))));
+        verify(data, never()).searchImages(anyString(), any());
+        verifyNoInteractions(client, reader);
+    }
+
+    @Test
+    void ordinaryModelAnswerReceivesActualLibraryCapabilityDespiteNoSearchThisTurn() throws Exception {
+        when(config.configured()).thenReturn(true);
+        when(client.reply(eq(config), anyString(), any())).thenReturn("可按图档名称查找。");
+        var history = List.of(new AssistantRequest.History("assistant", "你只能查看本人图档库。"));
+        var result = service.chat(new AssistantRequest("请继续解释", history, null, null), session);
+        assertEquals("ai", result.get("mode"));
+        verify(client)
+                .reply(
+                        eq(config),
+                        argThat(prompt -> prompt.contains("\"allowed\":true")
+                                && prompt.contains("\"scope\":\"shared\"")
+                                && prompt.contains("\"queried\":false")
+                                && prompt.contains("不限本人上传")),
+                        eq(history));
+        verify(data, never()).searchImages(anyString(), any());
+    }
+
+    @Test
+    void emptyLibrarySearchExplainsKeywordLimitInsteadOfPermissionDenial() {
+        var result = service.chat(request("查找海洋图库", null), session);
+        assertEquals("search", result.get("mode"));
+        assertTrue(result.get("answer").toString().contains("具备图档库查看权限"));
+        assertTrue(result.get("answer").toString().contains("文字标签"));
+        verify(data).searchImages("查找海洋图库", session);
         verifyNoInteractions(client, reader);
     }
 

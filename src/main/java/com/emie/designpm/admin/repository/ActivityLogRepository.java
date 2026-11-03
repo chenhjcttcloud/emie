@@ -2,6 +2,7 @@ package com.emie.designpm.admin.repository;
 
 import com.emie.designpm.entity.ActivityLog;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -22,6 +23,12 @@ public interface ActivityLogRepository extends JpaRepository<ActivityLog, Long> 
     default List<ActivityLog> findProjectHistory(Long projectId) {
         return findProjectHistory(projectId, PageRequest.of(0, 200));
     }
+
+    /** 完整读取交付与给分的相关审计事件，不受项目动态 200 条上限影响。 */
+    @Query("SELECT l FROM ActivityLog l WHERE l.entityType = 'sub_task' AND l.entityId IN :taskIds "
+            + "AND (l.action LIKE '发起子任务修改：%' OR l.action LIKE '产品企划确认成果：%' "
+            + "OR l.action LIKE '子任务驳回：%') ORDER BY l.time ASC, l.id ASC")
+    List<ActivityLog> findSubTaskDeliveryHistory(@Param("taskIds") Collection<Long> taskIds);
 
     @org.springframework.data.jpa.repository.Modifying
     @org.springframework.data.jpa.repository.Query(

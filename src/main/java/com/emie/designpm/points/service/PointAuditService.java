@@ -100,7 +100,7 @@ public class PointAuditService {
                 size,
                 "submittedAt DESC,businessVersionId DESC");
         String historical =
-                "(SELECT v.submitted_at AS submittedAt,v.submitted_by_id AS userId FROM sub_task_delivery_versions v JOIN sub_tasks t ON t.id=v.sub_task_id WHERE v.expected_points IS NULL) x";
+                "(SELECT v.submitted_at AS submittedAt,v.submitted_by_id AS userId,u.name AS userName FROM sub_task_delivery_versions v JOIN sub_tasks t ON t.id=v.sub_task_id LEFT JOIN users u ON u.user_id=v.submitted_by_id WHERE v.expected_points IS NULL) x";
         result.put(
                 "historicalCount",
                 jdbc.queryForObject("SELECT COUNT(*) FROM " + historical + where, params, Long.class));
@@ -112,6 +112,21 @@ public class PointAuditService {
         if (f.get("userId") != null && !f.get("userId").isBlank()) {
             where += " AND userId=:userId";
             p.put("userId", f.get("userId"));
+        }
+        String personKeyword = f.get("personKeyword");
+        if (personKeyword != null && !personKeyword.isBlank()) {
+            where +=
+                    " AND (LOWER(userId) LIKE :personKeyword ESCAPE '!' OR LOWER(userName) LIKE :personKeyword ESCAPE '!')";
+            p.put(
+                    "personKeyword",
+                    "%"
+                            + personKeyword
+                                    .trim()
+                                    .toLowerCase(Locale.ROOT)
+                                    .replace("!", "!!")
+                                    .replace("%", "!%")
+                                    .replace("_", "!_")
+                            + "%");
         }
         if (f.get("from") != null && !f.get("from").isBlank()) {
             where += " AND " + time + ">=:from";

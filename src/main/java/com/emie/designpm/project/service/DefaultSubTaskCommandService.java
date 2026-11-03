@@ -1,6 +1,8 @@
 package com.emie.designpm.project.service;
 
+import com.emie.designpm.admin.repository.ActivityLogRepository;
 import com.emie.designpm.admin.repository.SystemConfigRepository;
+import com.emie.designpm.admin.repository.UserRepository;
 import com.emie.designpm.admin.service.PermissionCatalog;
 import com.emie.designpm.admin.service.UserService;
 import com.emie.designpm.entity.*;
@@ -58,6 +60,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
     private TaskWithdrawalRepository taskWithdrawalRepository;
     private PointAdjustmentLedgerRepository pointAdjustmentLedgerRepository;
     private PointLedgerRepository pointLedgerRepository;
+    private ActivityLogRepository deliveryAuditRepository;
+    private UserRepository deliveryUserRepository;
     private PointAppealRepository pointAppealRepository;
     private NotificationRepository notificationRepository;
     private FileRecordRepository fileRecordRepository;
@@ -152,6 +156,16 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
     @Autowired(required = false)
     void setPointLedgerRepository(PointLedgerRepository repository) {
         this.pointLedgerRepository = repository;
+    }
+
+    @Autowired(required = false)
+    void setDeliveryAuditRepository(ActivityLogRepository repository) {
+        this.deliveryAuditRepository = repository;
+    }
+
+    @Autowired(required = false)
+    void setDeliveryUserRepository(UserRepository repository) {
+        this.deliveryUserRepository = repository;
     }
 
     @Autowired(required = false)
@@ -1198,17 +1212,52 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getDeliveryVersions(Long taskId) {
-        return deliveryVersions(deliveryVersionRepository.findBySubTaskIdOrderByVersionNoDesc(taskId));
+        return deliveryVersionsByTask(
+                        deliveryVersionRepository.findBySubTaskIdOrderByVersionNoDesc(taskId), List.of(taskId))
+                .getOrDefault(taskId, List.of());
     }
 
     @Transactional(readOnly = true)
     public Map<Long, List<Map<String, Object>>> getDeliveryVersionsByTaskIds(Collection<Long> taskIds) {
         if (taskIds == null || taskIds.isEmpty()) return Map.of();
-        return deliveryVersionRepository.findBySubTaskIdInOrderBySubTaskIdAscVersionNoDesc(taskIds).stream()
+        return deliveryVersionsByTask(
+                deliveryVersionRepository.findBySubTaskIdInOrderBySubTaskIdAscVersionNoDesc(taskIds), taskIds);
+    }
+
+    private Map<Long, List<Map<String, Object>>> deliveryVersionsByTask(
+            List<SubTaskDeliveryVersion> versions, Collection<Long> taskIds) {
+        if (versions.isEmpty()) return Map.of();
+        Map<Long, List<PointLedger>> ledgersByTask = pointLedgerRepository == null
+                ? Map.of()
+                : pointLedgerRepository.findBySubTaskIdIn(taskIds).stream()
+                        .collect(Collectors.groupingBy(PointLedger::getSubTaskId));
+        Map<Long, List<ActivityLog>> logsByTask = deliveryAuditRepository == null
+                ? Map.of()
+                : deliveryAuditRepository.findSubTaskDeliveryHistory(taskIds).stream()
+                        .collect(Collectors.groupingBy(ActivityLog::getEntityId));
+        Set<String> confirmerIds = versions.stream()
+                .map(SubTaskDeliveryVersion::getConfirmedBy)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<String, String> userNames = deliveryUserRepository == null || confirmerIds.isEmpty()
+                ? Map.of()
+                : deliveryUserRepository.findByUserIdIn(confirmerIds).stream()
+                        .collect(Collectors.toMap(User::getUserId, User::getName));
+        Map<Long, List<SubTaskDeliveryVersion>> byTask = versions.stream()
                 .collect(Collectors.groupingBy(
-                        version -> version.getSubTask().getId(),
-                        LinkedHashMap::new,
-                        Collectors.collectingAndThen(Collectors.toList(), this::deliveryVersions)));
+                        version -> version.getSubTask().getId(), LinkedHashMap::new, Collectors.toList()));
+        Map<Long, List<Map<String, Object>>> result = new LinkedHashMap<>();
+        byTask.forEach((taskId, taskVersions) -> {
+            List<Map<String, Object>> items = deliveryVersions(taskVersions);
+            SubTaskPointView.enrich(
+                    taskId,
+                    items,
+                    ledgersByTask.getOrDefault(taskId, List.of()),
+                    userNames,
+                    logsByTask.getOrDefault(taskId, List.of()));
+            result.put(taskId, items);
+        });
+        return result;
     }
 
     private List<Map<String, Object>> deliveryVersions(List<SubTaskDeliveryVersion> versions) {
@@ -1230,6 +1279,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                     item.put("expectedPoints", version.getExpectedPoints());
                     item.put("pointRuleCode", version.getPointRuleCode());
                     item.put("pointRuleDescription", version.getPointRuleDescription());
+                    item.put("pointRequestId", version.getPointRequestId());
+                    item.put("confirmedBy", version.getConfirmedBy());
                     item.put(
                             "confirmedAt",
                             version.getConfirmedAt() == null
@@ -1318,6 +1369,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             deliveryVersionRepository.save(version);
         Map<String, Object> confirmation = new LinkedHashMap<>();
         confirmation.put("deliveryVersionId", version == null ? null : version.getId());
+        confirmation.put("reviewComments", comments);
         confirmation.put("pointRequestId", version == null ? null : version.getPointRequestId());
         confirmation.put(
                 "pointRuleCode",

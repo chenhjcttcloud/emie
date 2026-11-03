@@ -90,7 +90,6 @@ class FrontendModuleLayoutTest {
                             "\\./" + java.util.regex.Pattern.quote(module) + "\\?v=\\d+")
                     .matcher(bootstrap);
             int currentIndex = matcher.find() ? matcher.start() : -1;
-            if (module.equals("projects.js")) currentIndex = bootstrap.indexOf("./" + module + "?v=148");
             assertTrue(currentIndex > previousIndex, module + " 的 ES Module 加载顺序不正确");
             previousIndex = currentIndex;
         }

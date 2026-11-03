@@ -32,6 +32,8 @@ const taskApprove = (...args) => EMIE.actions.taskApprove(...args);
 const taskReject = (...args) => EMIE.actions.taskReject(...args);
 const taskCancelReject = (...args) => EMIE.actions.taskCancelReject(...args);
 const taskCorrectDelivery = (...args) => EMIE.actions.taskCorrectDelivery(...args);
+const renderTaskPointSummary = (...args) => EMIE.actions.renderTaskPointSummary(...args);
+const renderDeliveryRounds = (...args) => EMIE.actions.renderDeliveryRounds(...args);
 const clearSWRCache = (...args) => EMIE.actions.clearSWRCache(...args);
 
 function formatProjectIp(ipName, ipSubOptions) {
@@ -282,8 +284,8 @@ function renderSubTaskCard(detail, task, idx) {
       <div class="subtask-meta-item">📅 ${task.status === 'rejected' && latestRejection?.requiredCompletionDate ? '驳回后要求完成' : '计划完成'}：<strong>${formatDate(visibleDeadline)}</strong></div>
       ${task.submittedForReviewAt || deliveryVersions[0]?.submittedAt ? `<div class="subtask-meta-item">成果提交：<strong>${fmtDT(deliveryVersions[0]?.submittedAt || task.submittedForReviewAt)}</strong></div>` : ''}
       ${task.actualDate ? `<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(task.actualDate)}</strong></div>` : ''}
-      ${task.pointRuleCode ? `<div class="subtask-meta-item">🏅 积分：<strong>${escHtml(taskPointSummary(task))}</strong></div>` : ''}
     </div>
+    ${renderTaskPointSummary(task)}
     ${task.details ? `<div style="font-size:13px;color:var(--gray-600);margin-top:6px;white-space:pre-wrap;">📝 ${escHtml(task.details)}</div>` : ''}
     ${task.referenceImagesJson ? renderSubTaskImages(task.referenceImagesJson) : ''}
     ${task.attachmentsJson ? renderTaskAttachments(task.attachmentsJson) : ''}
@@ -305,7 +307,6 @@ function renderSubTaskCard(detail, task, idx) {
       ` : ''}
       ${/* 渠道定制单：销售第二轮确认 */''}
       ${isPlanner && String(getCurrentUserId()) === String(detail.plannerId || '') && (!task.assigneeRole || task.assigneeRole === 'designer') && task.status === 'completed' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-change-bonus" data-project-id="${detail.id}" data-task-id="${task.id}">修改</button>` : ''}
-      ${task.pendingChangeBonusRequestId ? `<span class="subtask-action-note">本次修改 ${task.pendingChangeRuleCode ? Number(task.pendingChangeBonusPoints || 0) + ' 分，企划确认后入账' : '无积分'}</span>` : ''}
       ${myTask && task.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-accept" data-project-id="${detail.id}" data-task-id="${task.id}">✅ 接单</button>` : ''}
       ${myTask && task.status === 'accepted' ? (isRedelivering ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-redeliver" data-project-id="${detail.id}" data-task-id="${task.id}">📤 重新交付</button>` : `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-deliver" data-project-id="${detail.id}" data-task-id="${task.id}">📤 交付成果</button>`) : ''}
       ${task.status === 'rejected' && task.activeRejectionCycleId && task.activeRejectionRole === EMIE.state.currentRole && (
@@ -321,7 +322,6 @@ function renderSubTaskCard(detail, task, idx) {
         <button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-edit" data-project-id="${detail.id}" data-task-id="${task.id}">✏️ 编辑</button>
         ${task.status === 'pending' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-delete" data-project-id="${detail.id}" data-task-id="${task.id}" style="color:var(--danger);border-color:var(--danger);">🗑️ 删除</button>` : ''}
       ` : ''}
-      ${deliveryVersions.length ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-history" data-task-id="${task.id}">📚 提交历史</button>` : ''}
     </div>
   </div>`;
 }
@@ -361,8 +361,9 @@ function openProjectSubTaskDetail(event, taskId) {
           <div class="detail-item"><div class="detail-label">实际完成</div><div class="detail-value">${task.actualDate ? formatDate(task.actualDate) : '-'}</div></div>
           <div class="detail-item"><div class="detail-label">修改要求次数</div><div class="detail-value">${records.length} 次</div></div>
           ${task.submittedForReviewAt || task.deliveryVersions?.[0]?.submittedAt ? `<div class="detail-item"><div class="detail-label">成果提交时间</div><div class="detail-value">${fmtDT(task.deliveryVersions?.[0]?.submittedAt || task.submittedForReviewAt)}</div></div>` : ''}
-          ${task.pointRuleCode ? `<div class="detail-item"><div class="detail-label">积分规则</div><div class="detail-value">${escHtml(task.pointRuleCode)}</div></div><div class="detail-item"><div class="detail-label">积分快照</div><div class="detail-value">${Number(task.basePointSnapshot || 0)} 分</div></div><div class="detail-item"><div class="detail-label">合作分配快照</div><div class="detail-value">${escHtml(taskCollaborationSummary(task))}</div></div><div class="detail-item"><div class="detail-label">积分归属月份</div><div class="detail-value">${escHtml(task.milestoneMonth || '按实际入账月份')}</div></div><div class="detail-item"><div class="detail-label">指派/立项说明</div><div class="detail-value">${escHtml(task.assignmentReason || '-')}</div></div>` : ''}
+          ${task.pointRuleCode ? `<div class="detail-item"><div class="detail-label">积分规则</div><div class="detail-value">${escHtml(task.pointRuleCode)}</div></div><div class="detail-item"><div class="detail-label">预计基础积分</div><div class="detail-value">${Number(task.basePointSnapshot || 0)} 分</div></div><div class="detail-item"><div class="detail-label">合作分配快照</div><div class="detail-value">${escHtml(taskCollaborationSummary(task))}</div></div><div class="detail-item"><div class="detail-label">积分归属月份</div><div class="detail-value">${escHtml(task.milestoneMonth || '按实际入账月份')}</div></div><div class="detail-item"><div class="detail-label">指派/立项说明</div><div class="detail-value">${escHtml(task.assignmentReason || '-')}</div></div>` : ''}
         </div>
+        ${renderTaskPointSummary(task)}
         <div class="detail-item" style="margin-top:12px;">
           <div class="detail-label">任务要求</div>
           <div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.details || '未填写')}</div>
@@ -372,6 +373,8 @@ function openProjectSubTaskDetail(event, taskId) {
         ${EMIE.actions.taskRecommendationsPlaceholder?.() || ''}
         ${task.deliverables ? `<div class="detail-item" style="margin-top:12px;"><div class="detail-label">当前交付成果</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.deliverables)}</div></div>` : ''}
         ${renderSubTaskImages(task.pendingChangeReferenceImagesJson)}
+        ${deliveryVersions.length ? `<div class="delivery-section-heading">交付与积分记录</div>${renderDeliveryRounds(deliveryVersions, records, task)}` : ''}
+        <details class="delivery-all-requirements"><summary>全部修改要求（含驳回及取消记录）</summary>
         <div style="margin-top:18px;">
           <div style="font-size:14px;font-weight:700;margin-bottom:8px;">修改要求记录 <span style="color:var(--gray-400);font-weight:400;">(${records.length})</span></div>
           ${records.length ? records.map(record => `
@@ -384,8 +387,9 @@ function openProjectSubTaskDetail(event, taskId) {
               <span style="color:var(--primary);white-space:nowrap;">查看详情 ›</span>
             </button>`).join('') : '<div class="empty" style="padding:24px;"><p>暂无修改要求记录</p></div>'}
         </div>
+        </details>
       </div>
-      <div class="modal-footer">${deliveryVersions.length ? `<button class="btn btn-outline" data-emie-action="click:designer-history" data-task-id="${task.id}">📚 提交历史</button>` : ''}<button class="btn btn-primary" data-emie-action="click:detail-subtask-close">关闭</button></div>
+      <div class="modal-footer">${deliveryVersions.length ? `<button class="btn btn-outline" data-emie-action="click:designer-history" data-task-id="${task.id}">交付与积分记录</button>` : ''}<button class="btn btn-primary" data-emie-action="click:detail-subtask-close">关闭</button></div>
     </div>`;
   document.body.appendChild(modal);
   EMIE.actions.mountTaskRecommendations?.(modal, { projectId: EMIE.projectState.currentProjectDetail.id, taskId: task.id });

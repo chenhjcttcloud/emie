@@ -25,6 +25,8 @@ public class TaskDetailDTO {
     private String pendingChangeRuleCode;
     private String pendingChangeBonusRequestId;
     private Double pendingChangeBonusPoints;
+    private String pendingChangeBonusReason;
+    private Map<String, Object> pointSummary;
     private String pendingChangeReferenceImagesJson;
     private Integer qualityBonusThresholdSnapshot;
     private Double qualityBonusRatioSnapshot;

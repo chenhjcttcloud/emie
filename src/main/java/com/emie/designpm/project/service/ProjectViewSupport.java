@@ -112,6 +112,7 @@ public class ProjectViewSupport {
                     item.put("pendingChangeRuleCode", task.getPendingChangeRuleCode());
                     item.put("pendingChangeBonusRequestId", task.getPendingChangeBonusRequestId());
                     item.put("pendingChangeBonusPoints", task.getPendingChangeBonusPoints());
+                    item.put("pendingChangeBonusReason", task.getPendingChangeBonusReason());
                     item.put("pendingChangeReferenceImagesJson", task.getPendingChangeReferenceImagesJson());
                     item.put("details", task.getDetails());
                     item.put("deliverables", task.getDeliverables());
@@ -134,6 +135,9 @@ public class ProjectViewSupport {
                     item.put("relation", session.userId().equals(task.getDesignerId()) ? "assignee" : "publisher");
                     List<PointLedger> ledgers = ledgersByTask.getOrDefault(task.getId(), List.of());
                     item.put(
+                            "pointSummary",
+                            SubTaskPointView.summary(ledgers, deliveriesByTask.getOrDefault(task.getId(), List.of())));
+                    item.put(
                             "issuedPoints",
                             ledgers.stream()
                                     .map(PointLedger::getPoints)
@@ -150,6 +154,8 @@ public class ProjectViewSupport {
         List<String> userIds = projectAccessService.departmentTaskUserIds(session.role(), session.userId());
         if (userIds.isEmpty()) return List.of();
         List<SubTask> tasks = subTaskRepository.findDepartmentSubTasks(userIds);
+        List<Long> taskIds = tasks.stream().map(SubTask::getId).toList();
+        Map<Long, List<PointLedger>> ledgersByTask = loadPointLedgers(taskIds);
         Map<Long, List<Map<String, Object>>> deliveriesByTask = Optional.ofNullable(
                         subTaskCommandService.getDeliveryVersionsByTaskIds(
                                 tasks.stream().map(SubTask::getId).toList()))
@@ -177,7 +183,12 @@ public class ProjectViewSupport {
                     item.put("publisherName", task.getPublisherName());
                     item.put("publisherRole", task.getPublisherRole());
                     item.put("assigneeRole", task.getAssigneeRole());
+                    item.put("pointRuleCode", task.getPointRuleCode());
+                    item.put("basePointSnapshot", task.getBasePointSnapshot());
                     item.put("pendingChangeBonusRequestId", task.getPendingChangeBonusRequestId());
+                    item.put("pendingChangeRuleCode", task.getPendingChangeRuleCode());
+                    item.put("pendingChangeBonusPoints", task.getPendingChangeBonusPoints());
+                    item.put("pendingChangeBonusReason", task.getPendingChangeBonusReason());
                     item.put("pendingChangeReferenceImagesJson", task.getPendingChangeReferenceImagesJson());
                     item.put("details", task.getDetails());
                     item.put("deliverables", task.getDeliverables());
@@ -192,6 +203,11 @@ public class ProjectViewSupport {
                     item.put("plannerName", project.getPlannerName());
                     item.put("rejectionRecords", rejectionRecords(project, task, projectLogs));
                     item.put("deliveryVersions", deliveriesByTask.getOrDefault(task.getId(), List.of()));
+                    item.put(
+                            "pointSummary",
+                            SubTaskPointView.summary(
+                                    ledgersByTask.getOrDefault(task.getId(), List.of()),
+                                    deliveriesByTask.getOrDefault(task.getId(), List.of())));
                     String uid = session.userId();
                     item.put("relation", uid.equals(task.getPublisherId()) ? "publisher" : "department_member");
                     item.put("relationLabel", uid.equals(task.getPublisherId()) ? "我发布的任务" : "部门成员关联任务");
@@ -282,6 +298,10 @@ public class ProjectViewSupport {
 
         List<SubTask> taskList = p.getTasks();
         List<Long> taskIds = taskList.stream().map(SubTask::getId).collect(Collectors.toList());
+        Map<Long, List<Map<String, Object>>> deliveriesByTask = Optional.ofNullable(
+                        subTaskCommandService.getDeliveryVersionsByTaskIds(taskIds))
+                .orElse(Map.of());
+        Map<Long, List<PointLedger>> ledgersByTask = loadPointLedgers(taskIds);
         Map<Long, List<Map<String, Object>>> scoringMap = preloadedScoring != null ? preloadedScoring : new HashMap<>();
         if (preloadedScoring == null && !taskIds.isEmpty()) {
             scoringRepository.findBySubTaskIds(taskIds).forEach(sr -> {
@@ -324,7 +344,10 @@ public class ProjectViewSupport {
                                 taskDto.setActiveRejectionCycleId(c.getId());
                                 taskDto.setActiveRejectionRole(c.getRejectionRole());
                             });
-                    taskDto.setDeliveryVersions(subTaskCommandService.getDeliveryVersions(t.getId()));
+                    List<Map<String, Object>> deliveries = deliveriesByTask.getOrDefault(t.getId(), List.of());
+                    taskDto.setDeliveryVersions(deliveries);
+                    taskDto.setPointSummary(
+                            SubTaskPointView.summary(ledgersByTask.getOrDefault(t.getId(), List.of()), deliveries));
                     return taskDto;
                 })
                 .collect(Collectors.toList()));
@@ -480,6 +503,7 @@ public class ProjectViewSupport {
         dto.setPendingChangeRuleCode(task.getPendingChangeRuleCode());
         dto.setPendingChangeBonusRequestId(task.getPendingChangeBonusRequestId());
         dto.setPendingChangeBonusPoints(task.getPendingChangeBonusPoints());
+        dto.setPendingChangeBonusReason(task.getPendingChangeBonusReason());
         dto.setPendingChangeReferenceImagesJson(task.getPendingChangeReferenceImagesJson());
         dto.setQualityBonusThresholdSnapshot(task.getQualityBonusThresholdSnapshot());
         dto.setQualityBonusRatioSnapshot(task.getQualityBonusRatioSnapshot());
@@ -509,5 +533,11 @@ public class ProjectViewSupport {
         dto.setSelfInnovation(task.getSelfInnovation());
         dto.setCreatedAt(task.getCreatedAt().format(DTF));
         return dto;
+    }
+
+    private Map<Long, List<PointLedger>> loadPointLedgers(List<Long> taskIds) {
+        if (pointLedgerRepository == null || taskIds.isEmpty()) return Map.of();
+        return pointLedgerRepository.findBySubTaskIdIn(taskIds).stream()
+                .collect(Collectors.groupingBy(PointLedger::getSubTaskId));
     }
 }

@@ -169,6 +169,123 @@ async function runChecks(page) {
   process.stdout.write('  responsive-layout ok\n');
 }
 
+async function runLazyAdminChecks(page) {
+  assert.equal(await page.evaluate(() => !!window.EMIE.modules.adminShell), false,
+    '登录首屏不应加载管理后台');
+  assert.equal(await page.evaluate(() => performance.getEntriesByType('resource')
+    .some(entry => /\/js\/(admin-|designer-evaluation)/.test(entry.name))), false,
+    '首屏不应请求管理后台脚本');
+  let releaseFailure;
+  let failedOnce = false;
+  const requests = [];
+  await page.route('**/js/admin-users.js*', async route => {
+    requests.push(route.request().url());
+    if (!failedOnce) {
+      failedOnce = true;
+      await new Promise(resolve => { releaseFailure = resolve; });
+      await route.abort('failed');
+    } else {
+      await route.continue();
+    }
+  });
+  // 同时进入两个管理视图只发起一轮加载；加载期间切页不应被旧结果覆盖。
+  const firstRequest = page.waitForRequest('**/js/admin-users.js*');
+  await page.evaluate(() => {
+    const e = window.EMIE;
+    window.lazyAdminSaved = { view: e.state.currentView, cache: e.state.cache.orders,
+      get: e.actions.apiGet, dashboard: e.actions.renderDashboard, html: document.getElementById('mainContent').innerHTML };
+    e.actions.apiGet = async () => ({});
+    e.actions.renderDashboard = async main => { main.textContent = 'lazy-newer-dashboard'; };
+    e.state.cache.orders = [{}];
+    e.state.currentView = 'admin';
+    window.lazyAdminFirst = e.actions.render();
+    window.lazyAdminConcurrent = e.loadViewModules('workload').then(() => 'ok', () => 'failed');
+  });
+  await firstRequest;
+  await page.evaluate(async () => {
+    window.EMIE.state.currentView = 'dashboard';
+    await window.EMIE.actions.render();
+  });
+  assert.equal(await page.locator('#mainContent').textContent(), 'lazy-newer-dashboard');
+  assert.equal(requests.length, 1, '并发加载不应重复下载同一模块');
+  releaseFailure();
+  await page.evaluate(async () => {
+    await window.lazyAdminFirst;
+    if (await window.lazyAdminConcurrent !== 'failed') throw new Error('应向调用方报告加载失败');
+  });
+  assert.equal(await page.locator('#mainContent').textContent(), 'lazy-newer-dashboard',
+    '旧页面加载失败不应覆盖当前页面');
+  const retried = await page.evaluate(async () => {
+    const e = window.EMIE;
+    await Promise.all([e.loadViewModules('admin'), e.loadViewModules('designer-performance')]);
+    const shell = e.modules.adminShell;
+    await e.loadViewModules('workload');
+    return !!e.modules.admin && !!e.modules.designerEvaluation && e.modules.adminShell === shell;
+  });
+  assert.equal(retried, true, '重试和跨入口切换应复用已加载模块');
+  assert.equal(requests.length, 2, '只重试失败模块');
+  assert.match(requests[1], /retry=1/);
+  await page.unroute('**/js/admin-users.js*');
+  await page.evaluate(() => {
+    const e = window.EMIE, saved = window.lazyAdminSaved;
+    e.actions.apiGet = saved.get;
+    e.actions.renderDashboard = saved.dashboard;
+    e.state.currentView = saved.view;
+    e.state.cache.orders = saved.cache;
+    document.getElementById('mainContent').innerHTML = saved.html;
+  });
+  process.stdout.write('  lazy-admin-first-load-concurrency-retry-navigation ok\n');
+}
+
+async function runNavigationDataChecks(page) {
+  const result = await page.evaluate(async () => {
+    const e = window.EMIE;
+    const routes = [
+      ['dashboard', 'renderDashboard'], ['workload', 'renderAdminWorkload'],
+      ['orders', 'renderOrderList'], ['channel', 'renderOrderList'], ['regular', 'renderOrderList'],
+      ['design-needs', 'renderOrderList'], ['tasks', 'renderMyTasks'], ['task-market', 'renderTaskMarket'],
+      ['materials', 'renderMaterialMarket'], ['image-library', 'renderImageLibrary'],
+      ['other-tasks', 'renderDepartmentTasks'], ['scoring', 'renderScoringView'], ['points', 'renderPointsView'],
+      ['designer-performance', 'renderAdminDesignerPerformance'], ['admin', 'renderAdmin'], ['logs', 'renderAdmin'],
+    ];
+    const main = document.getElementById('mainContent');
+    const saved = { view: e.state.currentView, role: e.state.currentRole, cache: e.state.cache.orders,
+      get: e.actions.apiGet, html: main.innerHTML };
+    const originalRenderers = Object.fromEntries(routes.map(([, action]) => [action, e.actions[action]]));
+    const requests = [], rendered = [];
+    try {
+      e.state.currentRole = 'admin';
+      for (const action of Object.keys(originalRenderers)) {
+        e.actions[action] = async container => {
+          rendered.push([e.state.currentView, action]);
+          container.textContent = 'rendered-' + e.state.currentView;
+        };
+      }
+      e.actions.apiGet = async url => { requests.push(url); return url.startsWith('/projects?') ? [] : {}; };
+      for (const [view] of routes) {
+        e.state.currentView = view;
+        e.state.cache.orders = [];
+        await e.actions.render();
+        if (!main.textContent.includes('rendered-' + view)) throw new Error('页面未完成渲染: ' + view);
+      }
+      return { requests, rendered, expected: routes };
+    } finally {
+      Object.assign(e.actions, originalRenderers);
+      e.actions.apiGet = saved.get;
+      e.state.currentView = saved.view;
+      e.state.currentRole = saved.role;
+      e.state.cache.orders = saved.cache;
+      main.innerHTML = saved.html;
+    }
+  });
+  assert.deepEqual(result.rendered, result.expected, '导航应继续调用各页面的数据渲染入口');
+  assert.equal(result.requests.filter(url => url.startsWith('/projects?')).length, 0,
+    '进入任一页面均不应预取未使用的全量项目列表');
+  assert.equal(result.requests.filter(url => url === '/projects/badge-stats').length, result.expected.length,
+    '侧栏统计仍应使用独立的最新服务端结果');
+  process.stdout.write('  navigation-no-unused-full-project-prefetch ok\n');
+}
+
 async function runPointRuleChecks(page) {
   const rules = [
     { ruleCode: 'D30_A', category: '产品设计', subcategory: '概念', description: '产品提案', points: 2 },
@@ -340,28 +457,28 @@ async function runPointLogChecks(page) {
   });
   try {
     const container = page.locator('#adminContent');
-    assert.equal(await container.locator('#pointLog-userId').getAttribute('type'), 'text');
+    assert.equal(await container.locator('#pointLog-personKeyword').getAttribute('type'), 'search');
     await container.locator('#pointLogResults').getByText('测试设计师').waitFor();
     assert.match(await container.locator('#pointLogResults').innerText(), /2\.5/);
     assert.match(await container.locator('#pointLogResults').innerText(), /测试企划/);
     assert.match(await container.locator('#pointAuditResults').innerText(), /历史未跟踪版本 2/);
     assert.equal(await container.locator('#pointLogResults img').count(), 0, '日志文本必须转义');
-    await container.locator('#pointLog-userId').fill('designer_test');
+    await container.locator('#pointLog-personKeyword').fill('designer_test');
     await container.locator('#pointLog-from').fill('2026-10-01');
     await container.locator('#pointLog-source').selectOption('TASK_BASE');
     await container.locator('#pointLog-keyword').fill('包装');
-    await container.locator('[data-emie-action="click:point-logs-query"]').click();
+    await container.getByRole('button', { name: '查询', exact: true }).click();
     await page.waitForFunction(() => window.pointLogRequests.length >= 4);
     const query = await page.evaluate(() => window.pointLogRequests.at(-2));
     const params = new URL(query, baseURL).searchParams;
-    assert.equal(params.get('userId'), 'designer_test');
+    assert.equal(params.get('personKeyword'), 'designer_test');
     assert.equal(params.get('source'), 'TASK_BASE');
     assert.equal(params.get('keyword'), '包装');
     await container.locator('[data-kind="logs"][data-page="1"]').click();
     await page.waitForFunction(() => window.pointLogRequests.some(url => url.startsWith('/points/logs') && new URL(url, location.origin).searchParams.get('page') === '1'));
     await container.locator('[data-emie-action="click:point-logs-reset"]').click();
-    await container.locator('#pointLog-userId').waitFor();
-    assert.equal(await container.locator('#pointLog-userId').inputValue(), '');
+    await container.locator('#pointLog-personKeyword').waitFor();
+    assert.equal(await container.locator('#pointLog-personKeyword').inputValue(), '');
   } finally {
     await page.evaluate(() => {
       window.EMIE.actions.apiGet = window.pointLogMock.get;
@@ -526,6 +643,8 @@ try {
     try {
       await page.goto(baseURL, { waitUntil: 'domcontentloaded' });
       await page.locator('html[data-app-ready]').waitFor({ timeout: 15_000 });
+      await runLazyAdminChecks(page);
+      await runNavigationDataChecks(page);
       await runChecks(page);
       await runPointRuleChecks(page);
       await runAdminSubcategoryChecks(page);
