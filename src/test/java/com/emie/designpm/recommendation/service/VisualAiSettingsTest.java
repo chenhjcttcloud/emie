@@ -5,6 +5,7 @@ import static org.mockito.Mockito.*;
 
 import com.emie.designpm.entity.VisualAiConfig;
 import com.emie.designpm.recommendation.repository.VisualAiConfigRepository;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -60,5 +61,34 @@ class VisualAiSettingsTest {
         assertEquals(false, settings.overview().get("keyStorageAvailable"));
         assertThrows(
                 IllegalArgumentException.class, () -> ReflectionTestUtils.invokeMethod(settings, "encrypt", "test"));
+    }
+
+    @Test
+    void legacyEndpointChangeCannotRetainAKeyForAnotherService() {
+        var repository = mock(VisualAiConfigRepository.class);
+        var settings = new VisualAiSettings(
+                repository,
+                "server-key",
+                "https://api.moonshot.cn/v1",
+                "kimi-k2.6",
+                "local-test-encryption-secret-32-characters",
+                true);
+        VisualAiConfig row = new VisualAiConfig();
+        row.setId(1L);
+        row.setEnabled(true);
+        row.setBaseUrl("https://api.moonshot.cn/v1");
+        row.setModel("kimi-k2.6");
+        row.setEncryptedKey(settings.encrypt("saved-kimi-key"));
+        when(repository.findById(1L)).thenReturn(Optional.of(row));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> settings.save(Map.of(
+                        "baseUrl", "https://1.1.1.1/v1", "model", "foreign-model", "enabled", true, "apiKey", "")));
+        assertEquals("https://api.moonshot.cn/v1", row.getBaseUrl());
+        verify(repository, never()).saveAndFlush(any());
+        settings.save(
+                Map.of("baseUrl", "https://1.1.1.1/v1", "model", "foreign-model", "enabled", true, "clearKey", true));
+        assertNull(row.getEncryptedKey());
+        assertFalse(settings.current().configured());
     }
 }

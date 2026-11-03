@@ -1727,3 +1727,85 @@ details.workload-provenance span{display:block;margin-top:6px}
   .free-rating-choice, .free-rating-choice span { transition: none!important; }
   .free-rating-choice:hover span, .free-rating-choice:active span { transform: none; }
 }
+
+/* 飞书同步字段：分组编辑，保留全部分组的待保存内容。 */
+.feishu-fields-page { container:feishuFields / inline-size; min-width:0; border:1px solid #e3e6f0; border-radius:15px; background:#fff; box-shadow:0 5px 18px rgba(30,41,59,.035); }
+.feishu-fields-toolbar { position:sticky; top:0; z-index:8; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:20px; border-bottom:1px solid #eceef5; border-radius:14px 14px 0 0; background:rgba(255,255,255,.98); }
+.feishu-fields-toolbar h3 { display:flex; align-items:center; flex-wrap:wrap; gap:9px; margin:0; color:#273247; font-size:16px; font-weight:650; }
+.feishu-fields-toolbar p { margin:6px 0 0; color:#8490a3; font-size:12px; line-height:1.6; }
+.feishu-fields-mode { padding:3px 7px; border:1px solid #e6e2fb; border-radius:5px; background:#f6f4ff; color:#8476b6; font-size:10px; font-weight:500; }
+.feishu-fields-actions { display:flex; align-items:center; flex:none; gap:8px; }
+.feishu-fields-actions .btn { min-height:35px; padding:8px 13px; border-radius:8px; font-size:12px; white-space:nowrap; }
+.feishu-fields-body { padding:20px; }
+.feishu-field-groups { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:17px; }
+.feishu-field-group { display:flex; align-items:center; gap:10px; min-width:0; padding:14px 12px; border:1px solid #e5e8f1; border-radius:11px; background:#fff; color:#667187; text-align:left; font:inherit; cursor:pointer; transition:background .15s,border-color .15s; }
+.feishu-field-group:hover { border-color:#c8c3ee; background:#faf9ff; }
+.feishu-field-group.is-active { border-color:#c9c1fa; background:#f6f4ff; box-shadow:0 0 0 1px #eeebff inset; color:#5b4cc8; }
+.feishu-field-group-icon { display:grid; place-items:center; flex:0 0 31px; height:34px; border-radius:9px; background:#f1f3f8; color:#929aab; font-size:20px; }
+.feishu-field-group.is-active .feishu-field-group-icon { background:#eae5ff; color:#7763da; }
+.feishu-field-group > span:nth-child(2) { display:flex; flex-direction:column; min-width:0; gap:5px; }
+.feishu-field-group strong { overflow:hidden; color:inherit; font-size:12px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
+.feishu-field-group small { overflow:hidden; color:#9a9eb1; font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+.feishu-field-group > b { flex:none; margin-left:auto; align-self:flex-start; color:#a7adbc; font-size:10px; font-weight:500; font-variant-numeric:tabular-nums; }
+.feishu-field-group.is-active > b { color:#9585ce; }
+.feishu-field-group:focus-visible { outline:2px solid #a799ea; outline-offset:2px; }
+.feishu-fields-guidance { display:flex; align-items:flex-start; gap:8px; padding:11px 13px; border:1px solid #e8ecf5; border-radius:8px; background:#f8faff; color:#7b89a2; font-size:11px; line-height:1.75; }
+.feishu-fields-guidance > span { flex:none; color:#a0aec6; font-size:14px; line-height:1.4; }
+.feishu-fields-guidance p { margin:0; }
+.feishu-fields-guidance p > span { margin-left:4px; color:#9aa4b8; }
+.feishu-fields-diagnostics:empty { display:none; }
+.feishu-fields-diagnostics { margin-top:12px; }
+.feishu-field-panel[hidden] { display:none!important; }
+.feishu-field-panel-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:22px 0 14px; }
+.feishu-field-panel-heading h4 { margin:0; color:#384458; font-size:14px; font-weight:650; }
+.feishu-field-panel-heading p { margin:5px 0 0; color:#9ba3b2; font-size:11px; }
+.feishu-field-panel-heading p strong { color:#8777c1; font-weight:600; }
+.feishu-field-panel-heading > span { color:#a7adbb; font-size:10px; }
+.feishu-field-table-scroll { max-width:100%; overflow-x:auto; border:1px solid #e7eaf2; border-radius:10px; scrollbar-width:thin; }
+.feishu-field-table { width:100%; min-width:590px; border-collapse:collapse; table-layout:fixed; font-size:12px; }
+.feishu-field-table thead th { padding:12px 16px; border-bottom:1px solid #e6e9f2; background:#f6f7fb; color:#929caf; font-size:10px; font-weight:600; letter-spacing:.02em; text-align:left; }
+.feishu-field-table thead th:nth-child(2) { width:29%; }
+.feishu-field-table tbody th,.feishu-field-table tbody td { height:49px; padding:7px 16px; border-bottom:1px solid #eff1f6; color:#69748a; font-size:12px; font-weight:400; text-align:left; vertical-align:middle; }
+.feishu-field-table tbody th { color:#515d74; }
+.feishu-field-table tbody tr:last-child th,.feishu-field-table tbody tr:last-child td { border-bottom:0; }
+.feishu-field-table tbody tr:hover { background:#fcfbff; }
+.feishu-field-table .feishu-field-check-cell { width:70px; padding-right:12px; padding-left:16px; text-align:center; }
+.feishu-field-table .feishu-field-type-cell { width:130px; }
+.feishu-field-enabled { width:15px; height:15px; margin:0; vertical-align:middle; accent-color:#7864d8; cursor:pointer; }
+.feishu-field-enabled:disabled { cursor:default; opacity:.6; }
+.feishu-field-enabled:focus-visible { outline:2px solid #baadf3; outline-offset:3px; }
+.feishu-field-table .feishu-field-target { display:block; width:100%; box-sizing:border-box; min-height:33px; padding:7px 10px; border:1px solid #e1e5ef; border-radius:7px; background:#fff; color:#606d85; font:inherit; font-size:12px; line-height:1.5; transition:border-color .15s,box-shadow .15s; }
+.feishu-field-table .feishu-field-target:hover:not(:disabled) { border-color:#c5bde9; }
+.feishu-field-table .feishu-field-target:focus { outline:0; border-color:#a291e1; box-shadow:0 0 0 3px #f0ecfc; }
+.feishu-field-table .feishu-field-target:disabled { border-color:#edf0f6; background:#f8f9fc; color:#a5adbd; }
+.feishu-field-table tr.is-off th { color:#a9afbd; }
+.feishu-field-table tr.is-off .feishu-field-target { background:#fafbfc; color:#a2aabd; }
+.feishu-field-required { display:inline-block; margin-left:7px; padding:2px 5px; border:1px solid #e9e4f6; border-radius:4px; background:#f7f4fc; color:#a193b7; font-size:9px; vertical-align:middle; }
+.feishu-field-type { display:inline-block; max-width:100%; padding:4px 7px; border-radius:5px; background:#f1f3f7; color:#929caf; font-size:10px; white-space:nowrap; }
+.feishu-field-type.is-number { background:#fff7ea; color:#b19a6b; }
+.feishu-field-type.is-date { background:#edf5fc; color:#87a1bd; }
+.feishu-field-type.is-relation { background:#f1edfb; color:#a28cc4; }
+.feishu-fields-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:15px; color:#a2aabc; font-size:10px; line-height:1.6; }
+.feishu-fields-footer > span:first-child { display:flex; align-items:center; flex:none; gap:5px; }
+.feishu-fields-footer i { width:5px; height:5px; margin-right:2px; border-radius:50%; background:#a594dd; }
+.feishu-fields-footer strong { color:#8377a9; font-weight:600; }
+@container feishuFields (max-width:780px) { .feishu-field-groups { grid-template-columns:repeat(2,minmax(0,1fr)); } .feishu-field-group { padding:12px; } }
+@container feishuFields (max-width:510px) { .feishu-fields-toolbar { align-items:flex-start; flex-wrap:wrap; gap:12px; padding:16px; } .feishu-fields-actions { width:100%; justify-content:flex-end; } .feishu-fields-body { padding:14px; } .feishu-field-group { gap:7px; padding:10px 8px; } .feishu-field-group-icon { flex-basis:25px; height:30px; font-size:17px; } .feishu-field-group strong { font-size:11px; } .feishu-field-group small { font-size:9px; } .feishu-field-group > b { font-size:9px; } .feishu-fields-guidance p > span { display:block; margin-left:0; } .feishu-field-panel-heading > span { display:none; } .feishu-fields-footer { align-items:flex-start; flex-direction:column; gap:5px; } }
+@media(prefers-reduced-motion:reduce) { .feishu-field-group,.feishu-field-target { transition:none!important; } }
+
+/* 管理页手机顶栏：身份信息只显示一次，为系统名称和退出按钮留出空间。 */
+@media(max-width:480px) {
+  body:has(.admin-page) .header { gap:8px; padding:0 10px; }
+  body:has(.admin-page) .header-left { flex:1; min-width:0; gap:8px; }
+  body:has(.admin-page) .header .logo { min-width:0; gap:6px; font-size:15px; line-height:1.3; }
+  body:has(.admin-page) .header .logo > img { flex:none; max-width:28px; height:28px!important; object-fit:contain; }
+  body:has(.admin-page) .header .logo > span:first-of-type { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  body:has(.admin-page) .header .app-version { display:none; }
+  body:has(.admin-page) .header-right { flex:none; gap:7px; }
+  body:has(.admin-page) .header-right:has(.identity-switcher) .user-display { display:none; }
+  body:has(.admin-page) .identity-trigger { max-width:112px; gap:6px; padding-right:6px; }
+  body:has(.admin-page) .identity-info { min-width:0; }
+  body:has(.admin-page) .identity-name { max-width:58px; overflow:hidden; text-overflow:ellipsis; }
+  body:has(.admin-page) .identity-chevron { width:13px; height:13px; }
+  body:has(.admin-page) .header .logout-btn { padding:6px 9px; }
+}

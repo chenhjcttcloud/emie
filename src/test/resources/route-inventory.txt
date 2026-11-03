@@ -31,10 +31,11 @@ GET /api/admin/sync/v2/status
 GET /api/admin/users
 GET /api/admin/users/page
 GET /api/admin/version/stream
-GET /api/admin/visual-ai-config
 GET /api/admin/workload
 GET /api/admin/workload/details
 GET /api/admin/workload/timeline
+GET /api/assistant/config
+GET /api/assistant/model
 GET /api/auth/feishu/callback
 GET /api/auth/feishu/config
 GET /api/auth/me
@@ -134,8 +135,9 @@ POST /api/admin/sync/v2/prepare
 POST /api/admin/sync/v2/rollback
 POST /api/admin/sync/validate-backups
 POST /api/admin/upload-image
-POST /api/admin/visual-ai-config
-POST /api/admin/visual-ai-config/index-library
+POST /api/assistant/chat
+POST /api/assistant/config
+POST /api/assistant/config/models
 POST /api/auth/feishu/auto-login
 POST /api/auth/feishu/exchange
 POST /api/auth/impersonate

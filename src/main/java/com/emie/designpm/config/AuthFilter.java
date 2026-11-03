@@ -179,10 +179,10 @@ public class AuthFilter implements Filter {
         if (path.startsWith("/api/system/")) return "admin.system_monitor.view";
         if (path.startsWith("/api/project-import/")) return "admin.project_import.execute";
         if (path.startsWith("/api/share/admin/")) return "admin.share.manage";
-        if (!path.startsWith("/api/admin/") || path.equals("/api/admin/public-config")) return null;
-        if (path.startsWith("/api/admin/visual-ai-config")) {
+        if (path.startsWith("/api/assistant/config")) {
             return "GET".equals(method) ? "admin.config.view" : "admin.config.edit";
         }
+        if (!path.startsWith("/api/admin/") || path.equals("/api/admin/public-config")) return null;
         if (path.startsWith("/api/admin/configs")) {
             return "GET".equals(method) ? "admin.config.view" : "admin.config.edit";
         }
@@ -202,7 +202,9 @@ public class AuthFilter implements Filter {
         if (path.startsWith("/api/admin/clear-data")) return "admin.data.clear";
         if (path.startsWith("/api/admin/workload")) return "admin.workload.view";
         if (path.startsWith("/api/admin/files")) return "admin.file_archive.manage";
-        if (path.startsWith("/api/admin/sync")) return "admin.feishu_sync.execute";
+        if (path.startsWith("/api/admin/sync")) {
+            return "GET".equals(method) ? "admin.feishu_sync.view" : "admin.feishu_sync.execute";
+        }
         return "page.admin.view";
     }
 }

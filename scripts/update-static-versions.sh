@@ -50,6 +50,17 @@ if ! git diff --quiet -- "$recommendation_css" || [[ -n "$(git ls-files --others
   fi
 fi
 
+# 助手使用独立样式，发布样式更新时同步刷新缓存。
+assistant_css=src/main/resources/static/css/business-assistant.css
+if ! git diff --quiet -- "$assistant_css" || [[ -n "$(git ls-files --others --exclude-standard -- "$assistant_css")" ]]; then
+  current="$(sed -n 's#.*href="/css/business-assistant.css?v=\([0-9][0-9]*\)".*#\1#p' "$INDEX" | head -1)"
+  if [[ -n "$current" ]]; then
+    next=$((current + 1))
+    sed -i '' "s#business-assistant.css?v=${current}#business-assistant.css?v=${next}#" "$INDEX"
+    printf 'cache_bump=business-assistant.css v%s->v%s\n' "$current" "$next"
+  fi
+fi
+
 # bootstrap 本身是唯一入口；任一模块版本变化后，入口也必须更新，确保浏览器不复用旧 import 图。
 current="$(sed -n 's#.*<script type="module" src="/js/bootstrap.js?v=\([0-9][0-9]*\)"></script>.*#\1#p' "$INDEX" | head -1)"
 if [[ -n "$current" ]]; then

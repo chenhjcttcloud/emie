@@ -270,6 +270,8 @@ function openPublishedSubTaskDetail(taskId) {
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'publishedSubTaskDetailModal';
+  modal.dataset.assistantProjectId = String(task.projectId);
+  modal.dataset.assistantTaskId = String(task.id);
   modal.innerHTML = `
     <div class="modal" style="max-width:760px;">
       <div class="modal-header">

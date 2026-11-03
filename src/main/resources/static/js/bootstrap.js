@@ -1,28 +1,27 @@
 import './core-runtime.js?v=328';
 import './event-runtime.js?v=269';
-import './core-auth.js?v=423';
-import './core-identity.js?v=496';
+import './core-auth.js?v=426';
+import './core-identity.js?v=498';
 import './core-shell.js?v=517';
-import './core-ui.js?v=521';
+import './core-ui.js?v=523';
 import './core.js?v=147';
 import './dashboard-projects.js?v=493';
 import './dashboard-home.js?v=623';
 import './dashboard-lists.js?v=429';
 import './dashboard-scoring.js?v=345';
 import './dashboard-points.js?v=383';
-import './dashboard-designer.js?v=605';
+import './dashboard-designer.js?v=606';
 import './dashboard.js?v=219';
 import './material-market.js?v=162';
-import './image-library.js?v=114';
-import './task-recommendations.js?v=5';
-import './visual-ai-settings.js?v=5';
+import './image-library.js?v=115';
+import './task-recommendations.js?v=6';
 import './project-uploads.js?v=498';
 import './project-form.js?v=459';
-import './project-detail.js?v=668';
+import './project-detail.js?v=669';
 import './project-tasks.js?v=696';
 import './project-sharing.js?v=264';
 import './projects.js?v=148';
-import './admin-shell.js?v=451';
+import './admin-shell.js?v=454';
 import './admin-users.js?v=279';
 import './admin-roles.js?v=229';
 import './admin-catalog.js?v=276';
@@ -35,6 +34,7 @@ import './admin-storage.js?v=321';
 import './admin-workload.js?v=526';
 import './admin.js?v=147';
 import './files.js?v=302';
+import './business-assistant.js?v=7';
 
 const EMIE = window.EMIE;
 const requiredEmieModules = [
@@ -42,7 +42,7 @@ const requiredEmieModules = [
   'dashboardProjects', 'dashboardHome', 'dashboardLists', 'dashboardScoring', 'dashboardPoints', 'dashboardDesigner', 'dashboard',
   'projectUploads', 'projectForm', 'projectDetail', 'projectTasks', 'projectSharing', 'projects', 'materialMarket', 'imageLibrary',
   'adminShell', 'adminUsers', 'adminRoles', 'adminCatalog', 'adminOrg', 'adminScoring', 'designerEvaluation', 'adminAudit',
-  'adminStorage', 'adminWorkload', 'admin', 'files', 'taskRecommendations', 'visualAiSettings',
+  'adminStorage', 'adminWorkload', 'admin', 'files', 'taskRecommendations', 'businessAssistant',
 ];
 const missingEmieModules = requiredEmieModules.filter(name => !EMIE.modules[name]);
 if (missingEmieModules.length) {

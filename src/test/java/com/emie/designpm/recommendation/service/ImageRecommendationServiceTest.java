@@ -94,7 +94,7 @@ class ImageRecommendationServiceTest {
     }
 
     @Test
-    void analyzesAllNineAccessibleReferenceImagesIncludingThoseAfterTheThird() {
+    void referenceMetadataRemainsUsableWithoutStartingImageAnalysis() {
         List<Map<String, String>> refs = new ArrayList<>();
         for (int i = 1; i <= 9; i++) {
             String name = "reference-" + i + ".png";
@@ -111,8 +111,22 @@ class ImageRecommendationServiceTest {
         } catch (Exception e) {
             throw new AssertionError(e);
         }
-        get(designer);
-        for (Map<String, String> ref : refs) verify(analysis).profile(ref.get("storedName"));
+        var metadataService = new ImageRecommendationService(
+                library,
+                files,
+                tasks,
+                access,
+                permissions,
+                links,
+                logs,
+                new VisualAnalysisService(),
+                new ImageRecommendationMatcher());
+        var response = metadataService.recommendations(11L, 22L, 8, false, designer);
+        assertEquals(false, response.get("aiConfigured"));
+        assertEquals(false, response.get("analysisPending"));
+        assertEquals("METADATA", response.get("status"));
+        assertFalse(items(response).isEmpty());
+        assertTrue(items(response).stream().allMatch(item -> "METADATA".equals(item.analysisStatus())));
     }
 
     @Test
@@ -163,20 +177,6 @@ class ImageRecommendationServiceTest {
         assertEquals(false, get(designer).get("cached"));
         item.setNotes("新增太空主题图案");
         assertEquals(false, get(designer).get("cached"));
-    }
-
-    @Test
-    void completedVisualAnalysisInvalidatesRankingCache() {
-        get(designer);
-        profiles.put(
-                "image-1.png",
-                new AnalysisView(
-                        "READY", ImageRecommendationMatcherTest.profile(List.of("星星"), List.of("扁平插画")), "已分析"));
-        when(analysis.configured()).thenReturn(true);
-        Map<String, Object> ready = get(designer);
-        assertEquals(false, ready.get("cached"));
-        assertEquals("READY", ready.get("status"));
-        assertEquals("READY", items(ready).getFirst().analysisStatus());
     }
 
     @Test

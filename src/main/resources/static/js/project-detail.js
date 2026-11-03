@@ -94,6 +94,7 @@ async function openProjectDetail(pid, taskId) {
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
     modal.id = 'projectDetailModal';
+    modal.dataset.assistantProjectId = String(detail.id);
     modal.innerHTML = `
     <button class="modal-close-float" data-emie-action="click:detail-close">✕</button>
       <div class="modal modal-lg">
@@ -341,6 +342,8 @@ function openProjectSubTaskDetail(event, taskId) {
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'projectSubTaskDetailModal';
+  modal.dataset.assistantProjectId = String(EMIE.projectState.currentProjectDetail.id);
+  modal.dataset.assistantTaskId = String(task.id);
   modal.innerHTML = `
     <div class="modal" style="max-width:760px;">
       <div class="modal-header">

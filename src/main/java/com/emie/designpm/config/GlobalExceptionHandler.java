@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /** 统一系统异常边界：记录完整堆栈，向客户端返回稳定且不泄露内部实现的错误结构。 */
 @RestControllerAdvice
@@ -69,6 +70,14 @@ public class GlobalExceptionHandler {
         log.warn("请求返回状态码 traceId={} path={} status={}", traceId, request.getRequestURI(), ex.getStatusCode());
         String message = ex.getReason() == null || ex.getReason().isBlank() ? "请求无法完成" : ex.getReason();
         return response(HttpStatus.valueOf(ex.getStatusCode().value()), message, null, traceId);
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleMissingResource(
+            NoResourceFoundException ex, HttpServletRequest request) {
+        String traceId = traceId();
+        log.debug("资源不存在 traceId={} path={}", traceId, request.getRequestURI());
+        return response(HttpStatus.NOT_FOUND, "请求的资源不存在", null, traceId);
     }
 
     @ExceptionHandler(Exception.class)

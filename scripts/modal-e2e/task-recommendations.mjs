@@ -44,7 +44,7 @@ if (process.env.EMIE_E2E_LOCAL_STATIC === '1') {
 try {
   await page.goto(baseURL, { waitUntil: 'domcontentloaded' });
   await page.locator('html[data-app-ready]').waitFor({ timeout: 20_000 });
-  await page.waitForFunction(() => window.EMIE?.modules?.taskRecommendations && window.EMIE?.modules?.visualAiSettings);
+  await page.waitForFunction(() => window.EMIE?.modules?.taskRecommendations && window.EMIE?.modules?.businessAssistant);
   await page.evaluate(() => {
     const e = window.EMIE;
     document.getElementById('loginPage').style.display = 'none';
@@ -56,13 +56,12 @@ try {
     e.state.currentRole = 'designer'; e.state.currentUserId = 'ui-simulation-designer';
     e.state.authUser = { userId: 'ui-simulation-designer', name: 'UI模拟设计师' };
     const names = ['森林野餐 · 主视觉', '森林伙伴 · 角色组合', '自然日记 · 春日配色', '林间散步 · 连续纹样', '午后野餐 · 包装应用', '森林来信 · 标签设计', '手绘小屋 · 元素合集', '户外假日 · 场景插画', 'UI模拟 · 额外图档'];
-    const items = names.map((name, index) => ({ id: index + 1, libraryItemId: index + 1, name, ipName: '森林伙伴', subOptions: ['春日系列'], reasons: [index % 2 ? '参考图元素相近：自然、野餐' : '同系列：森林伙伴 / 春日系列', index % 2 ? '配色与手绘风格接近' : '与任务的挂链设计需求相关'], score: 90 - index, analysisStatus: 'READY', images: [{ storedName: `ui-simulation-${index + 1}.${index === 1 ? 'ai' : 'png'}`, name: `UI模拟-${index + 1}.${index === 1 ? 'ai' : 'png'}`, size: 1024 }, ...(index === 2 ? [{ storedName: 'ui-simulation-33.png', name: 'UI模拟-补充预览.png', size: 2048 }] : [])] }));
+    const items = names.map((name, index) => ({ id: index + 1, libraryItemId: index + 1, name, ipName: '森林伙伴', subOptions: ['春日系列'], reasons: [index % 2 ? '图档标签与需求相关：自然、野餐' : '同系列：森林伙伴 / 春日系列', '与任务的挂链设计需求相关'], score: 90 - index, analysisStatus: 'DISABLED', images: [{ storedName: `ui-simulation-${index + 1}.${index === 1 ? 'ai' : 'png'}`, name: `UI模拟-${index + 1}.${index === 1 ? 'ai' : 'png'}`, size: 1024 }, ...(index === 2 ? [{ storedName: 'ui-simulation-33.png', name: 'UI模拟-补充预览.png', size: 2048 }] : [])] }));
     const task = { id: 91001, projectId: 92001, name: 'UI模拟 · 春日系列手机挂链设计', projectName: 'UI模拟 · 森林伙伴产品企划', details: '为森林伙伴春日系列设计手机挂链。延续自然、温暖的配色与手绘风格，结合小动物、野餐和植物元素，寻找可复用的主视觉与纹样。', status: 'accepted', designerId: 'ui-simulation-designer', designerName: 'UI模拟设计师', publisherName: 'UI模拟产品企划', plannedDate: '2026-11-20', referenceImagesJson: null, attachmentsJson: null, rejectionRecords: [], deliveryVersions: [] };
     e.dashboardState.designerTaskCache = [task];
     e.projectState.currentProjectDetail = { id: task.projectId, name: task.projectName, tasks: [task] };
-    const f = window.recommendationFixture = { task, items, associated: [], gets: [], posts: [], previews: [], downloads: [], pending: [], mode: 'ready', keyStorageAvailable: true };
-    f.payload = () => ({ items: f.mode === 'empty' ? [] : items, linkedItems: [], associatedLibraryItemIds: [...f.associated], canAssociate: true, status: f.mode === 'metadata' ? 'METADATA' : 'READY', aiConfigured: f.mode !== 'metadata', analysisPending: false, generatedAt: new Date().toISOString() });
-    f.config = () => ({ baseUrl: 'https://api.moonshot.cn/v1', model: 'kimi-k2.6', enabled: true, keyConfigured: true, keyStorageAvailable: f.keyStorageAvailable, indexStats: { total: 24, ready: 16, pending: 8, failed: 0, queued: 0 } });
+    const f = window.recommendationFixture = { task, items, associated: [], gets: [], posts: [], previews: [], downloads: [], pending: [], mode: 'ready' };
+    f.payload = () => ({ items: f.mode === 'empty' ? [] : items, linkedItems: [], associatedLibraryItemIds: [...f.associated], canAssociate: true, status: 'METADATA', aiConfigured: false, analysisPending: false, generatedAt: new Date().toISOString() });
     e.actions.apiGet = async url => {
       f.gets.push(url);
       if (url.includes('/image-recommendations')) {
@@ -70,7 +69,6 @@ try {
         if (f.mode === 'error') throw new Error('UI模拟 · 推荐服务暂时不可用');
         return f.payload();
       }
-      if (url === '/admin/visual-ai-config') return f.config();
       if (url === '/image-library') return [];
       throw new Error(`UI模拟禁止访问真实接口：${url}`);
     };
@@ -82,8 +80,6 @@ try {
         await new Promise(resolve => setTimeout(resolve, 50));
         return f.payload();
       }
-      if (url === '/admin/visual-ai-config') return f.config();
-      if (url === '/admin/visual-ai-config/index-library') return { queued: 8, indexStats: { total: 24, ready: 16, pending: 0, failed: 0, queued: 8 }, message: 'UI模拟 · 已安排 8 个文件进行分析' };
       throw new Error(`UI模拟禁止修改真实接口：${url}`);
     };
     e.actions.previewImage = (...args) => f.previews.push({ type: 'image', args });
@@ -96,7 +92,7 @@ try {
   let detail = page.locator('#publishedSubTaskDetailModal');
   await detail.locator('.task-recommendation-card').first().waitFor();
   assert.equal(await detail.locator('.task-recommendations-grid > .task-recommendation-card').count(), 8, 'defaults to at most eight recommended library items');
-  assert.match(await detail.innerText(), /参考图元素相近/);
+  assert.match(await detail.innerText(), /图档标签与需求相关/);
   assert.match(await detail.innerText(), /同系列/);
   assert.equal(await page.evaluate(() => window.recommendationFixture.gets[0]), '/projects/92001/subtasks/91001/image-recommendations?limit=8');
   // A narrow drawer uses two columns; scroll each card into view to exercise lazy images.
@@ -155,29 +151,12 @@ try {
 
   await page.evaluate(async () => { const e = window.EMIE; e.state.currentRole = 'designer'; await e.actions.renderImageLibrary(document.getElementById('mainContent')); });
   assert.equal(await page.locator('[data-emie-action="click:visual-ai-settings-open"]').count(), 0);
-  await page.evaluate(() => window.EMIE.actions.openVisualAiSettings());
-  assert.equal(await page.locator('#visualAiSettingsModal').count(), 0, 'designer cannot open AI configuration');
+  assert.equal(await page.evaluate(() => typeof window.EMIE.actions.openVisualAiSettings), 'undefined');
   await page.evaluate(async () => { const e = window.EMIE; e.state.currentRole = 'admin'; await e.actions.renderImageLibrary(document.getElementById('mainContent')); });
-  await page.locator('[data-emie-action="click:visual-ai-settings-open"]').click();
-  const settings = page.locator('#visualAiSettingsModal');
-  await settings.locator('#visualAiModel').waitFor();
-  assert.equal(await settings.locator('#visualAiApiKey').inputValue(), '');
-  await settings.locator('#visualAiSettingsSubmit').click();
-  await settings.getByText('设置已保存。重新打开任务即可使用新的识图配置。').waitFor();
-  const settingsPost = await page.evaluate(() => window.recommendationFixture.posts.find(entry => entry.url === '/admin/visual-ai-config'));
-  assert.equal('apiKey' in settingsPost.body, false, 'empty key must preserve existing server key');
-  await settings.locator('#visualAiIndexButton').click();
-  await page.locator('#systemConfirmModal [data-action="cancel"]').click();
-  assert.equal(await page.evaluate(() => window.recommendationFixture.posts.filter(entry => entry.url.endsWith('/index-library')).length), 0);
-  await settings.locator('#visualAiIndexButton').click();
-  await page.locator('#systemConfirmModal [data-action="confirm"]').click();
-  await settings.getByText('UI模拟 · 已安排 8 个文件进行分析').waitFor();
-  await settings.locator('[data-emie-action="click:visual-ai-settings-close"]').first().click();
-  await settings.waitFor({ state: 'detached' });
-  await page.evaluate(() => { window.recommendationFixture.keyStorageAvailable = false; window.EMIE.actions.openVisualAiSettings(); });
-  await page.locator('#visualAiApiKey').waitFor();
-  assert.equal(await page.locator('#visualAiApiKey').isDisabled(), true);
-  await page.locator('#visualAiSettingsModal [data-emie-action="click:visual-ai-settings-close"]').first().click();
+  assert.equal(await page.locator('[data-emie-action="click:visual-ai-settings-open"]').count(), 0, 'retired image-analysis settings must not appear for admins');
+  assert.equal(await page.locator('#visualAiSettingsModal').count(), 0);
+  assert.equal(await page.evaluate(() => window.recommendationFixture.gets.some(url => url.includes('/visual-ai-config'))), false);
+  assert.equal(await page.evaluate(() => window.recommendationFixture.posts.some(entry => entry.url.includes('/visual-ai-config'))), false);
 
   assert.deepEqual(errors, [], `browser errors: ${errors.join('; ')}`);
   console.log(`task recommendation browser checks passed; UI simulation screenshot: ${screenshot}`);

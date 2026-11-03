@@ -78,6 +78,8 @@ public final class PermissionCatalog {
                 permissions.add("page.subtasks.market.view");
                 permissions.add("page.workload.view");
                 permissions.add("page.admin.view");
+                // 旧管理员可查看同步运行情况；执行、重试和切换 Base 仍需独立授权。
+                permissions.add("admin.feishu_sync.view");
                 // 身份切换是管理员验证各角色权限的恢复入口；兼容模式避免新测试库
                 // 尚未执行权限迁移时把管理员意外锁死，显式 deny 仍由 PermissionService 优先移除。
                 permissions.add("admin.identity.switch");

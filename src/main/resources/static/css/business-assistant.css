@@ -1,0 +1,186 @@
+#businessAssistantRoot[hidden],#businessAssistantRoot [hidden]{display:none!important}
+.business-assistant-launcher{position:fixed;right:24px;bottom:22px;z-index:340;display:flex;align-items:center;gap:9px;min-height:48px;padding:12px 18px;border:1px solid #6255ed;border-radius:28px;background:#5546e8;color:#fff;font-family:inherit;font-size:14px;font-weight:600;line-height:1.3;box-shadow:0 7px 24px #4940bf35;cursor:pointer;transition:background .15s,box-shadow .15s}
+.business-assistant-launcher:hover{background:#4738d7;box-shadow:0 8px 28px #4940bf4d}
+.business-assistant-launcher>span:first-child{font-size:21px;line-height:1}
+.business-assistant-panel{position:fixed;right:24px;bottom:82px;z-index:350;display:flex;flex-direction:column;width:min(440px,calc(100vw - 32px));height:min(690px,calc(100dvh - 110px));min-height:280px;overflow:hidden;border:1px solid #dfe2f1;border-radius:18px;background:#fff;box-shadow:0 18px 70px #20224b2e;color:var(--gray-800,#243041);font-family:inherit;font-size:13px;text-align:left}
+#businessAssistantRoot.has-business-dialog .business-assistant-launcher{bottom:94px}
+#businessAssistantRoot.has-business-dialog .business-assistant-panel{bottom:154px;height:min(620px,calc(100dvh - 176px))}
+.business-assistant-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:17px 16px;border-bottom:1px solid #e9ebf4;background:linear-gradient(115deg,#f4f3ff,#fbfcff);flex:0 0 auto}
+.business-assistant-header h2{margin:0;color:#292546;font-size:15px;font-weight:700;line-height:1.4}
+.business-assistant-header p{margin:4px 0 0;color:#73788b;font-size:11px;max-width:255px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.business-assistant-header>div:last-child{display:flex;align-items:center;gap:2px}
+.business-assistant-icon{display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:8px;background:transparent;color:#77778c;font-size:17px;cursor:pointer}
+.business-assistant-icon:hover{background:#e9e7fb;color:#5144d1}
+.business-assistant-icon:disabled{opacity:.45;cursor:wait}
+.business-assistant-chat{display:flex;flex:1;flex-direction:column;min-height:0}
+.business-assistant-messages{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:18px 15px 12px;background:#fcfcff}
+.business-assistant-welcome{padding:18px 5px 7px}
+.business-assistant-welcome-icon{display:grid;place-items:center;width:44px;height:44px;margin-bottom:14px;border-radius:14px;background:#edeaff;color:#6653e9;font-size:28px}
+.business-assistant-welcome h3{margin:0 0 9px;font-size:18px;color:#292546}
+.business-assistant-welcome p{margin:0 0 18px;line-height:1.8;color:#73788b}
+.business-assistant-welcome small{display:block;margin-top:18px;font-size:11px;line-height:1.7;color:#9093a2}
+.business-assistant-shortcuts{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.business-assistant-shortcuts>button{max-width:100%;padding:7px 10px;border:1px solid #dedff0;border-radius:9px;background:#fff;color:#67637e;font:inherit;font-size:12px;line-height:1.5;cursor:pointer;text-align:left;overflow-wrap:anywhere}
+.business-assistant-shortcuts>button:hover{border-color:#c0b9f3;background:#f5f3ff;color:#5546d6}
+.business-assistant-message{margin:0 0 18px;overflow-wrap:anywhere}
+.business-assistant-message.is-user{display:flex;justify-content:flex-end;padding-left:38px}
+.business-assistant-message.is-user>div{max-width:100%;padding:10px 13px;background:#eeecfc;color:#42386b;border-radius:13px 13px 3px 13px;white-space:pre-wrap;line-height:1.75}
+.business-assistant-message.is-user small{display:block;margin-top:7px;font-size:11px;color:#80749d;white-space:normal}
+.business-assistant-message.is-assistant{border-bottom:1px solid #efeff6;padding-bottom:16px}
+.business-assistant-mode{display:inline-flex;margin:0 0 7px;padding:3px 7px;border-radius:5px;background:#f0eefb;color:#746596;font-size:10px;font-weight:600}
+.business-assistant-answer{white-space:pre-wrap;line-height:1.85;color:#495165}
+.business-assistant-service{margin:10px 0 0;padding:9px 10px;background:#fff9ee;border:1px solid #f2e4c7;border-radius:8px;color:#947145;font-size:11px;line-height:1.7;overflow-wrap:anywhere}
+.business-assistant-sources{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
+.business-assistant-source{padding:5px 8px;border:0;border-radius:6px;background:#eeedf8;color:#665b94;font:inherit;font-size:11px;cursor:pointer;max-width:100%;text-align:left;overflow-wrap:anywhere}
+.business-assistant-task{display:flex;flex-direction:column;gap:5px;width:100%;margin-top:8px;padding:11px;border:1px solid #e1e4ef;border-radius:9px;background:#fff;text-align:left;cursor:pointer;font:inherit;color:#465067}
+.business-assistant-task strong{font-size:12px;line-height:1.55;overflow-wrap:anywhere}
+.business-assistant-task span{font-size:11px;color:#888ca0}
+.business-assistant-task:hover{border-color:#bcb5ef;background:#faf9ff}
+.business-assistant-image{display:flex;gap:10px;margin-top:10px;padding:9px;border:1px solid #e6e7f0;border-radius:10px;background:#fff;min-width:0}
+.business-assistant-image>img{width:74px;height:85px;flex:0 0 74px;object-fit:contain;border-radius:7px;background:#f4f4f8}
+.business-assistant-image>div{flex:1;min-width:0}
+.business-assistant-image strong{display:block;font-size:12px;line-height:1.6;color:#4b4d65}
+.business-assistant-image span{display:block;font-size:10px;color:#9183a1;margin-top:3px}
+.business-assistant-image p{margin:5px 0;font-size:10px;line-height:1.65;color:#8b8b9d}
+.business-assistant-image-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px}
+.business-assistant-image-actions button{padding:0;border:0;background:none;font:inherit;font-size:10px;color:#6c5fc1;cursor:pointer}
+.business-assistant-pending{display:flex;align-items:center;gap:7px;flex:0 0 auto;padding:8px 16px;color:#9185ae;background:#fcfcff;font-size:11px}
+.business-assistant-pending>span{width:10px;height:10px;border:2px solid #e1dcf8;border-top-color:#8c7ac8;border-radius:50%;animation:assistantSpin .8s linear infinite}
+.business-assistant-composer{padding:12px 14px 9px;border-top:1px solid #e9ebf4;background:#fff;flex:0 0 auto}
+.business-assistant-input-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+#businessAssistantInput{display:block;width:100%;min-height:58px;max-height:120px;resize:vertical;padding:9px 10px;border:1px solid #dfe1ed;border-radius:10px;background:#fcfcff;font:inherit;font-size:13px;color:#4c5063;line-height:1.65;box-sizing:border-box}
+#businessAssistantInput:focus{outline:2px solid #dcd7fb;border-color:#a79be7}
+#businessAssistantInput:disabled{opacity:.65}
+.business-assistant-composer-actions{display:flex;justify-content:space-between;align-items:center;margin-top:9px;gap:10px}
+.business-assistant-upload{position:relative;display:inline-flex;align-items:center;min-height:30px;padding:5px 7px;font-size:11px;color:#858098;cursor:pointer;overflow:hidden;border-radius:6px}
+.business-assistant-upload:focus-within{outline:2px solid #b9aceb}
+.business-assistant-upload input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer}
+.business-assistant-composer>p{margin:7px 0 0;font-size:10px;line-height:1.5;color:#a0a1ae}
+.business-assistant-attachment{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 9px;margin-bottom:8px;background:#f3f1fc;border-radius:7px;font-size:11px;color:#7b6c9f}
+.business-assistant-attachment span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.business-assistant-attachment button{border:0;background:none;color:#9284a9;cursor:pointer;font-size:12px}
+/* Model settings use the same panel, with room for a readable form. */
+.business-assistant-panel.is-settings{width:min(520px,calc(100vw - 32px));height:min(780px,calc(100dvh - 110px))}
+.business-assistant-config{flex:1 1 0;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#d3d1e5 transparent;padding:22px;box-sizing:border-box;background:#f8f9fd}
+.business-assistant-config h3{margin:3px 0 0;color:#28283f;font-size:19px;font-weight:700;line-height:1.5}
+.business-assistant-settings-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.business-assistant-settings-heading>div>span{color:#817894;font-size:11px;font-weight:500}
+.business-assistant-back{flex:none;padding:7px 0 7px 8px;border:0;background:transparent;color:#827791;font:inherit;font-size:11px;cursor:pointer;white-space:nowrap}
+.business-assistant-back:hover{color:#5945ca}
+.business-assistant-config-intro{margin:7px 0 18px;color:#858394;font-size:11px;line-height:1.8}
+.business-assistant-config-note{margin:9px 0 0;color:#928c9f;font-size:11px;line-height:1.75;overflow-wrap:anywhere}
+.business-assistant-config label:not(.business-assistant-config-toggle){display:block;min-width:0;margin-top:15px;color:#635e76;font-size:12px;font-weight:500;line-height:1.5}
+.business-assistant-config label>input:not([type="checkbox"]),.business-assistant-config select{display:block;width:100%;min-height:42px;box-sizing:border-box;margin-top:7px;padding:10px 12px;border:1px solid #e0dfea;border-radius:9px;background:#fff;color:#4f4964;font:inherit;font-size:12px;font-weight:400;line-height:1.5;transition:border-color .15s,box-shadow .15s}
+.business-assistant-config label>input::placeholder{color:#b1abba}
+.business-assistant-config select{max-width:100%;padding-right:26px;text-overflow:ellipsis}
+.business-assistant-config label>input:focus,.business-assistant-config select:focus{outline:none;border-color:#a595e5;box-shadow:0 0 0 3px #ede9fb}
+.business-assistant-config label>input:disabled,.business-assistant-config input[readonly],.business-assistant-config select:disabled{background:#f4f4f9;color:#97909f}
+.business-assistant-config-toggle{display:flex;align-items:center;gap:10px;margin-top:0;color:#6d6580;font-size:12px;line-height:1.5;cursor:pointer}
+.business-assistant-config-toggle>span{flex:1;min-width:0}
+.business-assistant-config-toggle small{display:block;margin-top:4px;color:#9992a4;font-size:10px;font-weight:400;line-height:1.7}
+.business-assistant-config input[type="checkbox"]{flex:none;width:15px;height:15px;margin:0;accent-color:#6c55d9;cursor:pointer}
+.business-assistant-config input[type="checkbox"]:disabled{cursor:default}
+.business-assistant-enabled-row{justify-content:space-between;padding:14px 3px 16px}
+.business-assistant-enabled-row>input{appearance:none;width:33px!important;height:19px!important;padding:2px;border:1px solid #dedbe8;border-radius:99px;background:#dedce8;transition:background .15s}
+.business-assistant-enabled-row>input:before{content:"";display:block;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #35304a26;transition:transform .15s}
+.business-assistant-enabled-row>input:checked{border-color:#7860dd;background:#7860dd}
+.business-assistant-enabled-row>input:checked:before{transform:translateX(13px)}
+.business-assistant-enabled-row>input:focus-visible{outline:2px solid #b8a8ef;outline-offset:3px}
+.business-assistant-enabled-row>input:disabled{opacity:.5}
+.business-assistant-form-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.business-assistant-config-actions{display:flex;justify-content:flex-end;gap:9px;margin:20px -18px -18px;padding:15px 18px;border-top:1px solid #eceaf3;border-radius:0 0 12px 12px;background:#fcfcff}
+.business-assistant-config .btn{min-height:39px;border-radius:9px;font-family:inherit;font-size:12px;font-weight:500;white-space:nowrap}
+.business-assistant-config-actions .btn{min-height:41px;padding:9px 16px}
+.business-assistant-config .btn-primary{background:#6650d8;border-color:#6650d8;box-shadow:0 3px 8px #6650d815}
+.business-assistant-config .btn-primary:hover{background:#5841c8;border-color:#5841c8}
+.business-assistant-config .btn-outline{border-color:#dedbe9;color:#726780;background:#fff}
+.business-assistant-config .btn-outline:hover{background:#f6f4fe;border-color:#c9c0e7}
+.business-assistant-config .btn:disabled{cursor:not-allowed;box-shadow:none}
+.business-assistant-config-error{padding:12px;border:1px solid #f0dfe2;border-radius:10px;background:#fff7f8;color:#ae6d7a;font-size:12px;line-height:1.8}
+.business-assistant-config-loading{display:flex;align-items:center;gap:9px;margin:6px 0;color:#888298;font-size:12px}
+.business-assistant-config-loading:before{content:"";width:12px;height:12px;border:2px solid #e2dcf6;border-top-color:#8c7ac8;border-radius:50%;animation:assistantSpin .8s linear infinite}
+#businessAssistantRoot button:focus-visible{outline:2px solid #aaa0e8;outline-offset:2px}
+@keyframes assistantSpin{to{transform:rotate(360deg)}}
+@media(max-width:640px){.business-assistant-launcher{right:14px;bottom:18px;padding:11px 15px;min-height:44px;font-size:12px}.business-assistant-panel{right:10px;bottom:74px;width:calc(100vw - 20px);height:calc(100dvh - 96px);max-height:720px;border-radius:14px}.business-assistant-header{padding:14px}.business-assistant-header p{max-width:calc(100vw - 160px)}.business-assistant-messages{padding:14px 12px}.business-assistant-composer{padding:10px 12px 8px}#businessAssistantRoot.has-business-dialog .business-assistant-launcher{bottom:90px}#businessAssistantRoot.has-business-dialog .business-assistant-panel{bottom:146px;height:calc(100dvh - 166px);min-height:220px}.business-assistant-image>img{width:63px;height:78px;flex-basis:63px}}
+@media(prefers-reduced-motion:reduce){.business-assistant-launcher{transition:none}.business-assistant-pending>span{animation:none}}
+.business-assistant-header>div:first-child{min-width:0;flex:1}
+.business-assistant-header .business-assistant-model{max-width:260px;color:#7b72a1;font-size:10px;margin-top:3px}
+.business-assistant-model-notice{margin:0 0 8px!important;padding:7px 9px;border-radius:7px;background:#f5f2fc;color:#817198!important;font-size:10px!important;line-height:1.6!important}
+.business-assistant-active-model{display:flex;align-items:center;gap:12px;min-width:0;padding:16px;border:1px solid #e3def6;border-radius:13px;background:linear-gradient(115deg,#f1edff,#f9f7ff);overflow-wrap:anywhere}
+.business-assistant-active-icon{display:grid;place-items:center;flex:0 0 39px;width:39px;height:39px;border:1px solid #e2d9ff;border-radius:12px;background:#fff9;color:#795bda;font-size:24px}
+.business-assistant-active-copy{flex:1;min-width:0}
+.business-assistant-active-copy>span{display:block;color:#9787ae;font-size:10px}
+.business-assistant-active-copy>strong{display:block;margin-top:4px;color:#51416c;font-size:13px;font-weight:600;line-height:1.5}
+.business-assistant-active-copy>small{display:block;margin-top:3px;color:#a092b0;font-size:10px}
+.business-assistant-model-state{display:inline-flex;align-items:center;gap:5px;flex:none;padding:5px 7px;border:1px solid #d8ebde;border-radius:20px;background:#f0faf3;color:#71937c;font-size:10px;white-space:nowrap}
+.business-assistant-model-state>i{width:5px;height:5px;border-radius:50%;background:#80b28f}
+.business-assistant-model-state.is-disabled{border-color:#e1dfe9;background:#f1eff5;color:#9a92a6}
+.business-assistant-model-state.is-disabled>i{background:#aaa1b7}
+.business-assistant-model-library{padding:15px 16px;border:1px solid #e9e6f0;border-radius:12px;background:#fff}
+.business-assistant-profile-picker{display:flex;align-items:flex-end;gap:10px}
+.business-assistant-profile-picker>label{flex:1;min-width:0;margin-top:0!important;margin-bottom:0}
+.business-assistant-profile-picker>button{flex:none;min-height:42px!important;padding:8px 11px;white-space:nowrap}
+.business-assistant-profile-editor{margin-top:14px;padding:18px;border:1px solid #e9e6f0;border-radius:12px;background:#fff}
+.business-assistant-editor-heading h4{margin:0;color:#595069;font-size:14px;font-weight:600;line-height:1.5}
+.business-assistant-editor-heading p{margin:5px 0 0;color:#a198ad;font-size:11px;line-height:1.7}
+.business-assistant-section-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.business-assistant-section-title>span:first-child{color:#9280b7;font-size:19px}
+.business-assistant-section-title>strong{color:#625476;font-size:13px;font-weight:600}
+.business-assistant-default-badge{margin-left:auto;padding:4px 7px;border-radius:5px;background:#f1eef8;color:#9c8cb1;font-size:10px}
+.business-assistant-server-profile>p{margin:11px 0 0;color:#a197ac;font-size:11px;line-height:1.8}
+.business-assistant-server-profile dl{display:grid;grid-template-columns:42px minmax(0,1fr);gap:10px;margin:15px 0;padding:12px;border:1px solid #eeebf4;border-radius:8px;background:#faf9fd;color:#8d809c;font-size:11px;line-height:1.7}
+.business-assistant-server-profile dt{color:#aaa0b4}
+.business-assistant-server-profile dd{margin:0;overflow-wrap:anywhere}
+.business-assistant-server-profile>input[name="apiKey"]{display:none}
+.business-assistant-profile-active{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border:1px solid #dfede3;border-radius:6px;background:#f0f8f2;color:#7ca088;font-size:11px}
+.business-assistant-key-badge{display:inline-block;margin-left:7px;padding:2px 5px;border-radius:4px;background:#edf6ef;color:#87a28e;font-size:9px;font-weight:400;vertical-align:middle}
+.business-assistant-vision-option{margin-top:17px;padding:12px;border:1px solid #ece8f3;border-radius:9px;background:#fbfaff}
+.business-assistant-vision-option .business-assistant-config-toggle{align-items:flex-start}
+.business-assistant-vision-option input{margin-top:2px!important}
+.business-assistant-dialect{margin-top:13px;border:1px solid #ece8f2;border-radius:9px;background:#fff;color:#8e829e;font-size:11px}
+.business-assistant-dialect>summary{display:flex;align-items:center;gap:8px;padding:11px 12px;cursor:pointer;line-height:1.6;list-style:none}
+.business-assistant-dialect>summary::-webkit-details-marker{display:none}
+.business-assistant-dialect>summary:before{content:"›";display:block;color:#a292b3;font-size:17px;line-height:1;transition:transform .15s}
+.business-assistant-dialect[open]>summary:before{transform:rotate(90deg)}
+.business-assistant-dialect>summary>small{margin-left:auto;color:#b0a6ba;font-size:10px;font-weight:400}
+.business-assistant-dialect>.business-assistant-form-grid{padding:0 12px}
+.business-assistant-dialect .business-assistant-config-note{padding:0 12px 12px}
+.business-assistant-dialect label{margin-top:4px!important;font-size:11px!important}
+.business-assistant-dialect select{min-height:38px;padding:8px;font-size:11px}
+.business-assistant-profile-operations{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid #f0edf5}
+.business-assistant-delete-profile{padding:7px 5px;border:0;background:none;color:#bc8d98;font:inherit;font-size:11px;cursor:pointer}
+.business-assistant-delete-profile:hover{color:#a76072}
+.business-assistant-delete-profile:disabled{opacity:.5;cursor:not-allowed}
+.business-assistant-delete-confirm{margin-top:15px;padding:12px;border:1px solid #ecd8da;border-radius:10px;background:#fff7f7;color:#a2767e;font-size:11px;line-height:1.7}
+.business-assistant-delete-confirm p{margin:0 0 10px}
+.business-assistant-delete-confirm>div{display:flex;justify-content:flex-end;gap:8px}
+.business-assistant-config .business-assistant-service.is-error{background:#fff5f5;border-color:#eed7da;color:#b07680}
+@media(max-width:640px){.business-assistant-panel.is-settings{right:10px;bottom:74px;width:calc(100vw - 20px);height:calc(100dvh - 96px);max-height:800px}.business-assistant-config{padding:17px 15px}.business-assistant-settings-heading{gap:8px}.business-assistant-config h3{font-size:17px}.business-assistant-active-model{gap:9px;padding:13px}.business-assistant-active-icon{flex-basis:33px;width:33px;height:33px;border-radius:10px;font-size:21px}.business-assistant-profile-editor{padding:15px}.business-assistant-config-actions{margin:18px -15px -15px;padding:13px 15px}.business-assistant-config-actions .btn{flex:1;padding-right:9px;padding-left:9px}.business-assistant-model-library{padding:13px}.business-assistant-profile-picker{gap:8px}.business-assistant-profile-picker>button{padding-right:8px;padding-left:8px}.business-assistant-dialect>summary>small{font-size:9px}}
+@media(max-width:400px){.business-assistant-form-grid{grid-template-columns:minmax(0,1fr);gap:0}.business-assistant-header .business-assistant-model{max-width:calc(100vw - 164px)}.business-assistant-model-state{font-size:9px;padding:4px 6px}.business-assistant-active-copy>strong{font-size:12px}.business-assistant-back{font-size:10px}.business-assistant-config .btn{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.business-assistant-config-loading:before{animation:none}.business-assistant-config input,.business-assistant-config select,.business-assistant-enabled-row>input:before,.business-assistant-dialect>summary:before{transition:none}}
+/* Add a model by connecting once, then choosing from the returned catalog. */
+.business-assistant-connect-fields{margin-top:3px}
+.business-assistant-connect-fields .business-assistant-discover{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;margin-top:16px;border-color:#d4cbed;background:#f8f5ff;color:#7058b8}
+.business-assistant-discover>span{font-size:19px;line-height:1}
+.business-assistant-discovery-feedback{margin:12px 0 0;padding:10px 11px;border:1px solid #dce9e2;border-radius:9px;background:#f4faf6;color:#71917d;font-size:11px;line-height:1.75;overflow-wrap:anywhere}
+.business-assistant-discovery-feedback.is-error{border-color:#efdadd;background:#fff7f8;color:#ad7581}
+.business-assistant-discovery-feedback.is-loading{display:flex;align-items:center;gap:8px;border-color:#e6dff5;background:#faf7ff;color:#9784b0}
+.business-assistant-discovery-feedback.is-loading:before{content:"";flex:none;width:11px;height:11px;border:2px solid #e4dcf3;border-top-color:#9582bc;border-radius:50%;animation:assistantSpin .8s linear infinite}
+.business-assistant-model-choice{margin-top:18px;padding-top:16px;border-top:1px solid #eeebf4}
+.business-assistant-model-choice>label{margin-top:0!important}
+#businessAssistantModelControl>input{display:block;width:100%;min-height:42px;box-sizing:border-box;margin-top:7px;padding:10px 12px;border:1px solid #e0dfea;border-radius:9px;background:#fff;color:#4f4964;font:inherit;font-size:12px;line-height:1.5}
+#businessAssistantModelControl>input:focus{outline:none;border-color:#a595e5;box-shadow:0 0 0 3px #ede9fb}
+#businessAssistantModelControl>input::placeholder{color:#b1abba}
+.business-assistant-manual-model{display:block;margin-top:9px;padding:3px 0;border:0;background:none;color:#8d80a3;font:inherit;font-size:11px;line-height:1.65;text-align:left;cursor:pointer}
+.business-assistant-manual-model:hover{color:#6a54b3;text-decoration:underline}
+.business-assistant-manual-model:disabled{opacity:.6;cursor:default;text-decoration:none}
+.business-assistant-model-advanced{margin-top:16px}
+.business-assistant-model-advanced>.business-assistant-form-grid{padding-bottom:12px;row-gap:12px}
+.business-assistant-model-advanced .business-assistant-form-grid label>input{min-height:38px;padding:8px;font-size:11px}
+.business-assistant-model-advanced>.business-assistant-vision-option{margin:0 12px 12px;padding:10px}
+@media(max-width:400px){.business-assistant-model-advanced>.business-assistant-form-grid{row-gap:10px}.business-assistant-model-advanced>summary>small{max-width:48%;text-align:right}}
+@media(prefers-reduced-motion:reduce){.business-assistant-discovery-feedback.is-loading:before{animation:none}}
+.business-assistant-editor-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.business-assistant-editor-heading>div{min-width:0}
+.business-assistant-editor-back{flex:none;margin:1px 0 0;padding:3px 0 3px 5px;border:0;background:none;color:#8d80a3;font:inherit;font-size:10px;line-height:1.7;white-space:nowrap;cursor:pointer}
+.business-assistant-editor-back:hover{color:#6a54b3;text-decoration:underline}

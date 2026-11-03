@@ -19,6 +19,21 @@ import org.springframework.http.HttpStatus;
 class FeishuSyncControllerTest {
 
     @Test
+    void syncReadEndpointsStillRejectAnUnauthorizedNonAdministrator() {
+        SyncQueueService queueService = mock(SyncQueueService.class);
+        FeishuBaseService feishu = mock(FeishuBaseService.class);
+        var request = mock(jakarta.servlet.http.HttpServletRequest.class);
+        when(request.getAttribute("authSession")).thenReturn(new AuthSession("designer", "designer", "设计师"));
+        FeishuSyncController controller = controller(queueService, feishu);
+
+        assertEquals(HttpStatus.FORBIDDEN, controller.getStats(request).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, controller.getConfig(request).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, controller.v2Status(request).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, controller.schemaDiagnostics(request).getStatusCode());
+        verifyNoInteractions(queueService, feishu);
+    }
+
+    @Test
     void v2StatusIsAvailableToAdministrator() {
         SyncQueueService queueService = mock(SyncQueueService.class);
         FeishuBaseService feishu = mock(FeishuBaseService.class);

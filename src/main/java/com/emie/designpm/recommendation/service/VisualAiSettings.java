@@ -30,12 +30,61 @@ public class VisualAiSettings {
         public final String model;
         public final String apiKey;
         public final boolean enabled;
+        public final String provider;
+        public final String dialect;
+        public final String displayName;
+        public final boolean visionSupported;
+        public final String profileId;
+        public final String thinkingMode;
 
-        RuntimeConfig(String baseUrl, String model, String apiKey, boolean enabled) {
+        public RuntimeConfig(String baseUrl, String model, String apiKey, boolean enabled) {
+            this(
+                    baseUrl,
+                    model,
+                    apiKey,
+                    enabled,
+                    "kimi",
+                    "kimi",
+                    "服务器 Kimi（默认）",
+                    true,
+                    "server",
+                    "kimi-k2.6".equals(model) ? "disabled" : "auto");
+        }
+
+        public RuntimeConfig(
+                String baseUrl,
+                String model,
+                String apiKey,
+                boolean enabled,
+                String provider,
+                String dialect,
+                String displayName,
+                boolean visionSupported,
+                String profileId) {
+            this(baseUrl, model, apiKey, enabled, provider, dialect, displayName, visionSupported, profileId, "auto");
+        }
+
+        public RuntimeConfig(
+                String baseUrl,
+                String model,
+                String apiKey,
+                boolean enabled,
+                String provider,
+                String dialect,
+                String displayName,
+                boolean visionSupported,
+                String profileId,
+                String thinkingMode) {
             this.baseUrl = baseUrl;
             this.model = model;
             this.apiKey = apiKey;
             this.enabled = enabled;
+            this.provider = provider;
+            this.dialect = dialect;
+            this.displayName = displayName;
+            this.visionSupported = visionSupported;
+            this.profileId = profileId;
+            this.thinkingMode = thinkingMode;
         }
 
         public boolean configured() {
@@ -64,7 +113,7 @@ public class VisualAiSettings {
 
     public RuntimeConfig current() {
         VisualAiConfig stored = repository.findById(1L).orElse(null);
-        String key = environmentKey;
+        String key = stored == null || environmentBase.equals(stored.getBaseUrl()) ? environmentKey : "";
         if (stored != null
                 && stored.getEncryptedKey() != null
                 && !stored.getEncryptedKey().isBlank()) {
@@ -75,6 +124,27 @@ public class VisualAiSettings {
                 stored == null ? environmentModel : stored.getModel(),
                 key,
                 stored == null ? environmentEnabled : stored.isEnabled());
+    }
+
+    /** Server profile is bound to the deployment endpoint; legacy custom hosts never inherit its key. */
+    public RuntimeConfig serverCurrent() {
+        VisualAiConfig stored = repository.findById(1L).orElse(null);
+        String key = environmentKey;
+        boolean enabled = stored == null ? environmentEnabled : stored.isEnabled();
+        if (stored != null && environmentBase.equals(stored.getBaseUrl())) {
+            if (stored.getEncryptedKey() != null && !stored.getEncryptedKey().isBlank()) {
+                try {
+                    key = decrypt(stored.getEncryptedKey());
+                } catch (IllegalArgumentException unreadable) {
+                    key = "";
+                }
+            }
+        }
+        return new RuntimeConfig(environmentBase, environmentModel, key, enabled);
+    }
+
+    public boolean keyStorageAvailable() {
+        return encryptionSecret.length() >= 32;
     }
 
     public Map<String, Object> overview() {
@@ -119,6 +189,11 @@ public class VisualAiSettings {
         if (apiKey.length() > 4000 || apiKey.chars().anyMatch(Character::isISOControl))
             throw new IllegalArgumentException("AI 密钥格式无效");
         VisualAiConfig row = repository.findById(1L).orElseGet(VisualAiConfig::new);
+        if (row.getBaseUrl() != null
+                && !base.equals(row.getBaseUrl())
+                && apiKey.isBlank()
+                && !Boolean.TRUE.equals(body.get("clearKey")))
+            throw new IllegalArgumentException("更换接口地址时须重新填写对应密钥或明确清空旧密钥");
         row.setId(1L);
         row.setBaseUrl(base);
         row.setModel(model);
@@ -129,7 +204,7 @@ public class VisualAiSettings {
         return overview();
     }
 
-    static void validateBaseUrl(String raw) {
+    public static void validateBaseUrl(String raw) {
         try {
             URI uri = URI.create(raw);
             if (raw.length() > 500
@@ -154,7 +229,7 @@ public class VisualAiSettings {
         }
     }
 
-    private String encrypt(String value) {
+    public String encrypt(String value) {
         if (encryptionSecret.length() < 32)
             throw new IllegalArgumentException("服务器须先配置至少32位 VISUAL_AI_ENCRYPTION_KEY 才能保存密钥");
         try {
@@ -168,7 +243,7 @@ public class VisualAiSettings {
         }
     }
 
-    private String decrypt(String value) {
+    public String decrypt(String value) {
         try {
             if (encryptionSecret.length() < 32) throw new Exception();
             String[] parts = value.split("\\.");

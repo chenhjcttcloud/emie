@@ -5,28 +5,39 @@ import static org.mockito.Mockito.*;
 
 import com.emie.designpm.entity.FileRecord;
 import com.emie.designpm.file.service.FileArchiveService;
+import com.emie.designpm.file.service.FileThumbnailService;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.Base64;
+import java.util.Optional;
 import java.util.zip.CRC32;
 import javax.imageio.ImageIO;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class VisualInputReaderTest {
     @TempDir
     Path directory;
 
     private final FileArchiveService archive = mock(FileArchiveService.class);
-    private final VisualInputReader reader = new VisualInputReader(archive);
+    private final FileThumbnailService thumbnails = spy(new FileThumbnailService(archive));
+    private final VisualInputReader reader = new VisualInputReader(archive, thumbnails);
+
+    @BeforeEach
+    void configureUploadDirectory() {
+        ReflectionTestUtils.setField(reader, "uploadDir", directory.toString());
+    }
 
     @Test
     void resizesRealPngAndEncodesBoundedJpeg() throws Exception {
@@ -110,6 +121,113 @@ class VisualInputReaderTest {
         var error =
                 assertThrows(IllegalArgumentException.class, () -> reader.imageData(record("bomb.png", png.length)));
         assertTrue(error.getMessage().contains("分辨率"));
+    }
+
+    @Test
+    void analyzesCachedPngForLargeIllustratorWithoutOpeningOriginal() throws Exception {
+        Path cached = thumbnail("large.ai", Color.BLUE);
+        FileRecord record = record("large.ai", 450L * 1024 * 1024);
+        assertFalse(reader.metadataFingerprint(record, "model").isBlank());
+        String content = reader.fingerprint(record, "model");
+        assertEquals(content, reader.fingerprint(record, "model"));
+        var images = reader.imageData(record);
+        assertEquals(1, images.size());
+        BufferedImage decoded = decode(images.getFirst());
+        try {
+            assertEquals(64, decoded.getWidth());
+            assertTrue(new Color(decoded.getRGB(10, 10)).getBlue() > 200);
+        } finally {
+            decoded.flush();
+        }
+        assertEquals(cached.toRealPath(), reader.source(record));
+        verifyNoInteractions(archive);
+        verify(thumbnails, never()).getOrCreate(anyString(), any());
+        verify(thumbnails, never()).enqueue(anyString(), any());
+    }
+
+    @Test
+    void missingThumbnailKeepsOriginalSizeLimitWithoutRestoringArchive() {
+        FileRecord large = record("large.ai", VisualInputReader.MAX_BYTES + 1);
+        assertThrows(IllegalArgumentException.class, () -> reader.metadataFingerprint(large, "model"));
+        assertThrows(IllegalArgumentException.class, () -> reader.fingerprint(large, "model"));
+        assertThrows(IllegalArgumentException.class, () -> reader.imageData(large));
+        verifyNoInteractions(archive);
+    }
+
+    @Test
+    void thumbnailAppearanceAndReplacementInvalidateInputFingerprints() throws Exception {
+        Path original = directory.resolve("cover.png");
+        writePng(original, Color.RED);
+        FileRecord record = record("cover.png", Files.size(original));
+        when(archive.resolveFile("cover.png")).thenReturn(original);
+        String originalMetadata = reader.metadataFingerprint(record, "model");
+        String originalContent = reader.fingerprint(record, "model");
+        Path cached = thumbnail("cover.png", Color.BLUE);
+        String cachedMetadata = reader.metadataFingerprint(record, "model");
+        String cachedContent = reader.fingerprint(record, "model");
+        assertNotEquals(originalMetadata, cachedMetadata);
+        assertNotEquals(originalContent, cachedContent);
+        writePng(cached, Color.GREEN);
+        Files.setLastModifiedTime(cached, FileTime.fromMillis(System.currentTimeMillis() + 5000));
+        assertNotEquals(cachedMetadata, reader.metadataFingerprint(record, "model"));
+        assertNotEquals(cachedContent, reader.fingerprint(record, "model"));
+        verify(archive, times(1)).resolveFile("cover.png");
+    }
+
+    @Test
+    void rejectsInvalidOversizedAndSymbolicLinkThumbnailsWithoutOriginalFallback() throws Exception {
+        FileRecord record = record("large.ai", VisualInputReader.MAX_BYTES + 1);
+        Path cached = thumbnail("large.ai", Color.BLUE);
+        Files.writeString(cached, "not an image");
+        assertThrows(IllegalArgumentException.class, () -> reader.imageData(record));
+        Files.write(cached, new byte[(int) VisualInputReader.MAX_BYTES + 1]);
+        assertThrows(IllegalArgumentException.class, () -> reader.metadataFingerprint(record, "model"));
+        assertThrows(IllegalArgumentException.class, () -> reader.imageData(record));
+        Files.delete(cached);
+        Path outside = directory.resolve("outside.png");
+        writePng(outside, Color.BLUE);
+        Files.createSymbolicLink(cached, outside);
+        assertThrows(IllegalArgumentException.class, () -> reader.metadataFingerprint(record, "model"));
+        assertThrows(IllegalArgumentException.class, () -> reader.imageData(record));
+        verifyNoInteractions(archive);
+    }
+
+    @Test
+    void rejectsEscapedCachePathsAndCacheDirectoryLinks() throws Exception {
+        FileRecord record = record("large.ai", VisualInputReader.MAX_BYTES + 1);
+        Path outside = directory.resolve("outside.png");
+        writePng(outside, Color.BLUE);
+        doReturn(Optional.of(outside)).when(thumbnails).cached(eq("large.ai"), any());
+        assertThrows(IllegalArgumentException.class, () -> reader.metadataFingerprint(record, "model"));
+        doCallRealMethod().when(thumbnails).cached(eq("large.ai"), any());
+        Path other = Files.createDirectory(directory.resolve("other-cache"));
+        writePng(other.resolve("large.ai.ai-page-1.png"), Color.BLUE);
+        Files.createSymbolicLink(directory.resolve("thumbnail-cache"), other);
+        assertThrows(IllegalArgumentException.class, () -> reader.metadataFingerprint(record, "model"));
+        verifyNoInteractions(archive);
+    }
+
+    private Path thumbnail(String name, Color color) throws Exception {
+        Path cache = Files.createDirectories(directory.resolve("thumbnail-cache"));
+        Path target = cache.resolve(name + (name.endsWith(".ai") ? ".ai-page-1.png" : ".png"));
+        writePng(target, color);
+        return target;
+    }
+
+    private void writePng(Path target, Color color) throws Exception {
+        BufferedImage image = new BufferedImage(64, 32, BufferedImage.TYPE_INT_RGB);
+        try {
+            var graphics = image.createGraphics();
+            try {
+                graphics.setColor(color);
+                graphics.fillRect(0, 0, image.getWidth(), image.getHeight());
+            } finally {
+                graphics.dispose();
+            }
+            ImageIO.write(image, "png", target.toFile());
+        } finally {
+            image.flush();
+        }
     }
 
     private FileRecord record(String name, long size) {

@@ -5,7 +5,6 @@ import com.emie.designpm.entity.FileRecord;
 import com.emie.designpm.entity.ImageLibraryItem;
 import com.emie.designpm.file.repository.FileRecordRepository;
 import com.emie.designpm.file.service.FileArchiveService;
-import com.emie.designpm.imagelibrary.event.ImageLibraryChangedEvent;
 import com.emie.designpm.imagelibrary.repository.ImageLibraryItemRepository;
 import com.emie.designpm.reference.repository.IpOptionRepository;
 import com.emie.designpm.util.SecurityUtil;
@@ -18,7 +17,6 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -35,19 +33,16 @@ public class ImageLibraryController {
     private final FileRecordRepository files;
     private final IpOptionRepository ipOptions;
     private final FileArchiveService archive;
-    private final ApplicationEventPublisher events;
 
     public ImageLibraryController(
             ImageLibraryItemRepository items,
             FileRecordRepository files,
             IpOptionRepository ipOptions,
-            FileArchiveService archive,
-            ApplicationEventPublisher events) {
+            FileArchiveService archive) {
         this.items = items;
         this.files = files;
         this.ipOptions = ipOptions;
         this.archive = archive;
-        this.events = events;
     }
 
     @GetMapping
@@ -101,8 +96,6 @@ public class ImageLibraryController {
                 record.setTargetId(item.getId());
             }
             files.saveAll(records);
-            events.publishEvent(new ImageLibraryChangedEvent(
-                    records.stream().map(FileRecord::getStoredName).toList()));
             return ResponseEntity.ok(view(item));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of("error", "图档保存失败"));
@@ -148,8 +141,6 @@ public class ImageLibraryController {
                 record.setTargetId(id);
             }
             files.saveAll(selected);
-            events.publishEvent(new ImageLibraryChangedEvent(
-                    selected.stream().map(FileRecord::getStoredName).toList()));
             return ResponseEntity.ok(view(items.save(item)));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of("error", "图档修改失败"));

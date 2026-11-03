@@ -58,7 +58,13 @@ public class PermissionService {
         if (role != null) {
             permissions.addAll(PermissionCatalog.translateConfiguredPermissions(role.getPermissions()));
         }
-        permissions.removeAll(rolePermissionRepository.findDeniedPermissionCodes(assignmentRoleName));
+        List<String> deniedPermissions = rolePermissionRepository.findDeniedPermissionCodes(assignmentRoleName);
+        // 保留已获执行权限角色的状态读取能力，明确禁止的 view 仍在下面优先移除。
+        if (permissions.contains("admin.feishu_sync.execute")
+                && !deniedPermissions.contains("admin.feishu_sync.execute")) {
+            permissions.add("admin.feishu_sync.view");
+        }
+        permissions.removeAll(deniedPermissions);
         // 防止旧版角色编辑在未展示新增能力时写入 deny，造成管理员无法恢复身份、
         // 一线角色无法上传或读取自己刚上传的文件。
         permissions.addAll(PermissionCatalog.mandatoryPermissions(roleName));

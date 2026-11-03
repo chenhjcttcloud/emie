@@ -12,20 +12,16 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
-class VisualAiPermissionFilterTest {
+class AssistantConfigPermissionFilterTest {
     @Test
-    void readingAiConfigurationUsesConfigurationViewPermission() throws Exception {
-        check("GET", "/api/admin/visual-ai-config", "admin.config.view");
+    void readingAssistantConfigurationUsesConfigurationViewPermission() throws Exception {
+        check("GET", "/api/assistant/config", "admin.config.view");
     }
 
     @Test
-    void changingAiConfigurationRequiresConfigurationEditPermission() throws Exception {
-        check("POST", "/api/admin/visual-ai-config", "admin.config.edit");
-    }
-
-    @Test
-    void startingPaidLibraryAnalysisRequiresConfigurationEditPermission() throws Exception {
-        check("POST", "/api/admin/visual-ai-config/index-library", "admin.config.edit");
+    void changingAssistantConfigurationRequiresConfigurationEditPermission() throws Exception {
+        check("POST", "/api/assistant/config", "admin.config.edit");
+        check("POST", "/api/assistant/config/models", "admin.config.edit");
     }
 
     private void check(String method, String path, String permission) throws Exception {

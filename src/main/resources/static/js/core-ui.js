@@ -257,6 +257,8 @@ if (document.body) {
 }
 
 document.addEventListener('keydown', event => {
+  // The global assistant is a separate nonmodal panel above ordinary business drawers.
+  if (event.target?.closest?.('#businessAssistantRoot')) return;
   const overlay = getTopModalOverlay();
   if (!overlay) return;
   const modal = getModalDialog(overlay);

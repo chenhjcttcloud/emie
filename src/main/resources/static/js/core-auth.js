@@ -515,6 +515,7 @@ async function checkFeishuCallback() {
 }
 
 function handleLogout() {
+  document.dispatchEvent(new Event('emie:identity-changing'));
   // 关闭所有弹窗
   document.querySelectorAll('.modal-overlay').forEach(el => el.remove());
   const token = localStorage.getItem('design_pm_token');

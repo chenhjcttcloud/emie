@@ -4,9 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 请求体解析失败之前没有专门处理，会跌到 catch-all 变成 500——客户端自己传错格式，
@@ -26,6 +28,17 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals("请求体格式不正确，请检查输入", response.getBody().get("error"));
+        assertTrue(response.getBody().containsKey("traceId"));
+    }
+
+    @Test
+    void retiredEndpointReturnsNotFoundWithoutInternalResourceDetails() {
+        var request = new MockHttpServletRequest();
+        request.setRequestURI("/api/admin/visual-ai-config");
+        var response = handler.handleMissingResource(
+                new NoResourceFoundException(HttpMethod.GET, "api/admin/visual-ai-config"), request);
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertEquals("请求的资源不存在", response.getBody().get("error"));
         assertTrue(response.getBody().containsKey("traceId"));
     }
 }

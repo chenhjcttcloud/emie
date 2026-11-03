@@ -63,11 +63,8 @@ function renderRecommendationCard(session, item, linked = false) {
   </article>`;
 }
 
-function recommendationExplanation(data) {
-  if (data.analysisPending || data.status === 'ANALYZING') return '图片内容正在分析，先展示已有匹配结果。稍后可点击“更新推荐”查看。';
-  if (data.aiConfigured === false) return 'AI 识图尚未开启，当前按 IP、二级 IP 和任务需求匹配。';
-  if (data.status === 'METADATA') return '当前按 IP、二级 IP 和任务需求匹配；可用的图片分析结果会一并参与推荐。';
-  return '结合任务需求、IP 分类和参考图内容，寻找可复用的图档。';
+function recommendationExplanation() {
+  return '根据任务需求、IP 分类和图档名称与标签，查找可复用的图档。';
 }
 
 function renderRecommendations(session) {

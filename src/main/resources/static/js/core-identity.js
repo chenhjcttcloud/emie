@@ -178,6 +178,7 @@ async function switchToUser(targetUserId) {
   try {
     const viewBeforeSwitch = EMIE.state.currentView || 'dashboard';
     const result = await apiPost('/auth/impersonate', { userId: targetUserId });
+    document.dispatchEvent(new Event('emie:identity-changing'));
     EMIE.state.authUser = { userId: result.userId, name: result.name, role: result.role, title: result.title };
     EMIE.state.currentRole = normalizeIdentityRole(result.role);
     EMIE.state.currentUserId = result.userId;

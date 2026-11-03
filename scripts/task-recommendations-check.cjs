@@ -26,7 +26,7 @@ function host() {
 function card(id, overrides = {}) {
   return { id, libraryItemId: id, name: `图档${id}`, ipName: '测试 IP', subOptions: ['系列一'], images: [{ storedName: `image-${id}.png`, name: `${id}.png`, size: 10, url: 'https://untrusted.invalid/picture.png' }], reasons: ['同一系列'], ...overrides };
 }
-function response(items, overrides = {}) { return { items, linkedItems: [], associatedLibraryItemIds: [], canAssociate: true, status: 'READY', aiConfigured: true, analysisPending: false, ...overrides }; }
+function response(items, overrides = {}) { return { items, linkedItems: [], associatedLibraryItemIds: [], canAssociate: true, status: 'METADATA', aiConfigured: false, analysisPending: false, ...overrides }; }
 function button(container, id) { return { dataset: { libraryId: String(id) }, closest: selector => selector === '[data-task-recommendations]' ? container : null }; }
 
 async function checkRecommendations() {
@@ -79,7 +79,8 @@ async function checkRecommendations() {
   const readOnly = host();
   r.EMIE.taskRecommendations.mountTaskRecommendations(readOnly, { projectId: 7, taskId: 15 });
   r.requests[5].resolve(response([card(15)], { canAssociate: false, aiConfigured: false, status: 'METADATA' })); await tick();
-  assert.match(readOnly.innerHTML, /AI 识图尚未开启/);
+  assert.match(readOnly.innerHTML, /图档名称与标签/);
+  assert.doesNotMatch(readOnly.innerHTML, /AI 识图|图片内容正在分析/);
   assert.doesNotMatch(readOnly.innerHTML, /click:task-recommendation-associate/);
   r.handlers.get('task-recommendation-associate')(null, button(readOnly, 15));
   assert.equal(r.posts.length, 1, 'read-only details must not submit an association');
@@ -92,55 +93,20 @@ async function checkRecommendations() {
   assert.equal(r.EMIE.taskRecommendations.taskRecommendationsPlaceholder(), '', 'disabled library page permission hides recommendations');
 }
 
-async function checkSettings() {
-  const r = runtime('src/main/resources/static/js/visual-ai-settings.js');
-  const fields = {
-    '#visualAiSettingsForm': { reportValidity: () => true },
-    '#visualAiBaseUrl': { value: 'https://api.moonshot.cn/v1/' },
-    '#visualAiModel': { value: 'kimi-k2.6' },
-    '#visualAiEnabled': { checked: true },
-    '#visualAiApiKey': { value: '', disabled: false },
-    '#visualAiSettingsSubmit': {}, '#visualAiSettingsMessage': {}, '#visualAiIndexButton': {}, '#visualAiIndexSummary': {},
-  };
-  const overlay = { isConnected: true, innerHTML: '', querySelector: selector => fields[selector] };
-  r.context.testSession = { overlay, config: { keyConfigured: true, keyStorageAvailable: true }, saving: false };
-  vm.runInContext('activeVisualAiSettings = testSession', r.context);
-  const saving = r.handlers.get('visual-ai-settings-save')({ preventDefault() {} });
-  assert.equal(r.posts[0].path, '/admin/visual-ai-config');
-  assert.equal(r.posts[0].body.baseUrl, 'https://api.moonshot.cn/v1');
-  assert.equal('apiKey' in r.posts[0].body, false, 'blank key must preserve the configured server key');
-  assert.equal('clearKey' in r.posts[0].body, false);
-  r.posts[0].resolve({ baseUrl: 'https://api.moonshot.cn/v1', model: 'kimi-k2.6', enabled: true, keyConfigured: true, keyStorageAvailable: true });
-  await saving;
-  assert.match(fields['#visualAiSettingsMessage'].textContent, /设置已保存/);
-
-  fields['#visualAiApiKey'].value = 'should-not-submit'; fields['#visualAiApiKey'].disabled = true;
-  const noStorage = r.handlers.get('visual-ai-settings-save')({ preventDefault() {} });
-  assert.equal('apiKey' in r.posts[1].body, false, 'disabled key storage must not send a key');
-  r.posts[1].reject(new Error('没有权限')); await noStorage;
-  assert.equal(fields['#visualAiSettingsMessage'].textContent, '没有权限');
-
-  r.EMIE.actions.showSystemConfirm = async () => false;
-  await r.handlers.get('visual-ai-settings-index')();
-  assert.equal(r.posts.length, 2, 'cancelled backfill must not send any library files for analysis');
-  r.EMIE.actions.showSystemConfirm = async () => true;
-  const indexing = r.handlers.get('visual-ai-settings-index')(); await tick();
-  assert.equal(r.posts[2].path, '/admin/visual-ai-config/index-library');
-  r.handlers.get('visual-ai-settings-index')();
-  assert.equal(r.posts.length, 3, 'backfill double click must not submit a second batch');
-  r.posts[2].resolve({ queued: 4, indexStats: { total: 9, ready: 3, pending: 2, failed: 0, queued: 4 } }); await indexing;
-  assert.match(fields['#visualAiIndexSummary'].textContent, /已分析 3/);
-  assert.match(fields['#visualAiSettingsMessage'].textContent, /已安排 4/);
-
-  r.EMIE.state.currentRole = 'designer';
-  r.handlers.get('visual-ai-settings-open')();
-  assert.equal(r.requests.length, 0, 'non-admin role cannot load the secret configuration UI');
-  r.handlers.get('visual-ai-settings-save')({ preventDefault() {} });
-  assert.equal(r.posts.length, 3, 'non-admin role cannot save configuration');
+function checkRetiredImageAnalysis() {
+  const bootstrap = fs.readFileSync('src/main/resources/static/js/bootstrap.js', 'utf8');
+  assert.doesNotMatch(bootstrap, /import ['"].*visual-ai-settings\.js/);
+  for (const file of ['admin-shell.js', 'image-library.js']) {
+    assert.doesNotMatch(fs.readFileSync(`src/main/resources/static/js/${file}`, 'utf8'), /click:visual-ai-settings-open/);
+  }
+  assert.equal(fs.existsSync('src/main/java/com/emie/designpm/recommendation/controller/VisualAiConfigController.java'), false);
+  assert.equal(fs.existsSync('src/main/java/com/emie/designpm/imagelibrary/event/ImageLibraryChangedEvent.java'), false);
+  const routes = fs.readFileSync('src/test/resources/route-inventory.txt', 'utf8');
+  assert.doesNotMatch(routes, /\/api\/admin\/visual-ai-config/);
 }
 
 (async () => {
   await checkRecommendations();
-  await checkSettings();
-  console.log('task recommendation checks passed (safe rendering, task isolation, persistent associations, config key handling)');
+  checkRetiredImageAnalysis();
+  console.log('task recommendation checks passed (safe rendering, task isolation, persistent associations, retired automatic analysis)');
 })().catch(error => { console.error(error); process.exitCode = 1; });

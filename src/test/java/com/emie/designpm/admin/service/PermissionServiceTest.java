@@ -115,6 +115,60 @@ class PermissionServiceTest {
     }
 
     @Test
+    void legacyAdministratorCanViewSyncWithoutGainingExecutionPermission() {
+        RoleRepository roles = mock(RoleRepository.class);
+        Role admin = Role.builder().name("admin").permissions("admin:config").build();
+        when(roles.findByNameIgnoreCase("admin")).thenReturn(Optional.of(admin));
+        PermissionService service = new PermissionService(roles, emptyAssignments(), emptyVersions());
+
+        assertTrue(service.has("管理员", "admin.feishu_sync.view"));
+        assertFalse(service.has("admin", "admin.feishu_sync.execute"));
+        assertFalse(service.has("designer", "admin.feishu_sync.view"));
+    }
+
+    @Test
+    void explicitSyncViewDenialOverridesAdministratorCompatibilityPermission() {
+        RoleRepository roles = mock(RoleRepository.class);
+        RolePermissionRepository assignments = emptyAssignments();
+        when(assignments.findDeniedPermissionCodes("admin")).thenReturn(List.of("admin.feishu_sync.view"));
+        PermissionService service = new PermissionService(roles, assignments, emptyVersions());
+
+        assertFalse(service.has("admin", "admin.feishu_sync.view"));
+        assertFalse(service.has("admin", "admin.feishu_sync.execute"));
+    }
+
+    @Test
+    void existingSyncExecutorCanStillReadStatusButExplicitViewDenialWins() {
+        RoleRepository roles = mock(RoleRepository.class);
+        RolePermissionRepository assignments = emptyAssignments();
+        when(assignments.findAllowedPermissionCodes("sync_operator")).thenReturn(List.of("admin.feishu_sync.execute"));
+        PermissionService service = new PermissionService(roles, assignments, emptyVersions());
+
+        assertTrue(service.has("sync_operator", "admin.feishu_sync.view"));
+        assertTrue(service.has("sync_operator", "admin.feishu_sync.execute"));
+
+        when(assignments.findDeniedPermissionCodes("sync_operator")).thenReturn(List.of("admin.feishu_sync.view"));
+        assertFalse(service.has("sync_operator", "admin.feishu_sync.view"));
+        assertTrue(service.has("sync_operator", "admin.feishu_sync.execute"));
+    }
+
+    @Test
+    void deniedLegacySyncExecutionDoesNotImplyReadPermission() {
+        RoleRepository roles = mock(RoleRepository.class);
+        Role operator = Role.builder()
+                .name("sync_operator")
+                .permissions("admin.feishu_sync.execute")
+                .build();
+        when(roles.findByNameIgnoreCase("sync_operator")).thenReturn(Optional.of(operator));
+        RolePermissionRepository assignments = emptyAssignments();
+        when(assignments.findDeniedPermissionCodes("sync_operator")).thenReturn(List.of("admin.feishu_sync.execute"));
+        PermissionService service = new PermissionService(roles, assignments, emptyVersions());
+
+        assertFalse(service.has("sync_operator", "admin.feishu_sync.execute"));
+        assertFalse(service.has("sync_operator", "admin.feishu_sync.view"));
+    }
+
+    @Test
     void normalizedAssignmentsAndExplicitDenyParticipateInResolution() {
         RoleRepository roles = mock(RoleRepository.class);
         RolePermissionRepository assignments = mock(RolePermissionRepository.class);
