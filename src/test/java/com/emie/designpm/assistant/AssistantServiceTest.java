@@ -27,7 +27,8 @@ class AssistantServiceTest {
         when(data.context(any(), any())).thenReturn(Map.of());
         when(data.context(isNull(), any())).thenReturn(Map.of());
         when(data.myTasks(any())).thenReturn(List.of());
-        when(data.searchImages(anyString(), any())).thenReturn(List.of());
+        when(data.searchImages(anyString(), any()))
+                .thenReturn(new AssistantDataService.ImageSearchResult(List.of(), 2, List.of(), 0, false));
         when(data.canSearchImages(any())).thenReturn(true);
         when(settings.current()).thenReturn(config);
     }
@@ -102,6 +103,32 @@ class AssistantServiceTest {
     }
 
     @Test
+    void noLibraryRecordsExplainsEnvironmentInsteadOfBlamingKeywordsOrPermissions() {
+        when(data.searchImages(anyString(), any()))
+                .thenReturn(new AssistantDataService.ImageSearchResult(List.of(), 0, List.of("绿色"), 0, false));
+        var result = service.chat(request("绿色系的图档", null), session);
+        assertTrue(result.get("answer").toString().contains("当前环境的图档库还没有图档记录"));
+        assertFalse(result.get("answer").toString().contains("关键词未匹配"));
+        verifyNoInteractions(client, reader);
+    }
+
+    @Test
+    void colorIntentReturnsRealCardsEvenWhenSelectedModelIsTextOnly() {
+        var images = List.of(
+                Map.<String, Object>of("id", 1L, "name", "春日", "images", List.of(Map.of("storedName", "green.png"))));
+        when(data.isColorSearch("薄荷绿")).thenReturn(true);
+        when(data.searchImages("薄荷绿", session))
+                .thenReturn(new AssistantDataService.ImageSearchResult(images, 4, List.of("绿色"), 1, true));
+        var result = service.chat(request("薄荷绿", null), session);
+        assertEquals("search", result.get("mode"));
+        assertEquals(images, result.get("images"));
+        assertTrue(result.get("answer").toString().contains("缩略图中的绿色配色"));
+        assertTrue(result.get("answer").toString().contains("没有可读取的缩略图"));
+        assertTrue(result.get("answer").toString().contains("本次先展示已检查"));
+        verifyNoInteractions(client, reader);
+    }
+
+    @Test
     void todoUsesOnlyServerAuthenticatedIdentityAndReturnsRealCards() {
         when(data.myTasks(session))
                 .thenReturn(List.of(Map.of("id", 1L, "projectId", 2L, "name", "本人任务", "status", "pending")));
@@ -126,7 +153,7 @@ class AssistantServiceTest {
         verify(data).searchImages(contains("鲸鱼"), eq(session));
         verify(client, never()).reply(any(), anyString(), any());
         assertEquals("search", answer.get("mode"));
-        assertTrue(answer.get("answer").toString().contains("不是整库视觉相似度"));
+        assertTrue(answer.get("answer").toString().contains("已从本次素材提取关键词"));
     }
 
     @Test

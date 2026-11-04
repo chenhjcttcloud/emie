@@ -30,6 +30,7 @@ public class AssistantDataService {
     private final AssistantTaskRepository ownTasks;
     private final ImageLibraryItemRepository library;
     private final FileRecordRepository files;
+    private final AssistantImageColorSearch colorSearch;
 
     public AssistantDataService(
             PermissionService permissions,
@@ -38,7 +39,8 @@ public class AssistantDataService {
             SubTaskRepository tasks,
             AssistantTaskRepository ownTasks,
             ImageLibraryItemRepository library,
-            FileRecordRepository files) {
+            FileRecordRepository files,
+            AssistantImageColorSearch colorSearch) {
         this.permissions = permissions;
         this.access = access;
         this.projects = projects;
@@ -46,6 +48,7 @@ public class AssistantDataService {
         this.ownTasks = ownTasks;
         this.library = library;
         this.files = files;
+        this.colorSearch = colorSearch;
     }
 
     @Transactional(readOnly = true)
@@ -116,12 +119,31 @@ public class AssistantDataService {
         return file;
     }
 
+    public record ImageSearchResult(
+            List<Map<String, Object>> images,
+            int libraryCount,
+            List<String> colors,
+            int missingThumbnails,
+            boolean partial) {}
+
+    public boolean isColorSearch(String query) {
+        return !colorSearch.parseColors(query).isEmpty()
+                && terms(colorSearch.textWithoutColors(query)).isEmpty();
+    }
+
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> searchImages(String query, AuthSession session) {
+    public ImageSearchResult searchImages(String query, AuthSession session) {
         requireLibrary(session);
-        List<String> terms = terms(query);
-        if (terms.isEmpty()) return List.of();
-        return library.findAllByOrderByCreatedAtDesc().stream()
+        var colors = colorSearch.parseColors(query);
+        List<String> terms = terms(colors.isEmpty() ? query : colorSearch.textWithoutColors(query));
+        if (terms.isEmpty() && colors.isEmpty()) return new ImageSearchResult(List.of(), -1, List.of(), 0, false);
+        List<ImageLibraryItem> items = library.findAllByOrderByCreatedAtDesc();
+        List<String> colorNames = colors.stream()
+                .map(AssistantImageColorSearch.ColorFamily::label)
+                .toList();
+        if (items.isEmpty()) return new ImageSearchResult(List.of(), 0, colorNames, 0, false);
+        if (!colors.isEmpty()) return searchByColor(items, terms, colors, colorNames);
+        List<Map<String, Object>> results = items.stream()
                 .map(item -> new Ranked(item, matches(item, terms)))
                 .filter(rank -> !rank.reasons().isEmpty())
                 .sorted(Comparator.comparingInt((Ranked rank) -> rank.reasons().size())
@@ -129,19 +151,75 @@ public class AssistantDataService {
                 .map(rank -> new ImageMatch(rank, imageFiles(rank.item())))
                 .filter(match -> !match.images().isEmpty())
                 .limit(6)
-                .map(match -> {
-                    Ranked rank = match.rank();
-                    ImageLibraryItem item = rank.item();
-                    Map<String, Object> view = new LinkedHashMap<>();
-                    view.put("id", item.getId());
-                    view.put("name", safe(item.getName(), 160));
-                    view.put("ipName", safe(item.getIpName(), 100));
-                    view.put("reasons", rank.reasons());
-                    view.put("images", match.images());
-                    return view;
-                })
+                .map(match -> imageView(match.rank().item(), match.rank().reasons(), match.images()))
                 .toList();
+        return new ImageSearchResult(results, items.size(), List.of(), 0, false);
     }
+
+    private ImageSearchResult searchByColor(
+            List<ImageLibraryItem> items,
+            List<String> terms,
+            List<AssistantImageColorSearch.ColorFamily> colors,
+            List<String> colorNames) {
+        // Resolve shared-library file bindings once, before touching thumbnail caches.
+        Map<String, FileRecord> records = new HashMap<>();
+        files.findByTargetTypeOrderByCreatedAtDesc("image_library")
+                .forEach(file -> records.putIfAbsent(file.getStoredName(), file));
+        List<ColorRanked> results = new ArrayList<>();
+        long deadline = System.nanoTime() + java.time.Duration.ofSeconds(2).toNanos();
+        int inspected = 0;
+        int unavailable = 0;
+        boolean partial = false;
+        for (ImageLibraryItem item : items) {
+            List<String> textReasons = matches(item, terms);
+            if (!terms.isEmpty() && textReasons.isEmpty()) continue;
+            List<Map<String, Object>> matchedFiles = new ArrayList<>();
+            List<String> reasons = new ArrayList<>(textReasons);
+            double best = 0;
+            for (Map<String, Object> file : imageFiles(item, name -> Optional.ofNullable(records.get(name)))) {
+                // Bound cold-cache work and retain any matches already found.
+                if (inspected >= 800 || System.nanoTime() >= deadline) {
+                    partial = true;
+                    break;
+                }
+                inspected++;
+                var match = colorSearch.match(file.get("storedName").toString(), colors);
+                if (!match.available()) unavailable++;
+                if (match.score() <= 0) continue;
+                matchedFiles.add(file);
+                if (match.score() > best) {
+                    best = match.score();
+                    reasons = new ArrayList<>(textReasons);
+                    reasons.addAll(match.reasons());
+                    // Preview the file that explains this result before its other variants.
+                    matchedFiles.remove(file);
+                    matchedFiles.add(0, file);
+                }
+            }
+            if (best > 0) results.add(new ColorRanked(item, best, reasons, matchedFiles));
+            if (partial) break;
+        }
+        List<Map<String, Object>> views = results.stream()
+                .sorted(Comparator.comparingDouble(ColorRanked::score).reversed())
+                .limit(6)
+                .map(match -> imageView(match.item(), match.reasons(), match.images()))
+                .toList();
+        return new ImageSearchResult(views, items.size(), colorNames, unavailable, partial);
+    }
+
+    private Map<String, Object> imageView(
+            ImageLibraryItem item, List<String> reasons, List<Map<String, Object>> images) {
+        Map<String, Object> view = new LinkedHashMap<>();
+        view.put("id", item.getId());
+        view.put("name", safe(item.getName(), 160));
+        view.put("ipName", safe(item.getIpName(), 100));
+        view.put("reasons", reasons);
+        view.put("images", images);
+        return view;
+    }
+
+    private record ColorRanked(
+            ImageLibraryItem item, double score, List<String> reasons, List<Map<String, Object>> images) {}
 
     public boolean canSearchImages(AuthSession session) {
         return session != null
@@ -176,8 +254,9 @@ public class AssistantDataService {
         String value = safe(query, 2000)
                 .toLowerCase(Locale.ROOT)
                 .replaceAll(
-                        "我想要|想要|帮我|请帮|根据这张|按这张|这张|找一下|找相似|相似|参考图|图档库|图库|图档|图片|素材|推荐|查找|找图|在我的|我的|里面|筛选|展示|出来|类型|相关",
+                        "我想要|我需要|我想找|想要|想找|需要|能不能|可不可以|有没有|是否有|给我|我要|请给|帮忙|帮我|请帮|找一些|找几张|找一张|找几个|找一个|一些|几张|一张|几款|看看|看一下|提供|挑选|选择|色调|配色|搭配|图案|根据这张|按这张|这张|找一下|找相似|相似|参考图|图档库|图库|图档|图片|素材|推荐|查找|找图|在我的|我的|里面|筛选|展示|出来|类型|相关",
                         " ")
+                .replaceAll("\\b(?:please|find|show|me|some|artwork|images?|pictures?|assets?)\\b", " ")
                 .replaceAll("(?<=\\p{IsHan})(?=[a-z0-9])|(?<=[a-z0-9])(?=\\p{IsHan})", " ")
                 .replaceAll("\\bhello\\s+kitty\\b", "hellokitty");
         LinkedHashSet<String> terms = new LinkedHashSet<>();
@@ -205,6 +284,11 @@ public class AssistantDataService {
     }
 
     private List<Map<String, Object>> imageFiles(ImageLibraryItem item) {
+        return imageFiles(item, files::findByStoredName);
+    }
+
+    private List<Map<String, Object>> imageFiles(
+            ImageLibraryItem item, java.util.function.Function<String, Optional<FileRecord>> lookup) {
         String raw = item.getImagesJson();
         try {
             List<Map<String, Object>> values = JSON.readValue(raw == null ? "[]" : raw, new TypeReference<>() {});
@@ -215,7 +299,7 @@ public class AssistantDataService {
                         String name = String.valueOf(file.getOrDefault("storedName", ""));
                         return name.matches("[a-zA-Z0-9][a-zA-Z0-9._-]{0,254}")
                                 && !name.contains("..")
-                                && files.findByStoredName(name)
+                                && lookup.apply(name)
                                         .filter(record -> "image_library".equals(record.getTargetType())
                                                 && (record.getTargetId() == null
                                                         || Objects.equals(item.getId(), record.getTargetId())))

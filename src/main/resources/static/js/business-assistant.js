@@ -664,8 +664,16 @@ function handleClick(event) {
     const file = item?.images?.find(value => imagePath(value, false));
     const url = imagePath(file, false);
     if (!url) return;
-    if (action === 'preview') EMIE.actions.openFilePreview?.(url, text(file.name, 255) || '图档', 0);
-    else EMIE.actions.doDirectDownload?.(url);
+    if (action === 'preview') {
+      const name = text(file.name, 255) || text(file.storedName, 255);
+      if (/\.(png|jpe?g|gif|webp|bmp)$/i.test(file.storedName)) {
+        const gallery = item.images.filter(value => /\.(png|jpe?g|gif|webp|bmp)$/i.test(value.storedName) && imagePath(value, false)).map(value => ({ src: EMIE.actions.authenticatedFileUrl(imagePath(value, false)), name: text(value.name, 255) || text(value.storedName, 255) }));
+        const source = EMIE.actions.authenticatedFileUrl(url);
+        EMIE.actions.previewImage?.(source, name, gallery, gallery.findIndex(value => value.src === source));
+      } else {
+        EMIE.actions.openFilePreview?.(url, /\.(ai|pdf|pptx?)$/i.test(name) ? name : text(file.storedName, 255), 0);
+      }
+    } else EMIE.actions.doDirectDownload?.(url);
   }
 }
 

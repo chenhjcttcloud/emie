@@ -26,10 +26,11 @@ await page.route('**/api/**', async route => {
   const fulfill = data => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(data) });
   if (url.pathname === '/api/assistant/chat') {
     const body = route.request().postDataJSON(); chats.push(body);
-    const response = body.attachmentStoredName || body.message === '按IP或风格查找图档' ? {
+    const colorSearch = body.message === '给我绿色图档';
+    const response = body.attachmentStoredName || body.message === '按IP或风格查找图档' || colorSearch ? {
       ...modelMeta(),
       mode: 'search', answer: 'UI 模拟：找到相关图档。', serviceMessage: '当前按名称、IP 与文字标签匹配，未进行参考图视觉分析。',
-      images: [{ id: 601, name: 'UI模拟 · 春日包装', ipName: '春日系列', reasons: ['同系列：春日'], images: [{ storedName: 'assistant-simulation-cover.ai', name: 'UI模拟.ai' }] }],
+      images: [{ id: 601, name: 'UI模拟 · 春日包装', ipName: '春日系列', reasons: ['同系列：春日'], images: [{ storedName: colorSearch ? 'assistant-simulation-green.png' : 'assistant-simulation-cover.ai', name: colorSearch ? '绿色预览.png' : 'UI模拟.ai' }] }],
       sources: [{ title: '查看图库', view: 'image-library' }], suggestions: []
     } : {
       ...modelMeta(),
@@ -103,10 +104,11 @@ async function setIdentity(role, userId) {
     localStorage.setItem('design_pm_token', 'business-assistant-ui-simulation-only');
     document.getElementById('loginPage').style.display = 'none'; document.getElementById('appContainer').style.display = '';
     document.documentElement.dataset.appReady = 'authenticated';
-    const f = window.assistantFixture ||= { sources: [], previews: [], downloads: [], opened: [] };
+    const f = window.assistantFixture ||= { sources: [], previews: [], rasterPreviews: [], downloads: [], opened: [] };
     e.actions.navigate = view => { f.sources.push(view); e.state.currentView = view; document.getElementById('mainContent').textContent = 'UI模拟页面 · ' + view; };
     e.actions.openProjectDetail = (projectId, taskId) => f.opened.push({ projectId, taskId });
     e.actions.openFilePreview = (...args) => f.previews.push(args);
+    e.actions.previewImage = (...args) => f.rasterPreviews.push(args);
     e.actions.doDirectDownload = (...args) => f.downloads.push(args);
   }, { role, userId });
   await page.locator('#businessAssistantLauncher').waitFor({ state: 'visible' });
@@ -230,6 +232,11 @@ try {
   await page.locator('.business-assistant-image [data-assistant-action="download"]').click();
   assert.equal(await page.evaluate(() => window.assistantFixture.previews.length), 1);
   assert.equal(await page.evaluate(() => window.assistantFixture.downloads.length), 1);
+  await send('给我绿色图档');
+  const colorCard = page.locator('.business-assistant-image').last();
+  await colorCard.locator('[data-assistant-action="preview"]').click();
+  assert.equal(await page.evaluate(() => window.assistantFixture.rasterPreviews.length), 1, 'raster image uses image preview');
+  assert.equal(await page.evaluate(() => window.assistantFixture.previews.length), 1, 'raster image does not enter document preview');
   await page.screenshot({ path: '/tmp/emie-business-assistant-conversation-ui.png', fullPage: true });
   await page.evaluate(() => {
     const transfer = new DataTransfer();

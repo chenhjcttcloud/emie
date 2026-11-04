@@ -54,7 +54,8 @@ public class AssistantService {
                 && message.matches("(?s).*(图档|图库|图片|参考图).*$")
                 && message.matches(
                         "(?s).*(权限|能否访问|能访问|能查看|能看到|能不能看|能不能访问|可以访问|可以查看|可以看到|看不到|看不见|无法查看|无法访问|不能查看|不能访问).*$");
-        boolean search = attachment || message.matches("(?s).*(找图|图档|图库|相似|参考图|素材推荐|图片推荐).*$");
+        boolean search =
+                attachment || data.isColorSearch(message) || message.matches("(?s).*(找图|图档|图库|相似|参考图|素材推荐|图片推荐).*$");
         boolean todo = message.matches("(?s).*(待办|待处理|我的任务|我的子任务|今天|本周|截止|优先|先做).*$");
         List<Map<String, Object>> tasks = todo ? data.myTasks(session) : List.of();
         List<Map<String, Object>> sources = new ArrayList<>(AssistantKnowledge.baseSources());
@@ -123,16 +124,32 @@ public class AssistantService {
                     }
                 } else serviceMessage = "小觅当前繁忙，素材内容未分析，当前仅按你输入的文字查找";
             } else if (file != null) serviceMessage = "智能对话未启用或未配置密钥，素材内容未分析，当前仅按你输入的文字查找";
-            images = data.searchImages(query, session);
+            var imageSearch = data.searchImages(query, session);
+            images = imageSearch.images();
             mode = "search";
-            answer = (described
+            boolean colorSearch = !imageSearch.colors().isEmpty();
+            answer = colorSearch
+                    ? "已按缩略图中的" + String.join("、", imageSearch.colors()) + "配色筛选共享图档，并结合你提供的名称、IP或标签文字匹配。"
+                    : described
                             ? "已从本次素材提取关键词，并按图库名称、IP和标签检索。"
-                            : contextualSearch ? "已按当前任务的IP和需求文字检索共享图档库。" : "当前按你输入的名称、IP和标签文字检索共享图档库。")
-                    + "这不是整库视觉相似度比较。"
-                    + (images.isEmpty()
-                            ? "当前账号具备图档库查看权限，但本次关键词未匹配到可展示的图档。请尝试图档名称或IP；颜色、画风需已有文字标签支持。"
-                            : "下面展示最多6个真实图档，推荐理由来自实际名称、IP或标签匹配，请预览确认是否适用。");
-            sources.add(Map.of("title", "图档库 · 名称/IP/标签检索", "view", "image-library"));
+                            : contextualSearch ? "已按当前任务的IP和需求文字检索共享图档库。" : "已按你输入的名称、IP和标签文字检索共享图档库。";
+            if (imageSearch.libraryCount() == 0) {
+                answer = "当前环境的图档库还没有图档记录。请先在图档库上传并保存图档，再让我帮你筛选；已有缩略图缓存需要对应的图库记录才能检索。";
+            } else if (images.isEmpty()) {
+                answer += imageSearch.libraryCount() < 0
+                        ? "请补充要查找的IP、名称或颜色，例如“绿色系的图档”。"
+                        : "当前账号具备图档库查看权限，本次未找到符合条件的图档。" + (colorSearch ? "可换一个颜色，或减少名称、IP等条件。" : "请尝试图档名称、IP或已有文字标签。");
+            } else {
+                answer += "下面展示最多6个真实图档，可直接预览和下载。";
+            }
+            if (imageSearch.missingThumbnails() > 0) {
+                answer += "部分图档暂时没有可读取的缩略图，尚未纳入颜色筛选。";
+            }
+            if (imageSearch.partial()) {
+                answer += "本次先展示已检查图档的结果；可增加IP或名称缩小范围。";
+            }
+            sources.add(
+                    Map.of("title", colorSearch ? "图档库 · 配色/名称/IP检索" : "图档库 · 名称/IP/标签检索", "view", "image-library"));
         } else if (config != null && config.configured()) {
             if (modelSlots.tryAcquire()) {
                 try {

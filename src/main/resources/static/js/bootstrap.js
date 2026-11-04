@@ -66,7 +66,7 @@ async function loadViewModules(view) {
 
 import './files.js?v=302';
 import './business-assistant-position.js?v=3';
-import './business-assistant.js?v=11';
+import './business-assistant.js?v=15';
 
 const EMIE = window.EMIE;
 EMIE.loadViewModules = loadViewModules;
