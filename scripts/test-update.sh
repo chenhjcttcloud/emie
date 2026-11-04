@@ -4,12 +4,22 @@ set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd -P)"
 BUILD_ROOT="$(bash "$ROOT/scripts/test-build-root.sh")"
+BUILD_MODE=package
+static_files=()
+for argument in "$@"; do
+  case "$argument" in
+    --full) BUILD_MODE=full ;;
+    --*) echo "未知参数：$argument（可选 --full 执行完整 Java 测试）" >&2; exit 2 ;;
+    *) static_files+=("$argument") ;;
+  esac
+done
+SECONDS=0
 
 echo '[1/8] 更新静态资源版本号'
 if [[ "$BUILD_ROOT" != "$ROOT" ]]; then
   printf '固定测试版本=%s，保留该版本静态资源缓存参数\n' "$(basename "$BUILD_ROOT")"
-elif [[ $# -gt 0 ]]; then
-  "$ROOT/scripts/update-static-versions.sh" "$@"
+elif [[ ${#static_files[@]} -gt 0 ]]; then
+  "$ROOT/scripts/update-static-versions.sh" "${static_files[@]}"
 else
   "$ROOT/scripts/update-static-versions.sh"
 fi
@@ -24,11 +34,10 @@ else
 fi
 
 echo '[3/8] 构建 Java 应用'
-"$BUILD_ROOT/scripts/mvnw-java21.sh" clean package -DskipTests -q
-if [[ "$BUILD_ROOT" != "$ROOT" ]]; then
-  mkdir -p "$ROOT/target"
-  cp "$BUILD_ROOT/target/design-pm-1.0.0.jar" "$ROOT/target/design-pm-1.0.0.jar"
-fi
+build_result="$(python3 "$ROOT/scripts/verified-build.py" --source-root "$BUILD_ROOT" --mode "$BUILD_MODE")"
+printf '%s\n' "$build_result"
+expected_jar_sha="$(sed -n 's/^jar_sha256=//p' <<<"$build_result")"
+[[ "$expected_jar_sha" =~ ^[0-9a-f]{64}$ ]] || { echo '构建未返回有效产物校验值' >&2; exit 1; }
 
 echo '[4/8] 重建并启动测试容器'
 "$ROOT/scripts/test-stack.sh" rebuild >/tmp/emie-test-update.log 2>&1 || {
@@ -56,6 +65,15 @@ raise SystemExit(0 if payload.get('status') == 'UP' else 1)
 PY
   echo '应用、数据库或 Redis 健康状态不是 UP' >&2; exit 1;
 }
+container_state="$(docker inspect emie-test-app --format '{{.State.Status}} {{.RestartCount}} {{.State.OOMKilled}}')"
+[[ "$container_state" == 'running 0 false' ]] || {
+  echo "测试应用容器状态异常：$container_state" >&2; exit 1;
+}
+local_jar_sha="$(shasum -a 256 "$ROOT/target/design-pm-1.0.0.jar" | awk '{print $1}')"
+running_jar_sha="$(docker compose -f docker-compose.test.yml exec -T test-app sha256sum /app/app.jar | awk '{print $1}')"
+[[ "$local_jar_sha" == "$expected_jar_sha" && "$running_jar_sha" == "$expected_jar_sha" ]] || {
+  echo '测试容器 JAR 与本次构建不一致' >&2; exit 1;
+}
 if docker compose -f docker-compose.test.yml logs --tail=120 test-app | grep -Eq 'UnknownHostException|Communications link failure|APPLICATION FAILED TO START|SyntaxError'; then
   echo '发现应用启动错误日志，停止本次更新' >&2
   docker compose -f docker-compose.test.yml logs --tail=120 test-app >&2
@@ -68,9 +86,12 @@ smoke_html="$(curl -fsS --max-time 10 http://127.0.0.1:8080/)" || {
 grep -Eq '产品管理系统|/js/bootstrap\.js' <<<"$smoke_html" || {
   echo '首页入口内容不完整' >&2; exit 1;
 }
+cmp -s <(printf '%s\n' "$smoke_html") "$BUILD_ROOT/src/main/resources/static/index.html" || {
+  echo '首页入口与本次源码不一致' >&2; exit 1;
+}
 for asset in /js/bootstrap.js /js/core-runtime.js /css/app.css; do
-  curl -fsS --max-time 10 "http://127.0.0.1:8080${asset}" >/dev/null || {
-    echo "静态资源检查失败: ${asset}" >&2; exit 1;
+  cmp -s <(curl -fsS --max-time 10 "http://127.0.0.1:8080${asset}") "$BUILD_ROOT/src/main/resources/static${asset}" || {
+    echo "静态资源与本次源码不一致: ${asset}" >&2; exit 1;
   }
 done
 CHROME_BIN="${CHROME_BIN:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
@@ -149,6 +170,7 @@ else
   echo '未找到 npm，无法执行弹窗交互浏览器回归' >&2
   exit 1
 fi
+python3 "$ROOT/scripts/verified-build.py" --source-root "$BUILD_ROOT" --mode "$BUILD_MODE" --check-only
 # 健康检查走 127.0.0.1（本机回环），但畀人开嘅地址係局域网 IP —— 打印后者，免得照住 127 去开
 APP_URL="${EMIE_TEST_APP_URL:-http://192.168.200.118:8080}"
-printf 'test_update=ok url=%s\n' "$APP_URL"
+printf 'test_update=ok url=%s elapsed_seconds=%s\n' "$APP_URL" "$SECONDS"

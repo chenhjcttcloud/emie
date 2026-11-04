@@ -8,6 +8,7 @@ ENV_FILE="${PRODUCTION_ENV_FILE:-$PROJECT_ROOT/.server.production.local.env}"
 REMOTE_HELPER_LOCAL="$PROJECT_ROOT/scripts/release-production-remote.sh"
 JAR_PATH="$PROJECT_ROOT/target/design-pm-1.0.0.jar"
 PREFLIGHT_ONLY="false"
+release_artifact_dir=''
 
 usage() {
   cat <<'EOF'
@@ -80,7 +81,7 @@ DEPLOY_DIR="${SERVER_DEPLOY_DIR:-/path/to/deploy-dir}"
 REMOTE_HELPER="$DEPLOY_DIR/.release-tools/release-production-remote.sh"
 REMOTE_INCOMING_DIR="$DEPLOY_DIR/incoming"
 
-for command_name in git ssh sshpass rsync curl sha256sum; do
+for command_name in git ssh sshpass rsync curl sha256sum python3; do
   command -v "$command_name" >/dev/null 2>&1 ||
     { echo "本机缺少命令：$command_name" >&2; exit 1; }
 done
@@ -96,7 +97,11 @@ ssh_args=(
   -o "ControlPath=/tmp/emie-release-%r@%h:%p"
 )
 export SSHPASS="$SERVER_PASSWORD"
-trap 'unset SSHPASS SERVER_PASSWORD SERVER_SUDO_PASSWORD' EXIT
+cleanup() {
+  if [[ -n "$release_artifact_dir" ]]; then rm -rf "$release_artifact_dir"; fi
+  unset SSHPASS SERVER_PASSWORD SERVER_SUDO_PASSWORD
+}
+trap cleanup EXIT
 
 run_ssh() {
   SSHPASS="$SERVER_PASSWORD" sshpass -e ssh "${ssh_args[@]}" "$SERVER_USER@$SERVER_HOST" "$@"
@@ -144,10 +149,14 @@ if [[ "$target_sha" == "$remote_current_sha" ]]; then
   exit 0
 fi
 
-printf "阶段 3/5：Java 21 完整构建与测试...\n"
-scripts/mvnw-java21.sh package
+printf "阶段 3/5：验证或生成 Java 21 完整测试构建...\n"
+release_artifact_dir="$(mktemp -d "${TMPDIR:-/tmp}/emie-release-artifact.XXXXXX")"
+JAR_PATH="$release_artifact_dir/app.jar"
+python3 "$PROJECT_ROOT/scripts/verified-build.py" --source-root "$PROJECT_ROOT" --mode full --output "$JAR_PATH"
 [[ -f "$JAR_PATH" ]] || { echo "构建产物不存在：$JAR_PATH" >&2; exit 1; }
 jar_sha="$(sha256sum "$JAR_PATH" | sed "s/ .*//")"
+[[ "$(git rev-parse HEAD)" == "$target_sha" && -z "$(git status --porcelain)" ]] || \
+  { echo "构建期间源码或提交发生变化，禁止生产发布。" >&2; exit 1; }
 target_short="${target_sha:0:7}"
 remote_incoming="$REMOTE_INCOMING_DIR/app-$target_sha.jar"
 printf "target_version=%s\n" "$expected_version"

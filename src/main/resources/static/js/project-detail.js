@@ -315,7 +315,7 @@ function renderSubTaskCard(detail, task, idx) {
         || (EMIE.state.currentRole === 'admin' && detail.type !== 'channel_custom')
       ) ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-cancel-reject" data-project-id="${detail.id}" data-task-id="${task.id}" data-cycle-id="${task.activeRejectionCycleId}">↩️ 取消驳回</button>` : ''}
       ${myTask && ['rejected', 'revision_requested'].includes(task.status) ? `<button class="btn btn-warning btn-sm" data-emie-action="click:detail-task-confirm-revision" data-project-id="${detail.id}" data-task-id="${task.id}">🛠️ 确认修改</button>` : ''}
-      ${myTask && task.status === 'delivered' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-correct" data-project-id="${detail.id}" data-task-id="${task.id}">📝 更正当前交付</button>` : ''}
+      ${myTask && ['delivered', 'submitted_for_review'].includes(task.status) ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-correct" data-project-id="${detail.id}" data-task-id="${task.id}">📝 更正当前交付</button>` : ''}
       ${isPlanner && detail.status !== 'paused' && (task.status === 'pending' || task.status === 'accepted') ? `
         ${task.allocationStatus === 'market_open' ? `<button class="btn btn-warning btn-sm" data-emie-action="click:detail-task-withdraw" data-project-id="${detail.id}" data-task-id="${task.id}">撤回市场</button>` : ''}
         ${task.status === 'accepted' ? `<button class="btn btn-warning btn-sm" data-emie-action="click:detail-task-cancel-accept" data-project-id="${detail.id}" data-task-id="${task.id}">取消接单</button>` : ''}

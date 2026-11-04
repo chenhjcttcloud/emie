@@ -286,7 +286,7 @@ public class ProjectTaskController {
                         projectId, taskId, req.withSessionContext(body, request)));
     }
 
-    /** 产品企划送审前，负责人主动更正漏交或错交文件并保留修订记录。 */
+    /** 每轮产品企划确认前，负责人可更正成果并保留历史版本。 */
     @PostMapping("/{projectId}/tasks/{taskId}/correct-delivery")
     public ResponseEntity<?> taskCorrectDelivery(
             @PathVariable Long projectId,

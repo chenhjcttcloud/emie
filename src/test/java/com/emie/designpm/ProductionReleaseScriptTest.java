@@ -53,7 +53,7 @@ class ProductionReleaseScriptTest {
     void repeatedReleaseExitsBeforeBuildingOrUploading() throws Exception {
         String script = Files.readString(localScript);
         int alreadyRunningCheck = script.indexOf("[[ \"$target_sha\" == \"$remote_current_sha\" ]]");
-        int build = script.indexOf("scripts/mvnw-java21.sh package");
+        int build = script.indexOf("python3 \"$PROJECT_ROOT/scripts/verified-build.py\"");
 
         assertTrue(alreadyRunningCheck >= 0);
         assertTrue(build > alreadyRunningCheck, "已运行的提交不应重复构建和上传");

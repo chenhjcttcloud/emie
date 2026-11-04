@@ -1123,8 +1123,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (currentUserId.isBlank() || !currentUserId.equals(task.getDesignerId())) {
             throw new RuntimeException("仅当前子任务负责人可修正交付");
         }
-        if (!"delivered".equals(task.getStatus())) {
-            throw new RuntimeException("仅尚未进入验收的已交付任务可以更正");
+        if (!List.of("delivered", "submitted_for_review").contains(task.getStatus())) {
+            throw new RuntimeException("仅企划确认前的已交付任务可以更正");
         }
         String changeSummary = SecurityUtil.sanitizeText((String) body.get("changeSummary"), 500);
         if (changeSummary == null || changeSummary.isBlank()) {
@@ -1311,6 +1311,13 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         if (!List.of("delivered", "submitted_for_review", "planner_approved").contains(task.getStatus())) {
             throw new RuntimeException("当前状态无法确认成果");
         }
+        SubTaskDeliveryVersion version = deliveryVersionRepository
+                .findFirstBySubTaskIdOrderByVersionNoDesc(taskId)
+                .orElse(null);
+        String latestVersionId = version == null ? null : String.valueOf(version.getId());
+        if (!Objects.equals(latestVersionId, Objects.toString(body.get("expectedDeliveryVersionId"), null))) {
+            throw new RuntimeException("成果已更新，请重新查看最新成果后确认");
+        }
         Map<String, Object> before = snapshotSubTask(task);
         boolean legacyManualScoring = usesLegacyManualScoring(task);
         double manualPoints = legacyManualScoring ? manualApprovalPoints(body.get("manualPoints")) : 0d;
@@ -1321,9 +1328,6 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         task.setCompletedAt(LocalDateTime.now());
         task.setActualDate(java.time.LocalDate.now().toString());
         task.setReviewComments(comments);
-        SubTaskDeliveryVersion version = deliveryVersionRepository
-                .findFirstBySubTaskIdOrderByVersionNoDesc(taskId)
-                .orElse(null);
         if (version != null) {
             version.setConfirmedAt(task.getCompletedAt());
             version.setConfirmedBy(currentUserId);

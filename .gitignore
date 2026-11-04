@@ -29,6 +29,8 @@ application-dev.yml
 .codebuddy/
 .sheet-work/
 outputs/
+.codex-build/
+__pycache__/
 
 # === 运行时上传文件 ===
 uploads/

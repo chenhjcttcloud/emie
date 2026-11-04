@@ -23,12 +23,17 @@ import com.emie.designpm.reference.repository.IpOptionRepository;
 import com.emie.designpm.reference.repository.ProductCategoryRepository;
 import com.emie.designpm.scoring.repository.ScoringRepository;
 import com.emie.designpm.sync.service.SyncQueueService;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
@@ -347,18 +352,163 @@ class ProjectReviewWorkflowTest {
                         eq("TASK_CORRECTED"), eq("sales-1"), eq("sub_task"), eq(11L), eq("designer-1"), anyMap());
     }
 
-    @Test
-    void correctionIsBlockedAfterPlannerSubmitsForReview() {
-        Project project = projectWithTask("channel_custom", "submitted_for_review");
-        when(projects.findById(1L)).thenReturn(Optional.of(project));
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "completed",
+                "planner_approved",
+                "sales_approved",
+                "admin_approved",
+                "rejected",
+                "revision_requested",
+                "accepted",
+                "pending"
+            })
+    void correctionIsBlockedOutsideUnconfirmedDeliveryStates(String status) {
+        SubTask task = projectWithTask("channel_custom", status).getTasks().get(0);
+        task.setDeliverables("原成果");
 
         Map<String, Object> body = new java.util.HashMap<>(deliveryBody());
         body.put("changeSummary", "尝试替换文件");
 
         RuntimeException error = assertThrows(RuntimeException.class, () -> service.taskCorrectDelivery(1L, 11L, body));
 
-        assertEquals("仅尚未进入验收的已交付任务可以更正", error.getMessage());
+        assertEquals("仅企划确认前的已交付任务可以更正", error.getMessage());
+        assertEquals(status, task.getStatus());
+        assertEquals("原成果", task.getDeliverables());
         verify(deliveryVersions, never()).save(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"delivered", "submitted_for_review"})
+    void onlyCurrentAssigneeCanCorrectDelivery(String status) {
+        SubTask task = projectWithTask("regular", status).getTasks().get(0);
+        task.setDeliverables("原成果");
+        Map<String, Object> body = new java.util.HashMap<>(deliveryBody());
+        body.put("currentUserId", "designer-2");
+        body.put("changeSummary", "替换他人成果");
+
+        RuntimeException error = assertThrows(RuntimeException.class, () -> service.taskCorrectDelivery(1L, 11L, body));
+
+        assertEquals("仅当前子任务负责人可修正交付", error.getMessage());
+        assertEquals(status, task.getStatus());
+        assertEquals("原成果", task.getDeliverables());
+        verify(deliveryVersions, never()).save(any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"initial, false", "redelivery, false", "revision, true", "revision, false"})
+    void eachDeliveryRoundCanBeCorrectedRepeatedlyBeforeConfirmation(String submissionType, boolean withPoints) {
+        Project project = projectWithTask("regular", "accepted");
+        SubTask task = project.getTasks().get(0);
+        task.setPointRuleCode("A1");
+        task.setBasePointSnapshot(20d);
+        boolean revision = "revision".equals(submissionType);
+        String requestId = revision ? "change-request-1" : null;
+        String ruleCode = revision ? (withPoints ? "B2" : null) : "A1";
+        double expectedPoints = revision ? (withPoints ? 8d : 0d) : 20d;
+        if (revision) {
+            task.setPendingChangeBonusRequestId(requestId);
+            task.setPendingChangeRuleCode(ruleCode);
+            task.setPendingChangeBonusPoints(expectedPoints);
+            task.setPendingChangeBonusReason("本轮修改要求");
+        }
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+        when(points.baseAlreadyAwarded(task)).thenReturn(revision);
+        List<SubTaskDeliveryVersion> versions = new ArrayList<>();
+        SubTaskDeliveryVersion earlier = deliveryVersion(task, 1);
+        earlier.setDeliverables("前轮成果");
+        earlier.setReferenceImagesJson("前轮图片快照");
+        earlier.setAttachmentsJson("前轮附件快照");
+        if (revision) earlier.setConfirmedAt(java.time.LocalDateTime.of(2026, 10, 1, 9, 0));
+        if (!"initial".equals(submissionType)) versions.add(earlier);
+        when(deliveryVersions.findMaxVersionNoBySubTaskId(11L)).thenAnswer(invocation -> versions.size());
+        when(deliveryVersions.save(any(SubTaskDeliveryVersion.class))).thenAnswer(invocation -> {
+            SubTaskDeliveryVersion version = invocation.getArgument(0);
+            if (!versions.contains(version)) {
+                version.setId((long) versions.size() + 1);
+                versions.add(version);
+            }
+            return version;
+        });
+        when(deliveryVersions.findFirstBySubTaskIdOrderByVersionNoDesc(11L))
+                .thenAnswer(invocation -> Optional.of(versions.get(versions.size() - 1)));
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Map<String, Object> body = new java.util.HashMap<>(deliveryBody());
+        body.put("deliverables", "本轮提交成果");
+        body.put("referenceImagesJson", "[{\"name\":\"round.png\",\"url\":\"/api/files/download/round.png\"}]");
+        body.put("attachmentsJson", "[{\"name\":\"round.pdf\",\"url\":\"/api/files/download/round.pdf\"}]");
+        if ("initial".equals(submissionType)) service.taskDeliver(1L, 11L, body);
+        else service.taskRedeliver(1L, 11L, body);
+        SubTaskDeliveryVersion original = versions.get(versions.size() - 1);
+        String originalImages = original.getReferenceImagesJson();
+        String originalAttachments = original.getAttachmentsJson();
+        assertEquals(submissionType, original.getSubmissionType());
+
+        body.put("changeSummary", "第一次更正说明");
+        body.put("deliverables", "第一次更正成果");
+        body.put("referenceImagesJson", "[{\"name\":\"corrected.png\",\"url\":\"/api/files/download/corrected.png\"}]");
+        body.put("attachmentsJson", "[]");
+        service.taskCorrectDelivery(1L, 11L, body);
+        SubTaskDeliveryVersion firstCorrection = versions.get(versions.size() - 1);
+        String firstCorrectionImages = firstCorrection.getReferenceImagesJson();
+        body.put("changeSummary", "第二次更正说明");
+        body.put("deliverables", "第二次更正成果");
+        body.put("referenceImagesJson", "[]");
+        service.taskCorrectDelivery(1L, 11L, body);
+        SubTaskDeliveryVersion latest = versions.get(versions.size() - 1);
+
+        assertEquals("submitted_for_review", task.getStatus());
+        assertEquals(original.getVersionNo() + 2, latest.getVersionNo());
+        assertEquals("本轮提交成果", original.getDeliverables());
+        assertEquals(originalImages, original.getReferenceImagesJson());
+        assertEquals(originalAttachments, original.getAttachmentsJson());
+        assertEquals("第一次更正成果", firstCorrection.getDeliverables());
+        assertEquals(firstCorrectionImages, firstCorrection.getReferenceImagesJson());
+        assertEquals("[]", firstCorrection.getAttachmentsJson());
+        assertEquals("前轮成果", earlier.getDeliverables());
+        assertEquals("前轮图片快照", earlier.getReferenceImagesJson());
+        assertEquals("前轮附件快照", earlier.getAttachmentsJson());
+        assertEquals("第二次更正成果", latest.getDeliverables());
+        assertEquals("[]", latest.getReferenceImagesJson());
+        assertEquals(requestId, task.getPendingChangeBonusRequestId());
+        for (SubTaskDeliveryVersion version : List.of(original, firstCorrection, latest)) {
+            assertEquals(requestId, version.getPointRequestId());
+            assertEquals(ruleCode, version.getPointRuleCode());
+            assertEquals(expectedPoints, version.getExpectedPoints());
+            assertNull(version.getConfirmedAt());
+        }
+        assertEquals("correction", firstCorrection.getSubmissionType());
+        assertEquals("correction", latest.getSubmissionType());
+        assertEquals("第二次更正说明", latest.getChangeSummary());
+        verify(points, never()).awardBaseSubmission(any(), nullable(SubTaskDeliveryVersion.class), anyString());
+        verify(points, never()).awardPendingChangeBonus(any(), nullable(SubTaskDeliveryVersion.class), anyString());
+        verify(points, never()).awardLegacyManualApproval(any(), any(), anyDouble(), anyString());
+
+        service.taskApprove(
+                1L,
+                11L,
+                Map.of(
+                        "currentRole",
+                        "planner",
+                        "currentUserId",
+                        "planner-1",
+                        "expectedDeliveryVersionId",
+                        latest.getId()));
+        assertEquals("completed", task.getStatus());
+        assertNotNull(latest.getConfirmedAt());
+        int savedVersions = versions.size();
+        assertThrows(RuntimeException.class, () -> service.taskCorrectDelivery(1L, 11L, body));
+        assertEquals(savedVersions, versions.size());
+        assertEquals("第二次更正成果", task.getDeliverables());
+        InOrder lockOrder = inOrder(projects, subTasks);
+        for (int operation = 0; operation < 5; operation++) {
+            lockOrder.verify(projects).findByIdForUpdate(1L);
+            lockOrder.verify(subTasks).findByIdForUpdate(11L);
+        }
     }
 
     @Test
@@ -690,6 +840,8 @@ class ProjectReviewWorkflowTest {
                         "planner-1",
                         "currentUser",
                         "企划甲",
+                        "expectedDeliveryVersionId",
+                        101L,
                         "comments",
                         "验收通过"));
 
@@ -706,6 +858,72 @@ class ProjectReviewWorkflowTest {
                         same(project.getTasks().get(0)), nullable(SubTaskDeliveryVersion.class), anyString());
         service.taskApprove(1L, 11L, Map.of("currentRole", "planner", "currentUserId", "planner-1"));
         verify(points, times(1)).awardBaseSubmission(any(), nullable(SubTaskDeliveryVersion.class), anyString());
+        verify(deliveryVersions, times(1)).findFirstBySubTaskIdOrderByVersionNoDesc(11L);
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(longs = {100L})
+    void plannerCannotConfirmAnUnseenUpdatedDelivery(Long expectedVersionId) {
+        Project project = projectWithTask("regular", "submitted_for_review");
+        SubTask task = project.getTasks().get(0);
+        task.setDeliverables("设计师最新成果");
+        task.setReviewComments("原验收备注");
+        task.setPendingChangeBonusRequestId("change-request-1");
+        task.setPendingChangeRuleCode("B2");
+        task.setPendingChangeBonusPoints(8d);
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+        SubTaskDeliveryVersion latest = deliveryVersion(task, 2);
+        latest.setId(102L);
+        when(deliveryVersions.findFirstBySubTaskIdOrderByVersionNoDesc(11L)).thenReturn(Optional.of(latest));
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("currentRole", "planner");
+        body.put("currentUserId", "planner-1");
+        body.put("comments", "验收通过");
+        if (expectedVersionId != null) body.put("expectedDeliveryVersionId", expectedVersionId);
+
+        RuntimeException error = assertThrows(RuntimeException.class, () -> service.taskApprove(1L, 11L, body));
+
+        assertEquals("成果已更新，请重新查看最新成果后确认", error.getMessage());
+        assertEquals("submitted_for_review", task.getStatus());
+        assertNull(task.getCompletedAt());
+        assertNull(task.getActualDate());
+        assertEquals("设计师最新成果", task.getDeliverables());
+        assertEquals("原验收备注", task.getReviewComments());
+        assertEquals("change-request-1", task.getPendingChangeBonusRequestId());
+        assertEquals("B2", task.getPendingChangeRuleCode());
+        assertEquals(8d, task.getPendingChangeBonusPoints());
+        assertNull(latest.getConfirmedAt());
+        assertNull(latest.getConfirmedBy());
+        assertNull(latest.getExpectedPoints());
+        assertTrue(project.getLogs().isEmpty());
+        verifyNoInteractions(points, notifications);
+        verify(deliveryVersions, never()).save(any());
+        verify(projects, never()).save(any());
+        verify(projects, never()).saveAndFlush(any());
+        InOrder lockOrder = inOrder(projects, subTasks, deliveryVersions);
+        lockOrder.verify(projects).findByIdForUpdate(1L);
+        lockOrder.verify(subTasks).findByIdForUpdate(11L);
+        lockOrder.verify(deliveryVersions).findFirstBySubTaskIdOrderByVersionNoDesc(11L);
+    }
+
+    @Test
+    void legacyTaskWithoutDeliveryVersionCanStillBeConfirmedWithNullVersionId() {
+        Project project = projectWithTask("regular", "submitted_for_review");
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+        when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("currentRole", "planner");
+        body.put("currentUserId", "planner-1");
+        body.put("expectedDeliveryVersionId", null);
+
+        service.taskApprove(1L, 11L, body);
+
+        assertEquals("completed", project.getTasks().get(0).getStatus());
+        verify(points).awardBaseSubmission(same(project.getTasks().get(0)), isNull(), eq("planner-1"));
+        verify(deliveryVersions, never()).save(any());
     }
 
     @Test
@@ -720,11 +938,22 @@ class ProjectReviewWorkflowTest {
         PointsService points = mock(PointsService.class);
         service.setPointsService(points);
         SubTaskDeliveryVersion version = deliveryVersion(task, 2);
+        version.setId(102L);
         when(deliveryVersions.findFirstBySubTaskIdOrderByVersionNoDesc(11L)).thenReturn(Optional.of(version));
         when(projects.save(any(Project.class))).thenAnswer(i -> i.getArgument(0));
 
         service.taskApprove(
-                1L, 11L, Map.of("currentRole", "planner", "currentUserId", "planner-1", "manualPoints", 12.5));
+                1L,
+                11L,
+                Map.of(
+                        "currentRole",
+                        "planner",
+                        "currentUserId",
+                        "planner-1",
+                        "manualPoints",
+                        12.5,
+                        "expectedDeliveryVersionId",
+                        102L));
 
         verify(points).awardLegacyManualApproval(same(task), same(version), eq(12.5d), eq("planner-1"));
         verify(points, never()).awardBaseSubmission(any(), nullable(SubTaskDeliveryVersion.class), anyString());
@@ -748,7 +977,10 @@ class ProjectReviewWorkflowTest {
         when(deliveryVersions.save(any())).thenAnswer(i -> i.getArgument(0));
         when(projects.save(any(Project.class))).thenAnswer(i -> i.getArgument(0));
 
-        service.taskApprove(1L, 11L, Map.of("currentRole", "planner", "currentUserId", "planner-1"));
+        service.taskApprove(
+                1L,
+                11L,
+                Map.of("currentRole", "planner", "currentUserId", "planner-1", "expectedDeliveryVersionId", 101L));
 
         assertEquals(2d, version.getExpectedPoints());
         assertEquals("D30_45", version.getPointRuleCode());

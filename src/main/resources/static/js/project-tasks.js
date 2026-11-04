@@ -673,7 +673,7 @@ async function taskDeliver(pid, tid) {
             <input type="hidden" name="actualDate">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required placeholder="描述交付的设计成果..." style="min-height:100px;"></textarea></div>
           </form>
-          <p class="form-hint">提交后通知产品企划，企划确认后发放基础分。</p>
+          <p class="form-hint">提交后通知产品企划，企划确认前可更正成果，确认后发放基础分。</p>
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
             <div class="form-label" style="margin-bottom:8px;">🖼️ 本地上传的交付参考图</div>
             <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="deliverImageInput">
@@ -851,7 +851,12 @@ async function taskCorrectDelivery(pid, tid) {
   try {
     const detail = await apiGet(`/projects/${pid}`);
     const task = detail.tasks.find(t => t.id === tid);
-    if (!task) return;
+    if (!task || !['delivered', 'submitted_for_review'].includes(task.status)
+        || String(task.designerId || '') !== String(getCurrentUserId())) {
+      doneOpenModal('taskCorrectDeliveryModal');
+      window.EMIE.actions.showSystemAlert('当前成果已确认或任务状态已变化，请刷新后查看。');
+      return;
+    }
     try { const allImages = JSON.parse(task.referenceImagesJson || '[]'); EMIE.projectState.deliverLibraryImages = allImages.filter(file => file.libraryItemId); EMIE.projectState.deliverImages = allImages.filter(file => !file.libraryItemId); } catch (_) { EMIE.projectState.deliverImages = []; EMIE.projectState.deliverLibraryImages = []; }
     try { EMIE.projectState.deliverAttachments = JSON.parse(task.attachmentsJson || '[]'); } catch (_) { EMIE.projectState.deliverAttachments = []; }
     const modal = document.createElement('div');
@@ -862,7 +867,7 @@ async function taskCorrectDelivery(pid, tid) {
       <div class="modal modal-lg">
         <div class="modal-header"><div class="modal-header-left">
           <div class="modal-title">📝 更正当前交付：${escHtml(task.name)}</div>
-          <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">提交后直接进入项目验收；如需修改，请由验收人驳回后重新交付。更正记录会保留。</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">本轮企划确认前可多次更正，每次更正都会保留历史版本。</div>
         </div></div>
         <div class="modal-body">
           <form id="taskCorrectDeliveryForm">
@@ -920,7 +925,12 @@ function taskApprove(pid, tid, projectType) {
   if (!tryOpenModal('taskApproveModal')) return;
   apiGet(`/projects/${pid}`).then(detail => {
     const task = detail.tasks.find(t => t.id === tid);
-    if (!task) return;
+    if (!task) {
+      doneOpenModal('taskApproveModal');
+      return;
+    }
+    const latestVersion = Array.isArray(task.deliveryVersions) ? task.deliveryVersions[0] : null;
+    const currentDelivery = latestVersion || task;
 
     const title = '✅ 企划确认';
     const legacyManualScoring = task.assigneeRole === 'designer'
@@ -929,17 +939,28 @@ function taskApprove(pid, tid, projectType) {
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
     modal.id = 'taskApproveModal';
+    modal.dataset.deliveryVersionId = latestVersion?.id == null ? '' : String(latestVersion.id);
     modal.innerHTML = `
       <div class="modal">
         <div class="modal-header"><div class="modal-header-left"><div class="modal-title">${title}：${escHtml(task.name)}</div></div></div>
         <div class="modal-body">
-          <p>${legacyManualScoring ? '这是 2026 年 10 月 1 日前创建的旧任务，请按本次最终交付情况手动给分；驳回时登记的积分不会另行自动发放。' : '确认后完成该子任务，并按本轮规则发放基础分；无积分修改轮次不发分。'}</p>
+          <p>${legacyManualScoring ? '这是 2026 年 10 月 1 日前创建的旧任务，请按本次最终交付情况手动给分；驳回时登记的积分不会另行自动发放。' : '确认后完成该子任务，并按本轮规则结算积分；无积分修改轮次不发分。'}</p>
           ${legacyManualScoring ? '<div class="form-group"><label class="form-label"><span class="required">*</span> 本次验收积分</label><input type="number" class="form-input" id="approveManualPoints" min="0" max="100000" step="0.01" required placeholder="请输入 0 到 100000，可保留两位小数"></div>' : ''}
+          <section class="delivery-confirmation-preview">
+            <strong>${latestVersion ? `本次确认第 ${escHtml(String(latestVersion.versionNo))} 版成果` : '本次确认的成果'}</strong>
+            <p style="white-space:pre-wrap;">${escHtml(currentDelivery.deliverables || '未填写文字交付内容')}</p>
+            ${EMIE.actions.renderSubTaskImages(currentDelivery.referenceImagesJson)}
+            ${EMIE.actions.renderTaskAttachments(currentDelivery.attachmentsJson)}
+          </section>
           <div class="form-group"><label class="form-label">验收意见（可选）</label><textarea class="form-textarea" id="approveComments" placeholder="输入验收意见..."></textarea></div>
         </div>
         <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-approve-close">取消</button><button class="btn btn-success" data-emie-action="click:task-submit-approve" data-project-id="${pid}" data-task-id="${tid}" data-project-type="${escHtml(projectType)}">确认</button></div>
       </div>`;
     document.body.appendChild(modal);
+    doneOpenModal('taskApproveModal');
+  }).catch(error => {
+    doneOpenModal('taskApproveModal');
+    window.EMIE.actions.showSystemAlert('加载失败: ' + (error.message || '请稍后重试'));
   });
 }
 
@@ -952,7 +973,9 @@ async function submitTaskApprove(pid, tid) {
     return;
   }
 
+  const deliveryVersionId = document.getElementById('taskApproveModal')?.dataset.deliveryVersionId;
   const data = {
+    expectedDeliveryVersionId: deliveryVersionId ? Number(deliveryVersionId) : null,
     comments: comments,
     currentUser: getCurrentUserName(),
     currentRole: EMIE.state.currentRole,
