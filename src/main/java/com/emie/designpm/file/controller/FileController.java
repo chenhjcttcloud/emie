@@ -1,5 +1,6 @@
 package com.emie.designpm.file.controller;
 
+import com.emie.designpm.admin.service.PermissionService;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
 import com.emie.designpm.entity.FileRecord;
@@ -31,7 +32,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -48,6 +48,9 @@ public class FileController {
     private static final Semaphore UPLOAD_SLOTS = new Semaphore(4);
     /** 缩略图请求允许排队，实际图片生成仍由 FileThumbnailService 控制并发。 */
     private static final Semaphore THUMBNAIL_REQUEST_SLOTS = new Semaphore(32);
+
+    private static final Set<String> INTERNAL_DOWNLOAD_DIRS =
+            Set.of("thumbnail-cache", "preview-cache", "restore-cache");
 
     private static final Logger log = LoggerFactory.getLogger(FileController.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -68,8 +71,8 @@ public class FileController {
     private final DesignRequirementRepository designRequirementRepository;
     private final FilePreviewService filePreviewService;
     private final FileThumbnailService fileThumbnailService;
+    private final PermissionService permissions;
 
-    @Autowired
     public FileController(
             FileArchiveService fileArchiveService,
             FileRecordRepository fileRecordRepository,
@@ -79,7 +82,8 @@ public class FileController {
             FileThumbnailService fileThumbnailService,
             DesignRequirementRepository designRequirementRepository,
             ProjectRepository projectRepository,
-            MaterialMarketItemRepository materialMarketRepository) {
+            MaterialMarketItemRepository materialMarketRepository,
+            PermissionService permissions) {
         this.fileArchiveService = fileArchiveService;
         this.fileRecordRepository = fileRecordRepository;
         this.projectAccessService = projectAccessService;
@@ -89,63 +93,7 @@ public class FileController {
         this.designRequirementRepository = designRequirementRepository;
         this.projectRepository = projectRepository;
         this.materialMarketRepository = materialMarketRepository;
-    }
-
-    public FileController(
-            FileArchiveService fileArchiveService,
-            FileRecordRepository fileRecordRepository,
-            ProjectAccessService projectAccessService,
-            SubTaskRepository subTaskRepository,
-            FilePreviewService filePreviewService,
-            FileThumbnailService fileThumbnailService,
-            DesignRequirementRepository designRequirementRepository) {
-        this(
-                fileArchiveService,
-                fileRecordRepository,
-                projectAccessService,
-                subTaskRepository,
-                filePreviewService,
-                fileThumbnailService,
-                designRequirementRepository,
-                null,
-                null);
-    }
-
-    public FileController(
-            FileArchiveService fileArchiveService,
-            FileRecordRepository fileRecordRepository,
-            ProjectAccessService projectAccessService,
-            SubTaskRepository subTaskRepository,
-            FilePreviewService filePreviewService,
-            FileThumbnailService fileThumbnailService) {
-        this(
-                fileArchiveService,
-                fileRecordRepository,
-                projectAccessService,
-                subTaskRepository,
-                filePreviewService,
-                fileThumbnailService,
-                null,
-                null,
-                null);
-    }
-
-    public FileController(
-            FileArchiveService fileArchiveService,
-            FileRecordRepository fileRecordRepository,
-            ProjectAccessService projectAccessService,
-            SubTaskRepository subTaskRepository,
-            FilePreviewService filePreviewService) {
-        this(
-                fileArchiveService,
-                fileRecordRepository,
-                projectAccessService,
-                subTaskRepository,
-                filePreviewService,
-                new FileThumbnailService(fileArchiveService),
-                null,
-                null,
-                null);
+        this.permissions = permissions;
     }
 
     /** 读取受权限保护的缩略图；原图仅用于点击后的大图预览。 */
@@ -174,8 +122,8 @@ public class FileController {
             }
             return ResponseEntity.ok()
                     .contentType(MediaType.IMAGE_PNG)
-                    .cacheControl(org.springframework.http.CacheControl.maxAge(java.time.Duration.ofDays(7))
-                            .cachePrivate())
+                    .cacheControl(
+                            org.springframework.http.CacheControl.noCache().cachePrivate())
                     .lastModified(Files.getLastModifiedTime(thumbnail).toMillis())
                     .body(new UrlResource(thumbnail.toUri()));
         } catch (FileNotFoundException e) {
@@ -276,7 +224,7 @@ public class FileController {
     @GetMapping("/library")
     public ResponseEntity<Object> library(HttpServletRequest request) {
         AuthSession session = (AuthSession) request.getAttribute("authSession");
-        if (session == null || !Set.of("admin", "planner", "designer").contains(session.role())) {
+        if (session == null || !permissions.canViewImageLibrary(session.role())) {
             return ResponseEntity.status(403).body(Map.of("error", "没有权限查看图档库"));
         }
         List<Map<String, Object>> items =
@@ -290,8 +238,10 @@ public class FileController {
     public ResponseEntity<Map<String, Object>> uploadLibraryImage(
             @RequestParam("file") MultipartFile file, HttpServletRequest request) {
         AuthSession session = (AuthSession) request.getAttribute("authSession");
-        if (session == null || !Set.of("admin", "planner").contains(session.role())) {
-            return ResponseEntity.status(403).body(Map.of("error", "仅产品企划和管理员可以上传图档"));
+        if (session == null
+                || !Set.of("admin", "planner").contains(session.role())
+                || !permissions.canViewImageLibrary(session.role())) {
+            return ResponseEntity.status(403).body(Map.of("error", "没有权限上传图档"));
         }
         if (file.isEmpty()
                 || file.getOriginalFilename() == null
@@ -341,6 +291,13 @@ public class FileController {
             @PathVariable String fileName,
             @RequestParam(value = "download", required = false, defaultValue = "false") boolean forceDownload,
             HttpServletRequest request) {
+        if (!SecurityUtil.isValidFileName(fileName)
+                || subDir.contains("..")
+                || subDir.contains("/")
+                || subDir.contains("\\")
+                || INTERNAL_DOWNLOAD_DIRS.contains(subDir.toLowerCase(Locale.ROOT))) {
+            return ResponseEntity.notFound().build();
+        }
         ResponseEntity<Object> authResult = checkDownloadAccess(subDir, fileName, request);
         if (authResult != null) {
             return authResult;
@@ -366,6 +323,8 @@ public class FileController {
             @PathVariable String fileName,
             @RequestParam(value = "download", required = false, defaultValue = "false") boolean forceDownload,
             HttpServletRequest request) {
+        if (!SecurityUtil.isValidFileName(fileName))
+            return ResponseEntity.notFound().build();
         ResponseEntity<Object> authResult = checkDownloadAccess(null, fileName, request);
         if (authResult != null) {
             return authResult;
@@ -522,9 +481,6 @@ public class FileController {
         if (session == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未登录或会话已过期，请重新登录"));
         }
-        if ("admin".equals(session.role())) {
-            return null;
-        }
         String relativePath = subDir == null || subDir.isBlank() ? fileName : subDir + "/" + fileName;
         if (canAccessFile(session, fileName, relativePath)) {
             return null;
@@ -533,19 +489,24 @@ public class FileController {
     }
 
     private boolean canAccessFile(AuthSession session, String storedName, String relativePath) {
-        return fileRecordRepository
-                .findByStoredName(storedName)
-                .map(record -> {
+        Optional<FileRecord> record = fileRecordRepository.findByStoredName(storedName);
+        if (record.filter(file -> "image_library".equals(file.getTargetType())).isPresent()) {
+            return permissions.canViewImageLibrary(session.role());
+        }
+        if ("admin".equals(session.role())) {
+            return true;
+        }
+        return record.map(file -> {
                     // 历史文件可能没有 owner/target 绑定，但仍被业务数据 JSON 引用。
                     // 按当前用户可见的项目、子任务及设计需求判断，避免历史文件被误判为无权访问。
-                    if (record.getTargetType() == null && record.getTargetId() == null) {
-                        return (record.getOwnerUserId() != null
-                                        && session.userId().equals(record.getOwnerUserId()))
+                    if (file.getTargetType() == null && file.getTargetId() == null) {
+                        return (file.getOwnerUserId() != null
+                                        && session.userId().equals(file.getOwnerUserId()))
                                 || isFileVisibleInAccessibleProjects(session, storedName, relativePath)
                                 || isFileVisibleInMaterialMarket(storedName)
                                 || isFileVisibleInAccessibleDesignRequirements(session, storedName);
                     }
-                    return canAccessBoundTarget(session, record.getTargetType(), record.getTargetId())
+                    return canAccessBoundTarget(session, file.getTargetType(), file.getTargetId())
                             || isFileVisibleInAccessibleProjects(session, storedName, relativePath)
                             || isFileVisibleInMaterialMarket(storedName)
                             || isFileVisibleInAccessibleDesignRequirements(session, storedName);
@@ -556,10 +517,6 @@ public class FileController {
     }
 
     private boolean canAccessBoundTarget(AuthSession session, String targetType, Long targetId) {
-        // 图档库是集合型资源，不绑定单个业务 targetId；必须先于 targetId 空值判断处理。
-        if ("image_library".equals(targetType)) {
-            return Set.of("admin", "planner", "designer").contains(session.role());
-        }
         if (targetType == null || targetType.isBlank() || targetId == null) {
             return false;
         }

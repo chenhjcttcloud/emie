@@ -138,7 +138,7 @@ function imageCard(item, messageIndex, imageIndex) {
   const files = Array.isArray(item?.images) ? item.images : [], file = files.find(value => imagePath(value, false));
   if (!file || !id(item.id)) return '';
   const reasons = (Array.isArray(item.reasons) ? item.reasons : []).filter(value => typeof value === 'string').slice(0, 3);
-  return `<article class="business-assistant-image"><img src="${EMPTY_IMAGE}" data-auth-src="${esc(imagePath(file, true))}" alt="${esc(text(item.name, 160))}" loading="lazy"><div><strong>${esc(text(item.name, 160) || '图档')}</strong>${item.ipName ? `<span>${esc(text(item.ipName, 100))}</span>` : ''}${reasons.length ? `<p>${reasons.map(reason => esc(text(reason, 160))).join(' · ')}</p>` : ''}<div class="business-assistant-image-actions"><button type="button" data-assistant-action="preview" data-message="${messageIndex}" data-image="${imageIndex}">预览</button><button type="button" data-assistant-action="download" data-message="${messageIndex}" data-image="${imageIndex}">下载</button><button type="button" data-assistant-action="source" data-view="image-library">图档库 ↗</button></div></div></article>`;
+  return `<article class="business-assistant-image"><img src="${EMPTY_IMAGE}" data-auth-src="${esc(imagePath(file, true))}" alt="${esc(text(item.name, 160))}" loading="lazy"><div><strong>${esc(text(item.name, 160) || '图档')}</strong>${item.ipName ? `<span>${esc(text(item.ipName, 100))}</span>` : ''}${reasons.length ? `<p>${reasons.map(reason => esc(text(reason, 160))).join(' · ')}</p>` : ''}<div class="business-assistant-image-actions"><button type="button" data-assistant-action="preview" data-message="${messageIndex}" data-image="${imageIndex}">预览</button><button type="button" data-assistant-action="download" data-message="${messageIndex}" data-image="${imageIndex}">下载</button><button type="button" data-assistant-action="source" data-view="image-library" data-item-id="${id(item.id)}">图档库 ↗</button></div></div></article>`;
 }
 
 function renderMessages() {
@@ -633,6 +633,13 @@ function closeSettings() {
 function openSource(element) {
   const view = element.dataset.view, projectId = id(element.dataset.projectId), taskId = id(element.dataset.taskId);
   if (!Object.hasOwn(VIEW_LABELS, view)) return;
+  const imageLibraryItemId = view === 'image-library' ? id(element.dataset.itemId) : null;
+  if (imageLibraryItemId) {
+    if (!EMIE.actions.canNavigateTo(view)) return;
+    closeBusinessAssistant();
+    EMIE.actions.navigate(view, { imageLibraryItemId });
+    return;
+  }
   if (projectId) EMIE.actions.openProjectDetail?.(projectId, taskId || undefined);
   else EMIE.actions.navigate?.(view);
   if (matchMedia('(max-width: 640px)').matches) closeBusinessAssistant();

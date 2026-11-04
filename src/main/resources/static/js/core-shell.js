@@ -64,17 +64,20 @@ function renderSidebar() {
 }
 
 // ==================== 导航 ====================
-function navigate(view) {
+function navigate(view, options = {}) {
   if (!canNavigateTo(view)) return;
   EMIE.state.currentView = view;
   if (view !== 'tasks') EMIE.state.taskBucket = 'all';
   // 保存当前浏览页面（刷新后恢复）
   localStorage.setItem('design_pm_lastView', view);
   renderSidebar();
-  render();
+  render(options);
   closeMobileSidebar();
+  if (view === 'image-library' && options.imageLibraryItemId) return;
   // 移动端切换页面后回顶部（延迟确保渲染完成）
+  const renderId = EMIE.state.renderId;
   setTimeout(() => {
+    if (EMIE.state.renderId !== renderId) return;
     window.scrollTo(0, 0);
     document.documentElement.scrollTop = 0;
   }, 50);

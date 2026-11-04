@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class PermissionService {
+    private static final Set<String> IMAGE_LIBRARY_ROLES = Set.of("admin", "planner", "designer");
 
     private final RoleRepository roleRepository;
     private final RolePermissionRepository rolePermissionRepository;
@@ -53,21 +55,7 @@ public class PermissionService {
         Role role = resolveRole(roleName);
         String assignmentRoleName = role != null ? role.getName() : roleName;
 
-        LinkedHashSet<String> permissions = new LinkedHashSet<>(PermissionCatalog.compatibilityPermissions(roleName));
-        permissions.addAll(rolePermissionRepository.findAllowedPermissionCodes(assignmentRoleName));
-        if (role != null) {
-            permissions.addAll(PermissionCatalog.translateConfiguredPermissions(role.getPermissions()));
-        }
-        List<String> deniedPermissions = rolePermissionRepository.findDeniedPermissionCodes(assignmentRoleName);
-        // 保留已获执行权限角色的状态读取能力，明确禁止的 view 仍在下面优先移除。
-        if (permissions.contains("admin.feishu_sync.execute")
-                && !deniedPermissions.contains("admin.feishu_sync.execute")) {
-            permissions.add("admin.feishu_sync.view");
-        }
-        permissions.removeAll(deniedPermissions);
-        // 防止旧版角色编辑在未展示新增能力时写入 deny，造成管理员无法恢复身份、
-        // 一线角色无法上传或读取自己刚上传的文件。
-        permissions.addAll(PermissionCatalog.mandatoryPermissions(roleName));
+        Set<String> permissions = effectivePermissions(roleName, role);
 
         List<String> sorted = new ArrayList<>(permissions);
         sorted.sort(String::compareTo);
@@ -87,9 +75,33 @@ public class PermissionService {
     }
 
     public boolean has(String rawRole, String permission) {
-        @SuppressWarnings("unchecked")
-        List<String> permissions = (List<String>) capabilities(rawRole).get("permissions");
-        return permissions.contains(permission);
+        String role = PermissionCatalog.normalizeRole(rawRole);
+        return effectivePermissions(role, resolveRole(role)).contains(permission);
+    }
+
+    private Set<String> effectivePermissions(String roleName, Role role) {
+        String assignmentRoleName = role != null ? role.getName() : roleName;
+        LinkedHashSet<String> permissions = new LinkedHashSet<>(PermissionCatalog.compatibilityPermissions(roleName));
+        permissions.addAll(rolePermissionRepository.findAllowedPermissionCodes(assignmentRoleName));
+        if (role != null) {
+            permissions.addAll(PermissionCatalog.translateConfiguredPermissions(role.getPermissions()));
+        }
+        List<String> deniedPermissions = rolePermissionRepository.findDeniedPermissionCodes(assignmentRoleName);
+        // 保留已获执行权限角色的状态读取能力，明确禁止的 view 仍在下面优先移除。
+        if (permissions.contains("admin.feishu_sync.execute")
+                && !deniedPermissions.contains("admin.feishu_sync.execute")) {
+            permissions.add("admin.feishu_sync.view");
+        }
+        permissions.removeAll(deniedPermissions);
+        // 防止旧版角色编辑在未展示新增能力时写入 deny，造成管理员无法恢复身份、
+        // 一线角色无法上传或读取自己刚上传的文件。
+        permissions.addAll(PermissionCatalog.mandatoryPermissions(roleName));
+        return permissions;
+    }
+
+    public boolean canViewImageLibrary(String rawRole) {
+        String role = PermissionCatalog.normalizeRole(rawRole);
+        return IMAGE_LIBRARY_ROLES.contains(role) && has(role, "page.image_library.view");
     }
 
     public List<String> scopes(String rawRole, String permission) {

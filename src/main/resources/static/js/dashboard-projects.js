@@ -171,7 +171,7 @@ function renderProjectRow(o, compact = false, showType = true) {
   </tr>`;
 }
 
-async function render() {
+async function render({ imageLibraryItemId } = {}) {
   const main = document.getElementById('mainContent');
   const renderId = (EMIE.state.renderId || 0) + 1;
   EMIE.state.renderId = renderId;
@@ -208,7 +208,7 @@ async function render() {
     } else if (view === 'materials') {
       await renderMaterialMarket(main);
     } else if (view === 'image-library') {
-      await EMIE.actions.renderImageLibrary(main, renderId);
+      await EMIE.actions.renderImageLibrary(main, renderId, imageLibraryItemId);
     } else if (view === 'other-tasks') {
       await renderDepartmentTasks(main, role, uid, EMIE.state.taskBucket || 'all');
     } else if (view === 'scoring') {

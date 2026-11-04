@@ -104,11 +104,15 @@ public class FileArchiveService {
                 if (storedName == null || storedName.isBlank()) {
                     continue;
                 }
-                fileRecordRepository.findByStoredName(storedName).ifPresent(record -> {
-                    record.setTargetType(targetType);
-                    record.setTargetId(targetId);
-                    fileRecordRepository.save(record);
-                });
+                // 图档引用不转移文件的图库归属及查看权限。
+                fileRecordRepository
+                        .findByStoredName(storedName)
+                        .filter(record -> !"image_library".equals(record.getTargetType()))
+                        .ifPresent(record -> {
+                            record.setTargetType(targetType);
+                            record.setTargetId(targetId);
+                            fileRecordRepository.save(record);
+                        });
             }
         } catch (Exception e) {
             log.warn("绑定文件记录失败 targetType={} targetId={}", targetType, targetId, e);

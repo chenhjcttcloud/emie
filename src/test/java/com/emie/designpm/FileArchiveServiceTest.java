@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -27,6 +28,32 @@ class FileArchiveServiceTest {
 
     @TempDir
     Path uploadDir;
+
+    @Test
+    void bindingProjectReferencesKeepsLibraryOwnership() {
+        FileRecordRepository records = mock(FileRecordRepository.class);
+        FileArchiveService service = new FileArchiveService(records, mock(SystemConfigRepository.class));
+        FileRecord library = FileRecord.builder()
+                .storedName("library.ai")
+                .targetType("image_library")
+                .targetId(9L)
+                .build();
+        FileRecord upload = FileRecord.builder().storedName("upload.png").build();
+        when(records.findByStoredName("library.ai")).thenReturn(Optional.of(library));
+        when(records.findByStoredName("upload.png")).thenReturn(Optional.of(upload));
+        service.bindFilesFromJson(
+                """
+                [{"storedName":"library.ai"},{"storedName":"upload.png"}]
+                """,
+                "project",
+                4L);
+        assertEquals("image_library", library.getTargetType());
+        assertEquals(9L, library.getTargetId());
+        verify(records, never()).save(library);
+        assertEquals("project", upload.getTargetType());
+        assertEquals(4L, upload.getTargetId());
+        verify(records).save(upload);
+    }
 
     @Test
     void resolveFilePrefersExistingLocalFileEvenWhenDatabaseMarksItArchived() throws Exception {

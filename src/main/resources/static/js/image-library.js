@@ -8,14 +8,17 @@ const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const getUserName = (...args) => EMIE.actions.getUserName(...args);
 let pendingImages = [];
 let editingItemId = null;
+let activeLibraryRender = null;
+let libraryRevision = 0;
 const PAGE_SIZE = 10;
 
 function parseJson(raw, fallback = []) { try { return raw ? JSON.parse(raw) : fallback; } catch { return fallback; } }
-function resourceUrl(url) { const token = localStorage.getItem('design_pm_token'); return token ? `${url}${url.includes('?') ? '&' : '?'}authToken=${encodeURIComponent(token)}` : url; }
+const resourceUrl = url => EMIE.actions.authenticatedFileUrl(url);
+const fileDownloadUrl = file => `/api/files/download/${encodeURIComponent(file.storedName)}`;
 
 function openUploadDrawer(existing = null) {
   editingItemId = existing?.id || null;
-  pendingImages = (existing?.images || []).map(image => ({ uploaded: image, preview: resourceUrl(image.url || `/api/files/download/${image.storedName}`) }));
+  pendingImages = (existing?.images || []).map(image => ({ uploaded: image, preview: resourceUrl(fileDownloadUrl(image)) }));
   const ips = (EMIE.state.ipOptions || []).filter(ip => ip.active !== false);
   const overlay = document.createElement('div'); overlay.id = 'imageLibraryUploadDrawer'; overlay.className = 'modal-overlay modal-detail-drawer';
   overlay.innerHTML = `<div class="modal"><div class="modal-header"><div><div class="modal-title">${existing ? '编辑图档' : '上传图档'}</div><div class="form-hint">完善图档资料，最多上传 3 张图片</div></div><button class="modal-close" data-emie-action="click:image-library-close-upload">✕</button></div><div class="modal-body image-library-form">
@@ -45,8 +48,8 @@ function toggleSubOption(button) { const group = document.getElementById('imageL
 function isAiFile(fileOrRecord) { return String(fileOrRecord?.name || '').toLowerCase().endsWith('.ai'); }
 function selectImages(files) { for (const file of Array.from(files)) { if (pendingImages.length >= 3) break; if (file.type.startsWith('image/') || isAiFile(file)) pendingImages.push({ file, preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : '' }); } document.getElementById('imageLibraryFiles').value = ''; renderPendingImages(); }
 function removePendingImage(index) { if (pendingImages[index].file) URL.revokeObjectURL(pendingImages[index].preview); pendingImages.splice(index, 1); renderPendingImages(); }
-function renderPendingImages() { document.getElementById('imageLibraryImageCount').textContent = `${pendingImages.length}/3`; document.getElementById('imageLibraryImagePreviews').innerHTML = pendingImages.map((item, index) => { const file = item.file || item.uploaded, action = `data-emie-action="click:image-library-preview-pending" data-index="${index}"`; return `<div>${isAiFile(file) ? `<span class="image-library-ai-preview"><b>Ai</b><small>${escHtml(file.name || 'AI 文件')}</small>${file.storedName ? `<img ${action} src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(resourceUrl(`/api/files/thumbnail/${file.storedName}`))}" alt="${escHtml(file.name || 'AI 文件')}">` : ''}</span>` : `<img ${action} src="${item.preview}" alt="待上传图片">`}<button type="button" data-emie-action="click:image-library-remove-image" data-index="${index}" aria-label="移除文件">✕</button></div>`; }).join(''); }
-function previewPendingImage(index) { const item = pendingImages[index], file = item?.file || item?.uploaded; if (!file) return; if (isAiFile(file)) return EMIE.actions.openFilePreview(file.url || `/api/files/download/${file.storedName}`, file.name || '图档预览', file.size || 0); const gallery = pendingImages.filter(entry => !isAiFile(entry.file || entry.uploaded)).map(entry => { const image = entry.file || entry.uploaded; return { src: entry.preview || resourceUrl(image.url || `/api/files/download/${image.storedName}`), name: image.name || '图档预览' }; }); const source = item.preview || resourceUrl(file.url || `/api/files/download/${file.storedName}`); EMIE.actions.previewImage(source, file.name || '图档预览', gallery, gallery.findIndex(image => image.src === source)); }
+function renderPendingImages() { document.getElementById('imageLibraryImageCount').textContent = `${pendingImages.length}/3`; document.getElementById('imageLibraryImagePreviews').innerHTML = pendingImages.map((item, index) => { const file = item.file || item.uploaded, action = `data-emie-action="click:image-library-preview-pending" data-index="${index}"`; return `<div>${isAiFile(file) ? `<span class="image-library-ai-preview"><b>Ai</b><small>${escHtml(file.name || 'AI 文件')}</small>${file.storedName ? `<img ${action} src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(resourceUrl(`/api/files/thumbnail/${file.storedName}`))}" alt="${escHtml(file.name || 'AI 文件')}">` : ''}</span>` : `<img ${action} src="${escHtml(item.preview)}" alt="待上传图片">`}<button type="button" data-emie-action="click:image-library-remove-image" data-index="${index}" aria-label="移除文件">✕</button></div>`; }).join(''); }
+function previewPendingImage(index) { const item = pendingImages[index], file = item?.file || item?.uploaded; if (!file) return; if (isAiFile(file)) return EMIE.actions.openFilePreview(fileDownloadUrl(file), file.name || '图档预览', file.size || 0); const gallery = pendingImages.filter(entry => !isAiFile(entry.file || entry.uploaded)).map(entry => { const image = entry.file || entry.uploaded; return { src: entry.preview || resourceUrl(fileDownloadUrl(image)), name: image.name || '图档预览' }; }); const source = item.preview || resourceUrl(fileDownloadUrl(file)); EMIE.actions.previewImage(source, file.name || '图档预览', gallery, gallery.findIndex(image => image.src === source)); }
 function showFormError(message) { const error = document.getElementById('imageLibraryFormError'); error.hidden = false; error.textContent = message; }
 
 async function submitUpload() {
@@ -58,61 +61,129 @@ async function submitUpload() {
     const subOptions = [...document.querySelectorAll('#imageLibrarySubOptions .chip.selected')].map(chip => chip.dataset.value);
     const body = { name, ipName, subOptions, notes: document.getElementById('imageLibraryNotes').value.trim(), images };
     if (editingItemId) await apiPut(`/image-library/${editingItemId}`, body); else await apiPost('/image-library', body);
-    closeUploadDrawer(); await renderImageLibrary(document.getElementById('mainContent'));
+    closeUploadDrawer(); await refreshImageLibrary();
   } catch (e) { showFormError(e.message || '上传失败'); submit.disabled = false; submit.textContent = '确认上传'; }
 }
 
-async function renderImageLibrary(main, renderId = EMIE.state.renderId) {
-  const canUpload = ['admin', 'planner'].includes(EMIE.state.currentRole);
+function isCurrentLibraryView({ renderId, currentUserId, currentRole }) {
+  return EMIE.state.renderId === renderId
+    && EMIE.state.currentUserId === currentUserId
+    && EMIE.state.currentRole === currentRole
+    && EMIE.state.currentView === 'image-library'
+    && EMIE.actions.canNavigateTo('image-library');
+}
+
+function refreshImageLibrary() {
+  // A completed mutation needs a new request even if an older list request is still pending.
+  libraryRevision++;
+  const targetId = activeLibraryRender && isCurrentLibraryView(activeLibraryRender)
+    ? activeLibraryRender.targetId : null;
+  return renderImageLibrary(document.getElementById('mainContent'), EMIE.state.renderId, targetId);
+}
+
+async function renderImageLibrary(main, renderId = EMIE.state.renderId, targetId) {
+  const { currentUserId, currentRole } = EMIE.state;
+  const render = { renderId, currentUserId, currentRole, targetId };
+  if (!main?.isConnected || !isCurrentLibraryView(render)) return;
+  activeLibraryRender = render;
+  const canUpload = ['admin', 'planner'].includes(currentRole);
   main.innerHTML = `<section class="image-library-hero"><div><span class="image-library-kicker">PRODUCT ASSET LIBRARY</span><h1>图档库</h1><p>沉淀产品视觉资产，让每一张好图都能被快速找到。</p></div><div class="image-library-hero-art"><span>✦</span><span>◌</span><span>✧</span></div></section><section class="image-library-toolbar"><div class="image-library-stats"><div><strong id="imageLibraryTotal">—</strong><span>全部图档</span></div><div><strong id="imageLibraryToday">—</strong><span>今日新增</span></div></div><div class="image-library-actions">${canUpload ? '<button class="btn btn-primary image-library-upload" data-emie-action="click:image-library-open-upload">＋ 上传图档</button>' : ''}<label class="image-library-search">⌕<input id="imageLibrarySearch" placeholder="搜索名称、IP 或企划…"></label></div></section><div id="imageLibraryGrid" class="image-library-grid"><div class="image-library-loading"><span></span>正在整理图档…</div></div><div id="imageLibraryPagination" class="project-pagination image-library-pagination" hidden></div>`;
   const grid = document.getElementById('imageLibraryGrid');
+  const isCurrentRender = () => activeLibraryRender === render && grid.isConnected && isCurrentLibraryView(render);
   try {
-    const items = await apiGet('/image-library');
-    if (EMIE.state.renderId !== renderId || !main.isConnected) return;
+    const items = await apiGet(libraryRevision ? `/image-library?refresh=${libraryRevision}` : '/image-library');
+    if (!isCurrentRender()) return;
     document.getElementById('imageLibraryTotal').textContent = items.length; document.getElementById('imageLibraryToday').textContent = items.filter(item => String(item.createdAt || '').slice(0, 10) === new Date().toISOString().slice(0, 10)).length;
-    const pagination = document.getElementById('imageLibraryPagination'); const state = EMIE.imageLibraryState || (EMIE.imageLibraryState = { page: 0, search: '' }); let filteredItems = items.filter(item => `${item.name} ${item.ipName} ${(item.subOptions || []).join(' ')} ${getUserName(item.ownerUserId)}`.toLowerCase().includes(state.search));
+    const pagination = document.getElementById('imageLibraryPagination');
+    const state = EMIE.imageLibraryState || (EMIE.imageLibraryState = { page: 0, search: '' });
+    const filterItems = () => items.filter(item => `${item.name} ${item.ipName} ${(item.subOptions || []).join(' ')} ${getUserName(item.ownerUserId)}`.toLowerCase().includes(state.search));
+    let filteredItems = filterItems();
+    if (targetId) {
+      const targetIndex = items.findIndex(item => Number(item.id) === targetId);
+      if (targetIndex >= 0) {
+        let filteredIndex = filteredItems.findIndex(item => Number(item.id) === targetId);
+        if (filteredIndex < 0) {
+          state.search = '';
+          filteredItems = items;
+          filteredIndex = targetIndex;
+        }
+        state.page = Math.floor(filteredIndex / PAGE_SIZE);
+      } else {
+        const notice = document.createElement('p');
+        notice.className = 'form-hint';
+        notice.setAttribute('role', 'status');
+        notice.textContent = '该图档已移除或当前无法查看。';
+        grid.before(notice);
+      }
+    }
     const renderItems = () => { const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE)); state.page = Math.min(state.page, totalPages - 1); const list = filteredItems.slice(state.page * PAGE_SIZE, (state.page + 1) * PAGE_SIZE); grid.innerHTML = list.length ? list.map(item => {
       const image = item.images?.[0] || {}, ai = isAiFile(image), thumb = image.storedName ? `/api/files/thumbnail/${image.storedName}` : image.url;
       const tags = [item.ipName, ...(item.subOptions || [])].filter(Boolean);
       const cover = ai ? `<span class="image-library-ai-cover"><b>Ai</b><small>Adobe Illustrator</small><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(resourceUrl(thumb))}" alt="${escHtml(item.name)}" loading="lazy"></span>` : `<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(resourceUrl(thumb))}" alt="${escHtml(item.name)}" loading="lazy">`;
       const manageActions = canUpload ? `<button data-emie-action="click:image-library-edit" data-item-id="${item.id}">编辑</button><button class="danger" data-emie-action="click:image-library-delete" data-item-id="${item.id}">删除</button>` : '';
-      return `<article class="image-library-card"><a href="#" data-emie-action="click:image-library-preview-cover" data-item-id="${item.id}">${cover}<span class="image-library-view">${ai ? '查看预览' : '点击放大'}</span>${item.images.length > 1 ? `<b class="image-library-count">${item.images.length} 个</b>` : ''}</a><div class="image-library-card-body"><div title="${escHtml(item.name)}">${escHtml(item.name)}</div><p>${tags.map(tag => `<span>${escHtml(tag)}</span>`).join('')}</p><small>产品企划：${escHtml(getUserName(item.ownerUserId) || item.ownerUserId || '未知')}</small><div class="image-library-card-actions"><button class="download" data-emie-action="click:image-library-open-item" data-item-id="${item.id}">下载</button>${manageActions}</div></div></article>`;
+      return `<article class="image-library-card" data-item-id="${escHtml(String(item.id))}"><a href="#" data-emie-action="click:image-library-preview-cover" data-item-id="${item.id}">${cover}<span class="image-library-view">${ai ? '查看预览' : '点击放大'}</span>${item.images.length > 1 ? `<b class="image-library-count">${item.images.length} 个</b>` : ''}</a><div class="image-library-card-body"><div title="${escHtml(item.name)}">${escHtml(item.name)}</div><p>${tags.map(tag => `<span>${escHtml(tag)}</span>`).join('')}</p><small>产品企划：${escHtml(getUserName(item.ownerUserId) || item.ownerUserId || '未知')}</small><div class="image-library-card-actions"><button class="download" data-emie-action="click:image-library-open-item" data-item-id="${item.id}">下载</button>${manageActions}</div></div></article>`;
     }).join('') : '<div class="image-library-empty"><div class="image-library-empty-icon">🖼️</div><h3>还没有图档</h3><p>上传产品图片，建立团队共享的视觉资产库</p></div>'; pagination.hidden = filteredItems.length <= PAGE_SIZE; pagination.innerHTML = `<span class="image-library-page-range">${filteredItems.length ? state.page * PAGE_SIZE + 1 : 0}–${Math.min((state.page + 1) * PAGE_SIZE, filteredItems.length)}，共 ${filteredItems.length} 项</span><div class="image-library-page-controls"><button type="button" ${state.page <= 0 ? 'disabled' : ''} data-page="${state.page - 1}">← 上一页</button><span>${state.page + 1} / ${totalPages}</span><button type="button" ${state.page >= totalPages - 1 ? 'disabled' : ''} data-page="${state.page + 1}">下一页 →</button></div>`; };
-    EMIE.imageLibraryItems = items; document.getElementById('imageLibrarySearch').value = state.search; renderItems(); document.getElementById('imageLibrarySearch').addEventListener('input', e => { state.search = e.target.value.trim().toLowerCase(); filteredItems = items.filter(item => `${item.name} ${item.ipName} ${(item.subOptions || []).join(' ')} ${getUserName(item.ownerUserId)}`.toLowerCase().includes(state.search)); state.page = 0; renderItems(); }); pagination.addEventListener('click', e => { const button = e.target.closest('button[data-page]'); if (!button || button.disabled) return; state.page = Number(button.dataset.page); renderItems(); grid.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
-  } catch (e) { if (EMIE.state.renderId === renderId && main.isConnected) grid.innerHTML = `<div class="empty-state">加载失败：${escHtml(e.message)}</div>`; }
+    EMIE.imageLibraryItems = items;
+    const search = document.getElementById('imageLibrarySearch');
+    search.value = state.search;
+    renderItems();
+    if (targetId) {
+      const card = grid.querySelector(`.image-library-card[data-item-id="${targetId}"]`);
+      if (card) {
+        card.tabIndex = -1;
+        card.focus({ preventScroll: true });
+        card.scrollIntoView({ block: 'center' });
+      }
+    }
+    search.addEventListener('input', e => {
+      render.targetId = null;
+      state.search = e.target.value.trim().toLowerCase();
+      filteredItems = filterItems();
+      state.page = 0;
+      renderItems();
+    });
+    pagination.addEventListener('click', e => {
+      const button = e.target.closest('button[data-page]');
+      if (!button || button.disabled) return;
+      render.targetId = null;
+      state.page = Number(button.dataset.page);
+      renderItems();
+      grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  } catch (e) { if (isCurrentRender()) grid.innerHTML = `<div class="empty-state">加载失败：${escHtml(e.message)}</div>`; }
 }
 function openItem(id) {
   const item = (EMIE.imageLibraryItems || []).find(entry => entry.id === id); if (!item?.images?.length) return;
   document.getElementById('imageLibraryDetailDrawer')?.remove();
   const overlay = document.createElement('div'); overlay.id = 'imageLibraryDetailDrawer'; overlay.className = 'modal-overlay modal-detail-drawer';
-  overlay.innerHTML = `<div class="modal"><div class="modal-header"><div><div class="modal-title">${escHtml(item.name)}</div><div class="form-hint">${escHtml([item.ipName, ...(item.subOptions || [])].filter(Boolean).join(' / '))}</div></div><button class="modal-close" data-emie-action="click:image-library-close-detail">✕</button></div><div class="modal-body"><div class="image-library-detail-meta"><span>产品企划：${escHtml(getUserName(item.ownerUserId) || item.ownerUserId || '未知')}</span>${item.notes ? `<p>${escHtml(item.notes)}</p>` : ''}</div><div class="image-library-file-grid">${item.images.map((file, index) => { const ai = isAiFile(file), url = resourceUrl(file.url || `/api/files/download/${file.storedName}`), thumb = `/api/files/thumbnail/${file.storedName}`; return `<article>${ai ? `<div class="image-library-detail-ai">Ai<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(resourceUrl(thumb))}" alt="${escHtml(file.name || item.name)}"></div>` : `<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(resourceUrl(thumb))}" alt="${escHtml(file.name || item.name)}">`}<div><strong title="${escHtml(file.name || '')}">${escHtml(file.name || `文件 ${index + 1}`)}</strong><span>${ai ? 'Adobe Illustrator' : '图片文件'}</span></div><footer><button class="btn btn-outline btn-sm" data-emie-action="click:image-library-preview-file" data-item-id="${item.id}" data-file-index="${index}">预览</button><button class="btn btn-primary btn-sm" data-emie-action="click:image-library-download-file" data-item-id="${item.id}" data-file-index="${index}">下载</button></footer></article>`; }).join('')}</div></div><div class="modal-footer">${item.images.length > 1 ? `<button class="btn btn-primary" data-emie-action="click:image-library-download-all" data-item-id="${item.id}">⬇ 下载全部（ZIP）</button>` : ''}<button class="btn btn-outline" data-emie-action="click:image-library-close-detail">关闭</button></div></div>`;
+  overlay.innerHTML = `<div class="modal"><div class="modal-header"><div><div class="modal-title">${escHtml(item.name)}</div><div class="form-hint">${escHtml([item.ipName, ...(item.subOptions || [])].filter(Boolean).join(' / '))}</div></div><button class="modal-close" data-emie-action="click:image-library-close-detail">✕</button></div><div class="modal-body"><div class="image-library-detail-meta"><span>产品企划：${escHtml(getUserName(item.ownerUserId) || item.ownerUserId || '未知')}</span>${item.notes ? `<p>${escHtml(item.notes)}</p>` : ''}</div><div class="image-library-file-grid">${item.images.map((file, index) => { const ai = isAiFile(file), thumb = `/api/files/thumbnail/${file.storedName}`; return `<article>${ai ? `<div class="image-library-detail-ai">Ai<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(resourceUrl(thumb))}" alt="${escHtml(file.name || item.name)}"></div>` : `<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(resourceUrl(thumb))}" alt="${escHtml(file.name || item.name)}">`}<div><strong title="${escHtml(file.name || '')}">${escHtml(file.name || `文件 ${index + 1}`)}</strong><span>${ai ? 'Adobe Illustrator' : '图片文件'}</span></div><footer><button class="btn btn-outline btn-sm" data-emie-action="click:image-library-preview-file" data-item-id="${item.id}" data-file-index="${index}">预览</button><button class="btn btn-primary btn-sm" data-emie-action="click:image-library-download-file" data-item-id="${item.id}" data-file-index="${index}">下载</button></footer></article>`; }).join('')}</div></div><div class="modal-footer">${item.images.length > 1 ? `<button class="btn btn-primary" data-emie-action="click:image-library-download-all" data-item-id="${item.id}">⬇ 下载全部（ZIP）</button>` : ''}<button class="btn btn-outline" data-emie-action="click:image-library-close-detail">关闭</button></div></div>`;
   overlay.addEventListener('click', e => { if (e.target === overlay) closeItemDetail(); }); document.body.appendChild(overlay);
 }
 function closeItemDetail() { document.getElementById('imageLibraryDetailDrawer')?.remove(); }
 function imageGallery(item) {
   return (item?.images || []).filter(entry => !isAiFile(entry)).map(entry => ({
-    src: resourceUrl(entry.url || `/api/files/download/${entry.storedName}`),
+    src: resourceUrl(fileDownloadUrl(entry)),
     name: entry.name || item.name,
   }));
 }
 function previewCover(id) {
   const item = (EMIE.imageLibraryItems || []).find(entry => entry.id === id); if (!item?.images?.length) return;
   const file = item.images.find(entry => !isAiFile(entry)) || item.images[0];
-  if (isAiFile(file)) return EMIE.actions.openFilePreview(file.url || `/api/files/download/${file.storedName}`, file.name || item.name, file.size || 0);
+  if (isAiFile(file)) return EMIE.actions.openFilePreview(fileDownloadUrl(file), file.name || item.name, file.size || 0);
   const gallery = imageGallery(item);
-  const source = resourceUrl(file.url || `/api/files/download/${file.storedName}`);
+  const source = resourceUrl(fileDownloadUrl(file));
   EMIE.actions.previewImage(source, file.name || item.name, gallery, gallery.findIndex(g => g.src === source));
 }
 function itemFile(id, index) { return (EMIE.imageLibraryItems || []).find(item => item.id === id)?.images?.[index]; }
 function previewItemFile(id, index) {
   const item = (EMIE.imageLibraryItems || []).find(entry => entry.id === id);
   const file = itemFile(id, index); if (!file) return;
-  if (isAiFile(file)) return EMIE.actions.openFilePreview(file.url || `/api/files/download/${file.storedName}`, file.name || '图档预览', file.size || 0);
+  if (isAiFile(file)) return EMIE.actions.openFilePreview(fileDownloadUrl(file), file.name || '图档预览', file.size || 0);
   const gallery = imageGallery(item);
-  const source = resourceUrl(file.url || `/api/files/download/${file.storedName}`);
+  const source = resourceUrl(fileDownloadUrl(file));
   EMIE.actions.previewImage(source, file.name || '图档预览', gallery, gallery.findIndex(g => g.src === source));
 }
-function downloadItemFile(id, index) { const file = itemFile(id, index); if (!file) return; EMIE.actions.doDirectDownload(resourceUrl(file.url || `/api/files/download/${file.storedName}`), file.name || '图档文件'); }
+function downloadItemFile(id, index) { const file = itemFile(id, index); if (!file) return; EMIE.actions.doDirectDownload(resourceUrl(fileDownloadUrl(file)), file.name || '图档文件'); }
 async function downloadAllFiles(id, button) {
   button.disabled = true; const oldText = button.textContent; button.textContent = '正在打包…';
   try {
@@ -123,7 +194,12 @@ async function downloadAllFiles(id, button) {
   } catch (e) { EMIE.actions.showSystemAlert(e.message); } finally { button.disabled = false; button.textContent = oldText; }
 }
 function editItem(id) { const item = (EMIE.imageLibraryItems || []).find(entry => entry.id === id); if (item) openUploadDrawer(item); }
-async function deleteItem(id) { const item = (EMIE.imageLibraryItems || []).find(entry => entry.id === id); if (!item || !await EMIE.actions.showSystemConfirm(`确认删除图档“${item.name}”吗？`)) return; try { await apiDelete(`/image-library/${id}`); await renderImageLibrary(document.getElementById('mainContent')); } catch (e) { EMIE.actions.showSystemAlert('删除失败：' + e.message); } }
+async function deleteItem(id) { const item = (EMIE.imageLibraryItems || []).find(entry => entry.id === id); if (!item || !await EMIE.actions.showSystemConfirm(`确认删除图档“${item.name}”吗？`)) return; try { await apiDelete(`/image-library/${id}`); await refreshImageLibrary(); } catch (e) { EMIE.actions.showSystemAlert('删除失败：' + e.message); } }
+
+document.addEventListener('emie:identity-changing', () => {
+  activeLibraryRender = null;
+  libraryRevision++;
+});
 
 EMIE.registerActions({ renderImageLibrary, openUploadDrawer, closeUploadDrawer, updateSubOptions, toggleSubOption, removePendingImage, previewPendingImage, submitUpload, openItem, closeItemDetail, previewCover, previewItemFile, downloadItemFile, downloadAllFiles, editItem, deleteItem });
 const register = EMIE.actions.registerEventAction;

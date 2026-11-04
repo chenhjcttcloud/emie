@@ -20,6 +20,22 @@ const modelMeta = () => { const profile = modelProfiles.find(item => item.id ===
 const configView = () => { const active = modelProfiles.find(item => item.id === activeProfileId); return { ...active, enabled: modelEnabled, keyStorageAvailable: true, message: '', activeProfileId, profiles: modelProfiles.map(profile => ({ ...profile, active: profile.id === activeProfileId })) }; };
 let nextDelay = false;
 let discoveryMode = 'success';
+const libraryItems = Array.from({ length: 24 }, (_, index) => ({
+  id: index === 20 ? 601 : index + 1,
+  name: index === 0 || index === 20 ? 'UI模拟 · 春日包装' : '其他图档 ' + index,
+  ipName: '春日系列',
+  images: [{ storedName: 'assistant-simulation-green.png', name: '绿色预览.png', url: 'https://untrusted.invalid/preview.png' }]
+}));
+let targetRemoved = false;
+let nextLibraryRead;
+let libraryDelete;
+
+function holdResponse() {
+  let markStarted, release;
+  const started = new Promise(resolve => { markStarted = resolve; });
+  const released = new Promise(resolve => { release = resolve; });
+  return { started, release, pause: () => { markStarted(); return released; } };
+}
 
 await page.route('**/api/**', async route => {
   const url = new URL(route.request().url());
@@ -42,6 +58,18 @@ await page.route('**/api/**', async route => {
     };
     if (nextDelay) { nextDelay = false; pending.push({ route, response }); return; }
     return fulfill(response);
+  }
+  if (url.pathname === '/api/image-library') {
+    const items = libraryItems.filter(item => !targetRemoved || item.id !== 601);
+    const read = nextLibraryRead;
+    nextLibraryRead = null;
+    await read?.pause();
+    return fulfill(items);
+  }
+  if (url.pathname === '/api/image-library/1' && route.request().method() === 'DELETE') {
+    await libraryDelete?.pause();
+    libraryItems.splice(libraryItems.findIndex(item => item.id === 1), 1);
+    return fulfill({});
   }
   if (url.pathname === '/api/assistant/model') return fulfill(modelMeta());
   if (url.pathname === '/api/assistant/config/models') {
@@ -104,7 +132,7 @@ async function setIdentity(role, userId) {
     localStorage.setItem('design_pm_token', 'business-assistant-ui-simulation-only');
     document.getElementById('loginPage').style.display = 'none'; document.getElementById('appContainer').style.display = '';
     document.documentElement.dataset.appReady = 'authenticated';
-    const f = window.assistantFixture ||= { sources: [], previews: [], rasterPreviews: [], downloads: [], opened: [] };
+    const f = window.assistantFixture ||= { navigate: e.actions.navigate, sources: [], previews: [], rasterPreviews: [], downloads: [], opened: [] };
     e.actions.navigate = view => { f.sources.push(view); e.state.currentView = view; document.getElementById('mainContent').textContent = 'UI模拟页面 · ' + view; };
     e.actions.openProjectDetail = (projectId, taskId) => f.opened.push({ projectId, taskId });
     e.actions.openFilePreview = (...args) => f.previews.push(args);
@@ -560,13 +588,72 @@ try {
   await page.evaluate(() => localStorage.setItem('design_pm_assistant_position', '{broken-position'));
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.EMIE?.modules?.businessAssistant && window.EMIE?.modules?.businessAssistantPosition);
-  await setIdentity('designer', 'assistant-ui-invalid-position');
+  await setIdentity('planner', 'assistant-ui-invalid-position');
   await page.locator('#businessAssistantLauncher').click();
   await assertPanelFits();
+  // Use the real navigation and library renderer for a target on page three.
+  await page.evaluate(() => {
+    window.EMIE.actions.navigate = window.assistantFixture.navigate;
+    window.EMIE.imageLibraryState = { page: 0, search: '其他图档' };
+  });
+  await send('给我绿色图档');
+  const libraryLink = page.locator('.business-assistant-image').last().getByRole('button', { name: '图档库 ↗', exact: true });
+  await libraryLink.click();
+  const locatedCard = page.locator('.image-library-card[data-item-id="601"]');
+  await locatedCard.waitFor();
+  await page.locator('#businessAssistantPanel').waitFor({ state: 'hidden' });
+  assert.match(await page.locator('#imageLibraryPagination').innerText(), /3 \/ 3/);
+  assert.equal(await page.locator('#imageLibrarySearch').inputValue(), '');
+  assert.equal(await locatedCard.evaluate(card => card === document.activeElement), true);
+  await page.waitForFunction(() => {
+    const card = document.querySelector('.image-library-card[data-item-id="601"]');
+    const bounds = card?.getBoundingClientRect();
+    return bounds && bounds.top >= 0 && bounds.bottom <= innerHeight;
+  });
+  assert.equal(await page.locator('.image-library-card[data-item-id="1"]').count(), 0, 'same-name record on page one is not selected');
+  await locatedCard.locator('a').click();
+  const previewSource = await page.evaluate(() => window.assistantFixture.rasterPreviews.at(-1)[0]);
+  assert.equal(new URL(previewSource, baseURL).pathname, '/api/files/download/assistant-simulation-green.png');
+  assert.equal(new URL(previewSource, baseURL).origin, new URL(baseURL).origin);
+
+
+  // Deleting an earlier item moves the target from page three to page two.
+  await page.evaluate(() => {
+    window.EMIE.imageLibraryState.page = 0;
+    window.EMIE.actions.navigate('image-library');
+  });
+  libraryDelete = holdResponse();
+  await page.locator('.image-library-card[data-item-id="1"]').getByRole('button', { name: '删除', exact: true }).click();
+  const deleting = page.waitForRequest(request => request.method() === 'DELETE' && new URL(request.url()).pathname === '/api/image-library/1');
+  await page.locator('#systemConfirmModal [data-action="confirm"]').click();
+  await deleting;
+  await libraryDelete.started;
+  await page.locator('#businessAssistantLauncher').click();
+  const staleRead = holdResponse();
+  nextLibraryRead = staleRead;
+  await libraryLink.click();
+  await staleRead.started;
+  libraryDelete.release();
+  await page.waitForFunction(() => document.activeElement?.matches('.image-library-card[data-item-id="601"]'));
+  assert.match(await page.locator('#imageLibraryPagination').innerText(), /2 \/ 3/);
+  assert.equal(await page.locator('#imageLibraryTotal').innerText(), '23');
+  const staleResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/image-library');
+  staleRead.release();
+  await (await staleResponse).finished();
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.match(await page.locator('#imageLibraryPagination').innerText(), /2 \/ 3/, 'an older list cannot overwrite the post-delete page');
+  assert.equal(await page.locator('#imageLibraryTotal').innerText(), '23');
+  assert.equal(await locatedCard.evaluate(card => card === document.activeElement), true);
+
+  await page.locator('#businessAssistantLauncher').click();
+  targetRemoved = true;
+  await libraryLink.click();
+  await page.getByRole('status').filter({ hasText: '该图档已移除或当前无法查看。' }).waitFor();
+  assert.equal(await locatedCard.count(), 0);
   await page.evaluate(() => { document.dispatchEvent(new Event('emie:identity-changing')); window.EMIE.state.authUser = null; localStorage.removeItem('design_pm_token'); document.getElementById('appContainer').style.display = 'none'; });
   await page.locator('#businessAssistantLauncher').waitFor({ state: 'hidden' });
   assert.deepEqual(errors, []);
-  console.log('business assistant UI checks passed (local API simulation, real core-ui keyboard integration, identity isolation, context, material search, file drop validation/permissions/deferred upload, draggable launcher/corner positioning/resize, endpoint/key model discovery, manual fallback, stale credential cancellation, model profiles, server default, credential isolation, mobile); screenshot=/tmp/emie-business-assistant-ui.png');
+  console.log('business assistant UI checks passed (local API simulation, real core-ui keyboard integration, identity isolation, context, material search, exact library item navigation, file drop validation/permissions/deferred upload, draggable launcher/corner positioning/resize, endpoint/key model discovery, manual fallback, stale credential cancellation, model profiles, server default, credential isolation, mobile); screenshot=/tmp/emie-business-assistant-ui.png');
 } catch (error) {
   await page.screenshot({ path: '/tmp/emie-business-assistant-ui-failure.png', fullPage: true }).catch(() => {});
   throw error;

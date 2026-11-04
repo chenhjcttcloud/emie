@@ -7,8 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.emie.designpm.admin.service.PermissionService;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
 import com.emie.designpm.entity.FileRecord;
@@ -17,6 +19,7 @@ import com.emie.designpm.file.controller.FileController;
 import com.emie.designpm.file.repository.FileRecordRepository;
 import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.file.service.FilePreviewService;
+import com.emie.designpm.file.service.FileThumbnailService;
 import com.emie.designpm.materialmarket.repository.MaterialMarketItemRepository;
 import com.emie.designpm.project.repository.ProjectRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
@@ -30,6 +33,7 @@ import java.util.concurrent.Semaphore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -42,8 +46,7 @@ class FileAccessRegressionTest {
         FileRecordRepository records = mock(FileRecordRepository.class);
         ProjectAccessService access = mock(ProjectAccessService.class);
         SubTaskRepository tasks = mock(SubTaskRepository.class);
-        FileController controller = new FileController(
-                mock(FileArchiveService.class), records, access, tasks, mock(FilePreviewService.class));
+        FileController controller = fileController(mock(FileArchiveService.class), records, access, tasks);
 
         FileRecord record = FileRecord.builder()
                 .storedName(storedName)
@@ -70,8 +73,7 @@ class FileAccessRegressionTest {
         FileRecordRepository records = mock(FileRecordRepository.class);
         ProjectAccessService access = mock(ProjectAccessService.class);
         SubTaskRepository tasks = mock(SubTaskRepository.class);
-        FileController controller = new FileController(
-                mock(FileArchiveService.class), records, access, tasks, mock(FilePreviewService.class));
+        FileController controller = fileController(mock(FileArchiveService.class), records, access, tasks);
 
         FileRecord legacyRecord = FileRecord.builder()
                 .storedName(storedName)
@@ -99,8 +101,7 @@ class FileAccessRegressionTest {
         FileRecordRepository records = mock(FileRecordRepository.class);
         ProjectAccessService access = mock(ProjectAccessService.class);
         SubTaskRepository tasks = mock(SubTaskRepository.class);
-        FileController controller = new FileController(
-                mock(FileArchiveService.class), records, access, tasks, mock(FilePreviewService.class));
+        FileController controller = fileController(mock(FileArchiveService.class), records, access, tasks);
 
         FileRecord pendingUpload = FileRecord.builder()
                 .storedName(storedName)
@@ -126,8 +127,7 @@ class FileAccessRegressionTest {
         FileRecordRepository records = mock(FileRecordRepository.class);
         ProjectAccessService access = mock(ProjectAccessService.class);
         SubTaskRepository tasks = mock(SubTaskRepository.class);
-        FileController controller = new FileController(
-                mock(FileArchiveService.class), records, access, tasks, mock(FilePreviewService.class));
+        FileController controller = fileController(mock(FileArchiveService.class), records, access, tasks);
 
         FileRecord legacyRecord = FileRecord.builder()
                 .storedName(storedName)
@@ -160,12 +160,11 @@ class FileAccessRegressionTest {
         FileArchiveService archive = mock(FileArchiveService.class);
         when(archive.recordUpload(any(), any(), any(Long.class), any(), any(), any(), any()))
                 .thenAnswer(invocation -> null);
-        FileController controller = new FileController(
+        FileController controller = fileController(
                 archive,
                 mock(FileRecordRepository.class),
                 mock(ProjectAccessService.class),
-                mock(SubTaskRepository.class),
-                mock(FilePreviewService.class));
+                mock(SubTaskRepository.class));
         ReflectionTestUtils.setField(controller, "uploadPath", tempDir);
         return controller;
     }
@@ -240,8 +239,11 @@ class FileAccessRegressionTest {
                 access,
                 tasks,
                 mock(FilePreviewService.class),
-                mock(com.emie.designpm.file.service.FileThumbnailService.class),
-                requirements);
+                mock(FileThumbnailService.class),
+                requirements,
+                null,
+                null,
+                mock(PermissionService.class));
 
         FileRecord deliveryImage = FileRecord.builder()
                 .storedName(storedName)
@@ -275,10 +277,11 @@ class FileAccessRegressionTest {
                 access,
                 tasks,
                 mock(FilePreviewService.class),
-                mock(com.emie.designpm.file.service.FileThumbnailService.class),
+                mock(FileThumbnailService.class),
                 mock(DesignRequirementRepository.class),
                 mock(ProjectRepository.class),
-                materials);
+                materials,
+                mock(PermissionService.class));
 
         FileRecord referenceImage = FileRecord.builder()
                 .storedName(storedName)
@@ -304,12 +307,19 @@ class FileAccessRegressionTest {
     void designerCanOpenImageLibraryFileWithoutBusinessTargetId() {
         String storedName = "library-image.png";
         FileRecordRepository records = mock(FileRecordRepository.class);
+        PermissionService permissions = mock(PermissionService.class);
+        when(permissions.canViewImageLibrary("designer")).thenReturn(true);
         FileController controller = new FileController(
                 mock(FileArchiveService.class),
                 records,
                 mock(ProjectAccessService.class),
                 mock(SubTaskRepository.class),
-                mock(FilePreviewService.class));
+                mock(FilePreviewService.class),
+                mock(FileThumbnailService.class),
+                null,
+                null,
+                null,
+                permissions);
         FileRecord libraryImage = FileRecord.builder()
                 .storedName(storedName)
                 .originalName("产品图.png")
@@ -328,13 +338,148 @@ class FileAccessRegressionTest {
     }
 
     @Test
-    void anonymousAdminManagedImageIsAllowedButOtherAdminFilesFailClosed() {
+    void revokedLibraryPermissionBlocksFileRoutesEvenForAdministrator(@TempDir Path tempDir) throws Exception {
+        String storedName = "library-cover.ai";
+        FileRecordRepository records = mock(FileRecordRepository.class);
+        FileArchiveService archive = mock(FileArchiveService.class);
+        FileThumbnailService thumbnails = mock(FileThumbnailService.class);
+        FilePreviewService previews = mock(FilePreviewService.class);
+        PermissionService permissions = mock(PermissionService.class);
         FileController controller = new FileController(
+                archive,
+                records,
+                mock(ProjectAccessService.class),
+                mock(SubTaskRepository.class),
+                previews,
+                thumbnails,
+                null,
+                null,
+                null,
+                permissions);
+        FileRecord image = FileRecord.builder()
+                .storedName(storedName)
+                .targetType("image_library")
+                .build();
+        when(records.findByStoredName(storedName)).thenReturn(Optional.of(image));
+        when(records.findByOriginalNameOrderByCreatedAtDesc("封面.ai")).thenReturn(List.of(image));
+        when(previews.isPreviewable(storedName)).thenReturn(true);
+        for (String role : List.of("admin", "designer")) {
+            MockHttpServletRequest request = new MockHttpServletRequest();
+            request.setAttribute("authSession", new AuthSession("test-user", role, "测试账号"));
+            assertEquals(403, controller.library(request).getStatusCode().value());
+            assertEquals(
+                    403,
+                    controller.thumbnail(storedName, request).getStatusCode().value());
+            assertEquals(
+                    403,
+                    controller
+                            .downloadFile(storedName, true, request)
+                            .getStatusCode()
+                            .value());
+            assertEquals(
+                    403,
+                    controller
+                            .previewStatus(storedName, false, request)
+                            .getStatusCode()
+                            .value());
+            assertEquals(
+                    403,
+                    controller.previewFile(storedName, request).getStatusCode().value());
+            assertEquals(
+                    403,
+                    controller.fileInfo(storedName, request).getStatusCode().value());
+            assertEquals(
+                    404,
+                    controller
+                            .downloadByOriginal("封面.ai", true, request)
+                            .getStatusCode()
+                            .value());
+        }
+        verifyNoInteractions(archive, thumbnails);
+
+        MockHttpServletRequest authorized = new MockHttpServletRequest();
+        authorized.setAttribute("authSession", new AuthSession("designer-1", "designer", "设计师"));
+        when(permissions.canViewImageLibrary("designer")).thenReturn(true);
+        ReflectionTestUtils.setField(controller, "uploadPath", tempDir);
+        Path thumbnail = java.nio.file.Files.writeString(tempDir.resolve("cached.png"), "thumbnail");
+        when(thumbnails.cached(storedName, tempDir.resolve("thumbnail-cache"))).thenReturn(Optional.of(thumbnail));
+        ResponseEntity<Object> response = controller.thumbnail(storedName, authorized);
+        assertEquals(200, response.getStatusCode().value());
+        assertTrue(response.getHeaders().getCacheControl().contains("no-cache"));
+    }
+
+    @Test
+    void projectReferenceCannotBypassLibraryPermission() {
+        String storedName = "project-library-reference.png";
+        FileRecordRepository records = mock(FileRecordRepository.class);
+        ProjectAccessService access = mock(ProjectAccessService.class);
+        FileController controller =
+                fileController(mock(FileArchiveService.class), records, access, mock(SubTaskRepository.class));
+        FileRecord record = FileRecord.builder()
+                .storedName(storedName)
+                .targetType("image_library")
+                .build();
+        when(records.findByStoredName(storedName)).thenReturn(Optional.of(record));
+        AuthSession session = new AuthSession("designer-1", "designer", "设计师");
+        Project project = new Project();
+        project.setReferenceImagesJson("[{\"storedName\":\"" + storedName + "\"}]");
+        when(access.findVisibleProjectsWithTasks(session)).thenReturn(List.of(project));
+
+        Boolean allowed =
+                ReflectionTestUtils.invokeMethod(controller, "canAccessFile", session, storedName, storedName);
+        assertFalse(allowed);
+    }
+
+    private static FileController fileController(
+            FileArchiveService archive,
+            FileRecordRepository records,
+            ProjectAccessService access,
+            SubTaskRepository tasks) {
+        return new FileController(
+                archive,
+                records,
+                access,
+                tasks,
+                mock(FilePreviewService.class),
+                mock(FileThumbnailService.class),
+                null,
+                null,
+                null,
+                mock(PermissionService.class));
+    }
+
+    @Test
+    void genericDownloadDoesNotServeInternalCacheFiles() {
+        FileRecordRepository records = mock(FileRecordRepository.class);
+        FileArchiveService archive = mock(FileArchiveService.class);
+        FileController controller =
+                fileController(archive, records, mock(ProjectAccessService.class), mock(SubTaskRepository.class));
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setAttribute("authSession", new AuthSession("admin-1", "admin", "管理员"));
+        for (String directory : List.of("thumbnail-cache", "preview-cache", "restore-cache")) {
+            assertEquals(
+                    404,
+                    controller
+                            .downloadFileInSubDir(directory, "cover.png", false, request)
+                            .getStatusCode()
+                            .value());
+            assertEquals(
+                    404,
+                    controller
+                            .downloadFile(directory + "/cover.png", false, request)
+                            .getStatusCode()
+                            .value());
+        }
+        verifyNoInteractions(records, archive);
+    }
+
+    @Test
+    void anonymousAdminManagedImageIsAllowedButOtherAdminFilesFailClosed() {
+        FileController controller = fileController(
                 mock(FileArchiveService.class),
                 mock(FileRecordRepository.class),
                 mock(ProjectAccessService.class),
-                mock(SubTaskRepository.class),
-                mock(FilePreviewService.class));
+                mock(SubTaskRepository.class));
         HttpServletRequest anonymous = mock(HttpServletRequest.class);
 
         // 白名单文件名（AdminService 生成规则）→ 匿名放行

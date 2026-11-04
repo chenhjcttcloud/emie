@@ -1,5 +1,6 @@
 package com.emie.designpm.imagelibrary.controller;
 
+import com.emie.designpm.admin.service.PermissionService;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.FileRecord;
 import com.emie.designpm.entity.ImageLibraryItem;
@@ -28,28 +29,29 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 @RequestMapping("/api/image-library")
 public class ImageLibraryController {
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final Set<String> VIEW_ROLES = Set.of("admin", "planner", "designer");
     private final ImageLibraryItemRepository items;
     private final FileRecordRepository files;
     private final IpOptionRepository ipOptions;
     private final FileArchiveService archive;
+    private final PermissionService permissions;
 
     public ImageLibraryController(
             ImageLibraryItemRepository items,
             FileRecordRepository files,
             IpOptionRepository ipOptions,
-            FileArchiveService archive) {
+            FileArchiveService archive,
+            PermissionService permissions) {
         this.items = items;
         this.files = files;
         this.ipOptions = ipOptions;
         this.archive = archive;
+        this.permissions = permissions;
     }
 
     @GetMapping
     public ResponseEntity<?> list(HttpServletRequest request) {
         var session = session(request);
-        if (session == null || !VIEW_ROLES.contains(session.role()))
-            return ResponseEntity.status(403).body(Map.of("error", "没有权限查看图档库"));
+        if (!canView(session)) return ResponseEntity.status(403).body(Map.of("error", "没有权限查看图档库"));
         return ResponseEntity.ok(
                 items.findAllByOrderByCreatedAtDesc().stream().map(this::view).toList());
     }
@@ -58,8 +60,7 @@ public class ImageLibraryController {
     @Transactional
     public ResponseEntity<?> create(@RequestBody Map<String, Object> body, HttpServletRequest request) {
         var session = session(request);
-        if (session == null || !Set.of("admin", "planner").contains(session.role()))
-            return ResponseEntity.status(403).body(Map.of("error", "仅产品企划和管理员可以上传图档"));
+        if (!canManage(session)) return ResponseEntity.status(403).body(Map.of("error", "没有权限上传图档"));
         String name = clean(body.get("name"), 160),
                 ipName = clean(body.get("ipName"), 100),
                 notes = clean(body.get("notes"), 1000);
@@ -107,7 +108,7 @@ public class ImageLibraryController {
     public ResponseEntity<?> update(
             @PathVariable Long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         var session = session(request);
-        if (!canManage(session)) return ResponseEntity.status(403).body(Map.of("error", "仅产品企划和管理员可以修改图档"));
+        if (!canManage(session)) return ResponseEntity.status(403).body(Map.of("error", "没有权限修改图档"));
         ImageLibraryItem item = items.findById(id).orElse(null);
         if (item == null) return ResponseEntity.notFound().build();
         String name = clean(body.get("name"), 160),
@@ -151,7 +152,7 @@ public class ImageLibraryController {
     @Transactional
     public ResponseEntity<?> delete(@PathVariable Long id, HttpServletRequest request) {
         var session = session(request);
-        if (!canManage(session)) return ResponseEntity.status(403).body(Map.of("error", "仅产品企划和管理员可以删除图档"));
+        if (!canManage(session)) return ResponseEntity.status(403).body(Map.of("error", "没有权限删除图档"));
         ImageLibraryItem item = items.findById(id).orElse(null);
         if (item == null) return ResponseEntity.notFound().build();
         files.deleteAll(files.findByTargetTypeAndTargetId("image_library", id));
@@ -162,8 +163,7 @@ public class ImageLibraryController {
     @GetMapping("/{id}/download-all")
     public ResponseEntity<?> downloadAll(@PathVariable Long id, HttpServletRequest request) {
         var session = session(request);
-        if (session == null || !VIEW_ROLES.contains(session.role()))
-            return ResponseEntity.status(403).body(Map.of("error", "没有权限下载图档"));
+        if (!canView(session)) return ResponseEntity.status(403).body(Map.of("error", "没有权限下载图档"));
         ImageLibraryItem item = items.findById(id).orElse(null);
         if (item == null) return ResponseEntity.notFound().build();
         List<Map<String, Object>> imageList = parseMaps(item.getImagesJson());
@@ -246,8 +246,12 @@ public class ImageLibraryController {
         return (AuthSession) request.getAttribute("authSession");
     }
 
-    private static boolean canManage(AuthSession session) {
-        return session != null && Set.of("admin", "planner").contains(session.role());
+    private boolean canView(AuthSession session) {
+        return session != null && permissions.canViewImageLibrary(session.role());
+    }
+
+    private boolean canManage(AuthSession session) {
+        return session != null && Set.of("admin", "planner").contains(session.role()) && canView(session);
     }
 
     private static boolean isAllowedLibraryFile(FileRecord record) {

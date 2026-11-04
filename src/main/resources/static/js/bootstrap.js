@@ -2,10 +2,10 @@ import './core-runtime.js?v=328';
 import './event-runtime.js?v=269';
 import './core-auth.js?v=426';
 import './core-identity.js?v=498';
-import './core-shell.js?v=517';
+import './core-shell.js?v=519';
 import './core-ui.js?v=523';
 import './core.js?v=147';
-import './dashboard-projects.js?v=509';
+import './dashboard-projects.js?v=511';
 import './dashboard-home.js?v=623';
 import './dashboard-lists.js?v=429';
 import './dashboard-scoring.js?v=345';
@@ -13,9 +13,9 @@ import './dashboard-points.js?v=383';
 import './dashboard-designer.js?v=608';
 import './dashboard.js?v=219';
 import './material-market.js?v=162';
-import './image-library.js?v=115';
+import './image-library.js?v=117';
 import './task-recommendations.js?v=6';
-import './project-uploads.js?v=498';
+import './project-uploads.js?v=499';
 import './project-form.js?v=459';
 import './project-detail.js?v=671';
 import './project-tasks.js?v=696';
@@ -66,7 +66,7 @@ async function loadViewModules(view) {
 
 import './files.js?v=302';
 import './business-assistant-position.js?v=3';
-import './business-assistant.js?v=15';
+import './business-assistant.js?v=17';
 
 const EMIE = window.EMIE;
 EMIE.loadViewModules = loadViewModules;

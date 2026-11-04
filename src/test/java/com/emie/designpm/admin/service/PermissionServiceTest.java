@@ -20,6 +20,19 @@ import org.junit.jupiter.api.Test;
 class PermissionServiceTest {
 
     @Test
+    void libraryPermissionKeepsCompatibilityAndHonorsExplicitDenial() {
+        RolePermissionRepository assignments = emptyAssignments();
+        PermissionService service = new PermissionService(mock(RoleRepository.class), assignments, emptyVersions());
+        for (String role : List.of("admin", "planner", "designer")) {
+            assertTrue(service.canViewImageLibrary(role));
+            when(assignments.findDeniedPermissionCodes(role)).thenReturn(List.of("page.image_library.view"));
+            assertFalse(service.canViewImageLibrary(role));
+        }
+        when(assignments.findAllowedPermissionCodes("sales")).thenReturn(List.of("page.image_library.view"));
+        assertFalse(service.canViewImageLibrary("sales"));
+    }
+
+    @Test
     void compatibilityMatrixPreservesCurrentCreateEntries() {
         RoleRepository roles = mock(RoleRepository.class);
         RolePermissionRepository assignments = emptyAssignments();

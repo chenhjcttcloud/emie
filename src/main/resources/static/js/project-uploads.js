@@ -374,7 +374,7 @@ function loadProtectedImage(img) {
   img.dataset.authLoading = 'true';
   const token = localStorage.getItem('design_pm_token');
   const headers = token ? { 'X-Auth-Token': token } : {};
-  fetch(source, { headers, credentials: 'same-origin' })
+  fetch(source, { headers, credentials: 'same-origin', cache: 'no-cache' })
     .then(response => {
       if (response.status === 202) {
         if (img.dataset.thumbnailRetries === '30') throw new Error('缩略图生成超时');
