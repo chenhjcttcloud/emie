@@ -169,3 +169,9 @@ docker compose up -d --build
 当前本地测试及生产均为 Temurin 21.0.13+9。因对应版本 Docker 标签尚不可用，`docker/java-security/install-runtime.sh` 使用 Adoptium 官方发布包和固定 SHA-256 安装整个 JRE，支持 Linux x64/aarch64。`apply-security.sh` 保留 86 条中间证书阻止指纹，并按官方 https://ops.java/emudhra 移除 emSign Root CA - G1、G2、emSign ECC Root CA - G3、AAA Certificate Services 四个根主体（仅删除实际存在的条目，自动适配 Temurin 别名）。对应 CVE-2026-114820，不能仅凭升级到 21.0.13 判断根证书修复完成。
 
 生产安全镜像为 `emie-app-runtime:java21-cve-2026-114820-20261026_093431`，稳定标签 `emie-app-runtime:java21` 同步指向该镜像。旧容器 `emie-app-security-old-20261026_093431` 及旧镜像保留；受保护备份/审计目录为 `<DEPLOY_DIR>/security-updates/java-cve-2026-114820-20261026_093431/`。本次只更新 Java 运行时和证书，业务 JAR、环境、挂载及资源限制保持原样。
+
+## 成长周报 OS 评分连接
+
+新增服务端环境变量 `GROWTH_OS_BASE_URL`、`GROWTH_OS_SCORE_TOKEN`，由主 Compose 和测试 Compose 传入。生产地址必须为 HTTPS 根地址，令牌单独保管，不进入前端、Git 或日志。未配置时保留原手工评分；已配置后异常明确提示，不自动回退手工录入。
+
+`GROWTH_OS_ALLOW_LOCAL_HTTP` 只在 dev/local profile 生效，本地隔离测试可允许 `growth-os` 容器别名；生产配置固定不允许该别名 HTTP。本次没有数据库迁移。标准原子发布从 `<DEPLOY_DIR>/.growth-os.env` 读取两项连接变量：文件须为 root 拥有、0600 普通文件，仅允许上述两个 KEY=value；拒绝重复、未知变量及非法值，完整校验后仅注入新候选容器，并强制关闭本地 HTTP。失败回滚沿用旧容器原配置；只改 Compose 不能影响该发布路径。评分使用、旧记录留存和接口见 [成长周报评分接入](growth-os-scores.md)。

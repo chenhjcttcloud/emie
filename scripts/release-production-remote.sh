@@ -116,7 +116,7 @@ load_visual_ai_env() {
     key="${line%%=*}"
     value="${line#*=}"
     case "$key" in
-      VISUAL_AI_ENABLED|VISUAL_AI_BASE_URL|VISUAL_AI_MODEL|VISUAL_AI_API_KEY|VISUAL_AI_ENCRYPTION_KEY)
+      VISUAL_AI_ENABLED|VISUAL_AI_BASE_URL|VISUAL_AI_MODEL|VISUAL_AI_API_KEY|VISUAL_AI_ENCRYPTION_KEY|ASSISTANT_TRUSTED_BASE_URLS)
         ;;
       *) die "AI 环境配置包含不允许的变量" ;;
     esac
@@ -127,6 +127,64 @@ load_visual_ai_env() {
   done < "$file"
 }
 load_visual_ai_env
+
+# 成长周报独立令牌只注入新候选容器；配置内容始终按数据解析。
+load_growth_os_env() {
+  local file="$DEPLOY_DIR/.growth-os.env" line key value seen_keys="|" invalid_data
+  local growth_base_url="" growth_score_token="" authority port
+  local LC_ALL=C
+  local host_label='[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?'
+  local origin_pattern="^https://(${host_label}(\\.${host_label})*|\\[[0-9A-Fa-f:]+\\])(:[0-9]{1,5})?/?$"
+  if [[ ! -e "$file" && ! -L "$file" ]]; then
+    return
+  fi
+  [[ -f "$file" && ! -L "$file" ]] || die "成长周报环境配置必须是普通文件"
+  [[ "$(stat -c %u "$file")" == "0" && "$(stat -c %a "$file")" == "600" ]] ||
+    die "成长周报环境配置必须由 root 拥有且权限为 0600"
+  [[ "$(stat -c %s "$file")" -le 16384 ]] || die "成长周报环境配置文件过大"
+  if IFS= read -r -d '' invalid_data < "$file"; then
+    die "成长周报环境配置不得包含 NUL 字符"
+  fi
+  unset invalid_data
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" != *$'\r'* ]] || die "成长周报环境配置不得包含 CR 字符"
+    [[ "$line" != *[[:cntrl:]]* ]] || die "成长周报环境配置不得包含控制字符"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    [[ "$line" == *=* ]] || die "成长周报环境配置必须使用 KEY=value 格式"
+    key="${line%%=*}"
+    value="${line#*=}"
+    case "$key" in
+      GROWTH_OS_BASE_URL|GROWTH_OS_SCORE_TOKEN) ;;
+      *) die "成长周报环境配置包含不允许的变量" ;;
+    esac
+    [[ "$seen_keys" != *"|$key|"* ]] || die "成长周报环境配置包含重复变量"
+    seen_keys+="$key|"
+    case "$key" in
+      GROWTH_OS_BASE_URL)
+        [[ "$value" =~ $origin_pattern ]] || die "成长周报地址必须是 HTTPS 根地址"
+        authority="${value#https://}"
+        authority="${authority%/}"
+        if [[ "$authority" == *]:* || ( "$authority" != \[* && "$authority" == *:* ) ]]; then
+          port="${authority##*:}"
+          [[ "$((10#$port))" -ge 1 && "$((10#$port))" -le 65535 ]] ||
+            die "成长周报地址端口不合法"
+        fi
+        growth_base_url="$value"
+        ;;
+      GROWTH_OS_SCORE_TOKEN)
+        [[ "${#value}" -ge 32 && "${#value}" -le 4096 && "$value" =~ ^[!-~]+$ ]] ||
+          die "成长周报接口令牌格式不合法"
+        growth_score_token="$value"
+        ;;
+    esac
+  done < "$file"
+  [[ "$seen_keys" == *"|GROWTH_OS_BASE_URL|"* && "$seen_keys" == *"|GROWTH_OS_SCORE_TOKEN|"* ]] ||
+    die "成长周报环境配置必须同时包含地址和独立令牌"
+  set_env_value GROWTH_OS_BASE_URL "$growth_base_url"
+  set_env_value GROWTH_OS_SCORE_TOKEN "$growth_score_token"
+  set_env_value GROWTH_OS_ALLOW_LOCAL_HTTP false
+}
+load_growth_os_env
 
 # 双连接池配置必须随候选容器一起传递，不能依赖旧容器是否已经配置过。
 primary_jdbc_url="$(get_env_value SPRING_DATASOURCE_URL 2>/dev/null || true)"
@@ -294,6 +352,7 @@ trap rollback ERR
 switch_started_epoch="$(date +%s)"
 old_stopped="true"
 docker stop -t 30 "$APP_CONTAINER" >/dev/null
+stop_finished_epoch="$(date +%s)"
 old_renamed="true"
 docker rename "$APP_CONTAINER" "$old_container"
 candidate_promoted="true"
@@ -312,6 +371,7 @@ if [[ "$healthy" != "true" ]]; then
   printf "release_error=新容器启动超时\n" >&2
   false
 fi
+healthy_epoch="$(date +%s)"
 
 container_jar_sha="$(
   docker exec "$APP_CONTAINER" sha256sum /app/app.jar | sed "s/ .*//"
@@ -339,4 +399,7 @@ printf "backup_dir=%s\n" "$backup_dir"
 printf "old_container=%s\n" "$old_container"
 printf "db_bytes=%s\n" "$db_bytes"
 printf "switch_seconds=%s\n" "$((finished_epoch - switch_started_epoch))"
+printf "stop_seconds=%s\n" "$((stop_finished_epoch - switch_started_epoch))"
+printf "start_and_health_seconds=%s\n" "$((healthy_epoch - stop_finished_epoch))"
+printf "post_check_seconds=%s\n" "$((finished_epoch - healthy_epoch))"
 printf "total_remote_seconds=%s\n" "$((finished_epoch - started_epoch))"

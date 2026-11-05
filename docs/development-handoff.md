@@ -1566,3 +1566,22 @@
 ## 2026-10-26 Java 安全修复已入库并标准发布
 
 用户随后授权推送仓库和生产。安全提交 0f51a962f7791f3513ffef05e040c2ebe9346f38 已同步 Gitee master / GitHub main，并使用干净 master 标准发布至生产 1.17.4；Java 21.0.13+9、根证书/中间证书检查、飞书 TLS、health 与浏览器入口验证通过。完整发布构建 407 项测试无失败、1 项既有跳过。原有 20 个业务工作区文件已校验原样恢复，未混入此次提交。备份/回滚点及 JAR 校验见 release-records.md；发布结果记录通过独立文档提交同步，生产保持运行安全提交。
+
+## 2026-11-05 成长周报 OS 分数接入（本地开发）
+
+- 用户确认：360 协同分和周报质量分自动填写产品系统月度绩效的对应两项，分别使用既有 10% 权重；任务完成率 70%、考勤 10% 和额外扣分规则保留。打开表单自动读分，保存时后端重新核对来源并计算总分。
+- 新增 backend Client/Service/admin GET 接口；严格飞书 user_id + 姓名匹配，不以 open_id/登录账号/同名兜底。只接受已发布 final 的当前分，0 分有效，previousScore仅作参考。已保存同月分在来源未完成时明确保留；新月份缺来源不能保存。每次保存使用现有 activity_logs 留存修改前后快照，无新迁移。说明见 growth-os-scores.md。
+- 原有未提交的发布流程脚本/文档，以及并行的推荐模块退役相关前端改动完整保留，本次没有提交或推送。新增评分模块版本最终 designer-evaluation v19、admin-scoring v663，bootstrap入口 v1508。
+- 本地产品库是隔离测试数据，只有两个测试设计师且均缺飞书 user_id；不伪造身份或覆盖用户资料。实际接入显示 missing_feishu_user_id。另用只读本地Growth SQLite身份和真实Java客户端验证HTTP链路，确认匹配成功，源当前返回重评失败/协同未发布，未把旧分当当前分。
+- 本次生产没有改动。发布前另需明确授权，并在产品生产后端注入独立 GROWTH_OS_BASE_URL/GROWTH_OS_SCORE_TOKEN；不复制本地数据覆盖生产。
+
+### 本地运行交接（2026-11-05，已验证）
+
+- 当前8080实际运行本次源码：快照 `.codex-build/growth-preview-20261105112254-c0da07`，JAR `1bfa8015f7aaed11885335b3d78a8f737e538a0beda902a172aac180d8981f80`。624测试、7组浏览器、独立评分浏览器回归及实际只读接口探测通过。完整过程见 release-records.md 同日记录。
+- `emie-test-app` 仅加入 internal 网；`emie-growth-preview-ingress-20261105112254-c0da07` 为无凭据固定 TCP 入口，独占发布0.0.0.0:8080，支持SSE/WebSocket。MySQL、Redis、Growth只新增网络连接，其原网络和业务数据保留。旧8080容器及失败候选均保留，不删除。
+- 保留式本地入口为 ignored `.codex-build/growth-integration-delivery.py`。普通原 `test-update.sh` 的 compose 与当前入口代理可能端口/项目名冲突，后续本地更新须先检查此交付计划和当前容器，保留式切换应用与入口，不能直接删除代理/旧容器；本入口现有workspace归属保护会拒绝另一snapshot工作目录，需要明确核对同项目交付标签后再扩展重用。不要通过旧固定源码配置启动历史版本。
+- 各私密 plan/runtime/真实响应在快照和 `.codex-build/growth-*-probe-*`，权限0600。不得加入Git或把令牌复制到前端；只有明确部署授权才可配置产品生产。
+
+### 2026-11-05 本次生产授权与发布范围
+
+用户已明确要求推送仓库和生产。本次仅发布Growth评分接入与必要的 `.growth-os.env` 候选配置加载器，保留其它线程未发布改动；使用精确提交重建，不复用混合dirty工作区的JAR。生产旧1.18.2/SHA577c2e3、Flyway98，5名设计师全部ID及姓名匹配，上游分数目前未发布或重评失败。实际提交、备份、容器及验收结果随后追加到release-records；生产独立令牌仅私密配置，不提交。

@@ -40,7 +40,7 @@ function renderDesignerMonthlyReport(report) {
   const mix = (counts, count) => Object.entries(counts || {}).map(([label, value]) => `${escHtml(label)} ${value} (${count ? Math.round(value * 100 / count) : 0}%)`).join('、') || '—';
   return `<section class="card designer-performance">
     <div class="card-header"><div><h3>设计师${annual ? '年度' : '月度'}绩效与交付成果</h3><p class="admin-section-hint">${periodLabel}归属积分含调账；任务旁显示该设计师在此任务累计获得的积分（包含历史月份，不等于当月归属积分）。展开任务后加载交付成果。</p></div>${designerPerformancePeriodControls(report.month)}</div>
-    <div class="designer-performance-summary"><span><strong>${rows.length}</strong> 位设计师</span><span><strong>${total}</strong> 项完成任务与需求</span><span><strong>${rows.reduce((sum, row) => sum + Number(row.score || 0), 0).toFixed(2)}</strong> ${periodLabel}归属积分</span><span><strong>${rows.filter(row => (row.evaluations || []).some(item => item.totalScore != null)).length} / ${rows.length}</strong> ${annual ? '已有月度评分' : '已完成月度评分'}</span></div>
+    ${!annual && report.growthScoreStatus === 'unavailable' ? `<p class="admin-section-hint" role="status" data-growth-integration-status>${escHtml(report.growthScoreMessage || '成长周报评分暂不可用，请稍后重试')}。现有积分与已保存评分继续保留。</p>` : ''}<div class="designer-performance-summary"><span><strong>${rows.length}</strong> 位设计师</span><span><strong>${total}</strong> 项完成任务与需求</span><span><strong>${rows.reduce((sum, row) => sum + Number(row.score || 0), 0).toFixed(2)}</strong> ${periodLabel}归属积分</span><span><strong>${rows.filter(row => (row.evaluations || []).some(item => item.totalScore != null)).length} / ${rows.length}</strong> ${annual ? '已有月度评分' : '已完成月度评分'}</span></div>
     <div class="designer-performance-list">${rows.map(row => `<article class="designer-performance-person"><div class="designer-performance-person-head"><div><strong>${escHtml(row.designer)}</strong><small>${escHtml(mix(row.categoryCounts, row.completedCount))}</small></div><div class="designer-performance-score"><strong>${Number(row.score || 0).toFixed(2)}</strong><span>${periodLabel}归属积分</span></div></div>${EMIE.actions.renderDesignerEvaluationSummary(row, report.month)}<div class="designer-performance-count">完成 ${Number(row.completedCount || 0)} 项任务与需求</div><div class="designer-performance-tasks">${(row.tasks || []).map(task => `<div class="designer-performance-task"><div class="designer-performance-task-head"><div><strong>${escHtml(task.name)}</strong><small>${escHtml(task.project || '')} · ${escHtml(String(task.completedAt || '').replace('T', ' '))} · ${escHtml(task.category || '未分类')}</small></div><div><span title="该设计师在此任务累计获得的积分，包含历史月份，不等于当月归属积分">该设计师在此任务累计获得 ${Number(task.score || 0).toFixed(2)} 积分</span><button type="button" class="btn btn-outline btn-sm" data-emie-action="click:scoring-task-deliveries" data-task-id="${Number(task.id)}" data-task-kind="${escHtml(task.kind || 'task')}" data-month="${escHtml(String(task.completedAt || '').slice(0, 7))}">查看成果</button></div></div><div class="designer-performance-deliveries" data-delivery-panel hidden></div></div>`).join('') || '<p class="admin-section-hint">所选时间内暂无完成任务或需求</p>'}</div></article>`).join('') || '<div class="empty-state">暂无在职设计师</div>'}</div>
   </section>`;
 }
@@ -129,6 +129,19 @@ async function renderAdminPoints(container) {
 }
 
 let designerPerformanceRequest = 0;
+function growthMonthPayload(value) {
+  if (value?.configured === false || Array.isArray(value)) return { configured: false, status: 'not_configured', users: [] };
+  if (value?.configured === true && Array.isArray(value.users)) return value;
+  return { configured: true, status: 'unavailable', message: '成长周报评分暂不可用，请稍后重试', users: [] };
+}
+function attachGrowthMonth(report, payload) {
+  report.growthScoreStatus = payload.status;
+  report.growthScoreMessage = payload.message;
+  for (const row of report.designers || []) {
+    const current = payload.users.find(item => item.userId === row.userId);
+    row.growthScores = { ...(current || { userId: row.userId, matchStatus: payload.configured ? 'unavailable' : 'not_configured' }), configured: payload.configured };
+  }
+}
 async function reloadDesignerMonthlyReport() {
   const month = document.getElementById('designerPerformanceMonth')?.value;
   if (!/^\d{4}(-\d{2})?$/.test(month || '')) return;
@@ -138,17 +151,38 @@ async function reloadDesignerMonthlyReport() {
   if (hint) hint.textContent = '正在加载积分与完成事项…';
   const list = card?.querySelector('.designer-performance-list');
   if (list) list.hidden = true;
+  let report, growth, ready = false;
+  const renderCurrent = () => {
+    const input = document.getElementById('designerPerformanceMonth');
+    if (requestId === designerPerformanceRequest && input?.isConnected && input.value === month) input.closest('.card').outerHTML = renderDesignerMonthlyReport(report);
+  };
+  // A slow optional upstream never blocks the original points and saved evaluation.
+  if (month.length === 7) {
+    apiGet('/performance/growth-scores?month=' + encodeURIComponent(month))
+      .then(growthMonthPayload)
+      .catch(failure => /failed:\s*404/i.test(String(failure?.message || ''))
+        ? { configured: false, status: 'not_configured', users: [] }
+        : { configured: true, status: 'unavailable', message: '成长周报评分暂不可用，请稍后重试', users: [] })
+      .then(payload => {
+        growth = payload;
+        if (report) attachGrowthMonth(report, payload);
+        if (ready) renderCurrent();
+      });
+  }
   try {
-    const [report, evaluations] = await Promise.all([
+    const [loadedReport, evaluations] = await Promise.all([
       apiGet('/performance/designer-monthly-report?month=' + encodeURIComponent(month)),
       apiGet('/performance/designer-evaluations?period=' + encodeURIComponent(month)),
     ]);
+    report = loadedReport;
     for (const row of report.designers || []) row.evaluations = evaluations.filter(item => item.userId === row.userId);
     if (month.length === 7) {
       const previews = await Promise.allSettled((report.designers || []).map(row => apiGet('/performance/designer-evaluations/completion?month=' + encodeURIComponent(month) + '&userId=' + encodeURIComponent(row.userId))));
       previews.forEach((result, index) => { if (result.status === 'fulfilled') report.designers[index].completionPreview = result.value; });
     }
-    if (requestId === designerPerformanceRequest && card?.isConnected && document.getElementById('designerPerformanceMonth')?.value === month) card.outerHTML = renderDesignerMonthlyReport(report);
+    if (growth) attachGrowthMonth(report, growth);
+    ready = true;
+    renderCurrent();
   } catch (error) { if (requestId === designerPerformanceRequest && card?.isConnected) card.querySelector('.admin-section-hint').textContent = '绩效加载失败：' + (error.message || '请稍后重试'); }
 }
 

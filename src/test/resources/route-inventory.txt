@@ -75,6 +75,8 @@ GET /api/performance/designer-evaluations/completion
 GET /api/performance/designer-monthly-report
 GET /api/performance/designer-monthly-report/{kind}/{taskId}/deliveries
 GET /api/performance/designer-targets
+GET /api/performance/growth-scores
+GET /api/performance/growth-scores/{month}/{userId}
 GET /api/performance/leaderboard
 GET /api/performance/monthly
 GET /api/performance/preview

@@ -50,6 +50,10 @@ spring:
     time-zone: Asia/Shanghai
 
 app:
+  growth-os:
+    base-url: ${GROWTH_OS_BASE_URL:}
+    score-token: ${GROWTH_OS_SCORE_TOKEN:}
+    allow-local-http: false
   emergency-admin:
     # 仅在两个环境变量都配置时启用；不得将凭据写入配置文件或源码。
     user-id: ${EMIE_EMERGENCY_ADMIN_USER_ID:}
@@ -122,6 +126,8 @@ spring:
     open-in-view: false
 
 app:
+  growth-os:
+    allow-local-http: ${GROWTH_OS_ALLOW_LOCAL_HTTP:false}
   feishu:
     # 共享测试库可能含有待处理任务；本地开发须显式开启后才允许调用飞书。
     sync-worker-enabled: ${APP_FEISHU_SYNC_WORKER_ENABLED:false}
@@ -157,6 +163,10 @@ spring:
         order_inserts: true
         order_updates: true
     open-in-view: false
+
+app:
+  growth-os:
+    allow-local-http: ${GROWTH_OS_ALLOW_LOCAL_HTTP:false}
 
 ---
 # === 生产环境：必须显式提供全部 DESIGNPM_DB_* 变量 ===

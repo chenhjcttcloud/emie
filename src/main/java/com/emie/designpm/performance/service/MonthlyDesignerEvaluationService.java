@@ -1,15 +1,20 @@
 package com.emie.designpm.performance.service;
 
+import com.emie.designpm.admin.repository.ActivityLogRepository;
 import com.emie.designpm.admin.repository.UserRepository;
+import com.emie.designpm.entity.ActivityLog;
 import com.emie.designpm.entity.MonthlyDesignerEvaluation;
 import com.emie.designpm.performance.repository.MonthlyDesignerEvaluationRepository;
 import com.emie.designpm.performance.repository.MonthlyUserPointTargetRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,16 +62,31 @@ public class MonthlyDesignerEvaluationService {
     private final UserRepository users;
     private final PerformanceService performance;
     private final MonthlyUserPointTargetRepository targets;
+    private final ActivityLogRepository activityLogs;
+    private final ObjectMapper json;
 
     public MonthlyDesignerEvaluationService(
             MonthlyDesignerEvaluationRepository evaluations,
             UserRepository users,
             PerformanceService performance,
             MonthlyUserPointTargetRepository targets) {
+        this(evaluations, users, performance, targets, null, null);
+    }
+
+    @Autowired
+    public MonthlyDesignerEvaluationService(
+            MonthlyDesignerEvaluationRepository evaluations,
+            UserRepository users,
+            PerformanceService performance,
+            MonthlyUserPointTargetRepository targets,
+            ActivityLogRepository activityLogs,
+            ObjectMapper json) {
         this.evaluations = evaluations;
         this.users = users;
         this.performance = performance;
         this.targets = targets;
+        this.activityLogs = activityLogs;
+        this.json = json;
     }
 
     public Completion completion(String month, String userId) {
@@ -213,6 +233,7 @@ public class MonthlyDesignerEvaluationService {
                 || (existing.isEmpty() && scores.version() != null))
             throw new ResponseStatusException(HttpStatus.CONFLICT, "评分已被修改，请关闭评分窗口，刷新页面后重试");
         var result = existing.orElseGet(MonthlyDesignerEvaluation::new);
+        String before = existing.isPresent() ? auditJson(result) : null;
         result.setUserId(userId);
         result.setMonthKey(month);
         result.setCompletionScore(values[0]);
@@ -234,6 +255,26 @@ public class MonthlyDesignerEvaluationService {
         result.setUpdatedBy(adminId);
         result.setUpdatedAt(LocalDateTime.now());
         result.setTotalScore(total(values[0], values[1], values[2], values[3], deduction));
-        return view(evaluations.saveAndFlush(result));
+        var saved = evaluations.saveAndFlush(result);
+        var output = view(saved);
+        if (activityLogs != null) {
+            var log = new ActivityLog("保存设计师月度绩效 " + month + " · " + userId, adminId, "admin");
+            log.setEntityType("monthly_designer_evaluation");
+            log.setEntityId(saved.getId());
+            log.setBeforeData(before);
+            log.setAfterData(auditJson(saved));
+            log.setChangedFields("月度评分、权重计算结果与评分来源");
+            activityLogs.save(log);
+        }
+        return output;
+    }
+
+    private String auditJson(MonthlyDesignerEvaluation value) {
+        if (activityLogs == null) return null;
+        try {
+            return json.writeValueAsString(value);
+        } catch (JsonProcessingException failure) {
+            throw new IllegalStateException("月度绩效审计记录生成失败，请稍后重试", failure);
+        }
     }
 }
