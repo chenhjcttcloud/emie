@@ -116,7 +116,7 @@ load_visual_ai_env() {
     key="${line%%=*}"
     value="${line#*=}"
     case "$key" in
-      VISUAL_AI_ENABLED|VISUAL_AI_BASE_URL|VISUAL_AI_MODEL|VISUAL_AI_API_KEY|VISUAL_AI_ENCRYPTION_KEY|ASSISTANT_TRUSTED_BASE_URLS)
+      VISUAL_AI_ENABLED|VISUAL_AI_BASE_URL|VISUAL_AI_MODEL|VISUAL_AI_API_KEY|VISUAL_AI_ENCRYPTION_KEY)
         ;;
       *) die "AI 环境配置包含不允许的变量" ;;
     esac
@@ -352,7 +352,6 @@ trap rollback ERR
 switch_started_epoch="$(date +%s)"
 old_stopped="true"
 docker stop -t 30 "$APP_CONTAINER" >/dev/null
-stop_finished_epoch="$(date +%s)"
 old_renamed="true"
 docker rename "$APP_CONTAINER" "$old_container"
 candidate_promoted="true"
@@ -371,7 +370,6 @@ if [[ "$healthy" != "true" ]]; then
   printf "release_error=新容器启动超时\n" >&2
   false
 fi
-healthy_epoch="$(date +%s)"
 
 container_jar_sha="$(
   docker exec "$APP_CONTAINER" sha256sum /app/app.jar | sed "s/ .*//"
@@ -399,7 +397,4 @@ printf "backup_dir=%s\n" "$backup_dir"
 printf "old_container=%s\n" "$old_container"
 printf "db_bytes=%s\n" "$db_bytes"
 printf "switch_seconds=%s\n" "$((finished_epoch - switch_started_epoch))"
-printf "stop_seconds=%s\n" "$((stop_finished_epoch - switch_started_epoch))"
-printf "start_and_health_seconds=%s\n" "$((healthy_epoch - stop_finished_epoch))"
-printf "post_check_seconds=%s\n" "$((finished_epoch - healthy_epoch))"
 printf "total_remote_seconds=%s\n" "$((finished_epoch - started_epoch))"
