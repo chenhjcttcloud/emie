@@ -1,6 +1,5 @@
 package com.emie.designpm.assistant;
 
-import com.emie.designpm.recommendation.service.VisualAiSettings;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayOutputStream;
@@ -14,6 +13,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.Flow;
 import java.util.function.Consumer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /** Explicit-key, read-only model listing. Discovery never saves or borrows a model credential. */
@@ -29,13 +29,14 @@ public class AssistantModelDiscovery {
     private final Consumer<String> validator;
     private final Semaphore slots = new Semaphore(2);
 
-    public AssistantModelDiscovery() {
+    @Autowired
+    public AssistantModelDiscovery(AssistantEndpointPolicy endpoints) {
         this(
                 HttpClient.newBuilder()
                         .connectTimeout(Duration.ofSeconds(5))
                         .followRedirects(HttpClient.Redirect.NEVER)
                         .build(),
-                VisualAiSettings::validateBaseUrl);
+                endpoints::validate);
     }
 
     AssistantModelDiscovery(HttpClient http, Consumer<String> validator) {
@@ -167,12 +168,13 @@ public class AssistantModelDiscovery {
             if (raw.isBlank() || raw.length() > 500 || raw.chars().anyMatch(Character::isISOControl))
                 throw new Exception();
             URI uri = URI.create(raw);
-            if (!"https".equals(uri.getScheme())
+            String scheme = Optional.ofNullable(uri.getScheme()).orElse("").toLowerCase(Locale.ROOT);
+            if (!Set.of("http", "https").contains(scheme)
                     || uri.getHost() == null
                     || uri.getUserInfo() != null
                     || uri.getQuery() != null
                     || uri.getFragment() != null
-                    || uri.getPort() != -1 && uri.getPort() != 443) throw new Exception();
+                    || uri.getPort() != -1 && (uri.getPort() < 1 || uri.getPort() > 65535)) throw new Exception();
             String host = uri.getHost().toLowerCase(Locale.ROOT);
             String path = Optional.ofNullable(uri.getRawPath()).orElse("").replaceAll("/+$", "");
             if (path.endsWith("/chat/completions"))
@@ -180,9 +182,9 @@ public class AssistantModelDiscovery {
             else if (path.endsWith("/models")) path = path.substring(0, path.length() - "/models".length());
             if (QWEN_HOSTS.contains(host) && (path.isEmpty() || path.equals("/api/v1"))) path = "/compatible-mode/v1";
             if (path.isEmpty() && (KIMI_HOSTS.contains(host) || host.equals("api.openai.com"))) path = "/v1";
-            return "https://" + host + (uri.getPort() == 443 ? ":443" : "") + path;
+            return scheme + "://" + host + (uri.getPort() == -1 ? "" : ":" + uri.getPort()) + path;
         } catch (Exception invalid) {
-            throw new IllegalArgumentException("请输入有效的公网 HTTPS 接口地址");
+            throw new IllegalArgumentException("请输入有效的模型接口地址");
         }
     }
 

@@ -8,15 +8,29 @@ import java.net.http.*;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class AssistantModelClient {
     private static final ObjectMapper JSON = new ObjectMapper();
-    private final HttpClient http = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .build();
+    private final HttpClient http;
+    private final AssistantEndpointPolicy endpoints;
+
+    @Autowired
+    public AssistantModelClient(AssistantEndpointPolicy endpoints) {
+        this(
+                HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofSeconds(5))
+                        .followRedirects(HttpClient.Redirect.NEVER)
+                        .build(),
+                endpoints);
+    }
+
+    AssistantModelClient(HttpClient http, AssistantEndpointPolicy endpoints) {
+        this.http = http;
+        this.endpoints = endpoints;
+    }
 
     public static class ModelFailure extends Exception {
         private final String publicMessage;
@@ -73,7 +87,7 @@ public class AssistantModelClient {
     private String complete(VisualAiSettings.RuntimeConfig config, List<Map<String, Object>> messages, int tokens)
             throws Exception {
         if (!config.configured()) throw new ModelFailure("智能对话未启用或未配置密钥，当前使用系统操作指引");
-        VisualAiSettings.validateBaseUrl(config.baseUrl);
+        endpoints.validate(config.baseUrl);
         Map<String, Object> body = requestBody(config, messages, tokens);
         HttpRequest request = HttpRequest.newBuilder(URI.create(config.baseUrl + "/chat/completions"))
                 .header("Content-Type", "application/json")

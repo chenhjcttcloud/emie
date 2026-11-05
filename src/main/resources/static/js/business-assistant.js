@@ -319,6 +319,7 @@ function renderSettings(config) {
         <div class="business-assistant-editor-heading"><div><h4>${creating ? '添加新模型' : '编辑模型配置'}</h4><p>${creating ? '填写接口地址和 Key，获取后选择想使用的模型即可。' : '可直接保存修改；重新获取模型列表时，需要填写此服务的 Key。'}</p></div>${creating ? '<button type="button" class="business-assistant-editor-back" data-assistant-action="config-list">返回模型列表</button>' : ''}</div>
         <div class="business-assistant-connect-fields">
           <label>接口地址<input name="baseUrl" type="url" required maxlength="500" value="${esc(text(profile.baseUrl, 500))}" placeholder="https://api.example.com/v1" spellcheck="false" ${editable ? '' : 'readonly'}></label>
+          <p class="business-assistant-config-note">支持公网 HTTPS 接口或已授权的内网代理。</p>
           <label>API Key${profile.keyConfigured ? '<span class="business-assistant-key-badge">已配置</span>' : ''}<input name="apiKey" type="password" maxlength="4000" autocomplete="new-password" ${creating || !profile.keyConfigured ? 'required' : ''} placeholder="${profile.keyConfigured ? '留空保留密钥；获取列表时请重新填写' : '粘贴此服务商的 API Key'}" ${storage ? '' : 'disabled'}></label>
           <p id="businessAssistantKeyHint" class="business-assistant-config-note">${!editable ? '当前账号没有修改配置权限。' : !storage ? '服务器尚未配置密钥加密存储，暂不能保存新密钥。' : profile.keyConfigured ? '保存时留空保留此配置的密钥；更换接口地址时须填写新密钥。' : '获取列表不会保存或切换模型；密钥仅在保存配置时加密存储。'}</p>
           <button type="button" class="btn btn-outline business-assistant-discover" data-assistant-action="config-discover" ${storage ? '' : 'disabled'}><span aria-hidden="true">↻</span> 获取模型列表</button>
@@ -377,15 +378,16 @@ function normalizeModelEndpoint(value) {
   const clean = value.trim().replace(/\/+$/, '');
   try {
     const url = new URL(clean);
-    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) return clean;
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) return clean;
     let path = url.pathname.replace(/\/+$/, '').replace(/\/(?:chat\/completions|models)$/, '');
     if (['dashscope.aliyuncs.com', 'dashscope-intl.aliyuncs.com', 'dashscope-us.aliyuncs.com'].includes(url.hostname) && path === '/api/v1') path = '/compatible-mode/v1';
     if (!path) {
       if (['api.moonshot.cn', 'api.moonshot.ai', 'api.openai.com'].includes(url.hostname)) path = '/v1';
       else if (['dashscope.aliyuncs.com', 'dashscope-intl.aliyuncs.com', 'dashscope-us.aliyuncs.com'].includes(url.hostname)) path = '/compatible-mode/v1';
     }
-    const explicitDefaultPort = /^https:\/\/[^/?#]+:443(?:\/|$)/i.test(clean);
-    return url.origin + (explicitDefaultPort ? ':443' : '') + path;
+    const defaultPort = url.protocol === 'https:' ? '443' : '80';
+    const explicitDefaultPort = new RegExp(`^https?://[^/?#]+:${defaultPort}(?:/|$)`, 'i').test(clean);
+    return url.origin + (explicitDefaultPort ? `:${defaultPort}` : '') + path;
   } catch { return clean; }
 }
 
@@ -499,7 +501,9 @@ function useManualModel() {
 async function discoverModels(button) {
   if (EMIE.state.currentRole !== 'admin' || !has('admin.config.edit') || state.busy || state.configBusy || discoveryController) return;
   const form = button.closest('#businessAssistantConfigForm');
-  if (!form || !form.elements.baseUrl.reportValidity()) return;
+  if (!form) return;
+  normalizeFormEndpoint(form);
+  if (!form.elements.baseUrl.reportValidity()) return;
   const baseUrl = form.elements.baseUrl.value.trim(), apiKey = form.elements.apiKey.value.trim();
   if (!apiKey) { discoveryFeedback('请填写此接口的 API Key 后获取模型列表；已保存的密钥不会在此回显。', true); form.elements.apiKey.focus(); return; }
   if (apiKey.length > 4000 || !/^[\x21-\x7e]+$/.test(apiKey)) { discoveryFeedback('API Key 格式无效，请检查后重试。', true); return; }

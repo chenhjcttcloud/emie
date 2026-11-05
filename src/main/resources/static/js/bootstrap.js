@@ -10,14 +10,13 @@ import './dashboard-home.js?v=623';
 import './dashboard-lists.js?v=429';
 import './dashboard-scoring.js?v=345';
 import './dashboard-points.js?v=383';
-import './dashboard-designer.js?v=609';
+import './dashboard-designer.js?v=610';
 import './dashboard.js?v=219';
 import './material-market.js?v=162';
 import './image-library.js?v=117';
-import './task-recommendations.js?v=6';
 import './project-uploads.js?v=499';
 import './project-form.js?v=459';
-import './project-detail.js?v=672';
+import './project-detail.js?v=673';
 import './project-tasks.js?v=697';
 import './project-sharing.js?v=264';
 import './projects.js?v=148';
@@ -66,7 +65,7 @@ async function loadViewModules(view) {
 
 import './files.js?v=302';
 import './business-assistant-position.js?v=3';
-import './business-assistant.js?v=17';
+import './business-assistant.js?v=19';
 
 const EMIE = window.EMIE;
 EMIE.loadViewModules = loadViewModules;
@@ -74,7 +73,7 @@ const requiredEmieModules = [
   'coreRuntime', 'eventRuntime', 'coreAuth', 'coreIdentity', 'coreShell', 'coreUi', 'core',
   'dashboardProjects', 'dashboardHome', 'dashboardLists', 'dashboardScoring', 'dashboardPoints', 'dashboardDesigner', 'dashboard',
   'projectUploads', 'projectForm', 'projectDetail', 'projectTasks', 'projectSharing', 'projects', 'materialMarket', 'imageLibrary',
-  'files', 'taskRecommendations', 'businessAssistantPosition', 'businessAssistant',
+  'files', 'businessAssistantPosition', 'businessAssistant',
 ];
 const missingEmieModules = requiredEmieModules.filter(name => !EMIE.modules[name]);
 if (missingEmieModules.length) {

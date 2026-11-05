@@ -4,12 +4,19 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.emie.designpm.recommendation.service.VisualAiSettings;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.ByteArrayOutputStream;
+import java.net.http.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Flow;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class AssistantModelClientTest {
     private VisualAiSettings.RuntimeConfig config(String provider, String dialect, boolean vision, String thinking) {
@@ -58,12 +65,110 @@ class AssistantModelClientTest {
 
     @Test
     void textOnlyProfileRefusesImagesBeforeAnyProviderRequest() {
-        var client = new AssistantModelClient();
+        var client = new AssistantModelClient(new AssistantEndpointPolicy(""));
         var error = assertThrows(
                 AssistantModelClient.ModelFailure.class,
                 () -> client.describe(
                         config("custom", "compatible", false, "auto"), List.of("data:image/jpeg;base64,YWJj")));
         assertTrue(error.publicMessage().contains("不支持图片理解"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void trustedLanRequestsUseTheSelectedProfileForChatAndImages() throws Exception {
+        String base = "http://192.168.200.118:8317/v1";
+        var policy = new AssistantEndpointPolicy(base);
+        HttpClient http = mock(HttpClient.class);
+        HttpResponse<byte[]> chat = mock(HttpResponse.class), image = mock(HttpResponse.class);
+        when(chat.statusCode()).thenReturn(200);
+        when(chat.body())
+                .thenReturn("{\"choices\":[{\"message\":{\"content\":\"内网回答\"}}]}".getBytes(StandardCharsets.UTF_8));
+        when(image.statusCode()).thenReturn(200);
+        when(image.body())
+                .thenReturn("{\"choices\":[{\"message\":{\"content\":\"{\\\"searchTerms\\\":[\\\"蓝色\\\"]}\"}}]}"
+                        .getBytes(StandardCharsets.UTF_8));
+        when(http.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(CompletableFuture.completedFuture(chat), CompletableFuture.completedFuture(image));
+        var client = new AssistantModelClient(http, policy);
+        var config = new VisualAiSettings.RuntimeConfig(
+                base,
+                "lan-selected-model",
+                "lan-profile-only-key",
+                true,
+                "custom",
+                "compatible",
+                "内网代理",
+                true,
+                "lan-profile",
+                "auto");
+        assertEquals("内网回答", client.reply(config, "测试问题", List.of()));
+        assertEquals("蓝色", client.describe(config, List.of("data:image/jpeg;base64,YWJj")));
+        var sent = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(http, times(2)).sendAsync(sent.capture(), any(HttpResponse.BodyHandler.class));
+        for (HttpRequest request : sent.getAllValues()) {
+            assertEquals(base + "/chat/completions", request.uri().toString());
+            assertEquals("POST", request.method());
+            assertEquals(
+                    "Bearer lan-profile-only-key",
+                    request.headers().firstValue("Authorization").orElseThrow());
+            String body = requestBody(request);
+            assertEquals(
+                    "lan-selected-model",
+                    new ObjectMapper().readTree(body).path("model").asText());
+            assertFalse(body.contains("lan-profile-only-key"));
+            assertFalse(body.contains("server-only-secret"));
+        }
+    }
+
+    @Test
+    void untrustedRuntimeProfilesAreRejectedBeforeAnyRequestAndProductionClientNeverRedirects() {
+        String base = "http://192.168.200.118:8317/v1";
+        var policy = new AssistantEndpointPolicy(base);
+        HttpClient http = mock(HttpClient.class);
+        var client = new AssistantModelClient(http, policy);
+        for (String endpoint : List.of(
+                "http://192.168.200.118:8318/v1",
+                "http://192.168.200.118:8317/v2",
+                "http://192.168.200.119:8317/v1",
+                "https://169.254.169.254/v1")) {
+            var config = new VisualAiSettings.RuntimeConfig(endpoint, "model", "private-profile-key", true);
+            assertThrows(IllegalArgumentException.class, () -> client.reply(config, "测试", List.of()));
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> client.describe(config, List.of("data:image/jpeg;base64,YWJj")));
+        }
+        var defaultPolicyClient = new AssistantModelClient(http, new AssistantEndpointPolicy(""));
+        var lanConfig = new VisualAiSettings.RuntimeConfig(base, "model", "private-profile-key", true);
+        assertThrows(IllegalArgumentException.class, () -> defaultPolicyClient.reply(lanConfig, "测试", List.of()));
+        verifyNoInteractions(http);
+        HttpClient productionHttp = (HttpClient) ReflectionTestUtils.getField(new AssistantModelClient(policy), "http");
+        assertNotNull(productionHttp);
+        assertEquals(HttpClient.Redirect.NEVER, productionHttp.followRedirects());
+    }
+
+    private String requestBody(HttpRequest request) throws Exception {
+        var bytes = new ByteArrayOutputStream();
+        var body = new CompletableFuture<String>();
+        request.bodyPublisher().orElseThrow().subscribe(new Flow.Subscriber<ByteBuffer>() {
+            public void onSubscribe(Flow.Subscription subscription) {
+                subscription.request(Long.MAX_VALUE);
+            }
+
+            public void onNext(ByteBuffer buffer) {
+                byte[] chunk = new byte[buffer.remaining()];
+                buffer.get(chunk);
+                bytes.writeBytes(chunk);
+            }
+
+            public void onError(Throwable error) {
+                body.completeExceptionally(error);
+            }
+
+            public void onComplete() {
+                body.complete(bytes.toString(StandardCharsets.UTF_8));
+            }
+        });
+        return body.get(1, TimeUnit.SECONDS);
     }
 
     @Test

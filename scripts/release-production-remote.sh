@@ -116,7 +116,7 @@ load_visual_ai_env() {
     key="${line%%=*}"
     value="${line#*=}"
     case "$key" in
-      VISUAL_AI_ENABLED|VISUAL_AI_BASE_URL|VISUAL_AI_MODEL|VISUAL_AI_API_KEY|VISUAL_AI_ENCRYPTION_KEY)
+      VISUAL_AI_ENABLED|VISUAL_AI_BASE_URL|VISUAL_AI_MODEL|VISUAL_AI_API_KEY|VISUAL_AI_ENCRYPTION_KEY|ASSISTANT_TRUSTED_BASE_URLS)
         ;;
       *) die "AI 环境配置包含不允许的变量" ;;
     esac

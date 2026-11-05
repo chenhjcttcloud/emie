@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-import com.emie.designpm.recommendation.service.VisualAiSettings;
 import java.net.http.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -57,12 +56,18 @@ class AssistantModelDiscoveryTest {
         assertEquals(
                 "https://dashscope.aliyuncs.com/compatible-mode/v1",
                 AssistantModelDiscovery.normalizeBase("https://dashscope.aliyuncs.com/api/v1/models"));
+        for (String suffix : List.of("", "/", "/models/", "/chat/completions")) {
+            assertEquals(
+                    "http://192.168.200.118:8317/v1",
+                    AssistantModelDiscovery.normalizeBase("http://192.168.200.118:8317/v1" + suffix));
+        }
         for (String bad : List.of(
-                "http://example.com",
+                "file:///etc/passwd",
                 "https://secret@example.com/v1",
                 "https://example.com/v1?key=secret",
                 "https://example.com/#fragment",
-                "https://example.com:8443/v1")) {
+                "https://example.com:0/v1",
+                "https://example.com:65536/v1")) {
             var failure =
                     assertThrows(IllegalArgumentException.class, () -> AssistantModelDiscovery.normalizeBase(bad));
             assertFalse(failure.getMessage().contains("secret"));
@@ -72,14 +77,59 @@ class AssistantModelDiscoveryTest {
     @Test
     void rejectsPrivateEndpointsAndInvalidKeysBeforeSendingAnything() {
         HttpClient http = mock(HttpClient.class);
-        var discovery = new AssistantModelDiscovery(http, VisualAiSettings::validateBaseUrl);
+        var discovery = new AssistantModelDiscovery(http, new AssistantEndpointPolicy("")::validate);
         for (String base : List.of(
-                "https://127.0.0.1/v1", "https://localhost/v1", "https://192.168.1.2/v1", "https://169.254.169.254/v1"))
+                "https://127.0.0.1/v1",
+                "https://localhost/v1",
+                "https://192.168.1.2/v1",
+                "https://169.254.169.254/v1",
+                "http://192.168.200.118:8317/v1",
+                "http://example.com",
+                "https://example.com:8443/v1"))
             assertThrows(IllegalArgumentException.class, () -> discovery.discover(request(base)));
         for (String key : List.of("", "secret\nKey", "secret Key", "密钥-fixture", "a".repeat(4001)))
             assertThrows(
                     IllegalArgumentException.class,
                     () -> discovery.discover(Map.of("baseUrl", "https://example.com/v1", "apiKey", key)));
+        verifyNoInteractions(http);
+    }
+
+    @Test
+    void trustedLanCatalogUsesOnlyTheExplicitKeyAtTheConfiguredBase() throws Exception {
+        String base = "http://192.168.200.118:8317/v1";
+        var http = http(200, "{\"data\":[{\"id\":\"lan-model\",\"input_modalities\":[\"text\"]}]}");
+        var discovery = new AssistantModelDiscovery(http, new AssistantEndpointPolicy(base)::validate);
+        var result = discovery.discover(request(base + "/chat/completions"));
+        assertEquals(base, result.get("baseUrl"));
+        assertEquals("custom", result.get("provider"));
+        assertEquals("compatible", result.get("dialect"));
+        assertEquals("lan-model", models(result).getFirst().get("id"));
+        assertFalse(result.toString().contains(KEY));
+        var sent = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(http).sendAsync(sent.capture(), any(HttpResponse.BodyHandler.class));
+        assertEquals(base + "/models", sent.getValue().uri().toString());
+        assertEquals("GET", sent.getValue().method());
+        assertEquals(
+                "Bearer " + KEY,
+                sent.getValue().headers().firstValue("Authorization").orElseThrow());
+        assertTrue(sent.getValue().bodyPublisher().isEmpty());
+    }
+
+    @Test
+    void lanTrustDoesNotAllowOtherHostsPortsSchemesOrPaths() {
+        HttpClient http = mock(HttpClient.class);
+        var discovery = new AssistantModelDiscovery(
+                http, new AssistantEndpointPolicy("http://192.168.200.118:8317/v1")::validate);
+        for (String base : List.of(
+                "http://192.168.200.119:8317/v1",
+                "http://192.168.200.118:8318/v1",
+                "https://192.168.200.118:8317/v1",
+                "http://192.168.200.118:8317/v2",
+                "http://192.168.200.118:8317/v1evil",
+                "http://192.168.200.118:8317/v1/../admin")) {
+            var failure = assertThrows(IllegalArgumentException.class, () -> discovery.discover(request(base)));
+            assertFalse(failure.getMessage().contains(KEY));
+        }
         verifyNoInteractions(http);
     }
 

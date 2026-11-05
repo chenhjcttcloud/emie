@@ -12,7 +12,12 @@ const browser = await chromium.launch({ headless: true, executablePath });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
 const page = await context.newPage();
 const errors = [], chats = [], uploads = [], saves = [], pending = [], discoveries = [], pendingDiscoveries = [];
+const lanProxyBase = 'http://192.168.200.118:8317/v1', directProxyRequests = [];
 page.on('pageerror', error => errors.push(error.message));
+page.on('request', request => {
+  if (new URL(request.url()).host === new URL(lanProxyBase).host) directProxyRequests.push(request.url());
+});
+await page.route(/^https?:\/\/192\.168\.200\.118:8317(?:\/|$)/, route => route.abort('blockedbyclient'));
 const modelProfiles = [{ id: 'server', name: '服务器 Kimi（默认）', provider: 'kimi', dialect: 'kimi', thinkingMode: 'disabled', baseUrl: 'https://api.moonshot.cn/v1', model: 'kimi-k2.6', visionSupported: true, keyConfigured: true, builtin: true }];
 let activeProfileId = 'server', modelEnabled = true;
 let nextProfileId = 1;
@@ -43,11 +48,15 @@ await page.route('**/api/**', async route => {
   if (url.pathname === '/api/assistant/chat') {
     const body = route.request().postDataJSON(); chats.push(body);
     const colorSearch = body.message === '给我绿色图档';
+    const lanChat = modelProfiles.find(profile => profile.id === activeProfileId).baseUrl === lanProxyBase;
     const response = body.attachmentStoredName || body.message === '按IP或风格查找图档' || colorSearch ? {
       ...modelMeta(),
       mode: 'search', answer: 'UI 模拟：找到相关图档。', serviceMessage: '当前按名称、IP 与文字标签匹配，未进行参考图视觉分析。',
       images: [{ id: 601, name: 'UI模拟 · 春日包装', ipName: '春日系列', reasons: ['同系列：春日'], images: [{ storedName: colorSearch ? 'assistant-simulation-green.png' : 'assistant-simulation-cover.ai', name: colorSearch ? '绿色预览.png' : 'UI模拟.ai' }] }],
       sources: [{ title: '查看图库', view: 'image-library' }], suggestions: []
+    } : lanChat ? {
+      ...modelMeta(), mode: 'ai', answer: 'UI 模拟：内网代理模型已处理本次提问。',
+      serviceMessage: '', sources: [], tasks: [], suggestions: []
     } : {
       ...modelMeta(),
       mode: 'guide', answer: 'UI 模拟：根据当前任务先确认需求，再准备交付。<img src=x onerror="window.assistantXss=true">',
@@ -75,11 +84,13 @@ await page.route('**/api/**', async route => {
   if (url.pathname === '/api/assistant/config/models') {
     const body = route.request().postDataJSON(); discoveries.push(body);
     if (discoveryMode === 'unsupported') return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: '此接口未提供模型列表，可手动填写模型名称' }) });
-    const kimi = body.baseUrl.includes('moonshot');
+    const kimi = body.baseUrl.includes('moonshot'), lan = body.baseUrl === lanProxyBase;
     const response = {
-      baseUrl: kimi ? 'https://api.moonshot.cn/v1' : 'https://api.deepseek.com',
-      provider: kimi ? 'kimi' : 'deepseek', dialect: kimi ? 'kimi' : 'deepseek', thinkingMode: 'auto',
-      models: kimi
+      baseUrl: lan ? lanProxyBase : kimi ? 'https://api.moonshot.cn/v1' : 'https://api.deepseek.com',
+      provider: lan ? 'custom' : kimi ? 'kimi' : 'deepseek', dialect: lan ? 'compatible' : kimi ? 'kimi' : 'deepseek', thinkingMode: 'auto',
+      models: lan
+        ? [{ id: 'lan-chat', name: 'lan-chat', visionSupported: false, visionKnown: true }]
+        : kimi
         ? [{ id: 'kimi-k2.6', name: 'kimi-k2.6', visionSupported: true, visionKnown: true }]
         : [{ id: 'deepseek-chat', name: 'deepseek-chat', visionSupported: false, visionKnown: true }, { id: 'deepseek-reasoner', name: 'deepseek-reasoner', visionSupported: false, visionKnown: true }]
     };
@@ -491,6 +502,48 @@ try {
   await page.getByText('模型配置已删除。', { exact: true }).waitFor();
   assert.match(await page.locator('#businessAssistantModel').innerText(), /服务器 Kimi/);
 
+  // 内网兼容代理保留 HTTP 与自定义端口；模型请求统一由本机业务 API 转发。
+  await page.locator('[data-assistant-action="config-new"]').click();
+  await page.locator('#businessAssistantConfigForm input[name="baseUrl"]').fill(lanProxyBase + '/chat/completions');
+  await page.locator('#businessAssistantConfigForm input[name="apiKey"]').fill('ui-lan-proxy-key');
+  await page.locator('[data-assistant-action="config-discover"]').click();
+  await page.locator('#businessAssistantDiscoveredModel option[value="lan-chat"]').waitFor({ state: 'attached' });
+  assert.deepEqual(discoveries.at(-1), { baseUrl: lanProxyBase, apiKey: 'ui-lan-proxy-key' });
+  assert.equal(await page.locator('#businessAssistantConfigForm input[name="baseUrl"]').inputValue(), lanProxyBase);
+  assert.equal(await page.locator('#businessAssistantConfigForm select[name="provider"]').inputValue(), 'custom');
+  assert.equal(await page.locator('#businessAssistantConfigForm select[name="dialect"]').inputValue(), 'compatible');
+  assert.equal(await page.locator('#businessAssistantConfigForm input[name="visionSupported"]').isChecked(), false);
+  await page.locator('#businessAssistantConfigForm button[name="saveAndUse"]').click();
+  await page.getByText('模型已保存并切换，全体成员下一次提问生效。', { exact: true }).waitFor();
+  const lanProfileId = await page.locator('#businessAssistantProfile').inputValue();
+  assert.notEqual(lanProfileId, 'server');
+  assert.equal(saves.at(-1).activate, true);
+  assert.equal(saves.at(-1).profile.baseUrl, lanProxyBase);
+  assert.equal(saves.at(-1).profile.model, 'lan-chat');
+  assert.equal(saves.at(-1).profile.provider, 'custom');
+  assert.equal(saves.at(-1).profile.dialect, 'compatible');
+  assert.equal(saves.at(-1).profile.apiKey, 'ui-lan-proxy-key');
+  assert.equal(await page.locator('#businessAssistantConfigForm input[name="apiKey"]').inputValue(), '');
+  assert.match(await page.locator('#businessAssistantModel').innerText(), /lan-chat/);
+  await page.locator('[data-assistant-action="config-back"]').click();
+  await send('通过内网代理说明任务下一步');
+  assert.equal(chats.at(-1).message, '通过内网代理说明任务下一步');
+  const lanAnswer = page.locator('#businessAssistantMessages .is-assistant').last();
+  assert.match(await lanAnswer.locator('.business-assistant-mode').innerText(), /AI 回答 · lan-chat/);
+  assert.match(await lanAnswer.locator('.business-assistant-answer').innerText(), /内网代理模型已处理本次提问/);
+  assert.equal(Object.hasOwn(chats.at(-1), 'apiKey'), false, 'chat never sends a model credential from the browser');
+  assert.equal(Object.hasOwn(chats.at(-1), 'baseUrl'), false, 'chat uses the server-selected model profile');
+  assert.deepEqual(directProxyRequests, [], 'browser never requests the private model proxy directly');
+  await page.locator('#businessAssistantSettings').click();
+  await page.locator('#businessAssistantConfigForm').waitFor();
+  assert.equal(await page.locator('#businessAssistantProfile').inputValue(), lanProfileId);
+  await page.locator('[data-assistant-action="config-delete"]').click();
+  assert.match(await page.locator('#businessAssistantDeleteConfirm').innerText(), /切回服务器默认 Kimi/);
+  await page.locator('[data-assistant-action="config-delete-confirm"]').click();
+  await page.getByText('模型配置已删除。', { exact: true }).waitFor();
+  assert.equal(await page.locator('#businessAssistantProfile').inputValue(), 'server');
+  assert.match(await page.locator('#businessAssistantModel').innerText(), /服务器 Kimi/);
+
   // 网关未实现模型列表时仍可手动配置；读取失败不切换全局模型。
   discoveryMode = 'unsupported';
   await page.locator('[data-assistant-action="config-new"]').click();
@@ -652,8 +705,9 @@ try {
   assert.equal(await locatedCard.count(), 0);
   await page.evaluate(() => { document.dispatchEvent(new Event('emie:identity-changing')); window.EMIE.state.authUser = null; localStorage.removeItem('design_pm_token'); document.getElementById('appContainer').style.display = 'none'; });
   await page.locator('#businessAssistantLauncher').waitFor({ state: 'hidden' });
+  assert.deepEqual(directProxyRequests, [], 'all model proxy traffic stays behind the assistant API');
   assert.deepEqual(errors, []);
-  console.log('business assistant UI checks passed (local API simulation, real core-ui keyboard integration, identity isolation, context, material search, exact library item navigation, file drop validation/permissions/deferred upload, draggable launcher/corner positioning/resize, endpoint/key model discovery, manual fallback, stale credential cancellation, model profiles, server default, credential isolation, mobile); screenshot=/tmp/emie-business-assistant-ui.png');
+  console.log('business assistant UI checks passed (local API simulation, real core-ui keyboard integration, identity isolation, context, material search, exact library item navigation, file drop validation/permissions/deferred upload, draggable launcher/corner positioning/resize, endpoint/key model discovery, LAN proxy profiles without direct browser traffic, manual fallback, stale credential cancellation, model profiles, server default, credential isolation, mobile); screenshot=/tmp/emie-business-assistant-ui.png');
 } catch (error) {
   await page.screenshot({ path: '/tmp/emie-business-assistant-ui-failure.png', fullPage: true }).catch(() => {});
   throw error;

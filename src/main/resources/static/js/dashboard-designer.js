@@ -403,7 +403,6 @@ function openPublishedSubTaskDetail(taskId) {
         <div class="detail-item" style="margin-top:12px;"><div class="detail-label">任务要求</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.details || '未填写')}</div></div>
         ${taskDetailFiles(task.referenceImagesJson, true)}
         ${taskDetailFiles(task.attachmentsJson, false)}
-        ${EMIE.actions.taskRecommendationsPlaceholder?.() || ''}
         ${task.deliverables ? `<div class="detail-item" style="margin-top:12px;"><div class="detail-label">当前交付成果</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.deliverables)}</div></div>` : ''}
         ${deliveryVersions.length ? `<div class="delivery-section-heading">交付与积分记录</div>${renderDeliveryRounds(deliveryVersions, records, task)}` : ''}
         <details class="delivery-all-requirements"><summary>全部修改要求（含驳回及取消记录）</summary>
@@ -447,7 +446,6 @@ function openPublishedSubTaskDetail(taskId) {
     </div>`;
   document.body.appendChild(modal);
   // 详情抽屉的关闭按钮直接绑定兜底事件，兼容部分旧页面缓存未加载声明式事件运行时的情况。
-  EMIE.actions.mountTaskRecommendations?.(modal, { projectId: task.projectId, taskId: task.id });
   modal.querySelector('.modal-close')?.addEventListener('click', () => closeM('publishedSubTaskDetailModal'));
   modal.addEventListener('click', event => {
     if (event.target === modal) closeM('publishedSubTaskDetailModal');

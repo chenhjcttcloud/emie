@@ -21,14 +21,17 @@ public class AssistantModelSettings {
     private final AssistantModelProfileRepository profiles;
     private final AssistantModelSelectionRepository selections;
     private final VisualAiSettings server;
+    private final AssistantEndpointPolicy endpoints;
 
     public AssistantModelSettings(
             AssistantModelProfileRepository profiles,
             AssistantModelSelectionRepository selections,
-            VisualAiSettings server) {
+            VisualAiSettings server,
+            AssistantEndpointPolicy endpoints) {
         this.profiles = profiles;
         this.selections = selections;
         this.server = server;
+        this.endpoints = endpoints;
     }
 
     @Transactional(readOnly = true)
@@ -169,7 +172,7 @@ public class AssistantModelSettings {
         if (!PROVIDERS.contains(provider) || !DIALECTS.contains(dialect))
             throw new IllegalArgumentException("服务商或接口格式无效");
         String base = validText(body.get("baseUrl"), 500, "请输入有效的接口地址").replaceAll("/+$", "");
-        VisualAiSettings.validateBaseUrl(base);
+        endpoints.validate(base);
         String model = validText(body.get("model"), 150, "请输入150字以内的模型名称");
         String thinking = string(body.get("thinkingMode"));
         if (thinking.isBlank()) thinking = "auto";

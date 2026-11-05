@@ -29,7 +29,8 @@ class AssistantModelSettingsTest {
             "kimi-k2.6",
             "local-test-encryption-secret-32-characters",
             true);
-    private final AssistantModelSettings settings = new AssistantModelSettings(profiles, selections, server);
+    private final AssistantModelSettings settings =
+            new AssistantModelSettings(profiles, selections, server, new AssistantEndpointPolicy(""));
 
     @BeforeEach
     void setup() {
@@ -117,13 +118,52 @@ class AssistantModelSettingsTest {
         String id = save(profile("own-key"), false);
         assertEquals("server", settings.current().profileId);
         settings.save(Map.of("operation", "activate", "profileId", id));
-        var restarted = new AssistantModelSettings(profiles, selections, server);
+        var restarted = new AssistantModelSettings(profiles, selections, server, new AssistantEndpointPolicy(""));
         assertEquals(id, restarted.current().profileId);
         assertEquals("own-key", restarted.current().apiKey);
         assertEquals("另一套模型", restarted.publicModel().get("modelName"));
         restarted.save(Map.of("operation", "activate", "profileId", "server"));
         assertEquals("server-only-secret", settings.current().apiKey);
         verify(selections, atLeastOnce()).findForUpdate();
+    }
+
+    @Test
+    void trustedLanProfileNeedsItsOwnKeyAndPersistsAcrossRestart() {
+        String base = "http://192.168.200.118:8317/v1";
+        var policy = new AssistantEndpointPolicy(base);
+        var lanSettings = new AssistantModelSettings(profiles, selections, server, policy);
+        Map<String, Object> value = profile(null);
+        value.put("baseUrl", base);
+        value.put("model", "lan-chat");
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> lanSettings.save(Map.of("operation", "save", "profile", value, "activate", true)));
+        assertEquals("server", lanSettings.current().profileId);
+        verify(profiles, never()).saveAndFlush(any());
+
+        value.put("apiKey", "lan-profile-only-secret");
+        String id = (String) lanSettings
+                .save(Map.of("operation", "save", "profile", value, "activate", true))
+                .get("savedProfileId");
+        assertEquals(base, stored.get(id).getBaseUrl());
+        assertFalse(stored.get(id).getEncryptedKey().contains("lan-profile-only-secret"));
+        var restarted = new AssistantModelSettings(profiles, selections, server, policy);
+        assertEquals(id, restarted.current().profileId);
+        assertEquals(base, restarted.current().baseUrl);
+        assertEquals("lan-chat", restarted.current().model);
+        assertEquals("lan-profile-only-secret", restarted.current().apiKey);
+        assertFalse(restarted.overview().toString().contains("lan-profile-only-secret"));
+        assertFalse(restarted.overview().toString().contains("server-only-secret"));
+
+        Map<String, Object> changed = profile("");
+        changed.put("id", id);
+        assertThrows(
+                IllegalArgumentException.class, () -> restarted.save(Map.of("operation", "save", "profile", changed)));
+        assertEquals(base, restarted.current().baseUrl);
+        stored.get(id).setEncryptedKey("unreadable-lan-key");
+        assertEquals("", restarted.current().apiKey);
+        assertFalse(restarted.current().configured());
+        assertEquals("server-only-secret", server.serverCurrent().apiKey);
     }
 
     @Test

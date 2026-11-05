@@ -26,6 +26,7 @@ services:
       VISUAL_AI_MODEL: ${VISUAL_AI_MODEL:-kimi-k2.6}
       VISUAL_AI_API_KEY: ${VISUAL_AI_API_KEY:-}
       VISUAL_AI_ENCRYPTION_KEY: ${VISUAL_AI_ENCRYPTION_KEY:-}
+      ASSISTANT_TRUSTED_BASE_URLS: ${ASSISTANT_TRUSTED_BASE_URLS:-}
       TZ: Asia/Shanghai
       JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Shanghai -Xmx512m -Xms128m -XX:+UseSerialGC -Xss512k -XX:MaxMetaspaceSize=192m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/app/logs/heapdump.hprof
     mem_limit: 768m
