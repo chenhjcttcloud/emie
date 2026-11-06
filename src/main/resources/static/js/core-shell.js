@@ -74,16 +74,8 @@ function navigate(view, options = {}) {
   // 保存当前浏览页面（刷新后恢复）
   localStorage.setItem('design_pm_lastView', view);
   renderSidebar();
-  render(options);
+  render({ ...options, resetScroll: view !== 'image-library' || !options.imageLibraryItemId });
   closeMobileSidebar();
-  if (view === 'image-library' && options.imageLibraryItemId) return;
-  // 移动端切换页面后回顶部（延迟确保渲染完成）
-  const renderId = EMIE.state.renderId;
-  setTimeout(() => {
-    if (EMIE.state.renderId !== renderId) return;
-    window.scrollTo(0, 0);
-    document.documentElement.scrollTop = 0;
-  }, 50);
 }
 
 function navigateProjectList(view, filters = {}) {
@@ -96,7 +88,7 @@ function navigateTaskBucket(bucket) {
   EMIE.state.taskBucket = ['pending', 'completed'].includes(bucket) ? bucket : 'all';
   localStorage.setItem('design_pm_taskBucket', EMIE.state.taskBucket);
   renderSidebar();
-  render();
+  render({ resetScroll: true });
   closeMobileSidebar();
 }
 

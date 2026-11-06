@@ -171,6 +171,7 @@ async function initApp() {
 
 function showLogin() {
   stopVersionChecks();
+  EMIE.actions.resetPageRender();
   document.getElementById('loginPage').style.display = '';
   document.getElementById('appContainer').style.display = 'none';
   document.getElementById('loginError').style.display = 'none';
@@ -374,6 +375,7 @@ function isPendingUser(user) {
 }
 
 function showPendingApproval() {
+  EMIE.actions.resetPageRender();
   document.getElementById('loginPage').style.display = 'none';
   document.getElementById('appContainer').style.display = '';
 

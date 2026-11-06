@@ -163,9 +163,18 @@ function requestModalClose(overlay) {
 
 function animateModalClose(overlay) {
   if (!overlay || !overlay.isConnected || overlay.dataset.modalClosing === '1') return;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    overlay.remove();
+    return;
+  }
   overlay.dataset.modalClosing = '1';
   overlay.classList.add('is-closing');
-  window.setTimeout(() => overlay.remove(), 180);
+  const fallback = window.setTimeout(() => overlay.remove(), 220);
+  overlay.addEventListener('animationend', event => {
+    if (event.target !== overlay || event.animationName !== 'overlayExit') return;
+    window.clearTimeout(fallback);
+    overlay.remove();
+  });
 }
 
 function normalizeModalStructure(root = document) {
@@ -230,7 +239,11 @@ function normalizeModalStructure(root = document) {
 
 function restoreModalFocus(overlay) {
   const origin = modalFocusOrigins.get(overlay);
-  if (origin?.isConnected) requestAnimationFrame(() => origin.focus({ preventScroll: true }));
+  if (!origin?.isConnected) return;
+  requestAnimationFrame(() => {
+    const top = getTopModalOverlay();
+    if (origin.isConnected && (!top || top.contains(origin))) origin.focus({ preventScroll: true });
+  });
 }
 
 // 页面大部分表单由模块按需动态渲染，统一监听新增节点，避免遗漏任何日期控件。

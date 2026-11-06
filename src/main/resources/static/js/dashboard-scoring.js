@@ -10,11 +10,13 @@ const matchesSearchText = (...args) => EMIE.actions.matchesSearchText(...args);
 const isDateInRange = (...args) => EMIE.actions.isDateInRange(...args);
 
 async function renderScoringView(main, role, uid) {
+  const renderId = EMIE.state.renderId;
   // 使用专用聚合端点（1 次 API 替代 N+1 次）
   const pendingItems = await swrFetch(`scoring_${role}_${uid}`,
     () => apiGet(`/scoring/pending?role=${role}&userId=${uid}`),
     15000
   );
+  if (EMIE.state.renderId !== renderId) return;
   let pendingTasks = [];
 
   for (const item of pendingItems) {
@@ -99,7 +101,10 @@ async function renderScoringView(main, role, uid) {
 function filterScoringView() {
   clearTimeout(filterScoringView._timer);
   EMIE.dashboardState.scoringPage = 1;
-  filterScoringView._timer = setTimeout(applyFilterScoringView, 350);
+  const renderId = EMIE.state.renderId;
+  filterScoringView._timer = setTimeout(() => {
+    if (EMIE.state.renderId === renderId) applyFilterScoringView();
+  }, 350);
 }
 
 function applyFilterScoringView() {

@@ -51,8 +51,7 @@ async function updateBadges(role, uid) {
 
 // ==================== 工作台 ====================
 async function renderDashboard(main, role, uid) {
-  // 渲染序列校验：render() 已自增 renderId；独立调用路径（changePlannerBoardScope）自行自增后进入。
-  // 这里只捕获当前序列号，await 期间若发生新导航/渲染则本次结果作废，避免旧数据覆盖新页面。
+  // 统一入口已更新 renderId，导航或刷新后丢弃旧的工作台响应。
   const renderId = EMIE.state.renderId;
   if (role === 'planner' && plannerScopeUserId !== uid) {
     plannerScopeUserId = uid;
@@ -294,13 +293,7 @@ async function changePlannerBoardScope(scope) {
   if (nextScope === plannerBoardScope && document.querySelector('#dashboardRoleStatus')) return;
   plannerBoardScope = nextScope;
   EMIE.projectListPreset = null;
-  const main = document.querySelector('main');
-  if (main) {
-    // 独立重绘路径：自增渲染序列，使先前渲染中尚未完成的异步继续写入作废。
-    EMIE.state.renderId = (EMIE.state.renderId || 0) + 1;
-    main.innerHTML = '<div class="loading">正在更新企划范围…</div>';
-    await renderDashboard(main, EMIE.state.currentRole, getCurrentUserId());
-  }
+  if (EMIE.state.currentView === 'dashboard') await EMIE.actions.render();
 }
 
 /** 在 dashboard 底部加载工作量看板 */

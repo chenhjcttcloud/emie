@@ -11,10 +11,11 @@ const isPreviewableFile = (...args) => EMIE.actions.isPreviewableFile(...args);
 // ==================== PDF / PPT / PPTX 在线预览 ====================
 
 
-function closeFilePreview() {
+function closeFilePreview(immediate = false) {
   EMIE.fileState.previewSequence++;
   EMIE.fileState.currentPreview = null;
-  document.getElementById('filePreviewOverlay')?.remove();
+  if (immediate) document.getElementById('filePreviewOverlay')?.remove();
+  else EMIE.actions.closeM('filePreviewOverlay');
 }
 
 function retryFilePreview() {
@@ -46,7 +47,7 @@ async function openFilePreview(fileUrl, fileName, fileSize, retry = false, previ
     return;
   }
 
-  closeFilePreview();
+  closeFilePreview(true);
   const requestSequence = ++EMIE.fileState.previewSequence;
   const normalizedUrl = normalizeFileUrl(fileUrl);
   const storedName = storedNameFromFile(normalizedUrl);

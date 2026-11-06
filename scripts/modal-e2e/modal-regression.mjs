@@ -288,6 +288,153 @@ async function runNavigationDataChecks(page) {
   process.stdout.write('  navigation-no-unused-full-project-prefetch ok\n');
 }
 
+async function runNavigationTransitionChecks(page) {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.evaluate(async () => {
+    const e = window.EMIE;
+    const main = document.getElementById('mainContent');
+    const app = document.getElementById('appContainer');
+    const login = document.getElementById('loginPage');
+    const fixture = window.navigationTransitionFixture = {
+      saved: {
+        actions: { apiGet: e.actions.apiGet, renderDashboard: e.actions.renderDashboard, renderAdmin: e.actions.renderAdmin },
+        state: { currentView: e.state.currentView, currentRole: e.state.currentRole, currentUserId: e.state.currentUserId },
+        projectListState: e.projectListState, projectListPreset: e.projectListPreset,
+        html: main.innerHTML, className: main.className, appDisplay: app.style.display, loginDisplay: login.style.display,
+      },
+    };
+    const pendingTasks = new Promise(resolve => { fixture.releaseTasks = resolve; });
+    const pendingAdmin = new Promise(resolve => { fixture.releaseAdmin = resolve; });
+    e.actions.apiGet = async url => {
+      if (url === '/projects/my-subtasks') {
+        fixture.requestedTasks = true;
+        return pendingTasks;
+      }
+      if (url === '/admin/configs') return pendingAdmin;
+      if (url === '/projects/task-market') return [];
+      if (url.startsWith('/projects/page?')) return { items: [], total: 0, totalPages: 0, page: 0 };
+      if (url === '/projects/badge-stats' && e.state.currentView === 'orders') {
+        fixture.failedBadge = true;
+        throw new Error('模拟侧栏统计失败');
+      }
+      return {};
+    };
+    e.actions.renderDashboard = async container => { container.innerHTML = '<h2>模拟过渡工作台</h2>'; };
+    e.actions.renderAdmin = async container => {
+      container.innerHTML = '<h2>模拟过渡管理页</h2><button>管理选项卡</button>';
+      await e.actions.apiGet('/admin/configs');
+    };
+    e.state.currentView = 'dashboard';
+    e.state.currentRole = 'designer';
+    e.state.currentUserId = 'transition-ui-designer';
+    app.style.display = '';
+    login.style.display = 'none';
+    await e.actions.render();
+  });
+  const main = page.locator('#mainContent');
+  const indicator = page.locator('#pageLoadingStatus');
+  const ordersHeading = main.getByRole('heading', { name: /全部项目/ });
+  try {
+    const loading = await page.evaluate(() => {
+      const e = window.EMIE;
+      e.state.currentView = 'tasks';
+      window.navigationTransitionFixture.pending = e.actions.render();
+      const main = document.getElementById('mainContent');
+      const indicator = document.getElementById('pageLoadingStatus');
+      return { busy: main.getAttribute('aria-busy'), inert: main.inert, text: main.textContent,
+        indicatorVisible: !!indicator?.getClientRects().length };
+    });
+    assert.equal(loading.busy, 'true');
+    assert.equal(loading.inert, true);
+    assert.match(loading.text, /模拟过渡工作台/, '同一账号切页时保留旧内容直到新页就绪');
+    assert.equal(loading.indicatorVisible, false, '短加载先不闪现加载提示');
+    await assertEventually(page, () => window.navigationTransitionFixture.requestedTasks, '任务请求应处于等待中');
+    await indicator.waitFor({ state: 'visible' });
+    assert.equal(await indicator.getAttribute('role'), 'status');
+
+    const renderView = view => page.evaluate(async view => {
+      const e = window.EMIE;
+      e.state.currentView = view;
+      await e.actions.render();
+      const main = document.getElementById('mainContent');
+      const animation = getComputedStyle(main).animationName;
+      const effect = main.getAnimations().find(motion => motion.animationName === 'pageEnter')?.effect;
+      const start = effect?.getKeyframes()[0];
+      return { entered: main.classList.contains('page-entered'), animation,
+        duration: effect?.getTiming().duration, opacity: Number(start?.opacity),
+        translateY: start?.transform ? new DOMMatrixReadOnly(start.transform).m42 : null,
+        childAnimation: getComputedStyle(main.firstElementChild).animationName };
+    }, view);
+    const ordersMotion = await renderView('orders');
+    await ordersHeading.waitFor();
+    await assertEventually(page, () => window.navigationTransitionFixture.failedBadge, '应尝试更新侧栏统计');
+    assert.equal(ordersMotion.entered, true, '真实页面切换时运行统一进入过渡');
+    assert.equal(ordersMotion.animation, 'pageEnter');
+    assert.equal(ordersMotion.duration, 220);
+    assert.equal(ordersMotion.opacity, 0.58);
+    assert.equal(ordersMotion.translateY, 7);
+    assert.equal(ordersMotion.childAnimation, 'none', '内容只随页面容器过渡一次');
+    assert.notEqual(await main.getAttribute('aria-busy'), 'true');
+    assert.equal(await main.evaluate(node => node.inert), false);
+    await indicator.waitFor({ state: 'hidden' });
+    await page.evaluate(async () => {
+      const fixture = window.navigationTransitionFixture;
+      fixture.releaseTasks([{ id: 96001, name: '迟到的子任务', status: 'pending', designerId: 'transition-ui-designer' }]);
+      await fixture.pending;
+    });
+    assert.equal(await ordersHeading.isVisible(), true, '过期任务响应和徽章请求失败均不能覆盖新页面');
+    assert.doesNotMatch(await main.textContent(), /迟到的子任务|加载失败/);
+    const entering = page.locator('#mainContent.page-entered');
+    await entering.waitFor({ state: 'detached', timeout: 2_000 });
+    assert.equal((await renderView('orders')).animation, 'none', '同页刷新不重复播放导航动画');
+    assert.equal((await renderView('dashboard')).animation, 'pageEnter');
+    await entering.waitFor({ state: 'detached', timeout: 2_000 });
+    const revisitMotion = await renderView('orders');
+    assert.equal(revisitMotion.animation, 'pageEnter', '再次进入同一页面仍播放导航动画');
+    assert.equal(revisitMotion.duration, 220);
+    await entering.waitFor({ state: 'detached', timeout: 2_000 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.evaluate(() => {
+      const e = window.EMIE;
+      e.state.currentView = 'admin';
+      window.navigationTransitionFixture.pendingAdminRender = e.actions.render();
+    });
+    await assertEventually(page, () => {
+      const main = document.getElementById('mainContent');
+      return main.textContent.includes('模拟过渡管理页') && !main.inert && main.getAttribute('aria-busy') !== 'true';
+    }, '管理页面外框已渲染时应可操作，无需等待二级内容');
+    await main.getByRole('button', { name: '管理选项卡' }).click({ trial: true });
+    assert.equal(await main.evaluate(node => getComputedStyle(node).animationName), 'none', '减少动态效果时跳过页面动画');
+    const drawer = await addModal(page, { id: 'projectSubTaskDetailModal', title: '减少动态效果抽屉' });
+    assert.equal(await drawer.evaluate(node => getComputedStyle(node).animationName), 'none', '减少动态效果时跳过抽屉进入动画');
+    const removed = await page.evaluate(() => {
+      window.EMIE.actions.closeM('projectSubTaskDetailModal');
+      return !document.getElementById('projectSubTaskDetailModal');
+    });
+    assert.equal(removed, true, '减少动态效果时关闭抽屉应立即移除');
+  } finally {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.evaluate(async () => {
+      const e = window.EMIE;
+      const { saved, releaseTasks, pending, releaseAdmin, pendingAdminRender } = window.navigationTransitionFixture;
+      releaseTasks([]);
+      releaseAdmin({});
+      await Promise.all([pending, pendingAdminRender]);
+      Object.assign(e.actions, saved.actions);
+      Object.assign(e.state, saved.state);
+      e.projectListState = saved.projectListState;
+      e.projectListPreset = saved.projectListPreset;
+      const main = document.getElementById('mainContent');
+      main.innerHTML = saved.html;
+      main.className = saved.className;
+      document.getElementById('appContainer').style.display = saved.appDisplay;
+      document.getElementById('loginPage').style.display = saved.loginDisplay;
+      delete window.navigationTransitionFixture;
+    });
+  }
+  process.stdout.write('  navigation-loading-latest-view-and-reduced-motion ok\n');
+}
+
 async function runPointRuleChecks(page) {
   const rules = [
     { ruleCode: 'D30_A', category: '产品设计', subcategory: '概念', description: '产品提案', points: 2 },
@@ -635,10 +782,16 @@ try {
     await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
     const page = await context.newPage();
     if (process.env.EMIE_E2E_LOCAL_STATIC === '1') {
-      await page.route('**/js/*.js*', async route => {
-        const filename = path.basename(new URL(route.request().url()).pathname);
-        await route.fulfill({ contentType: 'text/javascript', body: await fs.readFile(path.resolve('src/main/resources/static/js', filename), 'utf8') });
-      });
+      const staticRoot = new URL('../../src/main/resources/static/', import.meta.url);
+      for (const [extension, contentType] of [['js', 'text/javascript'], ['css', 'text/css']]) {
+        await page.route(`**/${extension}/*.${extension}*`, async route => {
+          const filename = path.basename(new URL(route.request().url()).pathname);
+          await route.fulfill({ contentType, body: await fs.readFile(new URL(`${extension}/${filename}`, staticRoot), 'utf8') });
+        });
+      }
+      await page.route(baseURL + '/', async route => route.fulfill({
+        contentType: 'text/html', body: await fs.readFile(new URL('index.html', staticRoot), 'utf8'),
+      }));
     }
     const browserErrors = [];
     page.on('pageerror', error => browserErrors.push(error.message));
@@ -647,6 +800,7 @@ try {
       await page.locator('html[data-app-ready]').waitFor({ timeout: 15_000 });
       await runLazyAdminChecks(page);
       await runNavigationDataChecks(page);
+      await runNavigationTransitionChecks(page);
       await runChecks(page);
       await runPointRuleChecks(page);
       await runAdminSubcategoryChecks(page);

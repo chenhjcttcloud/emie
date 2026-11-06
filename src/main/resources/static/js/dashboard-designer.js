@@ -25,10 +25,13 @@ function latestTaskSubmissionTime(task) {
 
 async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.currentRole,
                                    endpoint = '/projects/my-subtasks', readOnly = false) {
+  const renderId = EMIE.state.renderId;
   const marketView = endpoint === '/projects/task-market';
   let rows = await apiGet(endpoint);
+  if (EMIE.state.renderId !== renderId) return;
   if (!readOnly && role === 'designer' && endpoint === '/projects/my-subtasks') {
     const marketRows = await apiGet('/projects/task-market');
+    if (EMIE.state.renderId !== renderId) return;
     const known = new Set(rows.map(task => Number(task.id)));
     rows = rows.concat(marketRows.filter(task => !known.has(Number(task.id))));
   }
@@ -112,7 +115,10 @@ async function renderTaskMarket(main, role, uid) {
 
 function filterDesignerTasks() {
   clearTimeout(filterDesignerTasks._timer);
-  filterDesignerTasks._timer = setTimeout(applyFilterDesignerTasks, 350);
+  const renderId = EMIE.state.renderId;
+  filterDesignerTasks._timer = setTimeout(() => {
+    if (EMIE.state.renderId === renderId) applyFilterDesignerTasks();
+  }, 350);
 }
 
 function applyFilterDesignerTasks() {

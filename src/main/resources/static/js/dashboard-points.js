@@ -6,6 +6,8 @@ const closeM = (...args) => EMIE.actions.closeM(...args);
 const uploadFile = (...args) => EMIE.actions.uploadFile(...args);
 let pointsRulesCache = [];
 let pointsLedgerPage = 0;
+let pointsViewRequest = 0;
+let pointsMonthRequest = 0;
 const pointsLedgerSize = 10;
 let pointsRulesPage = 0;
 let pointsRulesFilter = { category: '', keyword: '' };
@@ -79,6 +81,9 @@ function renderLeaderboardRows(rows, currentUserId) {
 }
 
 async function refreshPointsMonth(month) {
+  const renderId = EMIE.state.renderId;
+  const request = ++pointsMonthRequest;
+  const isCurrent = () => EMIE.state.renderId === renderId && pointsMonthRequest === request;
   const isAdminView = EMIE.state.currentRole === 'admin';
   const total = month === 'total';
   const requestedMonth = /^\d{4}-\d{2}$/.test(month || '') ? month : currentMonthKey();
@@ -93,6 +98,7 @@ async function refreshPointsMonth(month) {
       // 总计只影响顶部累计统计，下面的月度绩效卡保持当前月份口径，避免页面出现重复的累计摘要。
       isAdminView ? Promise.resolve({}) : apiGet('/performance/preview?month=' + encodeURIComponent(requestedMonth)),
     ]);
+    if (!isCurrent()) return;
     const rows = Array.isArray(leaderboard) ? leaderboard : [];
     if (leaderboardBody) leaderboardBody.innerHTML = renderLeaderboardRows(rows, EMIE.state.currentUserId);
     if (previewBox) {
@@ -109,6 +115,7 @@ async function refreshPointsMonth(month) {
       previewBox.innerHTML = `<div class="points-performance-head"><div><span>本月目标进度</span><strong>${target > 0 ? rate + '%' : '未配置'}</strong></div><span>${formatPoints(actual)} / ${formatPoints(target)} 分</span></div><div class="points-progress"><span style="width:${progress}%"></span></div>`;
     }
   } catch (error) {
+    if (!isCurrent()) return;
     if (leaderboardBody) leaderboardBody.innerHTML = `<div class="points-empty-compact">加载失败：${escHtml(error.message || '请稍后重试')}</div>`;
     if (previewBox) previewBox.innerHTML = `<div class="empty-state">计算失败：${escHtml(error.message || '请稍后重试')}</div>`;
   }
@@ -197,10 +204,12 @@ function renderPointsLedger(ledger, adjustments, ledgerPages, associations = {})
 }
 
 async function renderPointsView(main) {
+  const renderId = EMIE.state.renderId;
+  const request = ++pointsViewRequest;
+  const isCurrent = () => EMIE.state.renderId === renderId && pointsViewRequest === request;
   const category = document.querySelector('.points-rule-filter select')?.value;
   const keyword = document.getElementById('pointsRuleSearch')?.value;
   if (category !== undefined || keyword !== undefined) pointsRulesFilter = { category: category || '', keyword: String(keyword || '').trim().toLowerCase() };
-  main.innerHTML = '<div class="loading">正在加载积分…</div>';
   try {
     const [mine, rules, appeals, poData, archives, adminConfigs, adminProgress] = await Promise.all([
       apiGet(`/points/me?page=${pointsLedgerPage}&size=${pointsLedgerSize}`), apiGet('/points/rules'), apiGet('/point-governance/appeals'),
@@ -208,6 +217,7 @@ async function renderPointsView(main) {
       EMIE.state.currentRole === 'admin' ? apiGet('/admin/configs') : Promise.resolve({}),
       EMIE.state.currentRole === 'admin' ? apiGet('/point-governance/po/progress') : Promise.resolve([]),
     ]);
+    if (!isCurrent()) return;
     if (mine.ledgerPages && pointsLedgerPage >= mine.ledgerPages) {
       pointsLedgerPage = mine.ledgerPages - 1;
       return renderPointsView(main);
@@ -216,6 +226,7 @@ async function renderPointsView(main) {
     const isAdminView = EMIE.state.currentRole === 'admin';
     const isDesignerView = EMIE.state.currentRole === 'designer';
     const plannerTasks = plannerMode ? await apiGet('/projects/my-subtasks') : [];
+    if (!isCurrent()) return;
     const issuedTasks = (Array.isArray(plannerTasks) ? plannerTasks : [])
       .filter(task => task.publisherId === EMIE.state.currentUserId
         && Number(task.issuedPoints || 0) > 0);
@@ -257,6 +268,7 @@ async function renderPointsView(main) {
     if (enabledRules.length) filterPointsRules(false);
     if (isDesignerView || isAdminView) await refreshPointsMonth(month);
   } catch (error) {
+    if (!isCurrent()) return;
     main.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>积分加载失败：${escHtml(error.message || '请稍后重试')}</p></div>`;
   }
 }

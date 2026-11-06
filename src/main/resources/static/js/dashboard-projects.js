@@ -8,7 +8,6 @@ const formatDate = (...args) => EMIE.actions.formatDate(...args);
 const renderScore = (...args) => EMIE.actions.renderScore(...args);
 const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const displayText = (...args) => EMIE.actions.displayText(...args);
-const showLoading = (...args) => EMIE.actions.showLoading(...args);
 const renderDashboard = (...args) => EMIE.actions.renderDashboard(...args);
 const renderOrderList = (...args) => EMIE.actions.renderOrderList(...args);
 const renderProjectTable = (...args) => EMIE.actions.renderProjectTable(...args);
@@ -26,11 +25,15 @@ const resumeProject = (...args) => EMIE.actions.resumeProject(...args);
 const plannerAcceptFromList = (...args) => EMIE.actions.plannerAcceptFromList(...args);
 const clearSWRCache = (...args) => EMIE.actions.clearSWRCache(...args);
 const renderMaterialMarket = (...args) => EMIE.actions.renderMaterialMarket(...args);
+let renderedPageKey;
+let pageOwner;
 
 // EMIE 工作台：主渲染、状态看板、项目列表、任务列表与待评分视图
 /** 左侧导航只允许由此函数写入，避免页面缓存、详情操作和工作台互相覆盖数据。 */
 async function refreshNavigationBadges() {
+  const renderId = EMIE.state.renderId;
   const badgeStats = await apiGet('/projects/badge-stats');
+  if (EMIE.state.renderId !== renderId) return badgeStats;
   const values = {
     badgeTotal: badgeStats.totalCount,
     badgeChannel: badgeStats.channelCount,
@@ -171,21 +174,72 @@ function renderProjectRow(o, compact = false, showType = true) {
   </tr>`;
 }
 
-async function render({ imageLibraryItemId } = {}) {
+function resetPageRender() {
+  EMIE.state.renderId = (EMIE.state.renderId || 0) + 1;
+  renderedPageKey = undefined;
+  pageOwner = undefined;
   const main = document.getElementById('mainContent');
+  if (main) {
+    main.replaceChildren();
+    main.classList.remove('page-entered');
+    main.removeAttribute('aria-busy');
+    main.inert = false;
+  }
+  const loadingStatus = document.getElementById('pageLoadingStatus');
+  if (loadingStatus) loadingStatus.hidden = true;
+}
+
+async function render({ imageLibraryItemId, resetScroll = false } = {}) {
+  const main = document.getElementById('mainContent');
+  if (!main) return;
   const renderId = (EMIE.state.renderId || 0) + 1;
   EMIE.state.renderId = renderId;
   const view = EMIE.state.currentView;
-  showLoading(main);
+  const role = EMIE.state.currentRole;
+  const uid = getCurrentUserId();
+  const owner = JSON.stringify([role, uid]);
+  const pageKey = JSON.stringify([role, uid, view, view === 'tasks' ? EMIE.state.taskBucket || 'all' : '']);
+  const loadingStatus = document.getElementById('pageLoadingStatus');
+  const firstPaint = pageOwner !== owner || !main.firstElementChild;
+  main.classList.remove('page-entered');
+  main.setAttribute('aria-busy', 'true');
+  // 图档定位由目标卡片接管焦点与滚动。
+  main.inert = !imageLibraryItemId;
+  if (firstPaint) {
+    main.innerHTML = '<div class="page-loading-placeholder" aria-hidden="true"><span></span><span></span><span></span></div>';
+  }
+  pageOwner = owner;
+  const loadingTimer = setTimeout(() => {
+    if (loadingStatus && EMIE.state.renderId === renderId) loadingStatus.hidden = false;
+  }, firstPaint ? 0 : 140);
+  let pageReady = false;
+  const contentObserver = new MutationObserver(finishPageRender);
+  contentObserver.observe(main, { childList: true });
+
+  function finishPageRender() {
+    clearTimeout(loadingTimer);
+    contentObserver.disconnect();
+    if (pageReady || EMIE.state.renderId !== renderId) return;
+    pageReady = true;
+    main.removeAttribute('aria-busy');
+    main.inert = false;
+    if (loadingStatus) loadingStatus.hidden = true;
+    if (resetScroll && !imageLibraryItemId) {
+      main.scrollTo({ top: 0, behavior: 'instant' });
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+    const isNavigation = renderedPageKey !== pageKey || resetScroll || imageLibraryItemId;
+    if (isNavigation && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      main.classList.add('page-entered');
+    }
+    renderedPageKey = pageKey;
+  }
 
   try {
     await EMIE.loadViewModules?.(view);
     if (EMIE.state.renderId !== renderId) return;
-    const role = EMIE.state.currentRole;
-    const uid = getCurrentUserId();
 
     // 每个页面自行请求所需数据，导航不预加载未被使用的全量项目。
-    if (EMIE.state.renderId !== renderId) return;
     if (view === 'dashboard') {
       await renderDashboard(main, role, uid);
     } else if (view === 'workload') {
@@ -220,16 +274,25 @@ async function render({ imageLibraryItemId } = {}) {
       else await EMIE.actions.renderAdminDesignerPerformance(main);
     } else if (view === 'admin' || view === 'logs') {
       await renderAdmin(main, role, uid);
-    }
-
-    // 侧栏每次重建后重新请求唯一统计源，页面缓存不得参与徽章计算。
-    if (EMIE.state.renderId === renderId) await refreshNavigationBadges();
+    } else main.replaceChildren();
   } catch (e) {
-    console.error('渲染错误:', e);
     if (EMIE.state.renderId !== renderId) return;
+    console.error('渲染错误:', e);
     main.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>加载失败: ${escHtml(e.message)}</p></div>`;
+    return;
+  } finally {
+    finishPageRender();
   }
+
+  // 徽章刷新失败时保留已完成的页面。
+  if (EMIE.state.renderId === renderId) await refreshNavigationBadges().catch(() => {});
 }
+
+document.getElementById('mainContent')?.addEventListener('animationend', event => {
+  if (event.target === event.currentTarget && event.animationName === 'pageEnter') {
+    event.currentTarget.classList.remove('page-entered');
+  }
+});
 
 // ==================== 徽章更新 ====================
 
@@ -238,6 +301,7 @@ EMIE.registerActions({
   refreshAfterMutation,
   updateProjectRow,
   renderProjectRow,
+  resetPageRender,
   render,
 });
 

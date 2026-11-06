@@ -47,6 +47,7 @@ async function reloadPersonalPerformance() {
   const body = root?.querySelector('#personalPerformanceBody');
   if (!input || !body || EMIE.state.currentRole !== 'designer') return;
   const request = ++personalRequest;
+  const renderId = EMIE.state.renderId;
   const period = input.value;
   const userId = EMIE.state.currentUserId;
   if (!/^\d{4}(-(?:0[1-9]|1[0-2]))?$/.test(period) || Number(period.slice(0, 4)) < 1) {
@@ -58,7 +59,7 @@ async function reloadPersonalPerformance() {
     EMIE.actions.apiGet('/performance/my-report?period=' + encodeURIComponent(period)),
     EMIE.actions.apiGet('/points/me?size=1'),
   ]);
-  if (request !== personalRequest || !root.isConnected || input.value !== period
+  if (request !== personalRequest || EMIE.state.renderId !== renderId || !root.isConnected || input.value !== period
       || EMIE.state.currentRole !== 'designer' || EMIE.state.currentUserId !== userId) return;
   if (report.status === 'rejected') {
     body.innerHTML = `<div class="card empty-state" role="alert"><p>个人绩效加载失败：${esc(report.reason?.message || '请稍后重试')}</p><button type="button" class="btn btn-outline btn-sm" data-emie-action="click:personal-performance-retry">重新加载</button></div>`;

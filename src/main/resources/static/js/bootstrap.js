@@ -1,18 +1,18 @@
 import './core-runtime.js?v=328';
 import './event-runtime.js?v=269';
-import './core-auth.js?v=427';
+import './core-auth.js?v=428';
 import './core-identity.js?v=498';
-import './core-shell.js?v=520';
-import './core-ui.js?v=523';
+import './core-shell.js?v=521';
+import './core-ui.js?v=524';
 import './core.js?v=147';
-import './dashboard-projects.js?v=512';
-import './dashboard-home.js?v=623';
-import './dashboard-lists.js?v=429';
-import './dashboard-scoring.js?v=345';
-import './dashboard-points.js?v=385';
-import './dashboard-designer.js?v=615';
+import './dashboard-projects.js?v=515';
+import './dashboard-home.js?v=624';
+import './dashboard-lists.js?v=430';
+import './dashboard-scoring.js?v=346';
+import './dashboard-points.js?v=386';
+import './dashboard-designer.js?v=616';
 import './dashboard.js?v=219';
-import './material-market.js?v=162';
+import './material-market.js?v=163';
 import './image-library.js?v=117';
 import './project-uploads.js?v=499';
 import './project-form.js?v=459';
@@ -51,7 +51,7 @@ async function loadViewModules(view) {
   if (view === 'designer-performance' && window.EMIE.state.currentRole === 'designer') {
     await Promise.all([
       loadAdminModule(['./designer-evaluation.js?v=20', 'designerEvaluation']),
-      loadAdminModule(['./designer-performance.js?v=1', 'designerPerformance']),
+      loadAdminModule(['./designer-performance.js?v=2', 'designerPerformance']),
     ]);
     return;
   }
@@ -70,7 +70,7 @@ async function loadViewModules(view) {
   await adminModulesPromise;
 }
 
-import './files.js?v=302';
+import './files.js?v=303';
 import './business-assistant-position.js?v=3';
 import './business-assistant.js?v=19';
 

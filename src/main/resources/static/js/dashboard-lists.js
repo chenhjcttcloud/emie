@@ -240,11 +240,12 @@ async function renderOrderList(main, type, role, uid, titleOverride = '', endpoi
   const previous = EMIE.projectListState;
   const keepPage = !Object.keys(preset).length && previous?.type === type && previous?.role === role && previous?.uid === uid && previous?.endpoint === endpoint;
   const state = EMIE.projectListState = { type, role, uid, endpoint, renderId, page: keepPage ? previous.page : 0, total: 0, totalPages: 0, filters: keepPage ? { ...previous.filters } : { ...preset }, loading: false };
-  main.innerHTML = `<div class="project-query-loading"><span class="project-query-spinner"></span>正在查询项目…</div>`;
   let result = await loadProjectListPage(state.page);
-  if (state.totalPages && state.page >= state.totalPages) result = await loadProjectListPage(state.totalPages - 1);
-  state.page = result.page ?? Math.min(state.page, Math.max(state.totalPages - 1, 0));
+  if (EMIE.state.renderId === renderId && state.totalPages && state.page >= state.totalPages) {
+    result = await loadProjectListPage(state.totalPages - 1);
+  }
   if (EMIE.state.renderId !== renderId) return;
+  state.page = result.page ?? Math.min(state.page, Math.max(state.totalPages - 1, 0));
 
   main.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -355,18 +356,19 @@ function renderProjectListLoading() {
 
 async function changeProjectListPage(page) {
   const state = EMIE.projectListState;
-  if (!state || page < 0 || state.loading) return;
+  if (!state || state.renderId !== EMIE.state.renderId || page < 0 || state.loading) return;
   const container = document.getElementById('projectListContainer');
   state.loading = true;
   if (container) container.innerHTML = renderProjectListLoading();
   try {
     const result = await loadProjectListPage(page);
+    if (state.renderId !== EMIE.state.renderId) return;
     state.page = result.page ?? page;
     if (container) container.innerHTML = renderProjectTable(result.items || [], { compact: true, showType: !state.type });
     const count = document.getElementById('projectListCount');
     if (count) count.textContent = `（${result.total || 0} 个）`;
   } catch (e) {
-    if (container) container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>查询失败：${escHtml(e.message)}</p></div>`;
+    if (state.renderId === EMIE.state.renderId && container) container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>查询失败：${escHtml(e.message)}</p></div>`;
   } finally {
     state.loading = false;
   }
@@ -386,12 +388,15 @@ function jumpProjectListPage() {
 
 function filterProjectList() {
   clearTimeout(filterProjectList._timer);
-  filterProjectList._timer = setTimeout(applyFilterProjectList, 350);
+  const renderId = EMIE.state.renderId;
+  filterProjectList._timer = setTimeout(() => {
+    if (EMIE.state.renderId === renderId) applyFilterProjectList();
+  }, 350);
 }
 
 async function applyFilterProjectList() {
   const state = EMIE.projectListState;
-  if (!state) return;
+  if (!state || state.renderId !== EMIE.state.renderId) return;
   const status = document.getElementById('projectStatusFilter')?.value || 'all';
   const category = document.getElementById('projectCategoryFilter')?.value || 'all';
   const market = document.getElementById('projectMarketFilter')?.value || 'all';
@@ -459,10 +464,14 @@ async function renderMyTasks(main, role, uid, bucket = 'all') {
   }
 
   // 其他角色: 展示项目列表，方便查看和添加子任务
+  const renderId = EMIE.state.renderId;
   const previous = EMIE.taskProjectListState;
-  EMIE.taskProjectListState = { page: previous?.page || 0, total: 0, totalPages: 0, filters: { ...previous?.filters } };
-  let initialPage = await loadTaskProjectPage(EMIE.taskProjectListState.page);
-  if (EMIE.taskProjectListState.totalPages && EMIE.taskProjectListState.page >= EMIE.taskProjectListState.totalPages) initialPage = await loadTaskProjectPage(EMIE.taskProjectListState.totalPages - 1);
+  const state = EMIE.taskProjectListState = { renderId, page: previous?.page || 0, total: 0, totalPages: 0, filters: { ...previous?.filters } };
+  let initialPage = await loadTaskProjectPage(state.page);
+  if (EMIE.state.renderId === renderId && state.totalPages && state.page >= state.totalPages) {
+    initialPage = await loadTaskProjectPage(state.totalPages - 1);
+  }
+  if (EMIE.state.renderId !== renderId) return;
   const orders = initialPage.items || [];
 
   main.innerHTML = `
@@ -495,7 +504,7 @@ async function renderMyTasks(main, role, uid, bucket = 'all') {
     <div id="taskProjectContainer">${renderTaskProjectTable(orders)}</div>
   `;
   EMIE.dashboardState.taskProjectsCache = orders;
-  const filters = EMIE.taskProjectListState.filters;
+  const filters = state.filters;
   if (filters.status) document.getElementById('taskProjectFilter').value = filters.status;
   if (filters.type) document.getElementById('taskProjectTypeFilter').value = filters.type;
   if (filters.keyword) document.getElementById('taskProjectSearch').value = filters.keyword;
@@ -508,7 +517,11 @@ async function loadTaskProjectPage(page) {
   const params = new URLSearchParams({ page: String(page), size: '15' });
   Object.entries(state?.filters || {}).forEach(([key, value]) => { if (value) params.set(key, value); });
   const result = await apiGet(`/projects/page?${params}`);
-  if (state) { state.page = result.page ?? page; state.total = result.total || 0; state.totalPages = result.totalPages || 0; }
+  if (state?.renderId === EMIE.state.renderId && state === EMIE.taskProjectListState) {
+    state.page = result.page ?? page;
+    state.total = result.total || 0;
+    state.totalPages = result.totalPages || 0;
+  }
   return result;
 }
 
@@ -550,10 +563,11 @@ function renderTaskProjectTable(orders) {
 
 async function changeTaskProjectPage(page) {
   const state = EMIE.taskProjectListState;
-  if (!state || page < 0 || page >= state.totalPages) return;
+  if (!state || state.renderId !== EMIE.state.renderId || page < 0 || page >= state.totalPages) return;
   const container = document.getElementById('taskProjectContainer');
   if (container) container.innerHTML = renderProjectListLoading();
   const result = await loadTaskProjectPage(page);
+  if (state.renderId !== EMIE.state.renderId) return;
   if (container) container.innerHTML = renderTaskProjectTable(result.items || []);
   EMIE.dashboardState.taskProjectsCache = result.items || [];
 }
@@ -564,7 +578,10 @@ async function renderDepartmentTasks(main, role, uid, bucket = 'all') {
 
 function filterTaskProjects() {
   clearTimeout(filterTaskProjects._timer);
-  filterTaskProjects._timer = setTimeout(applyFilterTaskProjects, 350);
+  const renderId = EMIE.state.renderId;
+  filterTaskProjects._timer = setTimeout(() => {
+    if (EMIE.state.renderId === renderId) applyFilterTaskProjects();
+  }, 350);
 }
 
 async function applyFilterTaskProjects() {
@@ -572,7 +589,8 @@ async function applyFilterTaskProjects() {
   const q = document.getElementById('taskProjectSearch')?.value?.toLowerCase() || '';
   const dateStart = document.getElementById('taskProjectDateStart')?.value;
   const dateEnd = document.getElementById('taskProjectDateEnd')?.value;
-  const state = EMIE.taskProjectListState || { filters: {} };
+  const state = EMIE.taskProjectListState;
+  if (!state || state.renderId !== EMIE.state.renderId) return;
   const requestId = (state.filterRequestId || 0) + 1;
   state.filterRequestId = requestId;
   state.filters = {};
@@ -586,7 +604,7 @@ async function applyFilterTaskProjects() {
   const c = document.getElementById('taskProjectContainer');
   if (c) c.innerHTML = renderProjectListLoading();
   const result = await loadTaskProjectPage(0);
-  if (state.filterRequestId !== requestId) return;
+  if (state.renderId !== EMIE.state.renderId || state.filterRequestId !== requestId) return;
   if (c) c.innerHTML = renderTaskProjectTable(result.items || []);
   EMIE.dashboardState.taskProjectsCache = result.items || [];
 }
