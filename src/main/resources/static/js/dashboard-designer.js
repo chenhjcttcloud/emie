@@ -18,6 +18,11 @@ const escHtml = (...args) => EMIE.actions.escHtml(...args);
 const matchesSearchText = (...args) => EMIE.actions.matchesSearchText(...args);
 const isDateInRange = (...args) => EMIE.actions.isDateInRange(...args);
 const compareTaskPriority = (...args) => EMIE.actions.compareTaskPriority(...args);
+
+function latestTaskSubmissionTime(task) {
+  return task.deliveryVersions?.[0]?.submittedAt || task.submittedForReviewAt;
+}
+
 async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.currentRole,
                                    endpoint = '/projects/my-subtasks', readOnly = false) {
   const marketView = endpoint === '/projects/task-market';
@@ -67,9 +72,17 @@ async function renderDesignerTasks(main, uid, bucket = 'all', role = EMIE.state.
         <option value="regular">公司常规品</option>
       </select>
       <input class="form-input" placeholder="🔍 搜索任务名/项目号..." data-emie-action="input:designer-filter" style="min-width:180px;" id="designerTaskSearch">
-      <input type="date" class="form-input" id="designerTaskDateStart" data-emie-action="change:designer-filter" style="min-width:130px;" title="计划完成日期起">
-      <span style="color:var(--gray-400);font-size:13px;">~</span>
-      <input type="date" class="form-input" id="designerTaskDateEnd" data-emie-action="change:designer-filter" style="min-width:130px;" title="计划完成日期止">
+      <div class="designer-task-date-filter" role="group" aria-label="日期筛选">
+        ${marketView ? '' : `<div class="designer-task-date-basis" id="designerTaskDateBasis" role="radiogroup" aria-label="日期筛选依据">
+          <label><input type="radio" name="designerTaskDateBasis" value="submitted" data-emie-action="change:designer-filter" checked><span>最新提交</span></label>
+          <label><input type="radio" name="designerTaskDateBasis" value="planned" data-emie-action="change:designer-filter"><span>计划完成</span></label>
+        </div>`}
+        <div class="designer-task-date-range">
+          <input type="date" class="form-input" id="designerTaskDateStart" data-emie-action="change:designer-filter" title="${marketView ? '计划完成日期起' : '筛选开始日期'}" aria-label="${marketView ? '计划完成日期起' : '筛选开始日期'}">
+          <span aria-hidden="true">至</span>
+          <input type="date" class="form-input" id="designerTaskDateEnd" data-emie-action="change:designer-filter" title="${marketView ? '计划完成日期止' : '筛选结束日期'}" aria-label="${marketView ? '计划完成日期止' : '筛选结束日期'}">
+        </div>
+      </div>
       <button class="btn btn-outline btn-sm" data-emie-action="click:designer-reset">↺ 重置</button>
     </div>
     <div id="designerTaskContainer">${renderDesignerTaskCards(myTasks, readOnly)}</div>
@@ -107,6 +120,7 @@ function applyFilterDesignerTasks() {
   const status = document.getElementById('designerTaskStatusFilter')?.value || 'all';
   const projectType = document.getElementById('designerTaskTypeFilter')?.value || 'all';
   const q = document.getElementById('designerTaskSearch')?.value || '';
+  const filterBySubmission = document.querySelector('#designerTaskDateBasis input:checked')?.value === 'submitted';
   const dateStart = document.getElementById('designerTaskDateStart')?.value;
   const dateEnd = document.getElementById('designerTaskDateEnd')?.value;
   let list = EMIE.dashboardState.designerTaskCache || [];
@@ -119,7 +133,9 @@ function applyFilterDesignerTasks() {
   if (projectType !== 'all') list = list.filter(t => t.projectType === projectType);
 
   if (q) list = list.filter(t => matchesSearchText(q, t.id, t.projectId, t.name, t.projectName, t.details, t.designerName));
-  list = list.filter(t => isDateInRange(t.plannedDate, dateStart, dateEnd));
+  if (dateStart || dateEnd) {
+    list = list.filter(t => isDateInRange(filterBySubmission ? latestTaskSubmissionTime(t) : t.plannedDate, dateStart, dateEnd));
+  }
   EMIE.dashboardState.designerTaskFilteredCache = list;
 
   const c = document.getElementById('designerTaskContainer');
@@ -134,12 +150,14 @@ function resetDesignerTaskFilters() {
   const statusEl = document.getElementById('designerTaskStatusFilter');
   const typeEl = document.getElementById('designerTaskTypeFilter');
   const searchEl = document.getElementById('designerTaskSearch');
+  const defaultDateBasisEl = document.querySelector('#designerTaskDateBasis input[value="submitted"]');
   const dateStartEl = document.getElementById('designerTaskDateStart');
   const dateEndEl = document.getElementById('designerTaskDateEnd');
   if (filterEl) filterEl.value = 'all';
   if (statusEl) statusEl.value = 'all';
   if (typeEl) typeEl.value = 'all';
   if (searchEl) searchEl.value = '';
+  if (defaultDateBasisEl) defaultDateBasisEl.checked = true;
   if (dateStartEl) dateStartEl.value = '';
   if (dateEndEl) dateEndEl.value = '';
   filterDesignerTasks();
@@ -167,6 +185,7 @@ function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
         const modificationCount = Array.isArray(t.rejectionRecords) ? t.rejectionRecords.length : 0;
         const deliveryVersions = Array.isArray(t.deliveryVersions) ? t.deliveryVersions : [];
         const latestDelivery = deliveryVersions[0];
+        const latestSubmittedAt = latestTaskSubmissionTime(t);
         const rejectionRecords = Array.isArray(t.rejectionRecords) ? t.rejectionRecords : [];
         const activeRejection = [...rejectionRecords].reverse().find(record => !record.cancelled && record.cycleId);
         const isRedelivering = t.status === 'accepted' && (t.pendingChangeBonusRequestId || rejectionRecords.some(record => !record.cancelled));
@@ -185,7 +204,7 @@ function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
             ${t.relation ? `<div class="subtask-meta-item">🔗 我的关系：<strong>${t.relationLabel || (t.relation === 'publisher' ? '我发布的任务' : t.relation === 'market' ? '接单市场' : t.relation === 'department_member' ? '部门成员关联任务' : '我负责的任务')}</strong></div>` : ''}
             <div class="subtask-meta-item">🕒 发布时间：<strong>${fmtDT(t.relation === 'market' && t.marketPublishedAt ? t.marketPublishedAt : t.createdAt) || '-'}</strong></div>
             <div class="subtask-meta-item">📅 ${t.status === 'rejected' && t.rejectionRecords?.length && t.rejectionRecords[t.rejectionRecords.length - 1]?.requiredCompletionDate ? '驳回后要求完成' : '计划完成'}：<strong>${formatDate(t.status === 'rejected' && t.rejectionRecords?.length ? (t.rejectionRecords[t.rejectionRecords.length - 1].requiredCompletionDate || t.plannedDate) : t.plannedDate)}</strong></div>
-            ${latestDelivery?.submittedAt || t.submittedForReviewAt ? `<div class="subtask-meta-item">成果提交：<strong>${fmtDT(latestDelivery?.submittedAt || t.submittedForReviewAt)}</strong></div>` : ''}
+            ${latestSubmittedAt ? `<div class="subtask-meta-item">最新成果提交：<strong>${fmtDT(latestSubmittedAt)}</strong></div>` : ''}
             ${t.actualDate ? `<div class="subtask-meta-item">✅ 实际完成：<strong>${formatDate(t.actualDate)}</strong></div>` : ''}
           </div>
           ${renderTaskPointSummary(t)}
@@ -202,7 +221,7 @@ function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
             ${canCancelRejection ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-cancel-reject" data-project-id="${t.projectId}" data-task-id="${t.id}" data-cycle-id="${activeRejection.cycleId}">↩️ 撤销驳回</button>` : ''}
         ${!readOnly && ['delivered', 'submitted_for_review'].includes(t.status) && t.designerId === getCurrentUserId() ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-correct" data-project-id="${t.projectId}" data-task-id="${t.id}">📝 更正当前交付</button>` : ''}
             ${plannerView && String(t.plannerId || '') === String(getCurrentUserId()) && (!t.assigneeRole || t.assigneeRole === 'designer') && t.status === 'completed' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-request-change" data-project-id="${t.projectId}" data-task-id="${t.id}">修改</button>` : ''}
-            ${t.status !== 'completed' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-detail" data-task-id="${t.id}">查看子任务详情${modificationCount ? `（${modificationCount}）` : ''}</button>` : ''}
+            ${t.status !== 'completed' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-detail" data-task-id="${t.id}"${readOnly ? ' data-read-only="true"' : ''}>查看子任务详情${modificationCount ? `（${modificationCount}）` : ''}</button>` : ''}
             ${t.status !== 'completed' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:designer-detail-project" data-project-id="${t.projectId}">查看项目</button>` : ''}
           </div>
         </div>`;
@@ -351,16 +370,25 @@ function taskDeliveryRounds(versions = [], rejectionRecords = []) {
   return rounds;
 }
 
-function deliveryRoundStatus(round) {
+function deliveryRoundPointsText(round) {
   if (round.pointStatus === 'awarded') return `已入账 ${deliveryPointAmount(round.awardedPoints)}`;
-  if (round.rejection && !round.confirmation.confirmedAt) return round.pointStatus === 'no_points' ? '已驳回 · 本次无积分' : '已驳回 · 未入账';
-  if (round.pointStatus === 'no_points') return round.confirmation.confirmedAt ? '本次无积分' : '待验收 · 本次无积分';
-  if (round.pointStatus === 'missing') return '已验收 · 未查到入账';
+  if (round.pointStatus === 'no_points') return '本次无积分';
+  if (round.rejection && !round.confirmation.confirmedAt) return '未入账';
+  if (round.pointStatus === 'missing') return '未查到入账';
   if (round.pointStatus === 'unrecorded') return '历史积分未记录';
   const expected = round.current.expectedPoints;
-  return expected == null ? '待验收 · 分数未记录'
-    : Number(expected) === 0 && !round.current.pointRuleCode ? '待验收 · 本次无积分'
-    : `待验收 · 预计 ${deliveryPointAmount(expected)}`;
+  return expected == null ? '分数未记录'
+    : Number(expected) === 0 && !round.current.pointRuleCode ? '本次无积分'
+    : `预计 ${deliveryPointAmount(expected)}`;
+}
+
+function deliveryRoundStatus(round) {
+  const points = deliveryRoundPointsText(round);
+  if (round.pointStatus === 'awarded') return points;
+  if (round.rejection && !round.confirmation.confirmedAt) return `已驳回 · ${points}`;
+  if (round.pointStatus === 'missing') return `已验收 · ${points}`;
+  if (round.pointStatus === 'unrecorded' || round.confirmation.confirmedAt) return points;
+  return `待验收 · ${points}`;
 }
 
 function deliveryConfirmationText(version) {
@@ -404,9 +432,15 @@ function renderTaskPointSummary(task, options = {}) {
   </div>`;
 }
 
-function renderDeliveryRounds(versions, rejectionRecords = [], task = {}) {
+function renderDeliveryRounds(versions, rejectionRecords = [], task = {},
+  { showLatestDelivery = true, expandLatest = true } = {}) {
   const rounds = taskDeliveryRounds(versions, rejectionRecords);
+  const reviewerMeta = record => [rejectionRoleNames[record?.reviewerRole] || record?.reviewerRole,
+    record?.reviewerName, record?.reviewedAt ? fmtDT(record.reviewedAt) : ''].filter(Boolean).join(' · ');
+  const submittedMeta = version => [version.submittedByName || task.designerName || '提交人未记录',
+    version.submittedAt ? fmtDT(version.submittedAt) : '时间未记录'].join(' · ');
   return rounds.length ? `<div class="delivery-round-list">${[...rounds].reverse().map((round, index) => {
+    const latest = index === 0;
     const current = round.current;
     const confirmation = round.confirmation;
     const history = round.versions.slice(0, -1).reverse();
@@ -415,20 +449,51 @@ function renderDeliveryRounds(versions, rejectionRecords = [], task = {}) {
       : current.changeReason || round.first.changeReason;
     const requirementImages = round.origin === 'rejection' ? round.requirement?.rejectionReferenceImagesJson
       : current.changeReferenceImagesJson || round.first.changeReferenceImagesJson;
+    const requirementMeta = reviewerMeta(round.requirement);
     const rule = current.pointRuleDescription || current.pointRuleCode;
     const awaitingConfirmation = ['pending', 'no_points'].includes(round.pointStatus) && !confirmation.confirmedAt;
     const confirmationText = deliveryConfirmationText(confirmation);
-    return `<details class="delivery-round" data-delivery-round="${escHtml(String(round.first.versionNo || round.first.id || index))}" data-point-status="${escHtml(round.pointStatus)}"${index === 0 ? ' open' : ''}>
+    const rejection = round.rejection;
+    const rejectionMeta = reviewerMeta(rejection);
+    const reviewState = confirmationText || round.pointStatus === 'awarded' || round.pointStatus === 'missing' ? 'confirmed'
+      : rejection ? 'rejected' : awaitingConfirmation ? 'pending' : 'unrecorded';
+    const reviewLabel = { confirmed: '已验收', rejected: '已驳回', pending: '待验收', unrecorded: '验收未记录' }[reviewState];
+    const currentLabel = current.versionNo != null ? `第 ${current.versionNo} 版` : '本轮最新版本';
+    const pointsClass = `delivery-point-status is-${escHtml(round.pointStatus)}`;
+    const pointsText = escHtml(deliveryRoundPointsText(round));
+    const reviewMeta = confirmationText || (rejection ? rejectionMeta || '驳回人和时间未记录'
+      : reviewState === 'pending' ? '等待企划验收' : '历史验收人和时间未记录');
+    return `<details class="delivery-round${latest ? ' is-latest' : ''}" data-delivery-round="${escHtml(String(round.first.versionNo || round.first.id || index))}" data-point-status="${escHtml(round.pointStatus)}"${latest && expandLatest ? ' open' : ''}>
       <summary class="delivery-round-summary">
-        <div class="delivery-round-heading"><strong>${escHtml(round.label)}</strong><span class="delivery-point-status is-${escHtml(round.pointStatus)}">${escHtml(deliveryRoundStatus(round))}</span>${history.length ? `<span class="delivery-correction-count">含 ${history.length} 次更正</span>` : ''}</div>
-        <div class="delivery-round-meta"><span>提交 ${current.submittedAt ? fmtDT(current.submittedAt) : '时间未记录'}</span>${confirmationText ? `<span>确认 ${escHtml(confirmationText)}</span>` : ''}</div>
+        <div class="delivery-round-heading"><span class="delivery-round-number">第 ${rounds.length - index} 轮</span><strong>${escHtml(round.label)}</strong>
+          <span class="delivery-round-outcome"><span class="delivery-round-review-status is-${reviewState}">${reviewLabel}</span> <span class="${pointsClass}">${pointsText}</span></span>
+          ${history.length ? `<span class="delivery-correction-count">含 ${history.length} 次更正</span>` : ''}</div>
+        <div class="delivery-round-meta"><span>提交 ${escHtml(submittedMeta(current))}</span>${confirmationText ? `<span>验收 ${escHtml(confirmationText)}</span>`
+          : rejectionMeta ? `<span>驳回 ${escHtml(rejectionMeta)}</span>` : ''}</div>
       </summary>
       <div class="delivery-round-body">
-        ${requirement ? `<section class="delivery-round-step"><h4>修改要求</h4><p>${escHtml(requirement)}</p>${taskDetailFiles(requirementImages, true)}${taskDetailFiles(round.requirement?.rejectionAttachmentsJson, false)}</section>` : ''}
-        <section class="delivery-round-step"><h4>本轮成果</h4><div class="delivery-step-meta">${escHtml(current.submittedByName || task.designerName || '提交人未记录')} · ${current.submittedAt ? fmtDT(current.submittedAt) : '时间未记录'}</div><p>${escHtml(current.deliverables || '未填写文字交付内容')}</p>${taskDetailFiles(current.referenceImagesJson, true)}${taskDetailFiles(current.attachmentsJson, false)}</section>
-        <section class="delivery-round-step"><h4>验收记录</h4><div class="delivery-step-meta">${confirmationText ? escHtml(confirmationText) : round.rejection ? '已驳回，待重新交付' : awaitingConfirmation ? '等待企划验收' : '历史验收信息未记录'}</div>${confirmation.reviewComments ? `<p>${escHtml(confirmation.reviewComments)}</p>` : ''}${round.rejection ? `<p class="delivery-rejection-reason">驳回意见：${escHtml(round.rejection.reason || '未填写')}</p>` : ''}</section>
-        <section class="delivery-round-step"><h4>积分入账</h4><strong class="delivery-point-status is-${escHtml(round.pointStatus)}">${escHtml(deliveryRoundStatus(round))}</strong>${rule ? `<div class="delivery-step-meta">规则：${escHtml(rule)}${current.pointRuleCode && current.pointRuleDescription ? `（${escHtml(current.pointRuleCode)}）` : ''}</div>` : ''}${confirmation.awardedAt ? `<div class="delivery-step-meta">入账时间 ${fmtDT(confirmation.awardedAt)}</div>` : ''}${round.pointStatus === 'missing' ? '<p class="task-point-note">本轮已有验收记录，未查到关联积分流水，未计入本轮已入账。</p>' : ''}</section>
-        ${history.length ? `<details class="delivery-correction-history"><summary>查看本轮更正留痕（${history.length}）</summary>${history.map(version => `<div class="delivery-correction-item"><div class="delivery-step-meta">${escHtml(version.changeSummary || '原交付记录')} · ${version.submittedAt ? fmtDT(version.submittedAt) : ''}</div><p>${escHtml(version.deliverables || '未填写文字交付内容')}</p>${taskDetailFiles(version.referenceImagesJson, true)}${taskDetailFiles(version.attachmentsJson, false)}</div>`).join('')}</details>` : ''}
+        ${requirement ? `<section class="delivery-round-step is-requirement"><h4>${round.origin === 'rejection' ? '重交依据 · 上一轮驳回理由' : '本轮修改要求'}</h4>
+          ${requirementMeta ? `<div class="delivery-step-meta">${escHtml(requirementMeta)}</div>` : ''}
+          <p>${escHtml(requirement)}</p>${taskDetailFiles(requirementImages, true)}${taskDetailFiles(round.requirement?.rejectionAttachmentsJson, false)}</section>` : ''}
+        ${latest && !showLatestDelivery ? `<div class="delivery-round-current-note">${escHtml(currentLabel)}的成果和附件见上方「交付进度」</div>`
+          : `<section class="delivery-round-step is-delivery"><h4>本轮成果 · ${escHtml(currentLabel)}</h4>
+            ${current.changeSummary ? `<p>修正说明：${escHtml(current.changeSummary)}</p>` : ''}
+            <p>${escHtml(current.deliverables || '未填写文字交付内容')}</p>${taskDetailFiles(current.referenceImagesJson, true)}${taskDetailFiles(current.attachmentsJson, false)}</section>`}
+        <section class="delivery-round-step${rejection ? ' is-rejection' : ''}"><h4>${rejection ? '本轮驳回理由' : '本轮验收'}</h4>
+          <div class="delivery-step-meta">${escHtml(reviewMeta)}</div>
+          ${confirmation.reviewComments && confirmation.reviewComments !== rejection?.reason ? `<p>${escHtml(confirmation.reviewComments)}</p>` : ''}
+          ${rejection ? `<p class="delivery-rejection-reason">${escHtml(rejection.reason || '未填写驳回理由')}</p>` : ''}</section>
+        <section class="delivery-round-step is-points"><h4>本轮积分</h4><strong class="${pointsClass}">${pointsText}</strong>
+          ${rule ? `<div class="delivery-step-meta">规则：${escHtml(rule)}${current.pointRuleCode && current.pointRuleDescription ? `（${escHtml(current.pointRuleCode)}）` : ''}</div>` : ''}
+          ${confirmation.awardedAt ? `<div class="delivery-step-meta">入账时间 ${fmtDT(confirmation.awardedAt)}</div>` : ''}
+          ${round.pointStatus === 'missing' ? '<p class="task-point-note">本轮验收已记录，积分流水待核对。</p>' : ''}</section>
+        ${history.length ? `<details class="delivery-correction-history"><summary>查看本轮旧版本（${history.length}）</summary>
+          ${history.map(version => `<div class="delivery-correction-item">
+            <strong class="delivery-correction-heading">${version.versionNo != null ? `第 ${escHtml(String(version.versionNo))} 版 · ` : ''}${version.submissionType === 'correction' ? '更正提交' : '本轮原始提交'}</strong>
+            <div class="delivery-step-meta">${escHtml(submittedMeta(version))}</div>
+            ${version.changeSummary ? `<p>修正说明：${escHtml(version.changeSummary)}</p>` : ''}
+            <p>${escHtml(version.deliverables || '未填写文字交付内容')}</p>${taskDetailFiles(version.referenceImagesJson, true)}${taskDetailFiles(version.attachmentsJson, false)}</div>`).join('')}
+        </details>` : ''}
       </div>
     </details>`;
   }).join('')}</div>` : '';
@@ -445,16 +510,93 @@ function openDeliveryHistory(taskId) {
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'deliveryHistoryModal';
-  modal.innerHTML = `<div class="modal delivery-history-modal"><div class="modal-header"><button class="modal-close" data-emie-action="click:designer-history-close">✕</button><div class="modal-header-left"><div class="modal-title">交付与积分记录 · ${escHtml(task.name || '-')}</div><div class="delivery-history-hint">每次交付、修改要求和实际入账分别留痕；主动更正收在对应交付内</div></div></div><div class="modal-body">${renderTaskPointSummary(task, { historyLink: false })}${renderTaskRejectionHistory(task)}${renderDeliveryRounds(versions, records, task) || '<div class="empty"><p>暂无交付记录</p></div>'}</div><div class="modal-footer"><button class="btn btn-primary" data-emie-action="click:designer-history-close">关闭</button></div></div>`;
+  modal.innerHTML = `<div class="modal delivery-history-modal"><div class="modal-header"><button class="modal-close" data-emie-action="click:designer-history-close">✕</button><div class="modal-header-left"><div class="modal-title">交付与积分记录 · ${escHtml(task.name || '-')}</div><div class="delivery-history-hint">从最近一轮开始显示。每轮可查看成果、验收结果和旧版本。</div></div></div><div class="modal-body">${renderTaskPointSummary(task, { historyLink: false })}${renderTaskRejectionHistory(task)}${renderDeliveryRounds(versions, records, task) || '<div class="empty"><p>暂无交付记录</p></div>'}</div><div class="modal-footer"><button class="btn btn-primary" data-emie-action="click:designer-history-close">关闭</button></div></div>`;
   document.body.appendChild(modal);
 }
 
-function openPublishedSubTaskDetail(taskId) {
+function renderSubTaskDetailBody(task, { projectId = task.projectId, projectStatus = task.projectStatus,
+  readOnly = false, showRejectionDetails, collaborationSummary } = {}) {
+  const versions = Array.isArray(task.deliveryVersions) ? task.deliveryVersions : [];
+  const records = taskRejectionRecords(task);
+  const latestRound = taskDeliveryRounds(versions, records).at(-1);
+  const latest = latestRound?.current;
+  const awaitingReview = ['delivered', 'submitted_for_review'].includes(task.status);
+  const canCorrect = awaitingReview && !readOnly && projectId != null
+    && ['designer', 'supplychain', 'planner', 'promotion'].includes(EMIE.state.currentRole)
+    && EMIE.actions.hasPermission('subtask.redeliver')
+    && task.designerId && String(task.designerId) === String(getCurrentUserId())
+    && !['paused', 'terminated', 'pending_terminate'].includes(projectStatus);
+  const redelivering = task.status === 'accepted' && (task.pendingChangeBonusRequestId || records.some(record => !record.cancelled));
+  const reworking = redelivering || ['rejected', 'revision_requested'].includes(task.status);
+  const status = getTaskStatusInfo(task.status);
+  const statusText = awaitingReview ? '等待企划验收' : redelivering ? '待重新交付' : status.label || '状态未记录';
+  const statusHint = canCorrect ? '本轮验收前可多次更正，企划将看到最新版本。' : ({
+    rejected: '请查看下方驳回意见，再提交新的成果。',
+    planner_approved: '产品企划已确认，等待后续验收。',
+    completed: versions.length ? '本轮交付已完成，历史成果可在下方查看。' : '本轮交付已完成。',
+  }[task.status] || '');
+  const submittedAt = latest?.submittedAt || task.submittedForReviewAt;
+  const confirmation = latestRound?.confirmation;
+  const reviewedBy = confirmation?.confirmedByName || confirmation?.confirmedBy;
+  const deliverables = task.deliverables ?? latest?.deliverables;
+  const referenceImages = task.referenceImagesJson ?? latest?.referenceImagesJson;
+  const attachments = task.attachmentsJson ?? latest?.attachmentsJson;
+  const files = taskDetailFiles(referenceImages, true) + taskDetailFiles(attachments, false);
+  const matchesLatest = latest && (latest.deliverables == null || latest.deliverables === deliverables)
+    && (latest.referenceImagesJson == null || latest.referenceImagesJson === referenceImages)
+    && (latest.attachmentsJson == null || latest.attachmentsJson === attachments);
+  const reviewComment = renderTaskReviewComment(task);
+  const changeFiles = taskDetailFiles(task.pendingChangeReferenceImagesJson, true);
+  const basicDetails = [
+    ['负责人', task.designerName || '待分配'],
+    ...(task.publisherName ? [['发布人', task.publisherName]] : []),
+    ['计划完成', formatDate(task.plannedDate)],
+    ...(task.actualDate ? [['实际完成', formatDate(task.actualDate)]] : []),
+  ];
+  const pointDetails = task.pointRuleCode ? [
+    ['积分规则', task.pointRuleCode], ['预计基础积分', `${deliveryPointNumber(task.basePointSnapshot)} 分`],
+    ...(collaborationSummary ? [['合作分配', collaborationSummary]] : []),
+    ['积分归属月份', task.milestoneMonth || '按实际入账月份'],
+  ] : [];
+  const renderDetails = fields => `<dl class="task-detail-fields">${fields.map(([label, value]) =>
+    `<div><dt>${escHtml(label)}</dt><dd>${escHtml(value)}</dd></div>`).join('')}</dl>`;
+  return `<section class="task-detail-panel task-detail-current">
+    <div class="task-detail-progress">
+      <div><h2>交付进度</h2><span class="badge task-detail-state ${status.cls}">${escHtml(statusText)}</span></div>
+      ${canCorrect ? `<button type="button" class="btn btn-primary" data-emie-action="click:designer-correct" data-project-id="${escHtml(projectId)}" data-task-id="${escHtml(task.id)}">更正当前交付</button>` : ''}
+    </div>
+    ${statusHint ? `<p class="task-detail-hint">${escHtml(statusHint)}</p>` : ''}
+    <div class="task-detail-output">
+      <div class="task-detail-output-heading"><h3>${reworking ? '最近提交成果' : '当前交付成果'}</h3>${matchesLatest && latest.versionNo != null ? `<span class="task-detail-version">第 ${escHtml(latest.versionNo)} 版</span>` : ''}</div>
+      ${submittedAt ? `<div class="task-detail-meta">${escHtml(latest?.submittedByName || task.designerName || '提交人未记录')} 提交于 ${escHtml(fmtDT(submittedAt))}</div>` : ''}
+      ${confirmation?.confirmedAt ? `<div class="task-detail-meta">${reviewedBy ? `${escHtml(reviewedBy)} 验收于 ` : '验收时间 '}${escHtml(fmtDT(confirmation.confirmedAt))}</div>` : ''}
+      ${deliverables ? `<p class="task-detail-text">${escHtml(deliverables)}</p>` : ''}
+      ${latest?.submissionType === 'correction' && latest.changeSummary ? `<div class="task-detail-meta">更正说明 · ${escHtml(latest.changeSummary)}</div>` : ''}
+      ${files || (deliverables ? '' : `<p class="task-detail-hint">${submittedAt ? '暂无文字说明或附件' : '暂无交付成果'}</p>`)}
+    </div>
+  </section>
+  ${records.length || reviewComment || changeFiles ? `<section class="task-detail-panel task-detail-feedback">
+    <h2>验收与反馈</h2>${reviewComment}${changeFiles}${renderTaskRejectionHistory(task, { showDetails: showRejectionDetails })}
+  </section>` : ''}
+  <section class="task-detail-panel task-detail-points">
+    <h2>积分</h2>${renderTaskPointSummary(task, { historyLink: false })}
+    ${pointDetails.length ? `<details class="task-detail-rule"><summary>查看积分规则与分配</summary>${renderDetails(pointDetails)}</details>` : ''}
+  </section>
+  ${versions.length ? `<section class="task-detail-panel task-detail-history">
+    <h2>历次交付</h2><p class="task-detail-hint">按最近提交排序，展开可查看本轮验收、积分和旧版本。</p>
+    ${renderDeliveryRounds(versions, records, task, { showLatestDelivery: !matchesLatest, expandLatest: false })}
+  </section>` : ''}
+  <section class="task-detail-panel task-detail-info">
+    <h2>任务信息</h2>${renderDetails(basicDetails)}
+    <h3>任务要求</h3><p class="task-detail-text">${escHtml(task.details || '未填写')}</p>
+    ${task.assignmentReason ? `<h3>指派／立项说明</h3><p class="task-detail-text">${escHtml(task.assignmentReason)}</p>` : ''}
+  </section>`;
+}
+
+function openPublishedSubTaskDetail(taskId, { readOnly = false } = {}) {
   if (document.getElementById('publishedSubTaskDetailModal')) return;
   const task = (EMIE.dashboardState.designerTaskCache || []).find(item => Number(item.id) === Number(taskId));
   if (!task) return;
-  const tsi = getTaskStatusInfo(task.status);
-  const records = Array.isArray(task.rejectionRecords) ? task.rejectionRecords : [];
   const deliveryVersions = Array.isArray(task.deliveryVersions) ? task.deliveryVersions : [];
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
@@ -462,32 +604,15 @@ function openPublishedSubTaskDetail(taskId) {
   modal.dataset.assistantProjectId = String(task.projectId);
   modal.dataset.assistantTaskId = String(task.id);
   modal.innerHTML = `
-    <div class="modal" style="max-width:760px;">
+    <div class="modal task-detail-drawer">
       <div class="modal-header">
         <button class="modal-close" data-emie-action="click:designer-detail-close">✕</button>
         <div class="modal-header-left">
-          <div class="modal-title">子任务详情 · ${escHtml(task.name || '-')}</div>
-          <div style="font-size:12px;color:var(--gray-400);margin-top:3px;">所属项目：${escHtml(task.projectName || '未命名项目')} · #${task.id}</div>
+          <div class="task-detail-kicker">子任务 #${task.id} · ${escHtml(task.projectName || '未命名项目')}</div>
+          <div class="modal-title">${escHtml(task.name || '子任务详情')}</div>
         </div>
-        <span class="badge ${tsi.cls}">${tsi.label}</span>
       </div>
-      <div class="modal-body">
-        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
-          <div class="detail-item"><div class="detail-label">负责人</div><div class="detail-value">${escHtml(task.designerName || '待分配')}</div></div>
-          <div class="detail-item"><div class="detail-label">发布人</div><div class="detail-value">${escHtml(task.publisherName || '-')}</div></div>
-          <div class="detail-item"><div class="detail-label">计划完成</div><div class="detail-value">${formatDate(task.plannedDate)}</div></div>
-          <div class="detail-item"><div class="detail-label">实际完成</div><div class="detail-value">${task.actualDate ? formatDate(task.actualDate) : '-'}</div></div>
-          ${task.deliveryVersions?.[0]?.submittedAt || task.submittedForReviewAt ? `<div class="detail-item"><div class="detail-label">成果提交时间</div><div class="detail-value">${fmtDT(task.deliveryVersions?.[0]?.submittedAt || task.submittedForReviewAt)}</div></div>` : ''}
-        </div>
-        ${renderTaskPointSummary(task)}
-        <div class="detail-item" style="margin-top:12px;"><div class="detail-label">任务要求</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.details || '未填写')}</div></div>
-        ${taskDetailFiles(task.referenceImagesJson, true)}
-        ${taskDetailFiles(task.attachmentsJson, false)}
-        ${task.deliverables ? `<div class="detail-item" style="margin-top:12px;"><div class="detail-label">当前交付成果</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.deliverables)}</div></div>` : ''}
-        ${renderTaskReviewComment(task)}
-        ${renderTaskRejectionHistory(task)}
-        ${deliveryVersions.length ? `<div class="delivery-section-heading">交付与积分记录</div>${renderDeliveryRounds(deliveryVersions, records, task)}` : ''}
-      </div>
+      <div class="modal-body task-detail-body">${renderSubTaskDetailBody(task, { readOnly })}</div>
       <div class="modal-footer">
         <button class="btn btn-outline" data-emie-action="click:designer-detail-project" data-project-id="${task.projectId}">查看所属项目</button>
         ${deliveryVersions.length ? `<button class="btn btn-outline" data-emie-action="click:designer-history" data-task-id="${task.id}">交付与积分记录</button>` : ''}
@@ -520,6 +645,7 @@ EMIE.registerActions({
   openDeliveryHistory,
   renderTaskPointSummary,
   renderDeliveryRounds,
+  renderSubTaskDetailBody,
   renderTaskReviewComment,
   renderTaskRejectionHistory,
 });
@@ -560,7 +686,9 @@ if (registerEventAction) {
     try { snapshot = JSON.parse(el.dataset.taskSnapshot || '{}'); } catch (_) { snapshot = undefined; }
     taskAccept(Number(el.dataset.projectId), Number(el.dataset.taskId), snapshot);
   });
-  registerEventAction('designer-correct', (_event, el) => taskCorrectDelivery(Number(el.dataset.projectId), Number(el.dataset.taskId)));
-  registerEventAction('designer-detail', (_event, el) => openPublishedSubTaskDetail(Number(el.dataset.taskId)));
+  registerEventAction('designer-correct', (_event, el) => taskCorrectDelivery(
+    Number(el.dataset.projectId), Number(el.dataset.taskId), el.closest('.task-detail-drawer')?.parentElement));
+  registerEventAction('designer-detail', (_event, el) => openPublishedSubTaskDetail(
+    Number(el.dataset.taskId), { readOnly: el.dataset.readOnly === 'true' }));
   registerEventAction('designer-page', (_event, el) => { EMIE.dashboardState.designerTaskPage = Number(el.dataset.page); renderDesignerTaskPage(); });
 }

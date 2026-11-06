@@ -54,7 +54,7 @@ try {
     const task = {
       id: 91001, projectId: 92001, name: 'UI模拟 · 春日系列手机挂链设计', projectName: 'UI模拟 · 森林伙伴产品企划',
       details: '延续自然、温暖的配色与手绘风格，结合小动物、野餐和植物元素。', deliverables: 'UI模拟 · 已完成挂链设计初稿',
-      status: 'accepted', designerId: 'ui-simulation-designer', designerName: 'UI模拟设计师', publisherName: 'UI模拟产品企划', plannedDate: '2026-11-20',
+      status: 'accepted', workflowStage: 'design', designerId: 'ui-simulation-designer', designerName: 'UI模拟设计师', publisherName: 'UI模拟产品企划', plannedDate: '2026-11-20',
       referenceImagesJson: JSON.stringify([{ storedName: 'ui-simulation-reference.png', name: 'UI模拟参考图.png', size: 1024 }]),
       attachmentsJson: JSON.stringify([{ storedName: 'ui-simulation-delivery.pdf', name: 'UI模拟交付说明.pdf', size: 2048 }]),
       rejectionRecords: [], deliveryVersions: [],
@@ -75,8 +75,8 @@ try {
   });
 
   const entryPoints = [
-    { id: 'publishedSubTaskDetailModal', action: 'openPublishedSubTaskDetail', close: 'designer-detail-close' },
-    { id: 'projectSubTaskDetailModal', action: 'openProjectSubTaskDetail', close: 'detail-subtask-close' },
+    { id: 'publishedSubTaskDetailModal', action: 'openPublishedSubTaskDetail', close: 'designer-detail-close', context: 'UI模拟 · 森林伙伴产品企划' },
+    { id: 'projectSubTaskDetailModal', action: 'openProjectSubTaskDetail', close: 'detail-subtask-close', context: '设计' },
   ];
   for (const role of ['designer', 'planner', 'admin']) {
     for (const entry of entryPoints) {
@@ -89,8 +89,9 @@ try {
         }, { role, action: entry.action });
         const detail = page.locator(`#${entry.id}`);
         await detail.waitFor({ state: 'visible' });
+        assert.equal(await detail.locator('.modal-title').innerText(), 'UI模拟 · 春日系列手机挂链设计');
+        assert.equal(await detail.locator('.task-detail-kicker').innerText(), `子任务 #91001 · ${entry.context}`);
         const text = await detail.innerText();
-        assert.match(text, /子任务详情 · UI模拟 · 春日系列手机挂链设计/);
         assert.match(text, /延续自然、温暖的配色与手绘风格/);
         assert.match(text, /UI模拟交付说明\.pdf/);
         assert.match(text, /UI模拟 · 已完成挂链设计初稿/);

@@ -1,6 +1,6 @@
 import './core-runtime.js?v=328';
 import './event-runtime.js?v=269';
-import './core-auth.js?v=426';
+import './core-auth.js?v=427';
 import './core-identity.js?v=498';
 import './core-shell.js?v=520';
 import './core-ui.js?v=523';
@@ -10,14 +10,14 @@ import './dashboard-home.js?v=623';
 import './dashboard-lists.js?v=429';
 import './dashboard-scoring.js?v=345';
 import './dashboard-points.js?v=385';
-import './dashboard-designer.js?v=611';
+import './dashboard-designer.js?v=615';
 import './dashboard.js?v=219';
 import './material-market.js?v=162';
 import './image-library.js?v=117';
 import './project-uploads.js?v=499';
 import './project-form.js?v=459';
-import './project-detail.js?v=674';
-import './project-tasks.js?v=698';
+import './project-detail.js?v=675';
+import './project-tasks.js?v=699';
 import './project-sharing.js?v=264';
 import './projects.js?v=148';
 // 管理模块只在进入对应页面时下载；保留原有版本号作为缓存边界。

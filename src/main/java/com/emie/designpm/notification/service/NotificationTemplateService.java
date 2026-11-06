@@ -23,7 +23,13 @@ public class NotificationTemplateService {
     }
 
     public record Template(
-            String title, String content, String priority, boolean mandatory, String deepLink, String feishuCardJson) {}
+            String title,
+            String content,
+            String priority,
+            boolean mandatory,
+            String deepLink,
+            String feishuLink,
+            String feishuCardJson) {}
 
     public Template render(String eventType, Map<String, String> context) {
         String project = value(context, "projectName", "未命名项目");
@@ -318,13 +324,15 @@ public class NotificationTemplateService {
             Map<String, String> context) {
         String title = renderVariables(configured(eventType, "title", defaultTitle), context);
         String content = renderVariables(configured(eventType, "content", defaultContent), context);
+        String feishuLink = toPublicUrl(deepLink);
         return new Template(
                 title,
                 content,
                 priority,
                 mandatory,
                 deepLink,
-                card(title, project, subject, deadline, actor, content, deepLink));
+                feishuLink,
+                card(title, project, subject, deadline, actor, content, feishuLink));
     }
 
     private String card(
@@ -334,7 +342,7 @@ public class NotificationTemplateService {
             String deadline,
             String actor,
             String content,
-            String deepLink) {
+            String cardLink) {
         ObjectNode card = JSON.createObjectNode();
         card.put("schema", "2.0");
         ObjectNode header = card.putObject("header");
@@ -347,7 +355,6 @@ public class NotificationTemplateService {
                 .put(
                         "content",
                         "**项目**：" + project + "\n**事项**：" + subject + "\n**截止时间**：" + deadline + "\n**触发人**：" + actor);
-        String cardLink = toPublicUrl(deepLink);
         if (!cardLink.isBlank()) {
             ObjectNode button = elements.addObject();
             button.put("tag", "button").put("type", "primary");

@@ -7,6 +7,7 @@ import com.emie.designpm.notification.repository.NotificationEventRepository;
 import java.time.LocalDateTime;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -34,13 +35,23 @@ public class NotificationOutboxService {
             String actorUserId,
             String idempotencyKey,
             String payload) {
-        return eventRepository
-                .findByIdempotencyKey(idempotencyKey)
-                .orElseGet(() -> saveNewEvent(
-                        eventType, aggregateType, aggregateId, aggregateVersion, actorUserId, idempotencyKey, payload));
+        return eventRepository.findByIdempotencyKey(idempotencyKey).orElseGet(() -> {
+            try {
+                return publishNew(
+                        eventType, aggregateType, aggregateId, aggregateVersion, actorUserId, idempotencyKey, payload);
+            } catch (DataIntegrityViolationException e) {
+                return eventRepository.findByIdempotencyKey(idempotencyKey).orElseThrow(() -> e);
+            }
+        });
     }
 
-    private NotificationEvent saveNewEvent(
+    public boolean hasEvent(String idempotencyKey) {
+        return eventRepository.existsByIdempotencyKey(idempotencyKey);
+    }
+
+    /** 只有成功插入幂等键的事务才能创建后续投递。并发冲突由调用方在回滚后处理。 */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public NotificationEvent publishNew(
             String eventType,
             String aggregateType,
             Long aggregateId,
@@ -48,30 +59,25 @@ public class NotificationOutboxService {
             String actorUserId,
             String idempotencyKey,
             String payload) {
-        try {
-            // Notification 与审计都引用该事件；使用 saveAndFlush 保证 IDENTITY 主键已生成，
-            // 避免在同一通知事务中写入空 event_id。
-            NotificationEvent event = eventRepository.saveAndFlush(NotificationEvent.builder()
-                    .eventType(eventType)
-                    .aggregateType(aggregateType)
-                    .aggregateId(aggregateId)
-                    .aggregateVersion(aggregateVersion)
-                    .actorUserId(actorUserId)
-                    .idempotencyKey(idempotencyKey)
-                    .payload(payload)
-                    .status("pending")
-                    .occurredAt(LocalDateTime.now())
-                    .build());
-            auditLogRepository.save(NotificationAuditLog.builder()
-                    .eventId(event.getId())
-                    .action("event_created")
-                    .operatorUserId(actorUserId)
-                    .detail("eventType=" + eventType + ", aggregate=" + aggregateType + "#" + aggregateId)
-                    .createdAt(LocalDateTime.now())
-                    .build());
-            return event;
-        } catch (DataIntegrityViolationException e) {
-            return eventRepository.findByIdempotencyKey(idempotencyKey).orElseThrow(() -> e);
-        }
+        // 先分配主键并检测幂等冲突，再写入通知和审计。
+        NotificationEvent event = eventRepository.saveAndFlush(NotificationEvent.builder()
+                .eventType(eventType)
+                .aggregateType(aggregateType)
+                .aggregateId(aggregateId)
+                .aggregateVersion(aggregateVersion)
+                .actorUserId(actorUserId)
+                .idempotencyKey(idempotencyKey)
+                .payload(payload)
+                .status("pending")
+                .occurredAt(LocalDateTime.now())
+                .build());
+        auditLogRepository.save(NotificationAuditLog.builder()
+                .eventId(event.getId())
+                .action("event_created")
+                .operatorUserId(actorUserId)
+                .detail("eventType=" + eventType + ", aggregate=" + aggregateType + "#" + aggregateId)
+                .createdAt(LocalDateTime.now())
+                .build());
+        return event;
     }
 }

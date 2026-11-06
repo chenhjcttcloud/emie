@@ -94,6 +94,11 @@ public class ProjectViewSupport {
                     item.put("status", task.getStatus());
                     item.put("plannedDate", task.getPlannedDate());
                     item.put("actualDate", task.getActualDate());
+                    item.put(
+                            "submittedForReviewAt",
+                            Optional.ofNullable(task.getSubmittedForReviewAt())
+                                    .map(time -> time.format(DTF))
+                                    .orElse(null));
                     item.put("designerId", task.getDesignerId());
                     item.put("designerName", task.getDesignerName());
                     item.put("allocationStatus", task.getAllocationStatus());
@@ -170,6 +175,11 @@ public class ProjectViewSupport {
                                     : task.getCreatedAt().format(DTF));
                     item.put("plannedDate", task.getPlannedDate());
                     item.put("actualDate", task.getActualDate());
+                    item.put(
+                            "submittedForReviewAt",
+                            Optional.ofNullable(task.getSubmittedForReviewAt())
+                                    .map(time -> time.format(DTF))
+                                    .orElse(null));
                     item.put("designerId", task.getDesignerId());
                     item.put("designerName", task.getDesignerName());
                     item.put("publisherId", task.getPublisherId());

@@ -81,6 +81,15 @@ public interface SubTaskRepository extends JpaRepository<SubTask, Long> {
     List<SubTask> findTop100ByStatusAndCreatedAtBetweenOrderByCreatedAtAsc(
             @Param("status") String status, @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
+    @Query("SELECT t FROM SubTask t JOIN FETCH t.project p "
+            + "WHERE t.id > :afterId AND t.plannedDate = :deadline "
+            + "AND t.status IN ('pending', 'accepted', 'rejected', 'revision_requested') "
+            + "AND t.designerId IS NOT NULL AND TRIM(t.designerId) <> '' "
+            + "AND t.allocationStatus NOT IN ('market_open', 'withdrawn') "
+            + "AND p.status NOT IN ('paused', 'pending_terminate', 'terminated', 'completed') ORDER BY t.id ASC")
+    List<SubTask> findDueReminderCandidates(
+            @Param("deadline") String deadline, @Param("afterId") long afterId, Pageable pageable);
+
     @Query("SELECT DISTINCT t FROM SubTask t JOIN FETCH t.project p "
             + "WHERE t.designerId = :userId OR t.publisherId = :userId ORDER BY t.updatedAt DESC, t.id DESC")
     List<SubTask> findMySubTasks(@Param("userId") String userId);

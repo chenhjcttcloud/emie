@@ -6,4 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface NotificationEventRepository extends JpaRepository<NotificationEvent, Long> {
     Optional<NotificationEvent> findByIdempotencyKey(String idempotencyKey);
+
+    boolean existsByIdempotencyKey(String idempotencyKey);
 }

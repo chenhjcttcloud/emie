@@ -4,6 +4,7 @@ const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const renderSidebar = (...args) => EMIE.actions.renderSidebar(...args);
 const render = (...args) => EMIE.actions.render(...args);
 const VERSION_CHECK_INTERVAL_MS = 60_000;
+const FEISHU_NOTIFICATION_TARGET_KEY = 'emie_feishu_notification_target';
 let versionCheckRequest = null;
 let lastVersionCheckAt = 0;
 
@@ -350,13 +351,22 @@ async function showApp() {
   }
 }
 
-function openNotificationDeepLink() {
-  const params = new URLSearchParams(window.location.search);
+function readNotificationDeepLink(params) {
   const projectId = Number(params.get('projectId'));
-  if (!Number.isSafeInteger(projectId) || projectId <= 0 || EMIE.state.notificationDeepLinkOpened) return;
+  if (!Number.isSafeInteger(projectId) || projectId <= 0) return null;
+  const taskId = Number(params.get('taskId'));
+  return { projectId, taskId: Number.isSafeInteger(taskId) && taskId > 0 ? taskId : undefined };
+}
+
+function openNotificationDeepLink() {
+  const url = new URL(window.location.href);
+  const target = readNotificationDeepLink(url.searchParams);
+  if (!target || EMIE.state.notificationDeepLinkOpened) return;
   EMIE.state.notificationDeepLinkOpened = true;
-  window.history.replaceState({}, document.title, window.location.pathname);
-  setTimeout(() => EMIE.actions.openProjectDetail(projectId), 0);
+  url.searchParams.delete('projectId');
+  url.searchParams.delete('taskId');
+  window.history.replaceState({}, document.title, url);
+  setTimeout(() => EMIE.actions.openProjectDetail(target.projectId, target.taskId), 0);
 }
 
 function isPendingUser(user) {
@@ -487,21 +497,40 @@ function handleFeishuLogin() {
       + '?redirect_uri=' + encodeURIComponent(redirectUri)
       + '&app_id=' + cfg.appId
       + '&state=' + encodeURIComponent(cfg.state || '');
+    const target = readNotificationDeepLink(new URLSearchParams(window.location.search));
+    if (target) {
+      const params = new URLSearchParams({ projectId: target.projectId });
+      if (target.taskId) params.set('taskId', target.taskId);
+      sessionStorage.setItem(FEISHU_NOTIFICATION_TARGET_KEY, params.toString());
+    } else {
+      sessionStorage.removeItem(FEISHU_NOTIFICATION_TARGET_KEY);
+    }
     window.location.href = url;
   }).catch(() => window.EMIE.actions.showSystemAlert('获取飞书配置失败'));
 }
 
 // 检测飞书 SSO 回调
 async function checkFeishuCallback() {
-  const params = new URLSearchParams(window.location.search);
-  const ticket = params.get('sso_ticket');
-  const error = params.get('sso_error');
+  const url = new URL(window.location.href);
+  const ticket = url.searchParams.get('sso_ticket');
+  const error = url.searchParams.get('sso_error');
+  if (!ticket && !error) return false;
+
+  // 飞书回调只返回登录票据，恢复同一标签页保存的项目和子任务编号。
+  const savedTarget = readNotificationDeepLink(new URLSearchParams(sessionStorage.getItem(FEISHU_NOTIFICATION_TARGET_KEY)));
+  sessionStorage.removeItem(FEISHU_NOTIFICATION_TARGET_KEY);
+  if (savedTarget && !readNotificationDeepLink(url.searchParams)) {
+    url.searchParams.set('projectId', savedTarget.projectId);
+    url.searchParams.delete('taskId');
+    if (savedTarget.taskId) url.searchParams.set('taskId', savedTarget.taskId);
+  }
+  url.searchParams.delete('sso_ticket');
+  url.searchParams.delete('sso_error');
+  window.history.replaceState({}, document.title, url);
   if (error) {
     window.EMIE.actions.showSystemAlert('飞书登录失败: ' + error);
-    window.history.replaceState({}, document.title, window.location.pathname);
     return false;
   }
-  if (!ticket) return false;
   const response = await fetch('/api/auth/feishu/exchange', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ticket })
@@ -509,7 +538,6 @@ async function checkFeishuCallback() {
   if (!response.ok) { window.EMIE.actions.showSystemAlert('飞书登录票据已失效，请重新登录'); return false; }
   const data = await response.json();
   localStorage.setItem('design_pm_token', data.token);
-  window.history.replaceState({}, document.title, window.location.pathname);
   // 只保存回调 token，由 initApp 统一调用 /me 并启动一次 showApp，避免并发首屏渲染。
   return true;
 }

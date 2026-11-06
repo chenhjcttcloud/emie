@@ -847,7 +847,7 @@ async function submitTaskRedeliver(pid, tid) {
   }
 }
 
-async function taskCorrectDelivery(pid, tid) {
+async function taskCorrectDelivery(pid, tid, detailDrawer) {
   if (!tryOpenModal('taskCorrectDeliveryModal')) return;
   try {
     const detail = await apiGet(`/projects/${pid}`);
@@ -863,6 +863,7 @@ async function taskCorrectDelivery(pid, tid) {
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
     modal.id = 'taskCorrectDeliveryModal';
+    if (detailDrawer?.isConnected) modal.dataset.detailDrawer = detailDrawer.id;
     modal.innerHTML = `
       <button class="modal-close-float" data-emie-action="click:task-correct-close">✕</button>
       <div class="modal modal-lg">
@@ -914,6 +915,8 @@ async function submitTaskCorrectDelivery(pid, tid) {
   data.attachmentsJson = JSON.stringify(EMIE.projectState.deliverAttachments);
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/correct-delivery`, data);
+    const detailDrawerId = form.closest('#taskCorrectDeliveryModal')?.dataset.detailDrawer;
+    if (detailDrawerId) closeM(detailDrawerId);
     closeM('taskCorrectDeliveryModal');
     await refreshAfterMutation(pid);
   } catch (e) {

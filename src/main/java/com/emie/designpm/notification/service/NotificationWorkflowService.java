@@ -14,6 +14,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -67,11 +68,8 @@ public class NotificationWorkflowService {
             Long aggregateId,
             String actorUserId,
             Map<String, String> context) {
-        if (recipientUserId == null || recipientUserId.isBlank()) return;
-        String routedRecipientUserId = recipientRouter.route(recipientUserId);
-        if (routedRecipientUserId == null
-                || routedRecipientUserId.isBlank()
-                || (!recipientRouter.isTestOverrideEnabled() && routedRecipientUserId.equals(actorUserId))) return;
+        String recipient = routableRecipient(recipientUserId, actorUserId);
+        if (recipient == null) return;
         if (aggregateId == null) {
             throw new IllegalArgumentException("通知业务对象 ID 不能为空");
         }
@@ -85,33 +83,97 @@ public class NotificationWorkflowService {
                     actorUserId,
                     eventType + ":" + aggregateType + ":" + aggregateId + ":" + UUID.randomUUID(),
                     t.content());
-            Notification n = notifications.save(Notification.builder()
-                    .eventId(event.getId())
-                    .recipientUserId(routedRecipientUserId)
-                    .category("workflow")
-                    .priority(t.priority())
-                    .mandatory(t.mandatory())
-                    .title(t.title())
-                    .content(t.content())
-                    .deepLink(t.deepLink())
-                    .aggregateType(aggregateType)
-                    .aggregateId(aggregateId)
-                    .status("unread")
-                    .createdAt(LocalDateTime.now())
-                    .build());
-            NotificationDelivery inApp = deliveries.save(NotificationDelivery.builder()
-                    .notificationId(n.getId())
-                    .channel("in_app")
-                    .status("delivered")
-                    .retryCount(0)
-                    .deliveredAt(LocalDateTime.now())
-                    .build());
-            audit(event, n, inApp, "in_app_delivered", actorUserId, "工作流站内通知已创建");
+            Notification n = saveInApp(event, recipient, actorUserId, t);
             return new NotificationBundle(event, n);
         });
         if (!enabled("notification.feishuEnabled")) return;
-        users.findByUserId(routedRecipientUserId)
+        users.findByUserId(recipient)
                 .ifPresent(user -> sendFeishu(bundle.event(), bundle.notification(), user, t, actorUserId));
+    }
+
+    /** 定时提醒按业务键创建一次，飞书投递与站内通知一起入库，由渠道重试任务认领。 */
+    public void notifyUserOnce(
+            String eventType,
+            String recipientUserId,
+            String aggregateType,
+            Long aggregateId,
+            String actorUserId,
+            String idempotencyKey,
+            Map<String, String> context) {
+        String recipient = routableRecipient(recipientUserId, actorUserId);
+        if (recipient == null || outbox.hasEvent(idempotencyKey) || !enabled("notification.feishuEnabled")) return;
+        NotificationTemplateService.Template t = templates.render(eventType, context);
+        // 等跳转地址配置完成再创建提醒，避免发送无法处理的卡片。
+        if (t.feishuLink().isBlank()) return;
+        try {
+            requiresNew.executeWithoutResult(status -> {
+                NotificationEvent event = outbox.publishNew(
+                        eventType, aggregateType, aggregateId, 1, actorUserId, idempotencyKey, t.content());
+                Notification notification = saveInApp(event, recipient, actorUserId, t);
+                boolean canDeliver = users.findByUserId(recipient)
+                        .map(User::getFeishuOpenId)
+                        .filter(openId -> !openId.isBlank())
+                        .isPresent();
+                LocalDateTime now = LocalDateTime.now();
+                NotificationDelivery delivery = deliveries.save(NotificationDelivery.builder()
+                        .notificationId(notification.getId())
+                        .channel("feishu")
+                        .status(canDeliver ? "pending" : "blocked")
+                        .createdAt(now)
+                        .nextRetryAt(canDeliver ? now : null)
+                        .failedAt(canDeliver ? null : now)
+                        .errorMsg(canDeliver ? null : "收件人未绑定飞书 Open ID")
+                        .cardPayload(t.feishuCardJson())
+                        .build());
+                audit(
+                        event,
+                        notification,
+                        delivery,
+                        canDeliver ? "feishu_queued" : "feishu_blocked",
+                        actorUserId,
+                        canDeliver ? "定时提醒已进入飞书投递队列" : "收件人未绑定飞书 Open ID，等待绑定后手动重试");
+            });
+        } catch (DataIntegrityViolationException failure) {
+            // 唯一键冲突由数据库裁决。先回滚再查，避免并发扫描生成第二份通知。
+            if (!outbox.hasEvent(idempotencyKey)) throw failure;
+        }
+    }
+
+    private String routableRecipient(String recipientUserId, String actorUserId) {
+        if (recipientUserId == null || recipientUserId.isBlank()) return null;
+        String recipient = recipientRouter.route(recipientUserId);
+        return recipient == null
+                        || recipient.isBlank()
+                        || (!recipientRouter.isTestOverrideEnabled() && recipient.equals(actorUserId))
+                ? null
+                : recipient;
+    }
+
+    private Notification saveInApp(
+            NotificationEvent event, String recipient, String actorUserId, NotificationTemplateService.Template t) {
+        Notification notification = notifications.save(Notification.builder()
+                .eventId(event.getId())
+                .recipientUserId(recipient)
+                .category("workflow")
+                .priority(t.priority())
+                .mandatory(t.mandatory())
+                .title(t.title())
+                .content(t.content())
+                .deepLink(t.deepLink())
+                .aggregateType(event.getAggregateType())
+                .aggregateId(event.getAggregateId())
+                .status("unread")
+                .createdAt(LocalDateTime.now())
+                .build());
+        NotificationDelivery inApp = deliveries.save(NotificationDelivery.builder()
+                .notificationId(notification.getId())
+                .channel("in_app")
+                .status("delivered")
+                .retryCount(0)
+                .deliveredAt(LocalDateTime.now())
+                .build());
+        audit(event, notification, inApp, "in_app_delivered", actorUserId, "工作流站内通知已创建");
+        return notification;
     }
 
     private record NotificationBundle(NotificationEvent event, Notification notification) {}

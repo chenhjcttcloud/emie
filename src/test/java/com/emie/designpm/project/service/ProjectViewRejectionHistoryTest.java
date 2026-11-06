@@ -36,6 +36,7 @@ class ProjectViewRejectionHistoryTest {
         task.setStatus("submitted_for_review");
         task.setDesignerId("d1");
         task.setCreatedAt(AT.minusDays(1));
+        task.setSubmittedForReviewAt(at(600));
         task.setDeliverables("最后一轮成果");
         project.getTasks().add(task);
 
@@ -82,8 +83,11 @@ class ProjectViewRejectionHistoryTest {
         var tasks = mock(SubTaskRepository.class);
         var cycles = mock(SubTaskRejectionCycleRepository.class);
         var commands = mock(SubTaskCommandService.class);
+        var access = mock(ProjectAccessService.class);
         when(projects.computeProjectStatus(project)).thenReturn("in_progress");
         when(tasks.findMySubTasks("d1")).thenReturn(List.of(task));
+        when(access.departmentTaskUserIds("planner", "p1")).thenReturn(List.of("d1"));
+        when(tasks.findDepartmentSubTasks(List.of("d1"))).thenReturn(List.of(task));
         when(logs.findSubTaskRejectionHistory(List.of(11L), List.of(1L)))
                 .thenReturn(List.of(old, duplicate, unrelated));
         when(cycles.findBySubTaskIdInOrderBySubTaskIdAscSequenceNoAsc(List.of(11L)))
@@ -95,7 +99,7 @@ class ProjectViewRejectionHistoryTest {
                 mock(ScoringRepository.class),
                 logs,
                 tasks,
-                mock(ProjectAccessService.class),
+                access,
                 mock(ProjectWorkflowService.class),
                 commands);
         ReflectionTestUtils.setField(view, "rejectionCycleRepository", cycles);
@@ -103,10 +107,15 @@ class ProjectViewRejectionHistoryTest {
         // The general project activity feed has already dropped all four events.
         var details = view.toDetailWithLogs(project, List.of()).getTasks().getFirst();
         var mine = view.getMySubTasks(new AuthSession("d1", "designer", "设计师")).getFirst();
+        var department = view.getDepartmentSubTasks(new AuthSession("p1", "planner", "产品企划"))
+                .getFirst();
+        assertEquals(at(600).format(ProjectViewSupport.DTF), mine.get("submittedForReviewAt"));
+        assertEquals(mine.get("submittedForReviewAt"), department.get("submittedForReviewAt"));
         var records = details.getRejectionRecords();
         var deliveries = details.getDeliveryVersions();
         assertEquals(records, mine.get("rejectionRecords"));
         assertEquals(deliveries, mine.get("deliveryVersions"));
+        assertEquals(deliveries, department.get("deliveryVersions"));
         assertEquals(
                 List.of("旧版反馈", "请更换颜色", "误驳回", "请补充尺寸"),
                 records.stream().map(r -> r.get("reason")).toList());
@@ -132,7 +141,7 @@ class ProjectViewRejectionHistoryTest {
         assertEquals("same-bonus", deliveries.get(2).get("pointRequestId"));
         assertNull(deliveries.get(3).get("rejectionCycleId"));
         assertFalse(v3.containsKey("rejectionCycleId"));
-        verify(logs, times(2)).findSubTaskRejectionHistory(List.of(11L), List.of(1L));
+        verify(logs, times(3)).findSubTaskRejectionHistory(List.of(11L), List.of(1L));
         verify(logs, never()).findProjectHistory(anyLong());
     }
 

@@ -43,9 +43,11 @@ const secondChange = delivery(3, {
   deliverables: '另一款包装初次提交', pointRuleCode: 'A3', pointRuleDescription: '包装修改', expectedPoints: 2,
   submittedAt: '2026-10-25T10:00:00',
 });
+const currentAttachmentName = '包装交付更新版-2026-10-25-final-production-artwork-with-a-long-filename-for-mobile-layout.zip';
+const currentAttachments = JSON.stringify([{ name: currentAttachmentName, url: '/api/files/download/current-packaging.zip', size: 1024 }]);
 const correction = delivery(4, {
   ...secondChange, id: 4, versionNo: 4, submissionType: 'correction', changeSummary: '补充当前轮附件',
-  deliverables: '已补充另一款包装附件', submittedAt: '2026-10-25T12:00:00',
+  deliverables: '已补充另一款包装附件', submittedAt: '2026-10-25T12:00:00', attachmentsJson: currentAttachments,
 });
 const summary = { awardedPoints: 13, basePoints: 10, changePoints: 3, otherPoints: 0, untrackedPoints: 0, hasUntrackedAwards: false };
 const task = {
@@ -53,7 +55,7 @@ const task = {
   projectType: 'regular', status: 'delivered', workflowStage: 'design', assigneeRole: 'designer',
   designerId: 'delivery-ui-designer', designerName: '模拟设计师', plannerId: 'delivery-ui-planner',
   plannerName: '模拟企划', publisherName: '模拟企划', plannedDate: '2026-11-20', createdAt: '2026-10-01T10:00:00',
-  details: '核对首次验收及后续修改给分。', deliverables: correction.deliverables, reviewComments: '',
+  details: '核对首次验收及后续修改给分。', deliverables: correction.deliverables, attachmentsJson: currentAttachments, reviewComments: '',
   pointRuleCode: 'A1', basePointSnapshot: 10, pointSummary: summary, pendingChangeBonusRequestId: 'revision-2',
   pendingChangeRuleCode: 'A3', pendingChangeBonusPoints: 2, pendingChangeBonusReason: '补充另一款包装',
   rejectionRecords: [], deliveryVersions: [correction, secondChange, firstChange, initial],
@@ -64,14 +66,17 @@ const project = {
   createdAt: task.createdAt, updatedAt: correction.submittedAt, deadline: task.plannedDate, tasks: [task], logs: [],
 };
 let projectResponse = project;
+const taskListResponses = new Map([
+  ['/api/projects/my-subtasks', [task]],
+  ['/api/projects/department-subtasks', []],
+  ['/api/projects/task-market', []],
+]);
 
 // Fulfill every API request locally; this check never reads or writes real business data.
 await page.route('**/api/**', async route => {
   const request = route.request(), url = new URL(request.url());
   if (request.method() !== 'GET') mutations.push(`${request.method()} ${url.pathname}`);
-  let payload = {};
-  if (url.pathname === '/api/projects/my-subtasks') payload = [task];
-  if (url.pathname === '/api/projects/task-market') payload = [];
+  let payload = taskListResponses.get(url.pathname) || {};
   if (url.pathname === `/api/projects/${project.id}`) payload = projectResponse;
   return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(payload) });
 });
@@ -92,15 +97,15 @@ async function closeHistory() {
   await history().locator('[data-emie-action="click:designer-history-close"]').first().click();
   await history().waitFor({ state: 'detached' });
 }
-async function showFixture(value) {
-  await page.evaluate(value => {
+async function showFixture(value, readOnly = false) {
+  await page.evaluate(({ value, readOnly }) => {
     const e = window.EMIE;
     const f = window.deliveryPointsFixture;
     f.task = value;
     e.dashboardState.designerTaskCache = [value];
     e.projectState.currentProjectDetail = { ...f.project, tasks: [value] };
-    document.getElementById('mainContent').innerHTML = e.actions.renderDesignerTaskCards([value]);
-  }, value);
+    document.getElementById('mainContent').innerHTML = e.actions.renderDesignerTaskCards([value], readOnly);
+  }, { value, readOnly });
 }
 function textNumbers(text) { return text.replace(/\s+/g, ' '); }
 async function assertSummary(container, expected = 13) {
@@ -108,6 +113,31 @@ async function assertSummary(container, expected = 13) {
   assert.ok(await totals.count() > 0, '子任务应直接展示积分汇总');
   assert.equal(await totals.first().getAttribute('data-awarded-points'), String(expected), '累计积分只采用实际入账');
   assert.match(textNumbers(await totals.first().innerText()), new RegExp(`累计已入账\\s*${expected}\\s*分`));
+}
+
+async function assertTaskDrawer(drawer, { status, deliverables, versionNo, canCorrect }) {
+  const body = drawer.locator('.task-detail-body');
+  const current = body.locator('.task-detail-current');
+  assert.equal(await body.locator(':scope > :first-child').evaluate(node => node.matches('.task-detail-current')), true,
+    '子任务详情先展示当前交付和验收状态');
+  assert.match(await current.locator('.task-detail-state').innerText(), new RegExp(status));
+  const output = current.locator('.task-detail-output');
+  assert.equal(await output.getByRole('heading', { name: '当前交付成果' }).isVisible(), true);
+  assert.equal(await output.locator('.task-detail-version').innerText(), `第 ${versionNo} 版`);
+  assert.equal(await output.getByText(deliverables, { exact: true }).isVisible(), true);
+  assert.equal(await output.getByText(currentAttachmentName, { exact: true }).isVisible(), true);
+  assert.equal(await current.locator('[data-emie-action="click:designer-correct"]').count(), canCorrect ? 1 : 0,
+    '更正入口仅向待验收成果的当前子任务负责人显示');
+  const inlineRounds = body.locator('.task-detail-history .delivery-round');
+  assert.ok(await inlineRounds.count() > 1, '多轮交付仍保留可展开的历史');
+  assert.equal(await body.locator('.task-detail-history .delivery-round[open]').count(), 0,
+    '抽屉内的历史仅默认展示每轮摘要');
+  const latest = inlineRounds.first();
+  await latest.locator(':scope > summary').click();
+  assert.equal(await latest.getAttribute('open'), '', '可以展开当轮的验收和积分记录');
+  assert.equal(await drawer.getByText(currentAttachmentName, { exact: true }).count(), 1,
+    '展开当轮记录也只展示一份当前附件');
+  await latest.locator(':scope > summary').click();
 }
 
 async function assertRejectionHistory(container, reasons) {
@@ -123,6 +153,77 @@ async function assertRejectionHistory(container, reasons) {
   assert.equal(await records.locator('.task-rejection-reason img').count(), 0, '驳回原因中的 HTML 作为文本显示');
 }
 
+async function assertFilteredTaskRows(tasks) {
+  await page.waitForFunction(expectedNames => {
+    const rows = [...document.querySelectorAll('#designerTaskContainer .subtask-name')];
+    return rows.length === expectedNames.length
+      && expectedNames.every(name => rows.some(row => row.textContent.includes(name)));
+  }, tasks.map(item => item.name));
+}
+
+async function assertTaskDateFilters() {
+  const from = '2026-10-25';
+  const to = '2026-10-27';
+  const latestCorrection = { ...task, id: 93101, name: '更正日期落在上界', submittedForReviewAt: initial.submittedAt,
+    deliveryVersions: [{ ...correction, submittedAt: `${to}T23:59:59` }, initial] };
+  const latestRedelivery = { ...task, id: 93102, name: '重新交付日期落在下界',
+    deliveryVersions: [delivery(2, { submissionType: 'redelivery', submissionOrigin: 'rejection', submittedAt: `${from}T00:00:00` }), initial] };
+  const legacySubmission = { ...task, id: 93103, name: '历史任务有提交时间',
+    deliveryVersions: [], submittedForReviewAt: '2026-10-26T10:00:00' };
+  const oldVersionInRange = { ...task, id: 93104, name: '仅旧版本日期落在区间',
+    deliveryVersions: [{ ...correction, submittedAt: '2026-10-28T09:00:00' }, secondChange] };
+  const noSubmission = { ...task, id: 93105, name: '未提交但计划日期符合', status: 'pending', plannedDate: '2026-10-26',
+    deliveryVersions: [], deliverables: null, attachmentsJson: '[]', pendingChangeBonusRequestId: null };
+  const all = [latestCorrection, latestRedelivery, legacySubmission, oldVersionInRange, noSubmission];
+  taskListResponses.set('/api/projects/my-subtasks', all);
+  taskListResponses.set('/api/projects/department-subtasks', all);
+
+  const openList = action => page.evaluate(action => {
+    const e = window.EMIE;
+    return e.actions[action](document.getElementById('mainContent'), e.state.currentRole, e.state.currentUserId);
+  }, action);
+  const dateBasis = page.locator('#designerTaskDateBasis');
+  const submittedChoice = dateBasis.getByText('最新提交', { exact: true });
+  const plannedChoice = dateBasis.getByText('计划完成', { exact: true });
+  const submittedRadio = dateBasis.locator('input[name="designerTaskDateBasis"][value="submitted"]');
+  const plannedRadio = dateBasis.locator('input[name="designerTaskDateBasis"][value="planned"]');
+  const startDate = page.locator('#designerTaskDateStart');
+  const endDate = page.locator('#designerTaskDateEnd');
+  for (const action of ['renderMyTasks', 'renderDepartmentTasks']) {
+    await openList(action);
+    assert.equal(await submittedChoice.isVisible(), true);
+    assert.equal(await plannedChoice.isVisible(), true, '两种日期依据直接显示');
+    assert.equal(await submittedRadio.isChecked(), true, '任务日期默认按最近成果提交');
+    await assertFilteredTaskRows(all);
+    await startDate.fill(from);
+    await endDate.fill(to);
+    await assertFilteredTaskRows([latestCorrection, latestRedelivery, legacySubmission]);
+    await plannedChoice.click();
+    assert.equal(await plannedRadio.isChecked(), true);
+    assert.deepEqual([await startDate.inputValue(), await endDate.inputValue()], [from, to], '切换日期依据时保留日期范围');
+    await assertFilteredTaskRows([noSubmission]);
+    await submittedChoice.click();
+    assert.equal(await submittedRadio.isChecked(), true);
+    await assertFilteredTaskRows([latestCorrection, latestRedelivery, legacySubmission]);
+    await plannedChoice.click();
+    await assertFilteredTaskRows([noSubmission]);
+    await page.locator('[data-emie-action="click:designer-reset"]').click();
+    assert.equal(await submittedRadio.isChecked(), true, '重置回到成果提交日期');
+    assert.equal(await startDate.inputValue(), '');
+    assert.equal(await endDate.inputValue(), '');
+    await assertFilteredTaskRows(all);
+  }
+
+  const matchingMarket = { ...noSubmission, id: 93106, name: '市场任务计划日期符合', allocationStatus: 'market_open', designerId: null };
+  const outsideMarket = { ...matchingMarket, id: 93107, name: '市场任务计划日期不符', plannedDate: '2026-10-28' };
+  taskListResponses.set('/api/projects/task-market', [matchingMarket, outsideMarket]);
+  await openList('renderTaskMarket');
+  assert.equal(await dateBasis.count(), 0, '接单市场仍按计划完成日期筛选');
+  await startDate.fill(from);
+  await endDate.fill(to);
+  await assertFilteredTaskRows([matchingMarket]);
+}
+
 try {
   await page.goto(baseURL, { waitUntil: 'domcontentloaded' });
   await page.locator('html[data-app-ready]').waitFor({ timeout: 20_000 });
@@ -131,7 +232,7 @@ try {
     const e = window.EMIE;
     e.state.currentRole = 'designer'; e.state.currentUserId = task.designerId;
     e.state.authUser = { userId: task.designerId, name: task.designerName, role: 'designer' };
-    e.state.permissions = ['page.dashboard.view', 'project.view', 'subtask.view'];
+    e.state.permissions = ['page.dashboard.view', 'project.view', 'subtask.view', 'subtask.redeliver'];
     localStorage.setItem('design_pm_token', 'delivery-points-ui-simulation-only');
     document.getElementById('loginPage').style.display = 'none';
     document.getElementById('appContainer').style.display = '';
@@ -193,6 +294,12 @@ try {
   const detail = page.locator('#projectSubTaskDetailModal');
   await detail.waitFor();
   await assertSummary(detail);
+  await assertTaskDrawer(detail, { status: '等待企划验收', deliverables: correction.deliverables, versionNo: 4, canCorrect: false });
+  const olderRound = detail.locator('.task-detail-history .delivery-round').nth(1);
+  await olderRound.locator(':scope > summary').click();
+  assert.equal(await olderRound.getByText(firstChange.deliverables, { exact: true }).isVisible(), true,
+    '展开历史轮次仍可查看当时的交付成果');
+  await olderRound.locator(':scope > summary').click();
   await detail.locator('[data-emie-action="click:designer-history"]').first().click();
   await history().waitFor();
   assert.equal(await rounds().count(), 3);
@@ -205,7 +312,20 @@ try {
     pointSummary: { ...summary, awardedPoints: 15, changePoints: 5 },
     deliveryVersions: [{ ...correction, awardedPoints: 2, pointStatus: 'awarded', confirmedAt: '2026-10-26T09:00:00',
       confirmedBy: 'delivery-ui-planner', confirmedByName: '模拟企划', awardedAt: '2026-10-26T09:00:00', reviewComments: '第二次修改验收通过' }, secondChange, firstChange, initial] };
-  await showFixture(secondChangeCompleted); await openHistory();
+  await page.evaluate(() => {
+    const e = window.EMIE;
+    e.state.currentRole = 'designer'; e.state.currentUserId = window.deliveryPointsFixture.task.designerId;
+  });
+  await showFixture(secondChangeCompleted);
+  await page.evaluate(id => window.EMIE.actions.openPublishedSubTaskDetail(id), secondChangeCompleted.id);
+  const published = page.locator('#publishedSubTaskDetailModal');
+  await published.waitFor();
+  await assertTaskDrawer(published, { status: '已完成', deliverables: correction.deliverables, versionNo: 4, canCorrect: false });
+  await published.locator('.modal-body').evaluate(node => { node.scrollTop = 0; });
+  await page.screenshot({ path: path.join(artifactDirectory, 'task-detail-completed.png'), fullPage: true, animations: 'disabled' });
+  await published.locator('.modal-footer [data-emie-action="click:designer-detail-close"]').click();
+  await published.waitFor({ state: 'detached' });
+  await openHistory();
   await assertSummary(history(), 15);
   assert.equal(await rounds().count(), 3);
   assert.match(textNumbers(await rounds().first().locator('summary').first().innerText()), /第\s*2\s*次修改.*已入账.*\+2\s*分/);
@@ -268,12 +388,14 @@ try {
   const reasonTwo = '第二轮驳回：修改盒侧文字';
   const cancelledReason = '此驳回已撤销，不是当前修改要求';
   const pointsRequest = 'shared-paid-rejection-request';
+  const redeliveryContent = '按第二轮意见已更新盒侧文字';
   const rejection = (id, attemptNo, reviewedAt, reason, rejectedDeliveryVersionId, fields = {}) => ({
     id, cycleId: 100 + id, attemptNo, reviewedAt, reason, rejectedDeliveryVersionId, pointRequestId: pointsRequest,
     reviewerRole: 'planner', reviewerName: '模拟企划', requiredCompletionDate: '2026-10-30', ...fields,
   });
   const repeatedlyRedelivered = {
     ...task, status: 'submitted_for_review', reviewComments: null, pendingChangeBonusRequestId: pointsRequest,
+    deliverables: redeliveryContent,
     rejectionRecords: [
       rejection(11, 1, '2026-10-20T12:00:00', reasonOne, 1, { deliverables: '第一次交付快照', withPoints: true, points: 2 }),
       rejection(12, 2, '2026-10-22T12:00:00', reasonTwo, 2, { deliverables: '第二次交付快照', withPoints: false,
@@ -282,16 +404,14 @@ try {
     ],
     deliveryVersions: [
       delivery(3, { submissionType: 'redelivery', submissionOrigin: 'rejection', pointRequestId: pointsRequest,
-        changeReason: '旧积分请求不能覆盖本轮驳回', submittedAt: '2026-10-23T10:00:00' }),
+        changeReason: '旧积分请求不能覆盖本轮驳回', deliverables: redeliveryContent,
+        attachmentsJson: currentAttachments, submittedAt: '2026-10-23T10:00:00' }),
       delivery(2, { submissionType: 'revision', submissionOrigin: 'rejection', rejectionCycleId: 111,
         pointRequestId: pointsRequest, submittedAt: '2026-10-22T10:00:00' }),
       delivery(1),
     ],
   };
-  await page.evaluate(() => {
-    const e = window.EMIE;
-    e.state.currentRole = 'designer'; e.state.currentUserId = window.deliveryPointsFixture.task.designerId;
-  });
+  projectResponse = { ...project, tasks: [repeatedlyRedelivered] };
   await showFixture(repeatedlyRedelivered);
   const cardHistory = main.locator('.task-rejection-history');
   assert.equal(await cardHistory.getByText(reasonTwo, { exact: true }).isVisible(), true);
@@ -300,14 +420,33 @@ try {
   assert.equal(await cardHistory.getByText(reasonOne, { exact: true }).isVisible(), true);
 
   await main.locator('[data-emie-action="click:designer-detail"]').click();
-  const published = page.locator('#publishedSubTaskDetailModal');
   await published.waitFor();
+  const redeliveredDrawer = { status: '等待企划验收', deliverables: redeliveryContent, versionNo: 3, canCorrect: true };
+  await assertTaskDrawer(published, redeliveredDrawer);
   await assertRejectionHistory(published, [reasonOne, reasonTwo, cancelledReason]);
+  await page.screenshot({ path: path.join(artifactDirectory, 'task-detail-desktop.png'), fullPage: true, animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const drawerWidth = await published.locator('.modal').evaluate(node => ({
+    overflow: node.scrollWidth - node.clientWidth, right: node.getBoundingClientRect().right,
+  }));
+  assert.ok(drawerWidth.overflow <= 1 && drawerWidth.right <= 390, '窄屏子任务详情及长附件名不横向溢出');
+  await page.screenshot({ path: path.join(artifactDirectory, 'task-detail-mobile.png'), fullPage: true, animations: 'disabled' });
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await published.locator('.task-detail-current [data-emie-action="click:designer-correct"]').click();
+  const correctionModal = page.locator('#taskCorrectDeliveryModal');
+  await correctionModal.waitFor();
+  assert.equal(await correctionModal.locator('textarea[name="deliverables"]').inputValue(), redeliveryContent,
+    '从详情更正时保留当前成果');
+  await correctionModal.locator('.modal-footer [data-emie-action="click:task-correct-close"]').click();
+  await correctionModal.waitFor({ state: 'detached' });
+  assert.equal(await published.isVisible(), true, '取消更正回到子任务详情');
   const snapshot = published.locator('.task-rejection-snapshot').first();
   await snapshot.locator('summary').click();
   assert.equal(await published.getByText('第二次交付快照', { exact: true }).isVisible(), true);
   assert.equal(await snapshot.getByText('二次驳回说明.pdf', { exact: true }).isVisible(), true);
-  const latestRequirement = published.locator('.delivery-round[data-delivery-round="3"] .delivery-round-step').first();
+  const latestRound = published.locator('.delivery-round[data-delivery-round="3"]');
+  await latestRound.locator(':scope > summary').click();
+  const latestRequirement = latestRound.locator('.delivery-round-step').first();
   assert.match(await latestRequirement.innerText(), /第二轮驳回/);
   assert.doesNotMatch(await latestRequirement.innerText(), /第一轮驳回|此驳回已撤销|旧积分请求/, '同一积分请求的旧驳回不能套用到新交付');
   const previousRound = published.locator('.delivery-round[data-delivery-round="2"]');
@@ -316,12 +455,20 @@ try {
   await published.locator('.modal-footer [data-emie-action="click:designer-detail-close"]').click();
   await published.waitFor({ state: 'detached' });
 
-  projectResponse = { ...project, tasks: [repeatedlyRedelivered] };
+  await showFixture(repeatedlyRedelivered, true);
+  await main.locator('[data-emie-action="click:designer-detail"][data-read-only="true"]').click();
+  await published.waitFor();
+  assert.equal(await published.locator('[data-emie-action="click:designer-correct"]').count(), 0,
+    '只读入口即使是子任务负责人也不显示更正操作');
+  await published.locator('.modal-footer [data-emie-action="click:designer-detail-close"]').click();
+  await published.waitFor({ state: 'detached' });
+
   await page.evaluate(pid => window.EMIE.actions.openProjectDetail(pid), project.id);
   const projectModal = page.locator('#projectDetailModal');
   await projectModal.waitFor();
   await projectModal.locator('[data-emie-action="click:detail-subtask-open"]').first().click();
   await detail.waitFor();
+  await assertTaskDrawer(detail, redeliveredDrawer);
   await assertRejectionHistory(detail, [reasonOne, reasonTwo, cancelledReason]);
   await detail.locator('.task-rejection-history [data-emie-action="click:detail-rejection-record"][data-attempt-no="1"]').click();
   const recordModal = page.locator('#taskRejectionRecordModal');
@@ -375,9 +522,10 @@ try {
   assert.doesNotMatch(historicalTitle, /已入账.*\+7/, '不能将未关联的历史积分反推到某次交付');
   await closeHistory();
 
+  await assertTaskDateFilters();
   assert.deepEqual(mutations, [], '模拟回归不得发送业务写请求');
   assert.deepEqual(errors, [], `browser errors: ${errors.join('; ')}`);
-  process.stdout.write('delivery-points: actual totals, revision/correction grouping, per-round confirmation, responsive history, no-points, repeated rejection history, missing-ledger and historical states passed; business writes=0\n');
+  process.stdout.write('delivery-points: drawer hierarchy and responsive layout, actual totals, revision/correction grouping, per-round confirmation, no-points, repeated rejection history, missing-ledger and historical states, latest submission date filters passed; business writes=0\n');
 } catch (error) {
   await page.screenshot({ path: path.join(artifactDirectory, 'delivery-points-failure.png'), fullPage: true }).catch(() => {});
   throw error;

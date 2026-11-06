@@ -326,8 +326,9 @@ class FrontendModuleLayoutTest {
                 detail.contains("data-emie-action=\"click:detail-subtask-open\"")
                         && detail.contains("data-task-id=\"${task.id}\"")
                         && detail.contains("projectSubTaskDetailModal")
-                        && detail.contains("修改要求次数"),
-                "项目详情中的整张子任务卡片应可打开对应子任务详情");
+                        && detail.contains("${renderSubTaskDetailBody(task, {")
+                        && detail.contains("showRejectionDetails: record =>"),
+                "项目详情中的整张子任务卡片应打开共用的子任务详情，并保留当轮驳回快照入口");
         assertTrue(
                 detail.contains("detail.tasks.map((t, i) => renderSubTaskCard(detail, t, i))"),
                 "项目参与者应在项目详情中看到该项目的完整子任务链");

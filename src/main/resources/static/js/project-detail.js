@@ -33,7 +33,7 @@ const taskReject = (...args) => EMIE.actions.taskReject(...args);
 const taskCancelReject = (...args) => EMIE.actions.taskCancelReject(...args);
 const taskCorrectDelivery = (...args) => EMIE.actions.taskCorrectDelivery(...args);
 const renderTaskPointSummary = (...args) => EMIE.actions.renderTaskPointSummary(...args);
-const renderDeliveryRounds = (...args) => EMIE.actions.renderDeliveryRounds(...args);
+const renderSubTaskDetailBody = (...args) => EMIE.actions.renderSubTaskDetailBody(...args);
 const clearSWRCache = (...args) => EMIE.actions.clearSWRCache(...args);
 
 function formatProjectIp(ipName, ipSubOptions) {
@@ -396,10 +396,9 @@ function openProjectSubTaskDetail(event, taskId) {
   if (event?.target?.closest('button,a,input,textarea,select,details,summary,[data-emie-no-card-open]')) return;
   if (event?.type === 'keydown') event.preventDefault();
   if (document.getElementById('projectSubTaskDetailModal')) return;
-  const task = EMIE.projectState.currentProjectDetail?.tasks?.find(item => Number(item.id) === Number(taskId));
+  const project = EMIE.projectState.currentProjectDetail;
+  const task = project?.tasks?.find(item => Number(item.id) === Number(taskId));
   if (!task) return;
-  const tsi = getTaskStatusInfo(task.status);
-  const records = Array.isArray(task.rejectionRecords) ? task.rejectionRecords : [];
   const deliveryVersions = Array.isArray(task.deliveryVersions) ? task.deliveryVersions : [];
   const workflowStageLabel = {
     design: '设计', design_review: '设计送审', three_d_review: '3D送审',
@@ -408,42 +407,23 @@ function openProjectSubTaskDetail(event, taskId) {
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'projectSubTaskDetailModal';
-  modal.dataset.assistantProjectId = String(EMIE.projectState.currentProjectDetail.id);
+  modal.dataset.assistantProjectId = String(project.id);
   modal.dataset.assistantTaskId = String(task.id);
   modal.innerHTML = `
-    <div class="modal" style="max-width:760px;">
+    <div class="modal task-detail-drawer">
       <div class="modal-header">
         <button class="modal-close" data-emie-action="click:detail-subtask-close">✕</button>
         <div class="modal-header-left">
-          <div class="modal-title">子任务详情 · ${escHtml(task.name || '-')}</div>
-          <div style="font-size:12px;color:var(--gray-400);margin-top:3px;">所属阶段：${escHtml(workflowStageLabel)} · #${task.id}</div>
+          <div class="task-detail-kicker">子任务 #${task.id} · ${escHtml(workflowStageLabel)}</div>
+          <div class="modal-title">${escHtml(task.name || '子任务详情')}</div>
         </div>
-        <span class="badge ${tsi.cls}">${tsi.label}</span>
       </div>
-      <div class="modal-body">
-        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
-          <div class="detail-item"><div class="detail-label">负责人</div><div class="detail-value">${escHtml(task.designerName || '待分配')}</div></div>
-          <div class="detail-item"><div class="detail-label">计划完成</div><div class="detail-value">${formatDate(task.plannedDate)}</div></div>
-          <div class="detail-item"><div class="detail-label">实际完成</div><div class="detail-value">${task.actualDate ? formatDate(task.actualDate) : '-'}</div></div>
-          <div class="detail-item"><div class="detail-label">修改要求次数</div><div class="detail-value">${records.length} 次</div></div>
-          ${task.submittedForReviewAt || task.deliveryVersions?.[0]?.submittedAt ? `<div class="detail-item"><div class="detail-label">成果提交时间</div><div class="detail-value">${fmtDT(task.deliveryVersions?.[0]?.submittedAt || task.submittedForReviewAt)}</div></div>` : ''}
-          ${task.pointRuleCode ? `<div class="detail-item"><div class="detail-label">积分规则</div><div class="detail-value">${escHtml(task.pointRuleCode)}</div></div><div class="detail-item"><div class="detail-label">预计基础积分</div><div class="detail-value">${Number(task.basePointSnapshot || 0)} 分</div></div><div class="detail-item"><div class="detail-label">合作分配快照</div><div class="detail-value">${escHtml(taskCollaborationSummary(task))}</div></div><div class="detail-item"><div class="detail-label">积分归属月份</div><div class="detail-value">${escHtml(task.milestoneMonth || '按实际入账月份')}</div></div><div class="detail-item"><div class="detail-label">指派/立项说明</div><div class="detail-value">${escHtml(task.assignmentReason || '-')}</div></div>` : ''}
-        </div>
-        ${renderTaskPointSummary(task)}
-        <div class="detail-item" style="margin-top:12px;">
-          <div class="detail-label">任务要求</div>
-          <div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.details || '未填写')}</div>
-        </div>
-        ${EMIE.actions.renderTaskReviewComment(task)}
-        ${EMIE.actions.renderTaskRejectionHistory(task, {
-          showDetails: record => `<button type="button" class="btn btn-outline btn-sm" data-emie-action="click:detail-rejection-record" data-task-id="${escHtml(task.id)}" data-attempt-no="${escHtml(record.attemptNo)}">查看当轮成果与附件</button>`,
-        })}
-        ${task.referenceImagesJson ? renderSubTaskImages(task.referenceImagesJson) : ''}
-        ${task.attachmentsJson ? renderTaskAttachments(task.attachmentsJson) : ''}
-        ${task.deliverables ? `<div class="detail-item" style="margin-top:12px;"><div class="detail-label">当前交付成果</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.deliverables)}</div></div>` : ''}
-        ${renderSubTaskImages(task.pendingChangeReferenceImagesJson)}
-        ${deliveryVersions.length ? `<div class="delivery-section-heading">交付与积分记录</div>${renderDeliveryRounds(deliveryVersions, records, task)}` : ''}
-      </div>
+      <div class="modal-body task-detail-body">${renderSubTaskDetailBody(task, {
+        projectId: project.id,
+        projectStatus: project.status,
+        collaborationSummary: taskCollaborationSummary(task),
+        showRejectionDetails: record => `<button type="button" class="btn btn-outline btn-sm" data-emie-action="click:detail-rejection-record" data-task-id="${escHtml(task.id)}" data-attempt-no="${escHtml(record.attemptNo)}">查看当轮成果与附件</button>`,
+      })}</div>
       <div class="modal-footer">${deliveryVersions.length ? `<button class="btn btn-outline" data-emie-action="click:designer-history" data-task-id="${task.id}">交付与积分记录</button>` : ''}<button class="btn btn-primary" data-emie-action="click:detail-subtask-close">关闭</button></div>
     </div>`;
   document.body.appendChild(modal);

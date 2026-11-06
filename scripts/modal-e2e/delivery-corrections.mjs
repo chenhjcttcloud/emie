@@ -19,6 +19,8 @@ const imageBytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAA
 page.on('pageerror', error => errors.push(error.message));
 
 const designerId = 'correction-ui-designer';
+const deepLinkSession = 'notification-deep-link-session';
+const feishuTicket = 'notification-deep-link-ticket';
 function image(name) {
   return { name, storedName: name, url: '/api/files/download/' + name, size: imageBytes.length };
 }
@@ -52,6 +54,17 @@ const project = () => ({
 await page.route('**/api/**', async route => {
   const request = route.request(), url = new URL(request.url());
   const fulfill = (payload, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(payload) });
+  if (url.pathname === '/api/auth/feishu/config') return fulfill({ enabled: 'true', appId: 'fixture', state: 'fixture-state' });
+  if (url.pathname === '/api/auth/feishu/exchange' && request.method() === 'POST') {
+    assert.deepEqual(request.postDataJSON(), { ticket: feishuTicket });
+    return fulfill({ token: deepLinkSession });
+  }
+  if (url.pathname === '/api/auth/me' && request.headers()['x-auth-token'] === deepLinkSession) {
+    return fulfill({ userId: designerId, name: '模拟设计师', role: 'designer' });
+  }
+  if (url.pathname === '/api/auth/permissions') {
+    return fulfill({ permissions: ['page.dashboard.view', 'project.detail.view', 'subtask.view'] });
+  }
   if (url.pathname === '/api/files/upload' && request.method() === 'POST') {
     const name = request.postDataBuffer()?.toString('latin1').match(/filename="([^"]+)"/)?.[1] || 'replacement.png';
     const result = { ...image(name), storedName: `ui-correction-upload-${uploads.length + 1}.png` };
@@ -93,7 +106,12 @@ await page.route('**/api/**', async route => {
     return fulfill({ error: 'UI模拟禁止未声明的写操作' }, 400);
   }
   if (url.pathname.startsWith('/api/files/')) return route.fulfill({ status: 200, contentType: 'image/png', body: imageBytes });
-  if (url.pathname === `/api/projects/${task.projectId}`) return fulfill(project());
+  if (url.pathname === `/api/projects/${task.projectId}`) {
+    if (request.headers()['x-auth-token'] === deepLinkSession) {
+      return fulfill({ ...project(), tasks: [{ ...task, id: task.id + 1, name: '非链接目标子任务' }, task] });
+    }
+    return fulfill(project());
+  }
   if (url.pathname === '/api/projects/my-subtasks') return fulfill([task]);
   if (url.pathname === '/api/projects/task-market') return fulfill([]);
   return fulfill({});
@@ -102,7 +120,8 @@ if (process.env.EMIE_E2E_LOCAL_STATIC === '1') {
   for (const [pattern, directory, contentType] of [['**/js/*.js*', 'js', 'text/javascript'], ['**/css/*.css*', 'css', 'text/css']]) {
     await page.route(pattern, async route => route.fulfill({ contentType, body: await fs.readFile(path.join(repoRoot, 'src/main/resources/static', directory, path.basename(new URL(route.request().url()).pathname)), 'utf8') }));
   }
-  await page.route(baseURL + '/', async route => route.fulfill({ contentType: 'text/html', body: await fs.readFile(path.join(repoRoot, 'src/main/resources/static/index.html'), 'utf8') }));
+  await page.route(url => url.origin === new URL(baseURL).origin && url.pathname === '/',
+    async route => route.fulfill({ contentType: 'text/html', body: await fs.readFile(path.join(repoRoot, 'src/main/resources/static/index.html'), 'utf8') }));
 }
 
 const form = () => page.locator('#taskCorrectDeliveryModal');
@@ -309,9 +328,38 @@ try {
   await approval.waitFor({ state: 'detached' });
   assert.equal(approvals.at(-1).expectedDeliveryVersionId, null, '无交付版本的历史任务显式提交空版本');
   assert.equal(approvals.length, 3);
+
+  // Intercept the OAuth round trip while exercising the real URL, login and drawer code.
+  const projectLink = new URL(`/?projectId=${task.projectId}`, baseURL);
+  const taskLink = new URL(projectLink);
+  taskLink.searchParams.set('taskId', task.id);
+  const callbackLink = new URL(`/?sso_ticket=${feishuTicket}`, baseURL);
+  await page.route('https://open.feishu.cn/open-apis/authen/v1/index?**',
+    route => route.fulfill({ status: 302, headers: { location: callbackLink.href } }));
+  await page.evaluate(() => localStorage.removeItem('design_pm_token'));
+  await page.goto(taskLink.href, { waitUntil: 'domcontentloaded' });
+  await page.locator('html[data-app-ready="login"]').waitFor();
+  const projectDrawer = page.locator('#projectDetailModal');
+  const taskDrawer = page.locator('#projectSubTaskDetailModal');
+  assert.equal(await projectDrawer.count(), 0, '登录前不打开项目详情');
+  await page.locator('#feishuLoginBtn').click();
+  const assertLinkedTask = async () => {
+    await page.locator('html[data-app-ready="authenticated"]').waitFor();
+    await projectDrawer.waitFor();
+    await taskDrawer.waitFor();
+    assert.ok((await taskDrawer.locator('.modal-title').innerText()).includes(task.name), '精确打开通知所链接的子任务');
+    assert.equal(new URL(page.url()).search, '', '登录票据和已处理的项目、子任务编号从地址栏移除');
+  };
+  await assertLinkedTask();
+  await page.goto(taskLink.href, { waitUntil: 'domcontentloaded' });
+  await assertLinkedTask();
+  await page.goto(projectLink.href, { waitUntil: 'domcontentloaded' });
+  await projectDrawer.waitFor();
+  assert.equal(await taskDrawer.count(), 0, '仅项目编号的旧通知仍打开项目详情');
+
   assert.deepEqual(unexpectedMutations, []);
   assert.deepEqual(errors, []);
-  console.log('delivery correction browser checks passed (local API simulation, both entry points, repeated corrections per round, replacement uploads, retained history, ownership, confirmed state, 403 form preservation, stale-state guard, stale approval version rejection and fresh approval, legacy null version)');
+  console.log('delivery correction browser checks passed (local API simulation, both entry points, repeated corrections per round, replacement uploads, retained history, ownership, confirmed state, 403 form preservation, stale-state guard, stale approval version rejection and fresh approval, legacy null version, authenticated and OAuth notification deep links)');
 } catch (error) {
   await page.screenshot({ path: path.join(artifactDirectory, 'delivery-corrections-failure.png'), fullPage: true }).catch(() => {});
   throw error;
