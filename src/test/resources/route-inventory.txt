@@ -79,6 +79,7 @@ GET /api/performance/growth-scores
 GET /api/performance/growth-scores/{month}/{userId}
 GET /api/performance/leaderboard
 GET /api/performance/monthly
+GET /api/performance/my-report
 GET /api/performance/preview
 GET /api/performance/standard
 GET /api/point-governance/appeals

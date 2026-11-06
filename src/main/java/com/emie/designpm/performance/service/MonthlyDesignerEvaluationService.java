@@ -197,6 +197,20 @@ public class MonthlyDesignerEvaluationService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<View> listForUser(String period, String userId) {
+        validatePeriod(period, false);
+        validateDesigner(userId);
+        return evaluations
+                .findByUserIdAndMonthKeyBetweenOrderByMonthKeyAsc(
+                        userId,
+                        period.length() == 4 ? period + "-01" : period,
+                        period.length() == 4 ? period + "-12" : period)
+                .stream()
+                .map(this::view)
+                .toList();
+    }
+
     @Transactional
     public View save(String month, String userId, Scores scores, String adminId) {
         validatePeriod(month, true);

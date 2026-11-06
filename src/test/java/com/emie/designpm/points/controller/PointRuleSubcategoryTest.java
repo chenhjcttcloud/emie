@@ -19,7 +19,7 @@ class PointRuleSubcategoryTest {
     private final PointRuleRepository rules = mock(PointRuleRepository.class);
     private final PointsService service =
             new PointsService(rules, mock(PointLedgerRepository.class), mock(ScoringRepository.class));
-    private final PointsController controller = new PointsController(service, null, null);
+    private final PointsController controller = new PointsController(service, null, null, null);
     private final MockHttpServletRequest request = new MockHttpServletRequest();
     private final PointRule existing = new PointRule();
 

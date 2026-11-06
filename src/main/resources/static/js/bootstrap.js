@@ -2,14 +2,14 @@ import './core-runtime.js?v=328';
 import './event-runtime.js?v=269';
 import './core-auth.js?v=426';
 import './core-identity.js?v=498';
-import './core-shell.js?v=519';
+import './core-shell.js?v=520';
 import './core-ui.js?v=523';
 import './core.js?v=147';
-import './dashboard-projects.js?v=511';
+import './dashboard-projects.js?v=512';
 import './dashboard-home.js?v=623';
 import './dashboard-lists.js?v=429';
 import './dashboard-scoring.js?v=345';
-import './dashboard-points.js?v=383';
+import './dashboard-points.js?v=384';
 import './dashboard-designer.js?v=610';
 import './dashboard.js?v=219';
 import './material-market.js?v=162';
@@ -27,7 +27,7 @@ const adminModuleDefinitions = [
   ['./admin-roles.js?v=229', 'adminRoles'],
   ['./admin-catalog.js?v=276', 'adminCatalog'],
   ['./admin-org.js?v=292', 'adminOrg'],
-  ['./designer-evaluation.js?v=19', 'designerEvaluation'],
+  ['./designer-evaluation.js?v=20', 'designerEvaluation'],
   ['./admin-scoring.js?v=663', 'adminScoring'],
   ['./admin-audit.js?v=384', 'adminAudit'],
   ['./admin-point-logs.js?v=17', 'adminPointLogs'],
@@ -48,6 +48,13 @@ async function loadAdminModule([url, name]) {
 }
 
 async function loadViewModules(view) {
+  if (view === 'designer-performance' && window.EMIE.state.currentRole === 'designer') {
+    await Promise.all([
+      loadAdminModule(['./designer-evaluation.js?v=20', 'designerEvaluation']),
+      loadAdminModule(['./designer-performance.js?v=1', 'designerPerformance']),
+    ]);
+    return;
+  }
   if (!['admin', 'logs', 'workload', 'designer-performance'].includes(view)) return;
   if (!adminModulesPromise) {
     adminModulesPromise = (async () => {

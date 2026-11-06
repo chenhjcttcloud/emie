@@ -216,7 +216,8 @@ async function render({ imageLibraryItemId } = {}) {
     } else if (view === 'points') {
       await renderPointsView(main);
     } else if (view === 'designer-performance') {
-      await EMIE.actions.renderAdminDesignerPerformance(main);
+      if (role === 'designer') await EMIE.actions.renderDesignerPersonalPerformance(main);
+      else await EMIE.actions.renderAdminDesignerPerformance(main);
     } else if (view === 'admin' || view === 'logs') {
       await renderAdmin(main, role, uid);
     }

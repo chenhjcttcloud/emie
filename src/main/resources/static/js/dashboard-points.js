@@ -148,19 +148,36 @@ function adjustmentSourceLabel(sourceType) {
   }[sourceType] || '其他积分调整';
 }
 
-function renderPointsLedger(ledger, adjustments, ledgerPages) {
+function pointLedgerTargetId(value) {
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+function renderPointsLedgerRelations(association = {}) {
+  const projectId = pointLedgerTargetId(association.projectId);
+  const taskId = pointLedgerTargetId(association.subTaskId);
+  const requirementId = pointLedgerTargetId(association.requirementId);
+  const related = (label, name, action, attributes) => `<div class="points-ledger-relation"><span>${label}</span>${action ? `<button type="button" class="points-ledger-link" data-emie-action="click:${action}" ${attributes}>${escHtml(name)}</button>` : `<span class="points-ledger-unavailable">${escHtml(name)}</span>`}</div>`;
+  const rows = [];
+  if (projectId || association.projectName) rows.push(related('项目', association.projectName || `#${projectId}`, projectId ? 'points-ledger-project' : null, `data-project-id="${projectId}"`));
+  if (taskId || association.subTaskName) rows.push(related('子任务', association.subTaskName || `#${taskId}`, projectId && taskId ? 'points-ledger-task' : null, `data-project-id="${projectId}" data-task-id="${taskId}"`));
+  if (requirementId || association.requirementName) rows.push(related('设计需求', association.requirementName || `#${requirementId}`, requirementId ? 'points-ledger-requirement' : null, `data-requirement-id="${requirementId}"`));
+  return rows.length ? `<div class="points-ledger-relations">${rows.join('')}</div>` : '';
+}
+
+function renderPointsLedger(ledger, adjustments, ledgerPages, associations = {}) {
   const visibleAdjustments = adjustments.filter(item => item.sourceType !== 'APPEAL');
   const rows = [
     ...ledger.map(item => {
       const code = String(item.ruleCode || '-');
       const stage = code.endsWith(':BASE') ? '基础积分' : code.endsWith(':QUALITY') ? '质量加分' : '积分';
-      return { createdAt: item.createdAt, source: `任务 #${item.subTaskId || '-'}`, detail: pointRuleTaskLabel(code), meta: `${code.replace(/:(BASE|QUALITY)$/, '')} · ${stage}`, accountingMonth: item.accountingMonth || '-', points: Number(item.points || 0) };
+      return { createdAt: item.createdAt, source: `任务 #${item.subTaskId || '-'}`, detail: pointRuleTaskLabel(code), meta: `${code.replace(/:(BASE|QUALITY)$/, '')} · ${stage}`, accountingMonth: item.accountingMonth || '-', points: Number(item.points || 0), association: associations[`L-${item.id}`] };
     }),
-    ...visibleAdjustments.map(item => ({ createdAt: item.createdAt, source: adjustmentSourceLabel(item.sourceType), detail: item.reason || '—', meta: item.sourceType === 'MATERIAL_MARKET' ? '素材被销售立项后自动奖励' : String(item.sourceType || '积分调整'), accountingMonth: item.accountingMonth || '-', points: Number(item.points || 0) })),
+    ...visibleAdjustments.map(item => ({ createdAt: item.createdAt, source: adjustmentSourceLabel(item.sourceType), detail: item.reason || '—', meta: item.sourceType === 'MATERIAL_MARKET' ? '素材被销售立项后自动奖励' : String(item.sourceType || '积分调整'), accountingMonth: item.accountingMonth || '-', points: Number(item.points || 0), association: associations[`A-${item.id}`] })),
   ].sort((left, right) => String(right.createdAt || '').localeCompare(String(left.createdAt || '')));
   const visibleCount = Number(ledger.length || 0) + visibleAdjustments.length;
   const pages = Math.max(1, Number(ledgerPages || 0));
-  return `<div class="card points-ledger-card" style="margin-bottom:18px;"><div class="card-header"><div><h3>我的积分明细</h3><span class="points-ledger-hint">任务积分、素材广场奖励和其他积分调整均按入账时间排列</span></div><span class="points-ledger-count">${visibleCount} 条记录</span></div>${rows.length ? `<div class="table-wrap"><table class="points-ledger-table"><thead><tr><th>来源</th><th>积分明细</th><th>归属月</th><th>积分</th><th>入账时间</th></tr></thead><tbody>${rows.map(item => `<tr><td><strong>${escHtml(item.source)}</strong></td><td><strong>${escHtml(item.detail)}</strong><div style="font-size:12px;color:var(--gray-400);">${escHtml(item.meta)}</div></td><td>${escHtml(item.accountingMonth)}</td><td style="color:${item.points >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:700;">${item.points >= 0 ? '+' : ''}${formatPoints(item.points)}</td><td>${escHtml(String(item.createdAt || '-').replace('T', ' ').slice(0, 19))}</td></tr>`).join('')}</tbody></table></div><div class="points-pagination"><span class="points-pagination-meta">每页 ${pointsLedgerSize} 条</span><div class="points-pagination-controls"><button class="points-page-button" ${pointsLedgerPage <= 0 ? 'disabled' : ''} data-emie-action="click:points-ledger-page" data-page="${pointsLedgerPage - 1}" aria-label="上一页">‹<span>上一页</span></button><span class="points-page-indicator"><b>${pointsLedgerPage + 1}</b><i>/</i>${pages}</span><button class="points-page-button" ${pointsLedgerPage >= pages - 1 ? 'disabled' : ''} data-emie-action="click:points-ledger-page" data-page="${pointsLedgerPage + 1}" aria-label="下一页"><span>下一页</span>›</button></div></div>` : '<div class="empty-state">暂无积分记录</div>'}</div>`;
+  return `<div class="card points-ledger-card" style="margin-bottom:18px;"><div class="card-header"><div><h3>我的积分明细</h3><span class="points-ledger-hint">任务积分、素材广场奖励和其他积分调整均按入账时间排列</span></div><span class="points-ledger-count">${visibleCount} 条记录</span></div>${rows.length ? `<div class="table-wrap"><table class="points-ledger-table"><thead><tr><th>来源</th><th>积分明细</th><th>归属月</th><th>积分</th><th>入账时间</th></tr></thead><tbody>${rows.map(item => `<tr><td><strong>${escHtml(item.source)}</strong></td><td><div class="points-ledger-detail"><div class="points-ledger-rule"><strong>${escHtml(item.detail)}</strong><div class="points-ledger-rule-meta">${escHtml(item.meta)}</div></div>${renderPointsLedgerRelations(item.association)}</div></td><td>${escHtml(item.accountingMonth)}</td><td style="color:${item.points >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:700;">${item.points >= 0 ? '+' : ''}${formatPoints(item.points)}</td><td>${escHtml(String(item.createdAt || '-').replace('T', ' ').slice(0, 19))}</td></tr>`).join('')}</tbody></table></div><div class="points-pagination"><span class="points-pagination-meta">每页 ${pointsLedgerSize} 条</span><div class="points-pagination-controls"><button class="points-page-button" ${pointsLedgerPage <= 0 ? 'disabled' : ''} data-emie-action="click:points-ledger-page" data-page="${pointsLedgerPage - 1}" aria-label="上一页">‹<span>上一页</span></button><span class="points-page-indicator"><b>${pointsLedgerPage + 1}</b><i>/</i>${pages}</span><button class="points-page-button" ${pointsLedgerPage >= pages - 1 ? 'disabled' : ''} data-emie-action="click:points-ledger-page" data-page="${pointsLedgerPage + 1}" aria-label="下一页"><span>下一页</span>›</button></div></div>` : '<div class="empty-state">暂无积分记录</div>'}</div>`;
 }
 
 async function renderPointsView(main) {
@@ -207,7 +224,7 @@ async function renderPointsView(main) {
     const poProgress = Array.isArray(poData?.progress) ? poData.progress : [];
     const archiveList = Array.isArray(archives) ? archives : [];
     const canPlannerProcessAppeals = false;
-    const ledgerSection = isAdminView ? '' : renderPointsLedger(ledger, adjustments, ledgerPages);
+    const ledgerSection = isAdminView ? '' : renderPointsLedger(ledger, adjustments, ledgerPages, mine.ledgerAssociations || {});
     const month = currentMonthKey();
     main.innerHTML = `
       <div class="points-page">
@@ -297,6 +314,19 @@ EMIE.registerModule('dashboardPoints', { renderPointsView, refreshPointsMonth, f
 
 const registerEventAction = EMIE.actions.registerEventAction;
 if (registerEventAction) {
+  registerEventAction('points-ledger-project', (_event, el) => {
+    const id = pointLedgerTargetId(el.dataset.projectId);
+    if (id) return EMIE.actions.openProjectDetail(id);
+  });
+  registerEventAction('points-ledger-task', (_event, el) => {
+    const projectId = pointLedgerTargetId(el.dataset.projectId);
+    const taskId = pointLedgerTargetId(el.dataset.taskId);
+    if (projectId && taskId) return EMIE.actions.openProjectDetail(projectId, taskId);
+  });
+  registerEventAction('points-ledger-requirement', (_event, el) => {
+    const id = pointLedgerTargetId(el.dataset.requirementId);
+    if (id) return EMIE.actions.openDesignRequirementDetail(id);
+  });
   registerEventAction('points-eligibility', () => EMIE.actions.configureMarketEligibility());
   registerEventAction('points-save-governance', () => EMIE.actions.saveWithdrawalGovernanceConfig());
   registerEventAction('points-ledger-page', (_event, el) => changePointsLedgerPage(Number(el.dataset.page)));

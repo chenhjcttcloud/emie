@@ -55,6 +55,29 @@ class MonthlyDesignerEvaluationServiceTest {
     }
 
     @Test
+    void personalEvaluationHistoryUsesAnExplicitUserScopedRange() {
+        designer();
+        var saved = new MonthlyDesignerEvaluation();
+        saved.setUserId("d1");
+        saved.setMonthKey("2026-10");
+        saved.setCompletionScore(BigDecimal.valueOf(100));
+        saved.setCollaborationScore(BigDecimal.valueOf(100));
+        saved.setAttendanceScore(BigDecimal.valueOf(100));
+        saved.setWeeklyReportScore(BigDecimal.valueOf(100));
+        when(repository.findByUserIdAndMonthKeyBetweenOrderByMonthKeyAsc("d1", "2026-01", "2026-12"))
+                .thenReturn(java.util.List.of(saved));
+        var annual = service.listForUser("2026", "d1");
+        assertEquals(1, annual.size());
+        assertEquals("d1", annual.getFirst().userId());
+        assertEquals("2026-10", annual.getFirst().monthKey());
+        service.listForUser("2026-10", "d1");
+        verify(repository).findByUserIdAndMonthKeyBetweenOrderByMonthKeyAsc("d1", "2026-10", "2026-10");
+        verify(repository, never()).findByMonthKeyBetweenOrderByMonthKeyAscUserIdAsc(anyString(), anyString());
+        assertThrows(IllegalArgumentException.class, () -> service.listForUser("2026-13", "d1"));
+        assertThrows(IllegalArgumentException.class, () -> service.listForUser("2026", "d2"));
+    }
+
+    @Test
     void completionUsesMonthlyPointsAndDesignerTargetWithCap() {
         designer();
         var target = new MonthlyUserPointTarget();

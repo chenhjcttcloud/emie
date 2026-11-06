@@ -9,4 +9,7 @@ public interface MonthlyDesignerEvaluationRepository extends JpaRepository<Month
     Optional<MonthlyDesignerEvaluation> findByUserIdAndMonthKey(String userId, String monthKey);
 
     List<MonthlyDesignerEvaluation> findByMonthKeyBetweenOrderByMonthKeyAscUserIdAsc(String start, String end);
+
+    List<MonthlyDesignerEvaluation> findByUserIdAndMonthKeyBetweenOrderByMonthKeyAsc(
+            String userId, String start, String end);
 }

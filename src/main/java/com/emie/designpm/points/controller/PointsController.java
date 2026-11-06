@@ -6,6 +6,7 @@ import com.emie.designpm.entity.DesignerMarketEligibility;
 import com.emie.designpm.entity.PointRule;
 import com.emie.designpm.entity.SystemConfig;
 import com.emie.designpm.materialmarket.repository.DesignerMarketEligibilityRepository;
+import com.emie.designpm.points.service.PointLedgerAssociationService;
 import com.emie.designpm.points.service.PointsService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,14 +26,17 @@ public class PointsController {
     private final PointsService points;
     private final SystemConfigRepository systemConfigs;
     private final DesignerMarketEligibilityRepository marketEligibility;
+    private final PointLedgerAssociationService associations;
 
     public PointsController(
             PointsService points,
             SystemConfigRepository systemConfigs,
-            DesignerMarketEligibilityRepository marketEligibility) {
+            DesignerMarketEligibilityRepository marketEligibility,
+            PointLedgerAssociationService associations) {
         this.points = points;
         this.systemConfigs = systemConfigs;
         this.marketEligibility = marketEligibility;
+        this.associations = associations;
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -69,6 +73,7 @@ public class PointsController {
                         safePage,
                         safeSize,
                         Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id"))));
+        var adjustments = points.adjustmentLedger(userId);
         return ResponseEntity.ok(Map.of(
                 "userId",
                 userId,
@@ -85,7 +90,16 @@ public class PointsController {
                 "ledgerPages",
                 ledger.getTotalPages(),
                 "adjustmentLedger",
-                points.adjustmentLedger(userId)));
+                adjustments,
+                "ledgerAssociations",
+                associations.associations(
+                        userId,
+                        ledger.getContent().stream()
+                                .map(com.emie.designpm.entity.PointLedger::getId)
+                                .toList(),
+                        adjustments.stream()
+                                .map(com.emie.designpm.entity.PointAdjustmentLedger::getId)
+                                .toList())));
     }
 
     @GetMapping("/rules")

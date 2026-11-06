@@ -11,6 +11,7 @@ import com.emie.designpm.points.repository.PointAdjustmentLedgerRepository;
 import com.emie.designpm.points.repository.PointLedgerRepository;
 import com.emie.designpm.points.repository.PointRuleRepository;
 import com.emie.designpm.scoring.repository.ScoringRepository;
+import com.emie.designpm.util.TextEncodingUtil;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -18,6 +19,7 @@ import java.time.YearMonth;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -331,7 +333,16 @@ public class PointsService {
 
     @Transactional(readOnly = true)
     public List<PointRule> rules() {
-        return rules.findAllByOrderByRuleCodeAsc();
+        return rules.findAllByOrderByRuleCodeAsc().stream()
+                .map(rule -> {
+                    PointRule view = new PointRule();
+                    BeanUtils.copyProperties(rule, view);
+                    view.setCategory(TextEncodingUtil.repairUtf8Mojibake(rule.getCategory()));
+                    view.setSubcategory(TextEncodingUtil.repairUtf8Mojibake(rule.getSubcategory()));
+                    view.setDescription(TextEncodingUtil.repairUtf8Mojibake(rule.getDescription()));
+                    return view;
+                })
+                .toList();
     }
 
     public PointRule updateRule(

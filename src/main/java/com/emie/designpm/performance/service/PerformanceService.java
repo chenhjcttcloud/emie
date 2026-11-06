@@ -96,11 +96,25 @@ public class PerformanceService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> designerMonthlyReport(String month) {
+        return designerMonthlyReport(month, users.findByRole("designer"));
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> designerMonthlyReport(String month, String userId) {
+        MonthlyDesignerEvaluationService.validatePeriod(month, false);
+        if (userId == null || userId.isBlank()) throw new IllegalArgumentException("设计师不能为空");
+        User designer = users.findByUserId(userId)
+                .filter(user -> "designer".equals(user.getRole()))
+                .orElseThrow(() -> new IllegalArgumentException("设计师不存在"));
+        return designerMonthlyReport(month, List.of(designer));
+    }
+
+    private Map<String, Object> designerMonthlyReport(String month, List<User> selectedDesigners) {
         boolean annual = month.length() == 4;
         YearMonth selected = annual ? Year.parse(month).atMonth(1) : YearMonth.parse(month);
         LocalDateTime from = selected.atDay(1).atStartOfDay();
         LocalDateTime to = selected.plusMonths(annual ? 12 : 1).atDay(1).atStartOfDay();
-        List<User> designers = users.findByRole("designer").stream()
+        List<User> designers = selectedDesigners.stream()
                 .filter(user -> user.getStatus() == null || "active".equalsIgnoreCase(user.getStatus()))
                 .toList();
         Map<String, Double> monthlyPoints = new HashMap<>();

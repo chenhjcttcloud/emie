@@ -2,6 +2,8 @@ import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { runDesignerPersonalPerformanceChecks } from './designer-performance.mjs';
+import { runPointsLedgerLinkChecks } from './points-ledger-links.mjs';
 
 const baseURL = process.env.EMIE_BASE_URL || 'http://127.0.0.1:8080';
 const repeat = Number.parseInt(process.env.MODAL_E2E_REPEAT || '1', 10);
@@ -612,7 +614,7 @@ async function runDesignerEvaluationChecks(page) {
       e.state.currentRole = 'designer'; const designer = e.actions.canNavigateTo('designer-performance');
       return { admin, designer };
     });
-    assert.deepEqual(permissions, { admin: true, designer: false });
+    assert.deepEqual(permissions, { admin: true, designer: true });
     console.log('  designer-monthly-evaluation-save-conflict-and-annual-average ok');
   } finally {
     if (initialViewport) await page.setViewportSize(initialViewport);
@@ -650,6 +652,8 @@ try {
       await runAdminSubcategoryChecks(page);
       await runPointLogChecks(page);
       await runDesignerEvaluationChecks(page);
+      await runDesignerPersonalPerformanceChecks(page, artifactRoot);
+      await runPointsLedgerLinkChecks(page, artifactRoot);
       assert.deepEqual(browserErrors, [], `页面脚本错误: ${browserErrors.join('; ')}`);
       await context.tracing.stop();
       process.stdout.write(`modal_e2e run=${run}/${repeat} ok\n`);

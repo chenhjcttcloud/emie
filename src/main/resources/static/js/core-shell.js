@@ -21,9 +21,12 @@ const NAV_DEFINITIONS = [
 
 function canNavigateTo(view) {
   const nav = NAV_DEFINITIONS.find(item => item.view === view);
+  if (view === 'designer-performance') {
+    return EMIE.state.currentRole === 'admin' ? hasPermission('page.admin.view')
+      : EMIE.state.currentRole === 'designer' && hasPermission('page.points.view');
+  }
   if (!nav || !hasPermission(nav.permission)) return false;
   if (view === 'points' && !['planner', 'designer', 'admin'].includes(EMIE.state.currentRole)) return false;
-  if (view === 'designer-performance' && EMIE.state.currentRole !== 'admin') return false;
   if (view === 'image-library' && !['admin', 'planner', 'designer'].includes(EMIE.state.currentRole)) return false;
   return view !== 'other-tasks' || canViewOtherTasksNav();
 }
@@ -42,7 +45,7 @@ function canViewOtherTasksNav() {
 function renderSidebar() {
   const navs = NAV_DEFINITIONS
     .filter(item => canNavigateTo(item.view))
-    .map(item => ({ ...item, badge: '' }));
+    .map(item => ({ ...item, label: item.view === 'designer-performance' && EMIE.state.currentRole === 'designer' ? '我的绩效' : item.label, badge: '' }));
   if (!canNavigateTo(EMIE.state.currentView)) {
     EMIE.state.currentView = canNavigateTo('dashboard') ? 'dashboard' : navs[0]?.view || 'dashboard';
   }
