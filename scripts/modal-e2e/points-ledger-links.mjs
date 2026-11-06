@@ -108,24 +108,27 @@ export async function runPointsLedgerLinkChecks(page, artifactRoot) {
     await page.locator('#' + id).waitFor({ state: 'hidden' });
   };
   try {
-    assert.equal(await card.locator('thead th').count(), 5, '保留五列明细结构');
+    assert.deepEqual(await card.locator('thead th').allTextContents(), ['来源', '项目', '子任务', '归属月', '积分', '入账时间']);
     const firstTask = action('task').filter({ hasText: '包装主视觉设计' });
     const firstRow = card.locator('tbody tr').filter({ has: page.locator('[data-emie-action="click:points-ledger-task"][data-task-id="82001"]') });
-    const detail = firstRow.locator('td').nth(1);
-    assert.match(await detail.innerText(), /A1/);
-    assert.match(await detail.innerText(), /包装整套设计/);
-    assert.match(await detail.innerText(), /关联测试项目/);
-    assert.match(await detail.innerText(), /包装主视觉设计/);
-    assert.equal(await detail.locator('.points-ledger-detail').count(), 1);
-    assert.equal(await detail.locator('.points-ledger-relations').count(), 1, '业务关联与规则在同一明细格展示');
+    const taskCells = firstRow.locator('td');
+    assert.deepEqual((await taskCells.allTextContents()).map(text => text.trim()),
+      ['任务 #82001', '关联测试项目', '包装主视觉设计', '2026-11', '+12', '2026-11-05 10:00:00']);
+    assert.equal(await taskCells.nth(1).getByRole('button', { name: '关联测试项目' }).count(), 1);
+    assert.equal(await taskCells.nth(2).getByRole('button', { name: '包装主视觉设计' }).count(), 1);
     assert.equal(await firstTask.getAttribute('data-project-id'), '81001');
     assert.equal(await firstTask.getAttribute('data-task-id'), '82001');
     const deleted = card.locator('tbody tr').filter({ hasText: '任务 #82999' });
     assert.equal(await deleted.count(), 1);
-    assert.equal(await deleted.locator('.points-ledger-relations button').count(), 0, '失效关联不产生错误跳转');
-    const manual = card.locator('tbody tr').filter({ hasText: '管理员手动校准，不关联业务' });
-    assert.equal(await manual.locator('.points-ledger-relations button').count(), 0,
+    assert.deepEqual((await deleted.locator('td').allTextContents()).slice(1, 3), ['—', '—']);
+    assert.equal(await deleted.locator('button').count(), 0, '失效关联不产生错误跳转');
+    const manual = card.locator('tbody tr').filter({ hasText: '管理员调账' });
+    assert.deepEqual((await manual.locator('td').allTextContents()).slice(1, 3), ['—', '—']);
+    assert.equal(await manual.locator('button').count(), 0,
       '人工调账 sourceId 与需求 ID 相同也不关联到需求');
+    const requirementRow = card.locator('tbody tr').filter({ hasText: '设计/送审需求' });
+    assert.deepEqual((await requirementRow.locator('td').allTextContents()).slice(1, 3), ['—', '—']);
+    assert.equal(await requirementRow.locator('td').first().getByRole('button', { name: '界面送审需求' }).count(), 1);
     assert.equal(await card.locator('img').count(), 0, '关联名称按文本转义');
     assert.match(await card.innerText(), /<img src=x onerror=alert\(1\)>/);
     assert.equal(await page.evaluate(() => pointsLedgerLinkFixture.reads.some(url =>

@@ -25,16 +25,6 @@ function pointRuleCategoryLabel(category) {
   return { A: '平面与视觉（A类）', B: '产品与原创（B类）', E: '执行与跟单（E类）', S: '内部建设（S类）', T: '任务验收（T类）', M: '素材采纳（M类）', material_market: '素材采纳（M类）', GENERAL: '通用规则（通用类）', '通用': '通用规则（通用类）' }[category] || category || '通用规则（通用类）';
 }
 
-function pointRuleTaskLabel(code) {
-  const value = String(code || '').replace(/:(BASE|QUALITY)$/i, '').toUpperCase();
-  if (value.startsWith('D20_')) {
-    const rule = pointsRulesCache.find(item => String(item.ruleCode || '').toUpperCase() === value);
-    return rule?.description || value;
-  }
-  const labels = { TASK_APPROVED: '通用任务（验收完成）', M1: '设计采纳', M2: '直接采纳', A1: '包装整套设计', A2: '包装单项设计', A3: '包装修改/刀模/箱规', A4: '包装多语言版', A5: '详情页全套设计', A6: '详情页局部/改版', A7: '主图/单张卖点图', A8: '海报/立牌/单页', A9: '展会物料整套', A10: 'UI界面/灯珠图案/待机页', A11: 'AI生图/场景图/推广图', B1: '原创产品设计', B2: '外采产品IP化设计', B3: '新增SKU/配色衍生', B4: '展会样品/客户定制产品', B5: '3D建模渲染出图', B6: '3D公仔建模/输出', E1: '常规执行任务', E2: '资料整理/跟进任务', E3: '打样/修改执行任务', E4: '其他执行任务', S1: '特殊专项任务' };
-  return value ? `${value}（${labels[value] || '积分任务'}）` : '积分任务';
-}
-
 function comparePointRuleCodes(left, right) {
   return String(left?.ruleCode || '').localeCompare(String(right?.ruleCode || ''), undefined, {
     numeric: true,
@@ -143,6 +133,7 @@ function adjustmentSourceLabel(sourceType) {
     MATERIAL_MARKET: '素材广场立项奖励',
     MATERIAL_FREE_RATING: '自由单评星奖励',
     PO_PROGRESS: 'PO 月度履职',
+    DESIGN_REQUIREMENT: '设计/送审需求',
     MANUAL: '管理员调账',
     TASK_WITHDRAWAL: '退单积分调整',
   }[sourceType] || '其他积分调整';
@@ -153,31 +144,56 @@ function pointLedgerTargetId(value) {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-function renderPointsLedgerRelations(association = {}) {
+function renderPointsLedgerTarget(name, id, action, attributes) {
+  const label = escHtml(name || (id ? `#${id}` : '—'));
+  return id && action
+    ? `<button type="button" class="points-ledger-link" data-emie-action="click:${action}" ${attributes}>${label}</button>`
+    : label;
+}
+
+function renderPointsLedgerRow(item) {
+  const association = item.association ?? {};
   const projectId = pointLedgerTargetId(association.projectId);
   const taskId = pointLedgerTargetId(association.subTaskId);
   const requirementId = pointLedgerTargetId(association.requirementId);
-  const related = (label, name, action, attributes) => `<div class="points-ledger-relation"><span>${label}</span>${action ? `<button type="button" class="points-ledger-link" data-emie-action="click:${action}" ${attributes}>${escHtml(name)}</button>` : `<span class="points-ledger-unavailable">${escHtml(name)}</span>`}</div>`;
-  const rows = [];
-  if (projectId || association.projectName) rows.push(related('项目', association.projectName || `#${projectId}`, projectId ? 'points-ledger-project' : null, `data-project-id="${projectId}"`));
-  if (taskId || association.subTaskName) rows.push(related('子任务', association.subTaskName || `#${taskId}`, projectId && taskId ? 'points-ledger-task' : null, `data-project-id="${projectId}" data-task-id="${taskId}"`));
-  if (requirementId || association.requirementName) rows.push(related('设计需求', association.requirementName || `#${requirementId}`, requirementId ? 'points-ledger-requirement' : null, `data-requirement-id="${requirementId}"`));
-  return rows.length ? `<div class="points-ledger-relations">${rows.join('')}</div>` : '';
+  const project = renderPointsLedgerTarget(association.projectName, projectId, 'points-ledger-project', `data-project-id="${projectId}"`);
+  const task = renderPointsLedgerTarget(association.subTaskName, taskId, projectId ? 'points-ledger-task' : null,
+    `data-project-id="${projectId}" data-task-id="${taskId}"`);
+  const requirement = requirementId || association.requirementName
+    ? `<div class="points-ledger-requirement">${renderPointsLedgerTarget(association.requirementName, requirementId,
+      'points-ledger-requirement', `data-requirement-id="${requirementId}"`)}</div>`
+    : '';
+  const color = item.points >= 0 ? 'var(--success)' : 'var(--danger)';
+  return `<tr>
+    <td><strong>${escHtml(item.source)}</strong>${requirement}</td>
+    <td>${project}</td>
+    <td>${task}</td>
+    <td>${escHtml(item.accountingMonth)}</td>
+    <td style="color:${color};font-weight:700;">${item.points >= 0 ? '+' : ''}${formatPoints(item.points)}</td>
+    <td>${escHtml(String(item.createdAt || '-').replace('T', ' ').slice(0, 19))}</td>
+  </tr>`;
 }
 
 function renderPointsLedger(ledger, adjustments, ledgerPages, associations = {}) {
   const visibleAdjustments = adjustments.filter(item => item.sourceType !== 'APPEAL');
   const rows = [
-    ...ledger.map(item => {
-      const code = String(item.ruleCode || '-');
-      const stage = code.endsWith(':BASE') ? '基础积分' : code.endsWith(':QUALITY') ? '质量加分' : '积分';
-      return { createdAt: item.createdAt, source: `任务 #${item.subTaskId || '-'}`, detail: pointRuleTaskLabel(code), meta: `${code.replace(/:(BASE|QUALITY)$/, '')} · ${stage}`, accountingMonth: item.accountingMonth || '-', points: Number(item.points || 0), association: associations[`L-${item.id}`] };
-    }),
-    ...visibleAdjustments.map(item => ({ createdAt: item.createdAt, source: adjustmentSourceLabel(item.sourceType), detail: item.reason || '—', meta: item.sourceType === 'MATERIAL_MARKET' ? '素材被销售立项后自动奖励' : String(item.sourceType || '积分调整'), accountingMonth: item.accountingMonth || '-', points: Number(item.points || 0), association: associations[`A-${item.id}`] })),
+    ...ledger.map(item => ({
+      createdAt: item.createdAt, source: `任务 #${item.subTaskId || '-'}`, accountingMonth: item.accountingMonth || '-',
+      points: Number(item.points || 0), association: associations[`L-${item.id}`],
+    })),
+    ...visibleAdjustments.map(item => ({
+      createdAt: item.createdAt, source: adjustmentSourceLabel(item.sourceType), accountingMonth: item.accountingMonth || '-',
+      points: Number(item.points || 0), association: associations[`A-${item.id}`],
+    })),
   ].sort((left, right) => String(right.createdAt || '').localeCompare(String(left.createdAt || '')));
   const visibleCount = Number(ledger.length || 0) + visibleAdjustments.length;
   const pages = Math.max(1, Number(ledgerPages || 0));
-  return `<div class="card points-ledger-card" style="margin-bottom:18px;"><div class="card-header"><div><h3>我的积分明细</h3><span class="points-ledger-hint">任务积分、素材广场奖励和其他积分调整均按入账时间排列</span></div><span class="points-ledger-count">${visibleCount} 条记录</span></div>${rows.length ? `<div class="table-wrap"><table class="points-ledger-table"><thead><tr><th>来源</th><th>积分明细</th><th>归属月</th><th>积分</th><th>入账时间</th></tr></thead><tbody>${rows.map(item => `<tr><td><strong>${escHtml(item.source)}</strong></td><td><div class="points-ledger-detail"><div class="points-ledger-rule"><strong>${escHtml(item.detail)}</strong><div class="points-ledger-rule-meta">${escHtml(item.meta)}</div></div>${renderPointsLedgerRelations(item.association)}</div></td><td>${escHtml(item.accountingMonth)}</td><td style="color:${item.points >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:700;">${item.points >= 0 ? '+' : ''}${formatPoints(item.points)}</td><td>${escHtml(String(item.createdAt || '-').replace('T', ' ').slice(0, 19))}</td></tr>`).join('')}</tbody></table></div><div class="points-pagination"><span class="points-pagination-meta">每页 ${pointsLedgerSize} 条</span><div class="points-pagination-controls"><button class="points-page-button" ${pointsLedgerPage <= 0 ? 'disabled' : ''} data-emie-action="click:points-ledger-page" data-page="${pointsLedgerPage - 1}" aria-label="上一页">‹<span>上一页</span></button><span class="points-page-indicator"><b>${pointsLedgerPage + 1}</b><i>/</i>${pages}</span><button class="points-page-button" ${pointsLedgerPage >= pages - 1 ? 'disabled' : ''} data-emie-action="click:points-ledger-page" data-page="${pointsLedgerPage + 1}" aria-label="下一页"><span>下一页</span>›</button></div></div>` : '<div class="empty-state">暂无积分记录</div>'}</div>`;
+  return `<div class="card points-ledger-card" style="margin-bottom:18px;"><div class="card-header"><div><h3>我的积分明细</h3><span class="points-ledger-hint">任务积分、素材广场奖励和其他积分调整均按入账时间排列</span></div><span class="points-ledger-count">${visibleCount} 条记录</span></div>${rows.length ? `
+    <div class="table-wrap"><table class="points-ledger-table">
+      <thead><tr><th>来源</th><th>项目</th><th>子任务</th><th>归属月</th><th>积分</th><th>入账时间</th></tr></thead>
+      <tbody>${rows.map(renderPointsLedgerRow).join('')}</tbody>
+    </table></div>
+    <div class="points-pagination"><span class="points-pagination-meta">每页 ${pointsLedgerSize} 条</span><div class="points-pagination-controls"><button class="points-page-button" ${pointsLedgerPage <= 0 ? 'disabled' : ''} data-emie-action="click:points-ledger-page" data-page="${pointsLedgerPage - 1}" aria-label="上一页">‹<span>上一页</span></button><span class="points-page-indicator"><b>${pointsLedgerPage + 1}</b><i>/</i>${pages}</span><button class="points-page-button" ${pointsLedgerPage >= pages - 1 ? 'disabled' : ''} data-emie-action="click:points-ledger-page" data-page="${pointsLedgerPage + 1}" aria-label="下一页"><span>下一页</span>›</button></div></div>` : '<div class="empty-state">暂无积分记录</div>'}</div>`;
 }
 
 async function renderPointsView(main) {

@@ -1465,17 +1465,13 @@ html:has(.admin-page)::-webkit-scrollbar,body:has(.admin-page)::-webkit-scrollba
 .points-ledger-hint { display:block; margin-top:4px; color:var(--gray-400); font-size:11px; }
 .points-ledger-card { min-width:0; }
 .points-ledger-card .points-ledger-table { table-layout:fixed; min-width:900px; }
-.points-ledger-table th:nth-child(1),.points-ledger-table td:nth-child(1) { width:12%; }
-.points-ledger-table th:nth-child(2),.points-ledger-table td:nth-child(2) { width:48%; }
-.points-ledger-table th:nth-child(3),.points-ledger-table td:nth-child(3) { width:10%; }
-.points-ledger-table th:nth-child(4),.points-ledger-table td:nth-child(4) { width:8%; }
-.points-ledger-table th:nth-child(5),.points-ledger-table td:nth-child(5) { width:22%; }
-.points-ledger-detail { display:flex; align-items:flex-start; flex-wrap:wrap; gap:10px 20px; }
-.points-ledger-rule { flex:1 1 180px; min-width:0; overflow-wrap:anywhere; }
-.points-ledger-rule-meta { color:var(--gray-400); font-size:12px; overflow-wrap:anywhere; }
-.points-ledger-relations { flex:1 1 180px; min-width:0; display:grid; gap:7px; }
-.points-ledger-relation { display:flex; align-items:baseline; gap:7px; min-width:0; }
-.points-ledger-relation > span:first-child { flex:none; color:var(--gray-400); font-size:11px; }
+.points-ledger-table th:nth-child(1) { width:14%; }
+.points-ledger-table th:nth-child(2),.points-ledger-table th:nth-child(3) { width:26%; }
+.points-ledger-table th:nth-child(4) { width:9%; }
+.points-ledger-table th:nth-child(5) { width:7%; }
+.points-ledger-table th:nth-child(6) { width:18%; }
+.points-ledger-table td:nth-child(-n+3) { overflow-wrap:anywhere; }
+.points-ledger-requirement { margin-top:4px; }
 .points-ledger-link { min-width:0; padding:0; border:0; background:transparent; color:var(--primary); font:inherit; font-size:12px; line-height:1.5; text-align:left; cursor:pointer; overflow-wrap:anywhere; }
 .points-ledger-link:hover { text-decoration:underline; }
 .points-ledger-link:focus-visible { outline:2px solid var(--primary); outline-offset:3px; border-radius:2px; }
