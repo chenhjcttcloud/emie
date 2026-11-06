@@ -100,9 +100,9 @@ class SubTaskPointViewTest {
         assertEquals("第二次要求", secondChange.get("changeReason"));
         assertEquals("revision", correction.get("submissionOrigin"));
         assertNull(rejection.get("revisionNo"));
-        assertEquals("rejection", rejection.get("submissionOrigin"));
-        assertEquals("驳回要求", rejection.get("rejectionReason"));
-        assertEquals(9, rejection.get("rejectionCycleId"));
+        assertEquals("unknown", rejection.get("submissionOrigin"));
+        assertNull(rejection.get("rejectionReason"));
+        assertNull(rejection.get("rejectionCycleId"));
         assertNull(unknown.get("revisionNo"));
         assertEquals("unknown", unknown.get("submissionOrigin"));
     }

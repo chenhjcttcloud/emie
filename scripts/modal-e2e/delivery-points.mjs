@@ -63,6 +63,7 @@ const project = {
   plannerId: task.plannerId, plannerName: task.plannerName, statusLabel: '进行中', statusCls: 'badge-progress',
   createdAt: task.createdAt, updatedAt: correction.submittedAt, deadline: task.plannedDate, tasks: [task], logs: [],
 };
+let projectResponse = project;
 
 // Fulfill every API request locally; this check never reads or writes real business data.
 await page.route('**/api/**', async route => {
@@ -71,7 +72,7 @@ await page.route('**/api/**', async route => {
   let payload = {};
   if (url.pathname === '/api/projects/my-subtasks') payload = [task];
   if (url.pathname === '/api/projects/task-market') payload = [];
-  if (url.pathname === `/api/projects/${project.id}`) payload = project;
+  if (url.pathname === `/api/projects/${project.id}`) payload = projectResponse;
   return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(payload) });
 });
 if (process.env.EMIE_E2E_LOCAL_STATIC === '1') {
@@ -107,6 +108,19 @@ async function assertSummary(container, expected = 13) {
   assert.ok(await totals.count() > 0, '子任务应直接展示积分汇总');
   assert.equal(await totals.first().getAttribute('data-awarded-points'), String(expected), '累计积分只采用实际入账');
   assert.match(textNumbers(await totals.first().innerText()), new RegExp(`累计已入账\\s*${expected}\\s*分`));
+}
+
+async function assertRejectionHistory(container, reasons) {
+  const records = container.locator('.task-rejection-history > .task-rejection-record');
+  assert.equal(await records.count(), reasons.length);
+  for (const reason of reasons) {
+    assert.equal(await records.locator('.task-rejection-reason').filter({ hasText: reason }).isVisible(), true,
+      '多次重交后各轮驳回原因默认可见');
+  }
+  const cancelled = records.filter({ hasText: '此驳回已撤销' });
+  assert.equal(await cancelled.locator('.task-rejection-heading > span').innerText(), '已撤销');
+  assert.match(await records.first().locator('.task-rejection-meta').first().innerText(), /产品企划.*模拟企划.*(?:10[-/]22|10月22)/);
+  assert.equal(await records.locator('.task-rejection-reason img').count(), 0, '驳回原因中的 HTML 作为文本显示');
 }
 
 try {
@@ -250,6 +264,89 @@ try {
   assert.ok(rejectionTitles.every(title => !/第\s*\d+\s*次修改/.test(title)), '加分驳回不能被误算成验收后的新增修改');
   await closeHistory();
 
+  const reasonOne = '第一轮驳回：调整包装比例 <img src=x onerror=alert(1)>';
+  const reasonTwo = '第二轮驳回：修改盒侧文字';
+  const cancelledReason = '此驳回已撤销，不是当前修改要求';
+  const pointsRequest = 'shared-paid-rejection-request';
+  const rejection = (id, attemptNo, reviewedAt, reason, rejectedDeliveryVersionId, fields = {}) => ({
+    id, cycleId: 100 + id, attemptNo, reviewedAt, reason, rejectedDeliveryVersionId, pointRequestId: pointsRequest,
+    reviewerRole: 'planner', reviewerName: '模拟企划', requiredCompletionDate: '2026-10-30', ...fields,
+  });
+  const repeatedlyRedelivered = {
+    ...task, status: 'submitted_for_review', reviewComments: null, pendingChangeBonusRequestId: pointsRequest,
+    rejectionRecords: [
+      rejection(11, 1, '2026-10-20T12:00:00', reasonOne, 1, { deliverables: '第一次交付快照', withPoints: true, points: 2 }),
+      rejection(12, 2, '2026-10-22T12:00:00', reasonTwo, 2, { deliverables: '第二次交付快照', withPoints: false,
+        rejectionAttachmentsJson: JSON.stringify([{ name: '二次驳回说明.pdf', url: '/api/files/download/rejection-note.pdf', size: 1024 }]) }),
+      rejection(13, 3, '2026-10-22T13:00:00', cancelledReason, 2, { cancelled: true }),
+    ],
+    deliveryVersions: [
+      delivery(3, { submissionType: 'redelivery', submissionOrigin: 'rejection', pointRequestId: pointsRequest,
+        changeReason: '旧积分请求不能覆盖本轮驳回', submittedAt: '2026-10-23T10:00:00' }),
+      delivery(2, { submissionType: 'revision', submissionOrigin: 'rejection', rejectionCycleId: 111,
+        pointRequestId: pointsRequest, submittedAt: '2026-10-22T10:00:00' }),
+      delivery(1),
+    ],
+  };
+  await page.evaluate(() => {
+    const e = window.EMIE;
+    e.state.currentRole = 'designer'; e.state.currentUserId = window.deliveryPointsFixture.task.designerId;
+  });
+  await showFixture(repeatedlyRedelivered);
+  const cardHistory = main.locator('.task-rejection-history');
+  assert.equal(await cardHistory.getByText(reasonTwo, { exact: true }).isVisible(), true);
+  assert.equal(await cardHistory.getByText(reasonOne, { exact: true }).isVisible(), false, '任务卡先显示最近一轮有效驳回');
+  await cardHistory.locator('.task-rejection-previous > summary').click();
+  assert.equal(await cardHistory.getByText(reasonOne, { exact: true }).isVisible(), true);
+
+  await main.locator('[data-emie-action="click:designer-detail"]').click();
+  const published = page.locator('#publishedSubTaskDetailModal');
+  await published.waitFor();
+  await assertRejectionHistory(published, [reasonOne, reasonTwo, cancelledReason]);
+  const snapshot = published.locator('.task-rejection-snapshot').first();
+  await snapshot.locator('summary').click();
+  assert.equal(await published.getByText('第二次交付快照', { exact: true }).isVisible(), true);
+  assert.equal(await snapshot.getByText('二次驳回说明.pdf', { exact: true }).isVisible(), true);
+  const latestRequirement = published.locator('.delivery-round[data-delivery-round="3"] .delivery-round-step').first();
+  assert.match(await latestRequirement.innerText(), /第二轮驳回/);
+  assert.doesNotMatch(await latestRequirement.innerText(), /第一轮驳回|此驳回已撤销|旧积分请求/, '同一积分请求的旧驳回不能套用到新交付');
+  const previousRound = published.locator('.delivery-round[data-delivery-round="2"]');
+  await previousRound.locator(':scope > summary').click();
+  assert.match(await previousRound.locator('.delivery-rejection-reason').innerText(), /第二轮驳回/);
+  await published.locator('.modal-footer [data-emie-action="click:designer-detail-close"]').click();
+  await published.waitFor({ state: 'detached' });
+
+  projectResponse = { ...project, tasks: [repeatedlyRedelivered] };
+  await page.evaluate(pid => window.EMIE.actions.openProjectDetail(pid), project.id);
+  const projectModal = page.locator('#projectDetailModal');
+  await projectModal.waitFor();
+  await projectModal.locator('[data-emie-action="click:detail-subtask-open"]').first().click();
+  await detail.waitFor();
+  await assertRejectionHistory(detail, [reasonOne, reasonTwo, cancelledReason]);
+  await detail.locator('.task-rejection-history [data-emie-action="click:detail-rejection-record"][data-attempt-no="1"]').click();
+  const recordModal = page.locator('#taskRejectionRecordModal');
+  await recordModal.waitFor();
+  assert.match(await recordModal.innerText(), /第一次交付快照/);
+  await page.evaluate(() => window.EMIE.actions.closeM('taskRejectionRecordModal'));
+  await recordModal.waitFor({ state: 'detached' });
+  await detail.locator('[data-emie-action="click:detail-subtask-close"]').first().click();
+  await detail.waitFor({ state: 'detached' });
+  await page.evaluate(() => window.EMIE.actions.closeM('projectDetailModal'));
+  await projectModal.waitFor({ state: 'detached' });
+
+  const awaitingRedelivery = { ...repeatedlyRedelivered, status: 'accepted',
+    reviewComments: '当前新增的修改要求', pendingChangeBonusRequestId: 'new-modification-request' };
+  projectResponse = { ...project, tasks: [awaitingRedelivery] };
+  await showFixture(awaitingRedelivery);
+  await main.locator('[data-emie-action="click:designer-redeliver"]').click();
+  const redelivery = page.locator('#taskRedeliverModal');
+  await redelivery.waitFor();
+  assert.match(await redelivery.locator('.review-box').innerText(), /当前修改意见.*当前新增的修改要求/);
+  await assertRejectionHistory(redelivery, [reasonOne, reasonTwo, cancelledReason]);
+  await redelivery.locator('.modal-footer [data-emie-action="click:task-redeliver-close"]').click();
+  await redelivery.waitFor({ state: 'detached' });
+  projectResponse = project;
+
   const unknownOrigin = { ...task, pendingChangeBonusRequestId: null,
     rejectionRecords: [{ attemptNo: 1, reviewedAt: '2026-10-22T12:00:00', reason: '未明确关联的旧驳回', pointRequestId: 'different-rejection' }],
     deliveryVersions: [{ ...secondChange, pointRequestId: 'unknown-request', revisionNo: null, submissionOrigin: 'unknown' }, initial] };
@@ -280,7 +377,7 @@ try {
 
   assert.deepEqual(mutations, [], '模拟回归不得发送业务写请求');
   assert.deepEqual(errors, [], `browser errors: ${errors.join('; ')}`);
-  process.stdout.write('delivery-points: actual totals, revision/correction grouping, per-round confirmation, responsive history, no-points, rejection, missing-ledger and historical states passed; business writes=0\n');
+  process.stdout.write('delivery-points: actual totals, revision/correction grouping, per-round confirmation, responsive history, no-points, repeated rejection history, missing-ledger and historical states passed; business writes=0\n');
 } catch (error) {
   await page.screenshot({ path: path.join(artifactDirectory, 'delivery-points-failure.png'), fullPage: true }).catch(() => {});
   throw error;

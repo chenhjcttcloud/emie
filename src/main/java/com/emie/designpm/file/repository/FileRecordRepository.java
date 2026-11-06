@@ -19,6 +19,21 @@ public interface FileRecordRepository extends JpaRepository<FileRecord, Long> {
         String getStoredName();
     }
 
+    interface SubTaskUploadProjection {
+        Long getTargetId();
+
+        String getStoredName();
+
+        String getOriginalName();
+
+        Long getFileSize();
+    }
+
+    @Query("SELECT f.targetId AS targetId, f.storedName AS storedName, f.originalName AS originalName, "
+            + "f.fileSize AS fileSize FROM FileRecord f WHERE f.targetType = 'sub_task' "
+            + "AND f.targetId IN :taskIds ORDER BY f.createdAt DESC, f.id DESC")
+    List<SubTaskUploadProjection> findSubTaskUploads(@Param("taskIds") Collection<Long> taskIds);
+
     @Query("SELECT f.id AS id, f.storedName AS storedName FROM FileRecord f "
             + "WHERE f.id > :afterId ORDER BY f.id ASC")
     List<IntegrityFileProjection> findIntegrityFilesAfter(@Param("afterId") Long afterId, Pageable pageable);

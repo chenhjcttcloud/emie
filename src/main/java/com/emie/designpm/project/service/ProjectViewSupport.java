@@ -13,8 +13,6 @@ import com.emie.designpm.points.repository.PointLedgerRepository;
 import com.emie.designpm.project.repository.SubTaskRejectionCycleRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
 import com.emie.designpm.scoring.repository.ScoringRepository;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -37,7 +35,6 @@ import org.springframework.stereotype.Service;
 public class ProjectViewSupport {
 
     static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
-    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final ProjectService projectService;
     private final ScoringRepository scoringRepository;
@@ -81,12 +78,11 @@ public class ProjectViewSupport {
                 ? Map.of()
                 : pointLedgerRepository.findBySubTaskIdIn(taskIds).stream()
                         .collect(Collectors.groupingBy(PointLedger::getSubTaskId));
-        Map<Long, List<ActivityLog>> logsByProject = new HashMap<>();
+        Rejections rejections = loadRejections(taskIds, taskProjectIds(tasks));
         return tasks.stream()
                 .map(task -> {
                     Project project = task.getProject();
-                    List<ActivityLog> projectLogs = logsByProject.computeIfAbsent(
-                            project.getId(), id -> activityLogRepository.findProjectHistory(id));
+                    var history = rejections.forTask(task, deliveriesByTask.getOrDefault(task.getId(), List.of()));
                     Map<String, Object> item = new LinkedHashMap<>();
                     item.put("id", task.getId());
                     item.put("name", task.getName());
@@ -130,13 +126,11 @@ public class ProjectViewSupport {
                     item.put("plannerName", project.getPlannerName());
                     item.put("salesId", project.getSalesId());
                     item.put("scoringRecords", scoringByTask.getOrDefault(task.getId(), List.of()));
-                    item.put("rejectionRecords", rejectionRecords(project, task, projectLogs));
-                    item.put("deliveryVersions", deliveriesByTask.getOrDefault(task.getId(), List.of()));
+                    item.put("rejectionRecords", history.rejections());
+                    item.put("deliveryVersions", history.deliveries());
                     item.put("relation", session.userId().equals(task.getDesignerId()) ? "assignee" : "publisher");
                     List<PointLedger> ledgers = ledgersByTask.getOrDefault(task.getId(), List.of());
-                    item.put(
-                            "pointSummary",
-                            SubTaskPointView.summary(ledgers, deliveriesByTask.getOrDefault(task.getId(), List.of())));
+                    item.put("pointSummary", SubTaskPointView.summary(ledgers, history.deliveries()));
                     item.put(
                             "issuedPoints",
                             ledgers.stream()
@@ -160,12 +154,11 @@ public class ProjectViewSupport {
                         subTaskCommandService.getDeliveryVersionsByTaskIds(
                                 tasks.stream().map(SubTask::getId).toList()))
                 .orElse(Map.of());
-        Map<Long, List<ActivityLog>> logsByProject = new HashMap<>();
+        Rejections rejections = loadRejections(taskIds, taskProjectIds(tasks));
         return tasks.stream()
                 .map(task -> {
                     Project project = task.getProject();
-                    List<ActivityLog> projectLogs = logsByProject.computeIfAbsent(
-                            project.getId(), id -> activityLogRepository.findProjectHistory(id));
+                    var history = rejections.forTask(task, deliveriesByTask.getOrDefault(task.getId(), List.of()));
                     Map<String, Object> item = new LinkedHashMap<>();
                     item.put("id", task.getId());
                     item.put("name", task.getName());
@@ -201,13 +194,12 @@ public class ProjectViewSupport {
                     item.put("readOnly", true);
                     item.put("plannerId", project.getPlannerId());
                     item.put("plannerName", project.getPlannerName());
-                    item.put("rejectionRecords", rejectionRecords(project, task, projectLogs));
-                    item.put("deliveryVersions", deliveriesByTask.getOrDefault(task.getId(), List.of()));
+                    item.put("rejectionRecords", history.rejections());
+                    item.put("deliveryVersions", history.deliveries());
                     item.put(
                             "pointSummary",
                             SubTaskPointView.summary(
-                                    ledgersByTask.getOrDefault(task.getId(), List.of()),
-                                    deliveriesByTask.getOrDefault(task.getId(), List.of())));
+                                    ledgersByTask.getOrDefault(task.getId(), List.of()), history.deliveries()));
                     String uid = session.userId();
                     item.put("relation", uid.equals(task.getPublisherId()) ? "publisher" : "department_member");
                     item.put("relationLabel", uid.equals(task.getPublisherId()) ? "我发布的任务" : "部门成员关联任务");
@@ -326,28 +318,24 @@ public class ProjectViewSupport {
                         .add(m);
             });
         }
-        Map<Long, List<SubTaskRejectionCycle>> rejectionCycles = rejectionCycleRepository == null
-                ? Map.of()
-                : rejectionCycleRepository.findBySubTaskIdInOrderBySubTaskIdAscSequenceNoAsc(taskIds).stream()
-                        .collect(Collectors.groupingBy(
-                                c -> c.getSubTask().getId(), LinkedHashMap::new, Collectors.toList()));
+        Rejections rejections = loadRejections(taskIds, p.getId() == null ? List.of() : List.of(p.getId()));
         dto.setTasks(taskList.stream()
                 .map(t -> {
                     TaskDetailDTO taskDto = toTaskDetail(t);
                     taskDto.setScoringRecords(scoringMap.getOrDefault(t.getId(), List.of()));
-                    List<SubTaskRejectionCycle> cycles = rejectionCycles.getOrDefault(t.getId(), List.of());
-                    taskDto.setRejectionRecords(rejectionRecords(p, t, effectiveLogs, cycles));
-                    cycles.stream()
+                    var history = rejections.forTask(t, deliveriesByTask.getOrDefault(t.getId(), List.of()));
+                    taskDto.setRejectionRecords(history.rejections());
+                    rejections.cycles().getOrDefault(t.getId(), List.of()).stream()
+                            .filter(c -> "rejected".equals(t.getStatus()))
                             .filter(c -> "ACTIVE".equals(c.getStatus()))
                             .max(Comparator.comparing(SubTaskRejectionCycle::getSequenceNo))
                             .ifPresent(c -> {
                                 taskDto.setActiveRejectionCycleId(c.getId());
                                 taskDto.setActiveRejectionRole(c.getRejectionRole());
                             });
-                    List<Map<String, Object>> deliveries = deliveriesByTask.getOrDefault(t.getId(), List.of());
-                    taskDto.setDeliveryVersions(deliveries);
-                    taskDto.setPointSummary(
-                            SubTaskPointView.summary(ledgersByTask.getOrDefault(t.getId(), List.of()), deliveries));
+                    taskDto.setDeliveryVersions(history.deliveries());
+                    taskDto.setPointSummary(SubTaskPointView.summary(
+                            ledgersByTask.getOrDefault(t.getId(), List.of()), history.deliveries()));
                     return taskDto;
                 })
                 .collect(Collectors.toList()));
@@ -369,84 +357,24 @@ public class ProjectViewSupport {
         return dto;
     }
 
-    private List<Map<String, Object>> rejectionRecords(
-            Project project, SubTask task, List<ActivityLog> preloadedLogs, List<SubTaskRejectionCycle> cycles) {
-        String legacyPrefix = "子任务驳回：" + task.getName() + "（意见：";
-        List<ActivityLog> logs = (preloadedLogs != null ? preloadedLogs : project.getLogs())
-                .stream()
-                        .filter(log ->
-                                log.getAction() != null && log.getAction().startsWith("子任务驳回："))
-                        .filter(log -> ("sub_task".equals(log.getEntityType())
-                                        && Objects.equals(log.getEntityId(), task.getId()))
-                                || (!"sub_task".equals(log.getEntityType())
-                                        && log.getAction().startsWith(legacyPrefix)))
-                        .sorted(Comparator.comparing(ActivityLog::getTime))
-                        .toList();
-        List<Map<String, Object>> records = new ArrayList<>();
-        for (int index = 0; index < logs.size(); index++) {
-            ActivityLog log = logs.get(index);
-            Map<String, Object> snapshot = parseJsonMap(log.getBeforeData());
-            Map<String, Object> rejection = parseJsonMap(log.getAfterData());
-            String action = log.getAction();
-            int reasonStart = action.indexOf("（意见：");
-            String reason = reasonStart >= 0
-                    ? action.substring(reasonStart + 4, action.endsWith("）") ? action.length() - 1 : action.length())
-                    : "";
-            Map<String, Object> record = new LinkedHashMap<>();
-            record.put("id", log.getId());
-            record.put("attemptNo", index + 1);
-            record.put("reviewerName", log.getUsername());
-            record.put("reviewerRole", log.getRole());
-            record.put("reviewedAt", log.getTime().format(DTF));
-            record.put("reason", reason);
-            record.put("withPoints", rejection.get("withPoints"));
-            record.put("pointRuleCode", rejection.get("pointRuleCode"));
-            record.put("pointRuleDescription", rejection.get("pointRuleDescription"));
-            record.put("points", rejection.get("points"));
-            record.put(
-                    "requiredCompletionDate",
-                    rejection.getOrDefault("requiredCompletionDate", snapshot.getOrDefault("plannedDate", "")));
-            record.put("rejectionReferenceImagesJson", rejection.getOrDefault("rejectionReferenceImagesJson", "[]"));
-            record.put("rejectionAttachmentsJson", rejection.getOrDefault("rejectionAttachmentsJson", "[]"));
-            record.put("deliverables", snapshot.getOrDefault("deliverables", task.getDeliverables()));
-            record.put(
-                    "referenceImagesJson", snapshot.getOrDefault("referenceImagesJson", task.getReferenceImagesJson()));
-            record.put("attachmentsJson", snapshot.getOrDefault("attachmentsJson", task.getAttachmentsJson()));
-            record.put("actualDate", snapshot.getOrDefault("actualDate", task.getActualDate()));
-            record.put("submittedByName", snapshot.getOrDefault("submittedByName", task.getDesignerName()));
-            record.put("legacy", snapshot.isEmpty());
-            Long rejectionCycleId = rejection.get("rejectionCycleId") instanceof Number n ? n.longValue() : null;
-            cycles.stream()
-                    .filter(c -> Objects.equals(c.getId(), rejectionCycleId))
-                    .findFirst()
-                    .ifPresent(c -> {
-                        record.put("cycleId", c.getId());
-                        record.put("cancelled", "CANCELLED".equals(c.getStatus()));
-                        record.put(
-                                "cancelledAt",
-                                c.getCancelledAt() == null
-                                        ? null
-                                        : c.getCancelledAt().format(DTF));
-                        record.put("cancelledByName", c.getCancelledByName());
-                    });
-            records.add(record);
-        }
-        return records;
+    private List<Long> taskProjectIds(List<SubTask> tasks) {
+        return tasks.stream().map(task -> task.getProject().getId()).distinct().toList();
     }
 
-    private List<Map<String, Object>> rejectionRecords(Project project, SubTask task, List<ActivityLog> preloadedLogs) {
-        List<SubTaskRejectionCycle> cycles = rejectionCycleRepository == null
-                ? List.of()
-                : rejectionCycleRepository.findBySubTaskIdInOrderBySubTaskIdAscSequenceNoAsc(List.of(task.getId()));
-        return rejectionRecords(project, task, preloadedLogs, cycles);
+    private Rejections loadRejections(List<Long> taskIds, List<Long> projectIds) {
+        if (taskIds.isEmpty()) return new Rejections(List.of(), Map.of());
+        var logs = activityLogRepository.findSubTaskRejectionHistory(taskIds, projectIds);
+        Map<Long, List<SubTaskRejectionCycle>> cycles = rejectionCycleRepository == null
+                ? Map.of()
+                : rejectionCycleRepository.findBySubTaskIdInOrderBySubTaskIdAscSequenceNoAsc(taskIds).stream()
+                        .collect(Collectors.groupingBy(
+                                cycle -> cycle.getSubTask().getId()));
+        return new Rejections(logs, cycles);
     }
 
-    private Map<String, Object> parseJsonMap(String json) {
-        if (json == null || json.isBlank()) return Map.of();
-        try {
-            return JSON.readValue(json, new TypeReference<>() {});
-        } catch (Exception ignored) {
-            return Map.of();
+    private record Rejections(List<ActivityLog> logs, Map<Long, List<SubTaskRejectionCycle>> cycles) {
+        SubTaskRejectionHistory.View forTask(SubTask task, List<Map<String, Object>> versions) {
+            return SubTaskRejectionHistory.build(task, logs, cycles.getOrDefault(task.getId(), List.of()), versions);
         }
     }
 

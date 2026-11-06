@@ -190,7 +190,8 @@ function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
           </div>
           ${renderTaskPointSummary(t)}
           ${t.details ? `<div style="font-size:13px;color:var(--gray-600);margin-top:8px;">📝 ${escHtml(t.details)}</div>` : ''}
-          ${t.reviewComments ? `<div class="review-box ${t.status === 'rejected' ? 'rejected' : 'approved'}">${t.status === 'revision_requested' || t.pendingChangeBonusRequestId ? '修改意见' : t.status === 'rejected' ? '驳回意见' : '验收意见'}：${escHtml(t.reviewComments)}</div>` : ''}
+          ${renderTaskReviewComment(t)}
+          ${renderTaskRejectionHistory(t, { compact: true })}
           ${taskDetailFiles(t.pendingChangeReferenceImagesJson, true)}
           ${latestDelivery ? `<div style="margin-top:12px;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;background:var(--gray-50);"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><strong style="font-size:13px;">${escHtml(taskDeliveryRounds(deliveryVersions, rejectionRecords).at(-1)?.label || '最新提交')} · 最新成果</strong><span style="font-size:11px;color:var(--gray-400);">${fmtDT(latestDelivery.submittedAt)}</span></div><div style="font-size:12px;color:var(--gray-700);white-space:pre-wrap;">${escHtml(latestDelivery.deliverables || '未填写文字交付内容')}</div>${taskDetailFiles(latestDelivery.referenceImagesJson, true)}${taskDetailFiles(latestDelivery.attachmentsJson, false)}</div>` : ''}
           <div class="subtask-actions">
@@ -221,6 +222,71 @@ function rejectionPointInfo(record) {
   return record.withPoints === false ? '本次不加分' : '';
 }
 
+const rejectionRoleNames = {
+  planner: '产品企划', sales: '销售', admin: '管理员', designer: '设计师', supplychain: '供应链', promotion: '产品推广',
+};
+
+function taskRejectionRecords(task) {
+  return Array.isArray(task.rejectionRecords) ? task.rejectionRecords : [];
+}
+
+function renderTaskReviewComment(task, { redelivery = false } = {}) {
+  const comment = task.reviewComments;
+  if (!comment) return '';
+  const records = taskRejectionRecords(task);
+  const latest = [...records].reverse().find(record => !record.cancelled);
+  const rejected = task.status === 'rejected' || (task.status === 'accepted' && latest?.reason === comment);
+  if (rejected && latest?.reason === comment) return '';
+  const revision = !rejected && (task.status === 'revision_requested' || task.pendingChangeBonusRequestId);
+  if (redelivery && latest?.reason === comment) return '';
+  const label = revision ? '当前修改意见' : rejected || redelivery ? '驳回意见' : '验收意见';
+  return `<div class="review-box ${rejected || redelivery ? 'rejected' : 'approved'}"><strong>${label}：</strong>${escHtml(comment)}</div>`;
+}
+
+function renderRejectionSnapshot(record, task) {
+  const submittedFiles = taskDetailFiles(record.referenceImagesJson, true) + taskDetailFiles(record.attachmentsJson, false);
+  const rejectionFiles = taskDetailFiles(record.rejectionReferenceImagesJson, true) + taskDetailFiles(record.rejectionAttachmentsJson, false);
+  if (!record.deliverables && !submittedFiles && !rejectionFiles) return '';
+  return `<details class="task-rejection-snapshot"><summary>查看当轮提交与附件</summary>
+    ${record.deliverables || submittedFiles ? `<div class="task-rejection-snapshot-content"><div class="detail-label">当轮提交内容 · ${escHtml(record.submittedByName || task.designerName || '-')}</div>
+      ${record.legacy ? '<small>历史记录创建时未保存独立快照，附件展示为当前可恢复内容。</small>' : ''}
+      ${record.deliverables ? `<p>${escHtml(record.deliverables)}</p>` : ''}${submittedFiles}</div>` : ''}
+    ${rejectionFiles ? `<div class="task-rejection-snapshot-content"><div class="detail-label">驳回参考图与附件</div>${rejectionFiles}</div>` : ''}
+  </details>`;
+}
+
+function renderTaskRejectionHistory(task, { compact = false, showDetails } = {}) {
+  const records = [...taskRejectionRecords(task)].reverse();
+  if (!records.length) return '';
+  const renderRecord = record => {
+    const reviewer = [rejectionRoleNames[record.reviewerRole] || record.reviewerRole, record.reviewerName]
+      .filter(Boolean).join(' · ');
+    const metadata = [reviewer, record.reviewedAt ? fmtDT(record.reviewedAt) : '',
+      record.requiredCompletionDate ? `要求完成：${formatDate(record.requiredCompletionDate)}` : '',
+      rejectionPointInfo(record)].filter(Boolean);
+    const attempt = record.attemptNo == null ? '驳回意见' : `第 ${record.attemptNo} 次驳回`;
+    const cancellation = [record.cancelledByName, record.cancelledAt ? fmtDT(record.cancelledAt) : '']
+      .filter(Boolean).join(' · ');
+    return `<article class="task-rejection-record${record.cancelled ? ' is-cancelled' : ''}">
+      <div class="task-rejection-heading"><strong>${escHtml(attempt)}</strong>${record.cancelled ? '<span>已撤销</span>' : ''}</div>
+      ${metadata.length ? `<div class="task-rejection-meta">${escHtml(metadata.join(' · '))}</div>` : ''}
+      <p class="task-rejection-reason">${escHtml(record.reason || '未填写驳回意见')}</p>
+      ${record.cancelled && cancellation ? `<div class="task-rejection-meta">撤销：${escHtml(cancellation)}</div>` : ''}
+      ${compact ? '' : typeof showDetails === 'function' ? showDetails(record) : renderRejectionSnapshot(record, task)}
+    </article>`;
+  };
+  if (compact) {
+    const latest = records.find(record => !record.cancelled) || records[0];
+    const earlier = records.filter(record => record !== latest);
+    return `<section class="task-rejection-history is-compact" aria-label="驳回记录">${renderRecord(latest)}
+      ${earlier.length ? `<details class="task-rejection-previous"><summary>其他驳回记录（${earlier.length}）</summary>${earlier.map(renderRecord).join('')}</details>` : ''}
+    </section>`;
+  }
+  return `<section class="task-rejection-history" aria-label="驳回记录"><div class="delivery-section-heading">驳回记录（${records.length}）</div>
+    ${records.map(renderRecord).join('')}
+  </section>`;
+}
+
 function deliveryPointNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? String(Math.round((number + Number.EPSILON) * 100) / 100) : '0';
@@ -240,6 +306,13 @@ function taskDeliveryRounds(versions = [], rejectionRecords = []) {
     if (version.submissionType !== 'correction' || !rounds.length) rounds.push({ versions: [] });
     rounds[rounds.length - 1].versions.push(version);
   });
+  const activeRecords = rejectionRecords.filter(record => !record.cancelled);
+  const newestActiveRecords = [...activeRecords].reverse();
+  const sameId = (left, right) => left != null && right != null && String(left) === String(right);
+  const linksToRejection = (version, record) => sameId(version.rejectionCycleId, record.cycleId)
+    || sameId(version.rejectionRecordId, record.id);
+  const rejectsVersion = (record, round) => round?.versions.some(version => sameId(record.rejectedDeliveryVersionId, version.id));
+  const timestamp = value => value ? Date.parse(String(value).replace(' ', 'T')) : NaN;
   rounds.forEach((round, index) => {
     round.first = round.versions[0];
     round.current = round.versions[round.versions.length - 1];
@@ -248,20 +321,25 @@ function taskDeliveryRounds(versions = [], rejectionRecords = []) {
     round.origin = [...round.versions].reverse().find(version => ['initial', 'revision', 'rejection'].includes(version.submissionOrigin))?.submissionOrigin
       || (round.revisionNo ? 'revision' : round.first.submissionType === 'initial' ? 'initial'
         : round.first.submissionType === 'redelivery' ? 'rejection' : 'unknown');
-    const requestId = round.current.pointRequestId || round.first.pointRequestId;
-    const previousTime = rounds[index - 1]?.current.submittedAt;
-    const nextTime = rounds[index + 1]?.versions[0].submittedAt;
-    const timestamp = value => value ? Date.parse(String(value).replace(' ', 'T')) : NaN;
-    const cycleId = round.current.rejectionCycleId || round.first.rejectionCycleId;
-    const activeRecords = rejectionRecords.filter(record => !record.cancelled);
-    // Link by request or time bounds, never by a rejection count or delivery array position.
-    round.requirement = activeRecords.find(record => cycleId && String(record.cycleId) === String(cycleId))
-      || activeRecords.find(record => requestId && record.pointRequestId === requestId)
-      || (round.origin === 'rejection' ? [...activeRecords].reverse().find(record =>
-        timestamp(record.reviewedAt) <= timestamp(round.first.submittedAt)
-        && (!previousTime || timestamp(record.reviewedAt) >= timestamp(previousTime))) : null);
-    round.rejection = activeRecords.find(record => timestamp(record.reviewedAt) >= timestamp(round.current.submittedAt)
-      && (!nextTime || timestamp(record.reviewedAt) <= timestamp(nextTime)));
+    const previous = rounds[index - 1];
+    const next = rounds[index + 1];
+    const hasRequirementLink = round.versions.some(version => version.rejectionCycleId != null || version.rejectionRecordId != null);
+    const linkedRequirement = hasRequirementLink
+      ? rejectionRecords.find(record => round.versions.some(version => linksToRejection(version, record))) : null;
+    round.cancelledRequirement = linkedRequirement?.cancelled === true;
+    // A points request can survive several rejections. Delivery, cycle and record IDs identify the round.
+    round.requirement = hasRequirementLink ? (round.cancelledRequirement ? null : linkedRequirement)
+      : round.origin === 'rejection' ? newestActiveRecords.find(record => rejectsVersion(record, previous))
+        || newestActiveRecords.find(record => record.rejectedDeliveryVersionId == null
+          && timestamp(record.reviewedAt) <= timestamp(round.first.submittedAt)
+          && (!previous || timestamp(record.reviewedAt) >= timestamp(previous.current.submittedAt))) : null;
+    if (linkedRequirement && !round.cancelledRequirement) round.origin = 'rejection';
+    round.rejection = newestActiveRecords.find(record => rejectsVersion(record, round))
+      || newestActiveRecords.find(record => record.rejectedDeliveryVersionId == null && record !== round.requirement
+        && next?.versions.some(version => linksToRejection(version, record)))
+      || activeRecords.find(record => record.rejectedDeliveryVersionId == null && record !== round.requirement
+        && timestamp(record.reviewedAt) >= timestamp(round.current.submittedAt)
+        && (!next || timestamp(record.reviewedAt) < timestamp(next.versions[0].submittedAt)));
     const awarded = round.versions.filter(version => version.pointStatus === 'awarded');
     round.awardedPoints = awarded.reduce((total, version) => total + Number(version.awardedPoints || 0), 0);
     round.pointStatus = awarded.length ? 'awarded' : round.current.pointStatus || 'unrecorded';
@@ -332,8 +410,11 @@ function renderDeliveryRounds(versions, rejectionRecords = [], task = {}) {
     const current = round.current;
     const confirmation = round.confirmation;
     const history = round.versions.slice(0, -1).reverse();
-    const requirement = current.changeReason || round.first.changeReason || current.rejectionReason
-      || round.first.rejectionReason || round.requirement?.reason;
+    const requirement = round.origin === 'rejection'
+      ? (round.cancelledRequirement ? '' : round.requirement?.reason || current.rejectionReason || round.first.rejectionReason)
+      : current.changeReason || round.first.changeReason;
+    const requirementImages = round.origin === 'rejection' ? round.requirement?.rejectionReferenceImagesJson
+      : current.changeReferenceImagesJson || round.first.changeReferenceImagesJson;
     const rule = current.pointRuleDescription || current.pointRuleCode;
     const awaitingConfirmation = ['pending', 'no_points'].includes(round.pointStatus) && !confirmation.confirmedAt;
     const confirmationText = deliveryConfirmationText(confirmation);
@@ -343,7 +424,7 @@ function renderDeliveryRounds(versions, rejectionRecords = [], task = {}) {
         <div class="delivery-round-meta"><span>提交 ${current.submittedAt ? fmtDT(current.submittedAt) : '时间未记录'}</span>${confirmationText ? `<span>确认 ${escHtml(confirmationText)}</span>` : ''}</div>
       </summary>
       <div class="delivery-round-body">
-        ${requirement ? `<section class="delivery-round-step"><h4>修改要求</h4><p>${escHtml(requirement)}</p>${taskDetailFiles(current.changeReferenceImagesJson || round.first.changeReferenceImagesJson || round.requirement?.rejectionReferenceImagesJson, true)}${taskDetailFiles(round.requirement?.rejectionAttachmentsJson, false)}</section>` : ''}
+        ${requirement ? `<section class="delivery-round-step"><h4>修改要求</h4><p>${escHtml(requirement)}</p>${taskDetailFiles(requirementImages, true)}${taskDetailFiles(round.requirement?.rejectionAttachmentsJson, false)}</section>` : ''}
         <section class="delivery-round-step"><h4>本轮成果</h4><div class="delivery-step-meta">${escHtml(current.submittedByName || task.designerName || '提交人未记录')} · ${current.submittedAt ? fmtDT(current.submittedAt) : '时间未记录'}</div><p>${escHtml(current.deliverables || '未填写文字交付内容')}</p>${taskDetailFiles(current.referenceImagesJson, true)}${taskDetailFiles(current.attachmentsJson, false)}</section>
         <section class="delivery-round-step"><h4>验收记录</h4><div class="delivery-step-meta">${confirmationText ? escHtml(confirmationText) : round.rejection ? '已驳回，待重新交付' : awaitingConfirmation ? '等待企划验收' : '历史验收信息未记录'}</div>${confirmation.reviewComments ? `<p>${escHtml(confirmation.reviewComments)}</p>` : ''}${round.rejection ? `<p class="delivery-rejection-reason">驳回意见：${escHtml(round.rejection.reason || '未填写')}</p>` : ''}</section>
         <section class="delivery-round-step"><h4>积分入账</h4><strong class="delivery-point-status is-${escHtml(round.pointStatus)}">${escHtml(deliveryRoundStatus(round))}</strong>${rule ? `<div class="delivery-step-meta">规则：${escHtml(rule)}${current.pointRuleCode && current.pointRuleDescription ? `（${escHtml(current.pointRuleCode)}）` : ''}</div>` : ''}${confirmation.awardedAt ? `<div class="delivery-step-meta">入账时间 ${fmtDT(confirmation.awardedAt)}</div>` : ''}${round.pointStatus === 'missing' ? '<p class="task-point-note">本轮已有验收记录，未查到关联积分流水，未计入本轮已入账。</p>' : ''}</section>
@@ -364,7 +445,7 @@ function openDeliveryHistory(taskId) {
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'deliveryHistoryModal';
-  modal.innerHTML = `<div class="modal delivery-history-modal"><div class="modal-header"><button class="modal-close" data-emie-action="click:designer-history-close">✕</button><div class="modal-header-left"><div class="modal-title">交付与积分记录 · ${escHtml(task.name || '-')}</div><div class="delivery-history-hint">每次交付、修改要求和实际入账分别留痕；主动更正收在对应交付内</div></div></div><div class="modal-body">${renderTaskPointSummary(task, { historyLink: false })}${renderDeliveryRounds(versions, records, task) || '<div class="empty"><p>暂无交付记录</p></div>'}</div><div class="modal-footer"><button class="btn btn-primary" data-emie-action="click:designer-history-close">关闭</button></div></div>`;
+  modal.innerHTML = `<div class="modal delivery-history-modal"><div class="modal-header"><button class="modal-close" data-emie-action="click:designer-history-close">✕</button><div class="modal-header-left"><div class="modal-title">交付与积分记录 · ${escHtml(task.name || '-')}</div><div class="delivery-history-hint">每次交付、修改要求和实际入账分别留痕；主动更正收在对应交付内</div></div></div><div class="modal-body">${renderTaskPointSummary(task, { historyLink: false })}${renderTaskRejectionHistory(task)}${renderDeliveryRounds(versions, records, task) || '<div class="empty"><p>暂无交付记录</p></div>'}</div><div class="modal-footer"><button class="btn btn-primary" data-emie-action="click:designer-history-close">关闭</button></div></div>`;
   document.body.appendChild(modal);
 }
 
@@ -375,7 +456,6 @@ function openPublishedSubTaskDetail(taskId) {
   const tsi = getTaskStatusInfo(task.status);
   const records = Array.isArray(task.rejectionRecords) ? task.rejectionRecords : [];
   const deliveryVersions = Array.isArray(task.deliveryVersions) ? task.deliveryVersions : [];
-  const roleNames = { planner: '产品企划', sales: '销售', admin: '管理员', designer: '设计师', supplychain: '供应链', promotion: '产品推广' };
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'publishedSubTaskDetailModal';
@@ -404,37 +484,9 @@ function openPublishedSubTaskDetail(taskId) {
         ${taskDetailFiles(task.referenceImagesJson, true)}
         ${taskDetailFiles(task.attachmentsJson, false)}
         ${task.deliverables ? `<div class="detail-item" style="margin-top:12px;"><div class="detail-label">当前交付成果</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.deliverables)}</div></div>` : ''}
+        ${renderTaskReviewComment(task)}
+        ${renderTaskRejectionHistory(task)}
         ${deliveryVersions.length ? `<div class="delivery-section-heading">交付与积分记录</div>${renderDeliveryRounds(deliveryVersions, records, task)}` : ''}
-        <details class="delivery-all-requirements"><summary>全部修改要求（含驳回及取消记录）</summary>
-        <div style="margin-top:18px;">
-          <div style="font-size:14px;font-weight:700;margin-bottom:8px;">修改要求记录 <span style="color:var(--gray-400);font-weight:400;">(${records.length})</span></div>
-          ${records.length ? records.map(record => `
-            <details style="border:1px solid #F3C1C1;border-radius:9px;margin-bottom:8px;overflow:hidden;">
-              <summary style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#FFF8F8;cursor:pointer;list-style:none;">
-                <strong style="color:#A32D2D;white-space:nowrap;">第 ${record.attemptNo} 次修改要求</strong>
-                <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray-600);">${escHtml(record.reason || '未填写修改意见')}</span>
-                ${rejectionPointInfo(record) ? `<span style="font-size:11px;color:var(--gray-500);white-space:nowrap;">${escHtml(rejectionPointInfo(record))}</span>` : ''}
-                <span style="font-size:11px;color:var(--gray-400);white-space:nowrap;">${record.reviewedAt ? new Date(record.reviewedAt).toLocaleString('zh-CN', { hour12: false }) : '-'}</span>
-              </summary>
-              <div style="padding:14px;">
-                <div style="padding:12px;background:var(--gray-50);border-radius:8px;">
-                  <div class="detail-label">当轮提交内容 · ${escHtml(record.submittedByName || task.designerName || '-')}</div>
-                  <div class="detail-value" style="white-space:pre-wrap;margin-top:5px;">${escHtml(record.deliverables || '未填写文字交付内容')}</div>
-                  ${taskDetailFiles(record.referenceImagesJson, true)}
-                  ${taskDetailFiles(record.attachmentsJson, false)}
-                </div>
-                <div style="margin-top:10px;padding:12px;background:#FFF8F8;border-radius:8px;">
-                  <div class="detail-label" style="color:#A32D2D;">修改意见 · ${escHtml(roleNames[record.reviewerRole] || record.reviewerRole || '')} ${escHtml(record.reviewerName || '-')}</div>
-                  <div class="detail-label" style="color:#A32D2D;margin-top:6px;">要求完成时间：${record.requiredCompletionDate ? formatDate(record.requiredCompletionDate) : '-'}</div>
-                  <div class="detail-value" style="white-space:pre-wrap;margin-top:5px;">${escHtml(record.reason || '未填写修改意见')}</div>
-                  ${rejectionPointInfo(record) ? `<div class="detail-label" style="margin-top:8px;color:var(--gray-600);">${escHtml(rejectionPointInfo(record))}</div>` : ''}
-                  ${taskDetailFiles(record.rejectionReferenceImagesJson, true)}
-                  ${taskDetailFiles(record.rejectionAttachmentsJson, false)}
-                </div>
-              </div>
-            </details>`).join('') : '<div class="empty" style="padding:24px;"><p>暂无修改要求记录</p></div>'}
-        </div>
-        </details>
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" data-emie-action="click:designer-detail-project" data-project-id="${task.projectId}">查看所属项目</button>
@@ -468,6 +520,8 @@ EMIE.registerActions({
   openDeliveryHistory,
   renderTaskPointSummary,
   renderDeliveryRounds,
+  renderTaskReviewComment,
+  renderTaskRejectionHistory,
 });
 
 EMIE.registerModule('dashboardDesigner', {

@@ -26,9 +26,17 @@ public interface ActivityLogRepository extends JpaRepository<ActivityLog, Long> 
 
     /** 完整读取交付与给分的相关审计事件，不受项目动态 200 条上限影响。 */
     @Query("SELECT l FROM ActivityLog l WHERE l.entityType = 'sub_task' AND l.entityId IN :taskIds "
-            + "AND (l.action LIKE '发起子任务修改：%' OR l.action LIKE '产品企划确认成果：%' "
-            + "OR l.action LIKE '子任务驳回：%') ORDER BY l.time ASC, l.id ASC")
+            + "AND (l.action LIKE '发起子任务修改：%' OR l.action LIKE '产品企划确认成果：%') "
+            + "ORDER BY l.time ASC, l.id ASC")
     List<ActivityLog> findSubTaskDeliveryHistory(@Param("taskIds") Collection<Long> taskIds);
+
+    /** Durable cycle records may still need their original audit snapshots; include pre-cycle project logs. */
+    @Query("SELECT l FROM ActivityLog l LEFT JOIN l.project p WHERE l.action LIKE '子任务驳回：%' "
+            + "AND ((l.entityType = 'sub_task' AND l.entityId IN :taskIds) "
+            + "OR ((l.entityType IS NULL OR l.entityType <> 'sub_task') "
+            + "AND (l.projectRefId IN :projectIds OR p.id IN :projectIds))) ORDER BY l.time ASC, l.id ASC")
+    List<ActivityLog> findSubTaskRejectionHistory(
+            @Param("taskIds") Collection<Long> taskIds, @Param("projectIds") Collection<Long> projectIds);
 
     @org.springframework.data.jpa.repository.Modifying
     @org.springframework.data.jpa.repository.Query(

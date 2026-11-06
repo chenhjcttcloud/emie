@@ -14,6 +14,7 @@ import com.emie.designpm.project.repository.SubTaskRepository;
 import com.emie.designpm.project.service.ProjectAccessService;
 import com.emie.designpm.project.service.ProjectLifecycleCommandService;
 import com.emie.designpm.project.service.ProjectService;
+import com.emie.designpm.project.service.ProjectTaskFileOverview;
 import com.emie.designpm.project.service.ProjectViewSupport;
 import com.emie.designpm.project.service.ProjectWorkflowService;
 import com.emie.designpm.project.service.SubTaskCommandService;
@@ -50,6 +51,9 @@ public class ProjectController {
 
     @Autowired(required = false)
     private com.emie.designpm.feishu.service.FeishuChatService feishuChatService;
+
+    @Autowired
+    private ProjectTaskFileOverview taskFileOverview;
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
@@ -398,20 +402,19 @@ public class ProjectController {
     @GetMapping("/{id}")
     public ResponseEntity<ProjectDetailDTO> getProjectDetail(@PathVariable Long id, HttpServletRequest request) {
         AuthSession session = getSession(request);
-        Optional<Project> projectOpt = projectService.getProjectById(id);
-        if (projectOpt.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-        if (!projectAccessService.canView(projectOpt.get(), session)) {
+        Project project = projectService.getProjectById(id).orElse(null);
+        if (project == null) return ResponseEntity.notFound().build();
+        if (!projectAccessService.canView(project, session)) {
             return ResponseEntity.status(403).build();
         }
-        // 日志单独查询，避免项目详情同时 fetch 两个集合导致连接和结果集膨胀；
-        // 不替换实体的 orphanRemoval 集合，避免 Hibernate 误判为删除全部日志。
+        // 单独查询日志，避免同时 fetch 两个集合及改写实体的 orphanRemoval 集合。
         List<ActivityLog> detailLogs = new ArrayList<>(activityLogRepository.findProjectHistory(id));
         Collections.reverse(detailLogs);
         // 仅记录成功访问，避免把未授权探测误记为正常查询。
         activityLogRepository.save(new ActivityLog("查询项目 #" + id, session.name(), session.role()));
-        return ResponseEntity.ok(toDetailWithLogs(projectOpt.get(), detailLogs));
+        ProjectDetailDTO detail = view.toDetailWithLogs(project, detailLogs);
+        if (taskFileOverview != null) taskFileOverview.addUploads(detail);
+        return ResponseEntity.ok(detail);
     }
 
     /** 新建项目 */
@@ -843,10 +846,6 @@ public class ProjectController {
 
     private ProjectDetailDTO toDetail(Project project) {
         return view.toDetail(project);
-    }
-
-    private ProjectDetailDTO toDetailWithLogs(Project project, List<ActivityLog> logs) {
-        return view.toDetailWithLogs(project, logs);
     }
 
     private ProjectDetailDTO toDetail(

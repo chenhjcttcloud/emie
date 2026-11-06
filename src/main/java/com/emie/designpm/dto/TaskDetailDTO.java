@@ -1,5 +1,6 @@
 package com.emie.designpm.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.List;
 import java.util.Map;
 import lombok.Data;
@@ -53,7 +54,13 @@ public class TaskDetailDTO {
     private List<Map<String, Object>> scoringRecords;
     private List<Map<String, Object>> rejectionRecords;
     private List<Map<String, Object>> deliveryVersions;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private List<UploadedFile> uploadedFiles;
+
     private Long activeRejectionCycleId;
     private String activeRejectionRole;
     private String createdAt;
+
+    public record UploadedFile(String storedName, String name, Long size) {}
 }

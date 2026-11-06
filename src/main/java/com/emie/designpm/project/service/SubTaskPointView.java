@@ -67,7 +67,6 @@ final class SubTaskPointView {
                 .collect(Collectors.groupingBy(PointLedger::getDeliveryVersionId));
         Map<String, Map<String, Object>> requests = new LinkedHashMap<>();
         Map<String, Integer> revisionNumbers = new LinkedHashMap<>();
-        Map<String, Map<String, Object>> rejections = new HashMap<>();
         Map<Long, Map<String, Object>> confirmations = new HashMap<>();
         List<ActivityLog> ordered = new ArrayList<>(taskLogs);
         ordered.sort(Comparator.comparing(ActivityLog::getTime, Comparator.nullsLast(Comparator.naturalOrder()))
@@ -81,9 +80,6 @@ final class SubTaskPointView {
             if (requestId != null && action.startsWith("发起子任务修改：")) {
                 revisionNumbers.computeIfAbsent(requestId, ignored -> revisionNumbers.size() + 1);
                 requests.put(requestId, snapshot);
-            } else if (requestId != null && action.startsWith("子任务驳回：")) {
-                requests.putIfAbsent(requestId, snapshot);
-                rejections.put(requestId, snapshot);
             }
             if (action.startsWith("产品企划确认成果：") && snapshot.get("deliveryVersionId") instanceof Number id) {
                 confirmations.put(id.longValue(), snapshot);
@@ -127,17 +123,9 @@ final class SubTaskPointView {
                     "submissionOrigin",
                     revisionNumbers.containsKey(requestId)
                             ? "revision"
-                            : rejections.containsKey(requestId)
-                                    ? "rejection"
-                                    : "initial".equals(version.get("submissionType")) ? "initial" : "unknown");
+                            : "initial".equals(version.get("submissionType")) ? "initial" : "unknown");
             version.put("changeReason", request.get("reason"));
             version.put("changeReferenceImagesJson", request.get("changeReferenceImagesJson"));
-            version.put(
-                    "rejectionReason",
-                    rejections.getOrDefault(requestId, Map.of()).get("reason"));
-            version.put(
-                    "rejectionCycleId",
-                    rejections.getOrDefault(requestId, Map.of()).get("rejectionCycleId"));
             version.put(
                     "reviewComments", confirmations.getOrDefault(id, Map.of()).get("reviewComments"));
         }

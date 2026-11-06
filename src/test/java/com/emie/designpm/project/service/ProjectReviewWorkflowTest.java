@@ -625,6 +625,10 @@ class ProjectReviewWorkflowTest {
     void paidRejectionKeepsBasePointsAndClearsBonusWhenCancelled() {
         Project project = projectWithTask("regular", "delivered");
         SubTask task = project.getTasks().get(0);
+        var submittedVersion = new SubTaskDeliveryVersion();
+        submittedVersion.setId(71L);
+        submittedVersion.setDeliverables("本轮上传成果");
+        when(deliveryVersions.findFirstBySubTaskIdOrderByVersionNoDesc(11L)).thenReturn(Optional.of(submittedVersion));
         task.setAssigneeRole("designer");
         task.setPointRuleCode("BASE");
         task.setBasePointSnapshot(5d);
@@ -670,6 +674,9 @@ class ProjectReviewWorkflowTest {
                 .map(i -> (SubTaskRejectionCycle) i.getArgument(0))
                 .findFirst()
                 .orElseThrow();
+        assertTrue(cycle.getPriorReviewSnapshotJson().contains("\"deliveryVersionId\":71"));
+        assertTrue(cycle.getPriorReviewSnapshotJson().contains("本轮上传成果"));
+        assertTrue(cycle.getPriorReviewSnapshotJson().contains("\"points\":3.0"));
         when(rejectionCycles.findById(201L)).thenReturn(Optional.of(cycle));
         when(rejectionCycles.findFirstBySubTaskIdAndStatusOrderBySequenceNoDesc(11L, "ACTIVE"))
                 .thenReturn(Optional.of(cycle));

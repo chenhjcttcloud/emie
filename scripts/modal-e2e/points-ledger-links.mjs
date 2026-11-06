@@ -15,6 +15,7 @@ export async function runPointsLedgerLinkChecks(page, artifactRoot) {
       role: e.state.currentRole, userId: e.state.currentUserId, permissions: e.state.permissions,
       authUser: e.state.authUser, designerTasks: e.dashboardState.designerTaskCache,
       projectDetail: e.projectState.currentProjectDetail,
+      previewImage: e.actions.previewImage, showDownloadOptions: e.actions.showDownloadOptions,
       appDisplay: document.getElementById('appContainer').style.display,
       loginDisplay: document.getElementById('loginPage').style.display,
     };
@@ -36,12 +37,29 @@ export async function runPointsLedgerLinkChecks(page, artifactRoot) {
       rejectionRecords: [], deliveryVersions: [],
     });
     const tasks = [task(82001, '包装主视觉设计'), task(82002, '包装修改'), task(82003, '详情页排版')];
+    const file = (storedName, name) => ({ storedName, name, size: 1200 });
+    const currentImage = file('overview-current.png', '当前交付图.png');
+    const oldDesign = file('overview-old.ai', '首轮源文件.ai');
+    tasks[0].uploadedFiles = [file('overview-setup.pdf', '最初任务资料.pdf'), currentImage, { url: 'javascript:alert(1)' }];
+    tasks[0].referenceImagesJson = JSON.stringify([currentImage]);
+    tasks[0].pendingChangeReferenceImagesJson = JSON.stringify([file('overview-change.png', '修改标注.png')]);
+    tasks[0].deliveryVersions = [
+      { id: 92002, versionNo: 2, submissionType: 'redelivery', referenceImagesJson: JSON.stringify([currentImage]) },
+      { id: 92001, versionNo: 1, submissionType: 'initial', attachmentsJson: JSON.stringify([oldDesign]) },
+    ];
+    tasks[0].rejectionRecords = [{
+      attemptNo: 1, reason: '请调整包装对比度', reviewerRole: 'planner', rejectedDeliveryVersionId: 92001,
+      attachmentsJson: JSON.stringify([oldDesign]),
+      rejectionAttachmentsJson: JSON.stringify([file('overview-feedback.docx', '驳回说明 <补充>.docx')]),
+    }];
+    tasks[1].uploadedFiles = [file('overview-other.pdf', '第二个子任务附件.pdf')];
     const project = {
       id: projectId, name: '关联测试项目', productName: '关联测试产品', type: 'regular',
       status: 'in_progress', statusLabel: '进行中', statusCls: 'badge-progress',
       plannerId: 'ledger-links-planner', plannerName: '测试企划',
       createdAt: '2026-11-01T10:00:00', updatedAt: '2026-11-05T10:00:00',
       deadline: '2026-11-20', tasks, logs: [],
+      attachmentsJson: JSON.stringify([file('overview-project.pdf', '项目本身的附件.pdf')]),
     };
     const requirement = {
       id: 83001, projectCode: 'NEED-83001', productName: '界面送审需求',
@@ -98,6 +116,8 @@ export async function runPointsLedgerLinkChecks(page, artifactRoot) {
     for (const action of ['apiPost', 'apiPut', 'apiDelete']) {
       e.actions[action] = async (...args) => { f.writes.push({ action, args }); throw new Error('Ledger link checks must remain read-only'); };
     }
+    e.actions.previewImage = url => { f.preview = new URL(url, location.origin).pathname; };
+    e.actions.showDownloadOptions = url => { f.download = new URL(url, location.origin).pathname; };
     await e.actions.renderPointsView(main);
   });
   const main = page.locator('#mainContent');
@@ -139,6 +159,26 @@ export async function runPointsLedgerLinkChecks(page, artifactRoot) {
     await page.locator('#projectDetailModal').waitFor({ state: 'visible' });
     assert.match(await page.locator('#projectDetailModal .modal-title').innerText(), /#81001/);
     assert.match(await page.locator('#projectDetailModal').innerText(), /关联测试产品/);
+    const overview = page.locator('#projectDetailModal .project-file-overview');
+    assert.match(await overview.locator('.detail-section-title').innerText(), /文件总览\s*6 个文件/);
+    assert.match(await overview.evaluate(element => element.nextElementSibling?.textContent), /产品档案资料/);
+    const fileGroups = overview.locator('.project-file-group');
+    assert.equal(await fileGroups.count(), 2);
+    assert.equal(await fileGroups.first().locator('.project-file-row').count(), 5, '每个文件在同一子任务内只显示一次');
+    assert.match(await fileGroups.first().innerText(), /最初任务资料\.pdf/);
+    assert.match(await fileGroups.first().innerText(), /首轮源文件\.ai/);
+    assert.match(await fileGroups.first().innerText(), /驳回说明 <补充>\.docx/);
+    assert.match(await fileGroups.first().innerText(), /修改标注\.png/);
+    assert.doesNotMatch(await overview.innerText(), /项目本身的附件|javascript:/);
+    await fileGroups.nth(1).locator('summary').click();
+    assert.match(await fileGroups.nth(1).innerText(), /第二个子任务附件\.pdf/);
+    await fileGroups.nth(1).locator('summary').click();
+    const currentFile = overview.locator('.project-file-row').filter({ hasText: '当前交付图.png' });
+    await currentFile.getByRole('button', { name: /预览/ }).click();
+    await currentFile.getByRole('button', { name: /下载/ }).click();
+    assert.deepEqual(await page.evaluate(() => [pointsLedgerLinkFixture.preview, pointsLedgerLinkFixture.download]),
+      ['/api/files/download/overview-current.png', '/api/files/download/overview-current.png']);
+    await overview.screenshot({ path: path.join(artifactRoot, 'project-file-overview.png'), animations: 'disabled' });
     await close('projectDetailModal');
 
     assert.equal(await page.evaluate(() => EMIE.dashboardState.designerTaskCache.length), 0);
@@ -191,6 +231,7 @@ export async function runPointsLedgerLinkChecks(page, artifactRoot) {
     await page.evaluate(() => {
       const e = window.EMIE, saved = window.pointsLedgerLinkMocks;
       e.actions.apiGet = saved.get; e.actions.apiPost = saved.post; e.actions.apiPut = saved.put; e.actions.apiDelete = saved.delete;
+      e.actions.previewImage = saved.previewImage; e.actions.showDownloadOptions = saved.showDownloadOptions;
       e.state.currentRole = saved.role; e.state.currentUserId = saved.userId; e.state.permissions = saved.permissions;
       e.state.authUser = saved.authUser; e.dashboardState.designerTaskCache = saved.designerTasks;
       e.projectState.currentProjectDetail = saved.projectDetail;

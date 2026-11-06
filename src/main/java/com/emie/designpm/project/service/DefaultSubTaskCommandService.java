@@ -1513,29 +1513,21 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         cycle.setPriorTaskStatus(task.getStatus());
         cycle.setPriorPlannedDate(task.getPlannedDate());
         cycle.setPriorReviewComments(task.getReviewComments());
-        cycle.setPriorReviewSnapshotJson("{}");
         cycle.setReason(comments);
         cycle.setRequiredCompletionDate(requiredCompletionDate);
         cycle.setCreatedBonusRequestId(bonusRequestId);
         cycle.setReferenceImagesJson(rejectionReferenceImagesJson);
         cycle.setAttachmentsJson(rejectionAttachmentsJson);
-        rejectionCycleRepository.save(cycle);
-        task.setStatus("rejected");
-        task.setReviewComments(comments);
-        task.setPlannedDate(requiredCompletionDate);
-        Map<String, Object> submittedSnapshot = new LinkedHashMap<>();
-        submittedSnapshot.put("deliverables", task.getDeliverables());
-        submittedSnapshot.put("referenceImagesJson", task.getReferenceImagesJson());
-        submittedSnapshot.put("attachmentsJson", task.getAttachmentsJson());
-        submittedSnapshot.put("actualDate", task.getActualDate());
-        submittedSnapshot.put("submittedById", task.getDesignerId());
-        submittedSnapshot.put("submittedByName", task.getDesignerName());
+        Map<String, Object> submittedSnapshot = SubTaskRejectionHistory.submissionSnapshot(
+                task,
+                deliveryVersionRepository
+                        .findFirstBySubTaskIdOrderByVersionNoDesc(taskId)
+                        .orElse(null));
         Map<String, Object> rejectionSnapshot = new LinkedHashMap<>();
         rejectionSnapshot.put("reason", comments == null ? "" : comments);
         rejectionSnapshot.put("requiredCompletionDate", requiredCompletionDate);
         rejectionSnapshot.put("rejectionReferenceImagesJson", rejectionReferenceImagesJson);
         rejectionSnapshot.put("rejectionAttachmentsJson", rejectionAttachmentsJson);
-        rejectionSnapshot.put("rejectionCycleId", cycle.getId());
         rejectionSnapshot.put("withPoints", withPoints);
         rejectionSnapshot.put("pointRuleCode", withPoints ? task.getPendingChangeRuleCode() : "");
         rejectionSnapshot.put(
@@ -1543,6 +1535,13 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                 withPoints ? pointsService.ruleDescription(task.getPendingChangeRuleCode()) : "");
         rejectionSnapshot.put("points", withPoints ? task.getPendingChangeBonusPoints() : 0d);
         rejectionSnapshot.put("pointRequestId", bonusRequestId);
+        cycle.setPriorReviewSnapshotJson(
+                AuditJson.toJson(Map.of("submission", submittedSnapshot, "rejection", rejectionSnapshot)));
+        rejectionCycleRepository.save(cycle);
+        rejectionSnapshot.put("rejectionCycleId", cycle.getId());
+        task.setStatus("rejected");
+        task.setReviewComments(comments);
+        task.setPlannedDate(requiredCompletionDate);
         p.getLogs()
                 .add(new ActivityLog(
                         "子任务驳回：" + task.getName() + "（意见：" + comments + "）",

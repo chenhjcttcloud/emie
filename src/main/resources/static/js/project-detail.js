@@ -173,6 +173,8 @@ function renderProjectDetailContent(detail) {
       ${renderProjectAttachments(detail)}
     </div>
 
+    ${renderProjectFileOverview(detail.tasks)}
+
     ${renderProductArchiveSection(detail)}
 
     ${renderProjectRelatedRoles(detail)}
@@ -217,6 +219,69 @@ function renderSubTaskAuditDetail(log) {
   if (Array.isArray(data.ledgerIds)) parts.push(`实际入账：${Number(data.awardedPoints || 0)} 分；积分流水 ID：${data.ledgerIds.length ? data.ledgerIds.join('、') : '本次无新增积分'}`);
   if (data.pointRequestId) parts.push(`修改请求 ID：${data.pointRequestId}`);
   return parts.length ? `<div class="timeline-time" style="margin-top:4px;white-space:pre-wrap;">${parts.map(escHtml).join('<br>')}</div>` : '';
+}
+
+function collectTaskOverviewFiles(task) {
+  const files = new Map();
+  const collect = (value, source) => {
+    let entries = value;
+    if (typeof entries === 'string') {
+      try { entries = JSON.parse(entries); } catch (_) { return; }
+    }
+    if (!Array.isArray(entries)) return;
+    for (const entry of entries) {
+      const raw = typeof entry === 'string' ? { url: entry } : entry;
+      if (!raw || typeof raw !== 'object') continue;
+      const storedName = typeof raw.storedName === 'string' ? raw.storedName.trim() : '';
+      const path = [raw.url, raw.fileUrl, raw.path].find(value => typeof value === 'string' && value.trim())?.trim();
+      if (!storedName && (!path || !path.split('?')[0].split('/').pop() || /^(?:javascript|data|blob):/i.test(path))) continue;
+      const name = [raw.name, raw.originalName].find(value => typeof value === 'string' && value.trim());
+      const file = { storedName, url: path, name, size: Math.max(0, Number(raw.size) || 0) };
+      const url = normalizeFileUrl(file);
+      if (!url.startsWith('/api/files/download/') && !url.startsWith('/api/files/download-by-original?name=')) continue;
+      if (!files.has(url)) {
+        files.set(url, { file: { ...file, name: name || storedNameFromFile(file) }, url, sources: new Set() });
+      }
+      if (source) files.get(url).sources.add(source);
+    }
+  };
+
+  collect(task.uploadedFiles);
+  collect(task.referenceImagesJson, '当前参考图');
+  collect(task.attachmentsJson, '当前附件');
+  collect(task.pendingChangeReferenceImagesJson, '本轮修改参考');
+  for (const version of task.deliveryVersions || []) {
+    const label = version.versionNo == null ? '历史交付' : `交付第 ${version.versionNo} 版`;
+    collect(version.referenceImagesJson, label);
+    collect(version.attachmentsJson, label);
+    collect(version.changeReferenceImagesJson, `${label}的修改参考`);
+  }
+  for (const record of task.rejectionRecords || []) {
+    const label = record.attemptNo == null ? '历史驳回' : `第 ${record.attemptNo} 次驳回`;
+    if (!record.legacy) {
+      collect(record.referenceImagesJson, `${label}前的成果`);
+      collect(record.attachmentsJson, `${label}前的成果`);
+    }
+    collect(record.rejectionReferenceImagesJson, `${label}的参考`);
+    collect(record.rejectionAttachmentsJson, `${label}的附件`);
+  }
+  return [...files.values()];
+}
+
+function renderProjectFileOverview(tasks) {
+  const groups = tasks.map(task => ({ task, files: collectTaskOverviewFiles(task) })).filter(group => group.files.length);
+  const count = groups.reduce((sum, group) => sum + group.files.length, 0);
+  return `<section class="detail-section project-file-overview">
+    <div class="detail-section-title">📁 文件总览 <span class="project-file-overview-count">${count} 个文件</span></div>
+    ${count ? `<p class="project-file-overview-hint">按子任务查看上传文件、历次交付和驳回附件。</p>
+      ${groups.map(({ task, files }, index) => `<details class="project-file-group" ${index === 0 ? 'open' : ''}>
+        <summary><strong>${escHtml(task.name || '未命名子任务')}</strong><span>${files.length} 个文件</span></summary>
+        <ul class="project-file-group-list">${files.map(({ file, url, sources }) => `<li class="project-file-row">
+          <div class="project-file-row-info"><strong>${escHtml(file.name)}</strong><small>${escHtml([...sources].join(' · ') || '子任务上传')}${file.size ? ` · ${fmtSize(file.size)}` : ''}</small></div>
+          <div class="project-file-row-actions">${isRasterImageFile(file.name) ? `<button type="button" class="attachment-action-btn preview" data-emie-action="click:detail-overview-image" data-file-url="${escHtml(url)}" data-file-name="${escHtml(file.name)}">👁 预览</button>` : ''}${renderAttachmentActions(file)}</div>
+        </li>`).join('')}</ul>
+      </details>`).join('')}` : '<p class="project-file-overview-hint">子任务上传文件后会在这里显示。</p>'}
+  </section>`;
 }
 
 function renderProductArchiveSection(detail) {
@@ -295,7 +360,8 @@ function renderSubTaskCard(detail, task, idx) {
       ${task.deliverables ? `<div class="detail-item"><div class="detail-label">交付成果</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.deliverables)}</div></div>` : ''}
     </div>` : ''}
 
-    ${task.reviewComments ? `<div class="review-box ${task.status === 'rejected' ? 'rejected' : 'approved'}"><strong>${task.status === 'revision_requested' || task.pendingChangeBonusRequestId ? '修改意见' : task.status === 'rejected' ? '驳回意见' : '验收意见'}：</strong>${escHtml(task.reviewComments)}</div>` : ''}
+    ${EMIE.actions.renderTaskReviewComment(task)}
+    ${EMIE.actions.renderTaskRejectionHistory(task, { compact: true })}
     ${renderSubTaskImages(task.pendingChangeReferenceImagesJson)}
 
 
@@ -368,25 +434,15 @@ function openProjectSubTaskDetail(event, taskId) {
           <div class="detail-label">任务要求</div>
           <div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.details || '未填写')}</div>
         </div>
+        ${EMIE.actions.renderTaskReviewComment(task)}
+        ${EMIE.actions.renderTaskRejectionHistory(task, {
+          showDetails: record => `<button type="button" class="btn btn-outline btn-sm" data-emie-action="click:detail-rejection-record" data-task-id="${escHtml(task.id)}" data-attempt-no="${escHtml(record.attemptNo)}">查看当轮成果与附件</button>`,
+        })}
         ${task.referenceImagesJson ? renderSubTaskImages(task.referenceImagesJson) : ''}
         ${task.attachmentsJson ? renderTaskAttachments(task.attachmentsJson) : ''}
         ${task.deliverables ? `<div class="detail-item" style="margin-top:12px;"><div class="detail-label">当前交付成果</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(task.deliverables)}</div></div>` : ''}
         ${renderSubTaskImages(task.pendingChangeReferenceImagesJson)}
         ${deliveryVersions.length ? `<div class="delivery-section-heading">交付与积分记录</div>${renderDeliveryRounds(deliveryVersions, records, task)}` : ''}
-        <details class="delivery-all-requirements"><summary>全部修改要求（含驳回及取消记录）</summary>
-        <div style="margin-top:18px;">
-          <div style="font-size:14px;font-weight:700;margin-bottom:8px;">修改要求记录 <span style="color:var(--gray-400);font-weight:400;">(${records.length})</span></div>
-          ${records.length ? records.map(record => `
-            <button type="button" data-emie-action="click:detail-rejection-record" data-task-id="${task.id}" data-attempt-no="${record.attemptNo}"
-              style="width:100%;display:flex;align-items:center;gap:8px;padding:10px 12px;margin-bottom:8px;border:1px solid #F3C1C1;border-radius:9px;background:#FFF8F8;cursor:pointer;text-align:left;">
-              <strong style="color:#A32D2D;white-space:nowrap;">第 ${record.attemptNo} 次修改要求${record.cancelled ? '（已取消）' : ''}</strong>
-              <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gray-600);">${escHtml(record.reason || '未填写修改意见')}</span>
-              ${record.withPoints === true ? `<span style="font-size:12px;color:var(--warning-dark,#92400E);white-space:nowrap;">${escHtml(record.pointRuleDescription || record.pointRuleCode || '积分规则')} · ${Number(record.points || 0)} 分</span>` : record.withPoints === false ? '<span style="font-size:12px;color:var(--gray-500);white-space:nowrap;">本次无积分</span>' : ''}
-              <span style="font-size:11px;color:var(--gray-400);white-space:nowrap;">${fmtDT(record.reviewedAt)}</span>
-              <span style="color:var(--primary);white-space:nowrap;">查看详情 ›</span>
-            </button>`).join('') : '<div class="empty" style="padding:24px;"><p>暂无修改要求记录</p></div>'}
-        </div>
-        </details>
       </div>
       <div class="modal-footer">${deliveryVersions.length ? `<button class="btn btn-outline" data-emie-action="click:designer-history" data-task-id="${task.id}">交付与积分记录</button>` : ''}<button class="btn btn-primary" data-emie-action="click:detail-subtask-close">关闭</button></div>
     </div>`;
@@ -1095,6 +1151,8 @@ if (registerEventAction) {
   registerEventAction('detail-rejection-close', () => closeM('taskRejectionRecordModal'));
   registerEventAction('detail-file-preview', (_event, element) =>
     openFilePreview(element.dataset.fileUrl, element.dataset.fileName, Number(element.dataset.fileSize) || 0));
+  registerEventAction('detail-overview-image', (_event, element) =>
+    EMIE.actions.previewImage(EMIE.actions.authenticatedFileUrl(element.dataset.fileUrl), element.dataset.fileName));
   registerEventAction('detail-file-download', (_event, element) => {
     _event.stopPropagation();
     showDownloadOptions(element.dataset.fileUrl, element.dataset.fileName, Number(element.dataset.fileSize) || 0);

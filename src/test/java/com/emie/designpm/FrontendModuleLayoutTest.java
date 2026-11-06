@@ -338,7 +338,8 @@ class FrontendModuleLayoutTest {
         String designerTasks = readResource("/static/js/dashboard-designer.js");
         assertTrue(
                 designerTasks.contains("openPublishedSubTaskDetail")
-                        && designerTasks.contains("修改要求记录")
+                        && designerTasks.contains("renderTaskRejectionHistory(task)")
+                        && designerTasks.contains("驳回记录")
                         && designerTasks.contains("当轮提交内容")
                         && designerTasks.contains("record.rejectionAttachmentsJson"),
                 "已发布子任务应可从独立详情查看每一轮修改要求、提交快照和附件");

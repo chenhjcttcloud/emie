@@ -10,14 +10,14 @@ import './dashboard-home.js?v=623';
 import './dashboard-lists.js?v=429';
 import './dashboard-scoring.js?v=345';
 import './dashboard-points.js?v=385';
-import './dashboard-designer.js?v=610';
+import './dashboard-designer.js?v=611';
 import './dashboard.js?v=219';
 import './material-market.js?v=162';
 import './image-library.js?v=117';
 import './project-uploads.js?v=499';
 import './project-form.js?v=459';
-import './project-detail.js?v=673';
-import './project-tasks.js?v=697';
+import './project-detail.js?v=674';
+import './project-tasks.js?v=698';
 import './project-sharing.js?v=264';
 import './projects.js?v=148';
 // 管理模块只在进入对应页面时下载；保留原有版本号作为缓存边界。

@@ -771,7 +771,8 @@ async function taskRedeliver(pid, tid) {
       <div class="modal modal-lg">
         <div class="modal-header"><div class="modal-header-left"><div class="modal-title">📤 重新交付：${escHtml(task.name)}</div></div></div>
         <div class="modal-body">
-          ${task.reviewComments ? `<div class="review-box rejected" style="margin-bottom:16px;"><strong>${task.status === 'revision_requested' || task.pendingChangeBonusRequestId ? '修改意见' : '驳回意见'}：</strong>${escHtml(task.reviewComments)}</div>` : ''}
+          ${EMIE.actions.renderTaskReviewComment(task, { redelivery: true })}
+          ${EMIE.actions.renderTaskRejectionHistory(task)}
           <form id="taskRedeliverForm">
             <input type="hidden" name="actualDate">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required style="min-height:100px;"></textarea></div>
