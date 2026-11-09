@@ -501,10 +501,15 @@ async function runPointRuleChecks(page) {
   await modal.waitFor({ state: 'detached' });
   await page.evaluate(async rules => {
     const original = window.EMIE.actions.apiGet;
+    const originalEnhanceDateInputs = window.enhanceDateInputs;
     window.enhanceDateInputs ??= () => {};
     window.EMIE.actions.apiGet = url => url === '/points/rules' ? Promise.resolve(rules) : original(url);
     try { await window.EMIE.actions.taskReject(101, 201); }
-    finally { window.EMIE.actions.apiGet = original; }
+    finally {
+      window.EMIE.actions.apiGet = original;
+      if (originalEnhanceDateInputs === undefined) delete window.enhanceDateInputs;
+      else window.enhanceDateInputs = originalEnhanceDateInputs;
+    }
   }, rules);
   const reject = page.locator('#taskRejectModal');
   const rejectRules = reject.locator('[data-reject-point-rules]');

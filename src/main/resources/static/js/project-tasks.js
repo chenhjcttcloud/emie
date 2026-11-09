@@ -273,7 +273,6 @@ async function addSubTask(pid) {
       <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-add-close">取消</button><button class="btn btn-outline" data-emie-action="click:task-save-draft" data-project-id="${pid}">保存草稿</button><button class="btn btn-primary" data-emie-action="click:task-submit-add" data-project-id="${pid}">确认添加</button></div>
     </div>`;
   document.body.appendChild(modal);
-  enhanceDateInputs(modal);
   try {
     const draft = JSON.parse(sessionStorage.getItem(`design_pm_subtask_draft_${pid}`) || 'null');
     if (draft) {
