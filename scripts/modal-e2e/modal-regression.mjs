@@ -446,7 +446,11 @@ async function runPointRuleChecks(page) {
   await page.evaluate(async rules => {
     if (!window.EMIE.actions.renderPointRulePicker) await import('/js/project-tasks.js');
     const original = window.EMIE.actions.apiGet;
-    window.EMIE.actions.apiGet = url => url === '/points/rules' ? Promise.resolve(rules) : original(url);
+    window.EMIE.actions.apiGet = url => {
+      if (url === '/points/rules') return Promise.resolve(rules);
+      if (url === '/projects/101') return Promise.resolve({ tasks: [{ id: 201 }] });
+      return original(url);
+    };
     try { await window.EMIE.actions.openTaskChangeBonus(101, 201); }
     finally { window.EMIE.actions.apiGet = original; }
   }, rules);
@@ -512,6 +516,124 @@ async function runPointRuleChecks(page) {
   assert.equal(await rejectRules.isVisible(), false, '选否后隐藏积分规则');
   await reject.locator('[data-emie-action="click:task-reject-close"]').click();
   process.stdout.write('  point-rule-picker-and-revision-points ok\n');
+}
+
+async function runVisualTaskRuleChecks(page) {
+  const rules = [
+    { ruleCode: 'VIS_V3_05', category: '包装设计', subcategory: '包装设计', description: '常规包装设计｜固定模板重新排版（无配件、无 UI）', points: 4 },
+    { ruleCode: 'VIS_V3_06', category: '包装设计', subcategory: '包装设计', description: '常规包装设计｜固定模板重新排版（有配件、有 UI）', points: 6 },
+    { ruleCode: 'VIS_V3_27', category: '产品设计', subcategory: '概念设计', description: '现有产品延伸设计｜其它 IP 款从 0 到 1 设计', points: 10 },
+    { ruleCode: 'VIS_V3_30', category: '产品设计', subcategory: '3D 设计送审', description: '现有产品延伸设计', points: 5 },
+    { ruleCode: 'D30_OLD', category: '产品设计', description: '旧设计规则', points: 8, enabled: false },
+    { ruleCode: 'GENERAL', category: '通用', description: '其他积分', points: 1 },
+  ];
+  await page.evaluate(rules => {
+    const e = window.EMIE;
+    const task = {
+      id: 301, supportsChangeTiers: true, pointRuleCode: 'VIS_V3_05',
+      smallChangeNoteSnapshot: '调整文字与配色', largeChangeNoteSnapshot: '重新排版与定义风格',
+    };
+    const legacyTask = {
+      id: 302, status: 'pending', name: '历史子任务', assigneeRole: 'designer',
+      pointRuleCode: 'D30_OLD', basePointSnapshot: 4,
+    };
+    const original = Object.fromEntries(['apiGet', 'apiPost', 'apiPut', 'hasPermission', 'refreshAfterMutation']
+      .map(key => [key, e.actions[key]]));
+    const fixture = window.visualTaskRuleFixture = { original, users: e.state.users, gets: [], writes: [] };
+    e.state.users = { ...e.state.users, designer: [] };
+    e.actions.hasPermission = () => true;
+    e.actions.refreshAfterMutation = async () => {};
+    e.actions.apiGet = async url => {
+      fixture.gets.push(url);
+      if (url === '/points/rules') return rules;
+      if (url === '/projects/301') return { tasks: [task, legacyTask] };
+      return original.apiGet(url);
+    };
+    const capture = async (url, body) => { fixture.writes.push({ url, body }); };
+    e.actions.apiPost = capture;
+    e.actions.apiPut = capture;
+  }, rules);
+  const addModal = page.locator('#addSubTaskModal');
+  const editModal = page.locator('#editTaskModal');
+  const changeModal = page.locator('#taskChangeBonusModal');
+  try {
+    await page.evaluate(() => window.EMIE.actions.addSubTask(301));
+    await addModal.waitFor();
+    const picker = addModal.locator('.point-rule-picker');
+    assert.match(await picker.locator('.point-rule-empty').innerText(), /选择一级分类/);
+    assert.equal(await picker.locator('[data-point-category-tab="通用"]').count(), 0);
+    await picker.locator('[data-point-category-tab="包装设计"]').click();
+    assert.match(await picker.locator('.point-rule-empty').innerText(), /选择二级分类/);
+    await picker.locator('[data-point-subcategory-tab="包装设计"]').click();
+    assert.equal(await picker.locator('.point-rule-row').count(), 2);
+    const withoutUi = picker.locator('[data-point-rule-code="VIS_V3_05"]');
+    const withUi = picker.locator('[data-point-rule-code="VIS_V3_06"]');
+    assert.match(await withoutUi.innerText(), /无配件、无 UI[\s\S]*4 分/);
+    assert.match(await withUi.innerText(), /有配件、有 UI[\s\S]*6 分/);
+    await withoutUi.click();
+    assert.equal(await picker.locator('[name="pointRuleCode"]').inputValue(), 'VIS_V3_05');
+    await withUi.click();
+    assert.equal(await picker.locator('[name="pointRuleCode"]').inputValue(), 'VIS_V3_06');
+    await picker.locator('[data-point-category-tab="产品设计"]').click();
+    await picker.locator('[data-point-subcategory-tab="概念设计"]').click();
+    assert.equal(await picker.locator('.point-rule-row').count(), 1);
+    await picker.locator('[data-point-rule-code="VIS_V3_27"]').click();
+    assert.equal(await picker.locator('[name="pointRuleCode"]').inputValue(), 'VIS_V3_27');
+    await picker.locator('[data-point-subcategory-tab="3D 设计送审"]').click();
+    assert.equal(await picker.locator('.point-rule-row').count(), 1);
+    await picker.locator('[data-point-rule-code="VIS_V3_30"]').click();
+    assert.equal(await picker.locator('[name="pointRuleCode"]').inputValue(), 'VIS_V3_30');
+    await addModal.locator('[data-emie-action="click:task-add-close"]').first().click();
+    await addModal.waitFor({ state: 'detached' });
+
+    await page.evaluate(() => window.EMIE.actions.editTask(301, 302));
+    await editModal.waitFor();
+    const editPicker = editModal.locator('.point-rule-picker');
+    assert.equal(await editPicker.locator('[data-point-category-tab="通用"]').count(), 0);
+    assert.match(await editPicker.locator('.point-rule-selected').innerText(), /旧设计规则（历史绑定） · 4 分/);
+    await editPicker.locator('[data-point-category-tab="包装设计"]').click();
+    assert.equal(await editPicker.locator('[name="pointRuleCode"]').inputValue(), 'D30_OLD');
+    await page.evaluate(() => window.EMIE.actions.submitEditTask(301, 302));
+    await editModal.waitFor({ state: 'detached' });
+    const edited = await page.evaluate(() => window.visualTaskRuleFixture.writes[0]);
+    assert.equal(edited.url, '/projects/301/tasks/302');
+    assert.equal(Object.hasOwn(edited.body, 'pointRuleCode'), false);
+
+    await page.evaluate(() => { window.visualTaskRuleFixture.gets.length = 0; });
+    for (const tier of ['small', 'large', 'none']) {
+      await page.evaluate(() => window.EMIE.actions.openTaskChangeBonus(301, 301));
+      await changeModal.waitFor();
+      const options = changeModal.getByRole('radiogroup', { name: '本次修改类型' });
+      assert.deepEqual(await options.getByRole('radio').evaluateAll(radios => radios.map(radio => radio.getAttribute('aria-label'))),
+        ['不给积分', '小改', '大改']);
+      assert.equal(await options.locator('input:checked').inputValue(), 'small');
+      assert.deepEqual(await options.locator('.task-change-tier-note').allTextContents(), ['调整文字与配色', '重新排版与定义风格']);
+      const noteColor = await options.locator('.task-change-tier-note').first().evaluate(note => getComputedStyle(note).color);
+      assert.equal(noteColor, 'rgb(75, 85, 99)');
+      assert.doesNotMatch(await options.innerText(), /\d+(?:\.\d+)?\s*分/);
+      assert.equal(await changeModal.locator('[name="pointRuleCode"], [name="withPoints"]').count(), 0);
+      await options.locator(`input[value="${tier}"]`).check();
+      await changeModal.locator('[name="reason"]').fill('测试修改意见');
+      await changeModal.getByRole('button', { name: '发起修改' }).click();
+      await changeModal.waitFor({ state: 'detached' });
+      const sent = await page.evaluate(() => window.visualTaskRuleFixture.writes.at(-1));
+      assert.equal(sent.url, '/projects/301/subtasks/301/change-bonus');
+      assert.deepEqual(Object.keys(sent.body).sort(), ['changeReferenceImagesJson', 'changeTier', 'reason', 'requestId']);
+      assert.equal(sent.body.changeTier, tier);
+      assert.equal(sent.body.reason, '测试修改意见');
+    }
+    assert.deepEqual(await page.evaluate(() => window.visualTaskRuleFixture.gets), Array(3).fill('/projects/301'));
+  } finally {
+    await page.evaluate(() => {
+      const e = window.EMIE;
+      const { original, users } = window.visualTaskRuleFixture;
+      Object.assign(e.actions, original);
+      e.state.users = users;
+      ['addSubTaskModal', 'editTaskModal', 'taskChangeBonusModal'].forEach(id => document.getElementById(id)?.remove());
+      delete window.visualTaskRuleFixture;
+    });
+  }
+  process.stdout.write('  visual-v3-task-rule-hierarchy-and-change-options ok\n');
 }
 
 async function runAdminSubcategoryChecks(page) {
@@ -803,6 +925,7 @@ try {
       await runNavigationTransitionChecks(page);
       await runChecks(page);
       await runPointRuleChecks(page);
+      await runVisualTaskRuleChecks(page);
       await runAdminSubcategoryChecks(page);
       await runPointLogChecks(page);
       await runDesignerEvaluationChecks(page);

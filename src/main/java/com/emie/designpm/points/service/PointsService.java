@@ -73,9 +73,10 @@ public class PointsService {
     public void awardBaseSubmission(SubTask task, SubTaskDeliveryVersion version, String actorId) {
         if (!eligibleForPoints(task) || !"completed".equals(task.getStatus())) return;
         String ruleCode = normalizedRuleCode(task.getPointRuleCode());
-        ensureSnapshot(task, ruleCode);
-        saveRecipientAward(
-                task, ruleCode + ":BASE", task.getDesignerId(), task.getBasePointSnapshot(), null, actorId, version);
+        double points = version != null && version.getExpectedPoints() != null
+                ? version.getExpectedPoints()
+                : ensureBoundBasePointSnapshot(task);
+        saveRecipientAward(task, ruleCode + ":BASE", task.getDesignerId(), points, null, actorId, version);
     }
 
     /** 修改轮次在企划确认时入账，无积分轮只清理待办。 */
@@ -196,11 +197,17 @@ public class PointsService {
         awardQualityCompletion(task);
     }
 
-    private void ensureSnapshot(SubTask task, String ruleCode) {
-        if (task.getBasePointSnapshot() == null) bindRuleSnapshot(task, ruleCode);
-        if (task.getBasePointSnapshot() == null
-                || !Double.isFinite(task.getBasePointSnapshot())
-                || task.getBasePointSnapshot() < 0) throw new IllegalStateException("任务积分快照无效");
+    /** Recover older bindings that predate task snapshots, even after their catalog is retired. */
+    public double ensureBoundBasePointSnapshot(SubTask task) {
+        Double points = task.getBasePointSnapshot();
+        if (points == null && !task.isSupportsChangeTiers()) {
+            points = rules.findByRuleCode(normalizedRuleCode(task.getPointRuleCode()))
+                    .map(PointRule::getPoints)
+                    .orElse(null);
+        }
+        if (!validPoints(points)) throw new IllegalStateException("任务积分快照无效");
+        if (task.getBasePointSnapshot() == null) task.setBasePointSnapshot(points);
+        return points;
     }
 
     private void saveAward(SubTask task, String ledgerCode, double rawPoints) {
@@ -267,7 +274,18 @@ public class PointsService {
         return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 
-    /** Validate an enabled rule and freeze its base points onto a task. */
+    /** Once the 3.0 catalog is installed, new designer tasks can bind only to its rules. */
+    public void bindNewTaskRuleSnapshot(SubTask task, String requestedRuleCode) {
+        String ruleCode = normalizedRuleCode(requestedRuleCode);
+        if (!ruleCode.isBlank()
+                && !ruleCode.startsWith(PointRule.VISUAL_V3_PREFIX)
+                && rules.existsByRuleCodeStartingWith(PointRule.VISUAL_V3_PREFIX)) {
+            throw new IllegalArgumentException("新子任务请选择 3.0 积分规则");
+        }
+        bindRuleSnapshot(task, requestedRuleCode);
+    }
+
+    /** Validate an enabled rule and freeze its points and revision notes onto a task. */
     public void bindRuleSnapshot(SubTask task, String requestedRuleCode) {
         if (task == null) throw new IllegalArgumentException("子任务不能为空");
         if (requestedRuleCode == null || requestedRuleCode.isBlank()) {
@@ -276,9 +294,17 @@ public class PointsService {
         String ruleCode = normalizedRuleCode(requestedRuleCode);
         PointRule rule = rules.findByRuleCode(ruleCode).orElseThrow(() -> new IllegalArgumentException("积分规则不存在或已删除"));
         if (!rule.isEnabled()) throw new IllegalArgumentException("积分规则已停用，请重新选择");
-        if (rule.getPoints() == null || rule.getPoints() < 0) throw new IllegalArgumentException("积分规则基础分无效");
+        if (!validPoints(rule.getPoints())) throw new IllegalArgumentException("积分规则基础分无效");
+        if (ruleCode.startsWith(PointRule.VISUAL_V3_PREFIX)
+                && (!validPoints(rule.getSmallChangePoints()) || !validPoints(rule.getLargeChangePoints()))) {
+            throw new IllegalArgumentException("积分规则的修改分值无效");
+        }
         task.setPointRuleCode(ruleCode);
         task.setBasePointSnapshot(rule.getPoints());
+        task.setSmallChangePointsSnapshot(rule.getSmallChangePoints());
+        task.setLargeChangePointsSnapshot(rule.getLargeChangePoints());
+        task.setSmallChangeNoteSnapshot(rule.getSmallChangeNote());
+        task.setLargeChangeNoteSnapshot(rule.getLargeChangeNote());
         task.setDifficultyMultiplierSnapshot(1d);
         task.setQualityBonusThresholdSnapshot(
                 rule.getQualityBonusThreshold() == null ? 0 : rule.getQualityBonusThreshold());
@@ -287,6 +313,22 @@ public class PointsService {
         task.setQualityTopRatioSnapshot(rule.getQualityTopRatio() == null ? 0.60d : rule.getQualityTopRatio());
         task.setMaxTotalMultiplierSnapshot(rule.getMaxTotalMultiplier() == null ? 3d : rule.getMaxTotalMultiplier());
         task.setCountInPerformanceSnapshot(rule.isCountInPerformance());
+    }
+
+    private boolean validPoints(Double points) {
+        return points != null && Double.isFinite(points) && points >= 0;
+    }
+
+    public double boundChangePoints(SubTask task, String tier) {
+        Double points =
+                switch (tier) {
+                    case "none" -> 0d;
+                    case "small" -> task.getSmallChangePointsSnapshot();
+                    case "large" -> task.getLargeChangePointsSnapshot();
+                    default -> throw new IllegalArgumentException("请选择不给积分、小改或大改");
+                };
+        if (!validPoints(points)) throw new IllegalStateException("该子任务的修改积分快照无效");
+        return points;
     }
 
     private boolean isPointRuleRequired() {

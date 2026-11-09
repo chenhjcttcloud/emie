@@ -231,7 +231,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         task.setPublisherName((String) body.getOrDefault("currentUser", ""));
         task.setPublisherRole(role);
         if (pointsService != null && "designer".equals(assigneeRole)) {
-            pointsService.bindRuleSnapshot(task, pointRuleCode);
+            pointsService.bindNewTaskRuleSnapshot(task, pointRuleCode);
             task.setConceptReserveExempt(Boolean.TRUE.equals(body.get("conceptReserveExempt")));
         }
         task.setRequiredSkillTagsJson(inputValidator.skillTags(body.get("requiredSkillTags")));
@@ -378,16 +378,25 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             clearPointRuleSnapshot(task);
         }
         if (body.containsKey("pointRuleCode")) {
-            if (!"pending".equals(task.getStatus())) {
-                throw new RuntimeException("子任务开始执行后不能修改积分规则");
+            String requestedCode = (String) body.get("pointRuleCode");
+            String ruleCode = requestedCode == null || requestedCode.isBlank()
+                    ? null
+                    : requestedCode.trim().toUpperCase(Locale.ROOT);
+            if (!Objects.equals(ruleCode, task.getPointRuleCode())) {
+                if (!"pending".equals(task.getStatus())) {
+                    throw new RuntimeException("子任务开始执行后不能修改积分规则");
+                }
+                if (ruleCode == null) {
+                    clearPointRuleSnapshot(task);
+                } else {
+                    if (ruleCode.startsWith(PointRule.VISUAL_V3_PREFIX) && usesLegacyManualScoring(task)) {
+                        throw new IllegalArgumentException("历史手动积分子任务需沿用原结算方式");
+                    }
+                    if (pointsService == null) throw new RuntimeException("积分规则服务暂不可用，请稍后重试");
+                    pointsService.bindNewTaskRuleSnapshot(task, ruleCode);
+                }
             }
-            if (pointsService == null) throw new RuntimeException("积分规则服务暂不可用，请稍后重试");
-            String ruleCode =
-                    body.containsKey("pointRuleCode") ? (String) body.get("pointRuleCode") : task.getPointRuleCode();
-            if (ruleCode == null || ruleCode.isBlank()) {
-                clearPointRuleSnapshot(task);
-            } else {
-                pointsService.bindRuleSnapshot(task, ruleCode);
+            if (ruleCode != null && "pending".equals(task.getStatus()) && body.containsKey("conceptReserveExempt")) {
                 task.setConceptReserveExempt(Boolean.TRUE.equals(body.get("conceptReserveExempt")));
             }
         }
@@ -447,6 +456,10 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         task.setPointRuleCode(null);
         task.setDifficultyMultiplierSnapshot(null);
         task.setBasePointSnapshot(null);
+        task.setSmallChangePointsSnapshot(null);
+        task.setLargeChangePointsSnapshot(null);
+        task.setSmallChangeNoteSnapshot(null);
+        task.setLargeChangeNoteSnapshot(null);
         task.setQualityBonusThresholdSnapshot(null);
         task.setQualityBonusRatioSnapshot(null);
         task.setQualityTopThresholdSnapshot(null);
@@ -1033,17 +1046,33 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             throw new IllegalArgumentException("该任务已有待重新交付的需求变化，请先完成");
         }
         if (pointsService == null) throw new IllegalStateException("积分服务暂不可用");
-        if (pointsService.changeBonusAlreadyAwarded(task, requestId)) return project;
+        if ((task.isSupportsChangeTiers()
+                        && deliveryVersionRepository.existsBySubTaskIdAndPointRequestIdAndConfirmedAtIsNotNull(
+                                taskId, requestId))
+                || pointsService.changeBonusAlreadyAwarded(task, requestId)) return project;
         String reason = SecurityUtil.sanitizeText((String) body.get("reason"), 500);
         if (reason == null || reason.isBlank()) throw new IllegalArgumentException("请填写需求变化原因");
-        boolean withPoints = Boolean.TRUE.equals(body.get("withPoints"));
+        String changeTier = "";
+        boolean withPoints;
         double points = 0d;
         String revisionRuleCode = null;
-        if (withPoints) {
-            SubTask snapshot = new SubTask();
-            pointsService.bindRuleSnapshot(snapshot, (String) body.get("pointRuleCode"));
-            points = snapshot.getBasePointSnapshot();
-            revisionRuleCode = snapshot.getPointRuleCode();
+        if (task.isSupportsChangeTiers()) {
+            if (!(body.get("changeTier") instanceof String tier)) {
+                throw new IllegalArgumentException("请选择不给积分、小改或大改");
+            }
+            changeTier = tier;
+            points = pointsService.boundChangePoints(task, tier);
+            withPoints = !"none".equals(changeTier);
+            if (withPoints) revisionRuleCode = task.getPointRuleCode();
+        } else {
+            if (body.containsKey("changeTier")) throw new IllegalArgumentException("该子任务使用原积分规则");
+            withPoints = Boolean.TRUE.equals(body.get("withPoints"));
+            if (withPoints) {
+                SubTask snapshot = new SubTask();
+                pointsService.bindRuleSnapshot(snapshot, (String) body.get("pointRuleCode"));
+                points = snapshot.getBasePointSnapshot();
+                revisionRuleCode = snapshot.getPointRuleCode();
+            }
         }
         task.setPendingChangeRuleCode(revisionRuleCode);
         task.setPendingChangeBonusRequestId(requestId);
@@ -1075,6 +1104,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                         AuditJson.toJson(Map.of(
                                 "reason", reason,
                                 "withPoints", withPoints,
+                                "changeTier", changeTier,
                                 "pointRuleCode", revisionRuleCode == null ? "" : revisionRuleCode,
                                 "pointRuleDescription",
                                         revisionRuleCode == null
@@ -1195,19 +1225,34 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         String ruleCode = task.getPendingChangeBonusRequestId() == null
                 ? task.getPointRuleCode()
                 : task.getPendingChangeRuleCode();
-        double expected = task.getPendingChangeBonusRequestId() == null
-                ? Optional.ofNullable(task.getBasePointSnapshot()).orElse(0d)
-                : Optional.ofNullable(task.getPendingChangeBonusPoints()).orElse(0d);
+        double expected;
         if (!"designer".equals(task.getAssigneeRole())
                 || task.getDesignerId() == null
                 || (task.getPendingChangeBonusRequestId() == null
                         && pointsService != null
-                        && pointsService.baseAlreadyAwarded(task))) expected = 0d;
+                        && pointsService.baseAlreadyAwarded(task))) {
+            expected = 0d;
+        } else {
+            expected = task.getPendingChangeBonusRequestId() == null
+                    ? deliveryBasePoints(task)
+                    : Optional.ofNullable(task.getPendingChangeBonusPoints()).orElse(0d);
+        }
         version.setExpectedPoints(expected);
         version.setPointRuleCode(ruleCode);
         version.setPointRequestId(task.getPendingChangeBonusRequestId());
         if (pointsService != null) version.setPointRuleDescription(pointsService.ruleDescription(ruleCode));
         return deliveryVersionRepository.save(version);
+    }
+
+    private double deliveryBasePoints(SubTask task) {
+        if (task.getBasePointSnapshot() != null) return task.getBasePointSnapshot();
+        if (pointsService != null
+                && !usesLegacyManualScoring(task)
+                && task.getPointRuleCode() != null
+                && !task.getPointRuleCode().isBlank()) {
+            return pointsService.ensureBoundBasePointSnapshot(task);
+        }
+        return 0d;
     }
 
     @Transactional(readOnly = true)
@@ -1339,8 +1384,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
                         change
                                 ? Optional.ofNullable(task.getPendingChangeBonusPoints())
                                         .orElse(0d)
-                                : Optional.ofNullable(task.getBasePointSnapshot())
-                                        .orElse(0d));
+                                : deliveryBasePoints(task));
                 version.setPointRuleCode(
                         change
                                 ? Optional.ofNullable(task.getPendingChangeRuleCode())

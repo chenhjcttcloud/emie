@@ -7,6 +7,8 @@ import static org.mockito.Mockito.*;
 
 import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.admin.service.UserService;
+import com.emie.designpm.entity.PointLedger;
+import com.emie.designpm.entity.PointRule;
 import com.emie.designpm.entity.Project;
 import com.emie.designpm.entity.ScoringRecord;
 import com.emie.designpm.entity.SubTask;
@@ -14,6 +16,8 @@ import com.emie.designpm.entity.SubTaskDeliveryVersion;
 import com.emie.designpm.entity.SubTaskRejectionCycle;
 import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.notification.service.NotificationWorkflowService;
+import com.emie.designpm.points.repository.PointLedgerRepository;
+import com.emie.designpm.points.repository.PointRuleRepository;
 import com.emie.designpm.points.service.PointsService;
 import com.emie.designpm.project.repository.ProjectRepository;
 import com.emie.designpm.project.repository.SubTaskDeliveryVersionRepository;
@@ -23,19 +27,29 @@ import com.emie.designpm.reference.repository.IpOptionRepository;
 import com.emie.designpm.reference.repository.ProductCategoryRepository;
 import com.emie.designpm.scoring.repository.ScoringRepository;
 import com.emie.designpm.sync.service.SyncQueueService;
+import java.nio.charset.StandardCharsets;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.support.EncodedResource;
+import org.springframework.jdbc.datasource.init.ScriptUtils;
 
 class ProjectReviewWorkflowTest {
 
@@ -1166,6 +1180,274 @@ class ProjectReviewWorkflowTest {
         assertThrows(RuntimeException.class, () -> service.taskDeliver(1L, 11L, deliveryBody()));
         assertThrows(RuntimeException.class, () -> service.taskRedeliver(1L, 11L, deliveryBody()));
         verify(deliveryVersions, never()).save(any());
+    }
+
+    @ParameterizedTest(name = "{0} / {2} awards {3} points")
+    @MethodSource("visualRevisionCases")
+    void visualRevisionUsesTheBoundRuleFromRequestThroughLedger(
+            String ruleCode, double expectedBase, String tier, double expectedRevision, PointRule catalogRule) {
+        Project project = projectWithTask("regular", "completed");
+        SubTask task = project.getTasks().getFirst();
+        task.setCreatedAt(LocalDateTime.of(2026, 10, 2, 10, 0));
+        PointRuleRepository rules = mock(PointRuleRepository.class);
+        PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
+        PointsService points = new PointsService(rules, ledgers, scoring);
+        service.setPointsService(points);
+        when(rules.findByRuleCode(ruleCode)).thenReturn(Optional.of(catalogRule));
+        points.bindNewTaskRuleSnapshot(task, ruleCode);
+        assertEquals(expectedBase, task.getBasePointSnapshot());
+        assertEquals(catalogRule.getSmallChangeNote(), task.getSmallChangeNoteSnapshot());
+        assertEquals(catalogRule.getLargeChangeNote(), task.getLargeChangeNoteSnapshot());
+        points.awardBaseSubmission(task);
+        String baseLedgerCode = ruleCode + ":BASE";
+        verify(ledgers)
+                .save(argThat(
+                        ledger -> baseLedgerCode.equals(ledger.getRuleCode()) && ledger.getPoints() == expectedBase));
+        when(ledgers.existsByUserIdAndSubTaskIdAndRuleCode("designer-1", 11L, baseLedgerCode))
+                .thenReturn(true);
+        clearInvocations(ledgers);
+
+        // Even a later directory edit must leave the already-bound task amounts intact.
+        PointRule edited = new PointRule();
+        edited.setRuleCode(ruleCode);
+        edited.setDescription(catalogRule.getDescription());
+        edited.setPoints(99d);
+        edited.setSmallChangePoints(98d);
+        edited.setLargeChangePoints(97d);
+        when(rules.findByRuleCode(ruleCode)).thenReturn(Optional.of(edited));
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(i -> i.getArgument(0));
+        when(projects.save(any(Project.class))).thenAnswer(i -> i.getArgument(0));
+        when(deliveryVersions.save(any(SubTaskDeliveryVersion.class))).thenAnswer(i -> {
+            SubTaskDeliveryVersion version = i.getArgument(0);
+            version.setId(71L);
+            version.setSubmittedAt(LocalDateTime.of(2026, 11, 9, 10, 0));
+            return version;
+        });
+
+        String requestId = "fa8dc57e-0902-4fc7-8a6d-aee662a6369d";
+        Map<String, Object> request = Map.of(
+                "currentRole",
+                "planner",
+                "currentUserId",
+                "planner-1",
+                "requestId",
+                requestId,
+                "reason",
+                "新版修改验收",
+                "changeTier",
+                tier,
+                "points",
+                10000,
+                "withPoints",
+                false,
+                "pointRuleCode",
+                "D30_11");
+        service.requestChangeBonus(1L, 11L, request);
+        assertEquals(expectedRevision, task.getPendingChangeBonusPoints());
+        assertEquals(expectedRevision > 0 ? ruleCode : null, task.getPendingChangeRuleCode());
+        service.taskConfirmRevision(1L, 11L, deliveryBody());
+        service.taskRedeliver(1L, 11L, deliveryBody());
+        ArgumentCaptor<SubTaskDeliveryVersion> submitted = ArgumentCaptor.forClass(SubTaskDeliveryVersion.class);
+        verify(deliveryVersions).save(submitted.capture());
+        SubTaskDeliveryVersion version = submitted.getValue();
+        assertEquals(expectedRevision, version.getExpectedPoints());
+        assertEquals(requestId, version.getPointRequestId());
+        verify(ledgers, never()).save(any());
+
+        when(deliveryVersions.findFirstBySubTaskIdOrderByVersionNoDesc(11L)).thenReturn(Optional.of(version));
+        Map<String, Object> confirmation =
+                Map.of("currentRole", "planner", "currentUserId", "planner-1", "expectedDeliveryVersionId", "71");
+        service.taskApprove(1L, 11L, confirmation);
+        service.taskApprove(1L, 11L, confirmation);
+        assertNotNull(version.getConfirmedAt());
+        assertNull(task.getPendingChangeBonusRequestId());
+        assertEquals(expectedBase, task.getBasePointSnapshot());
+        if (expectedRevision > 0) {
+            ArgumentCaptor<PointLedger> award = ArgumentCaptor.forClass(PointLedger.class);
+            verify(ledgers, times(1)).save(award.capture());
+            assertEquals(expectedRevision, award.getValue().getPoints());
+            assertEquals(ruleCode + ":CHANGE:" + requestId, award.getValue().getRuleCode());
+            assertEquals(71L, award.getValue().getDeliveryVersionId());
+        } else {
+            verify(ledgers, never()).save(any());
+        }
+        when(deliveryVersions.existsBySubTaskIdAndPointRequestIdAndConfirmedAtIsNotNull(11L, requestId))
+                .thenReturn(true);
+        service.requestChangeBonus(1L, 11L, request);
+        assertEquals("completed", task.getStatus());
+        assertNull(task.getPendingChangeBonusRequestId());
+    }
+
+    @Test
+    void visualRevisionRequiresAnExplicitValidTierEvenWithALegacyRuleSelection() {
+        Project project = projectWithTask("regular", "completed");
+        SubTask task = project.getTasks().getFirst();
+        task.setPointRuleCode("VIS_V3_11");
+        task.setSmallChangePointsSnapshot(1d);
+        task.setLargeChangePointsSnapshot(3d);
+        service.setPointsService(
+                new PointsService(mock(PointRuleRepository.class), mock(PointLedgerRepository.class), scoring));
+        Map<String, Object> request = new LinkedHashMap<>(Map.of(
+                "currentRole",
+                "planner",
+                "currentUserId",
+                "planner-1",
+                "requestId",
+                "fa8dc57e-0902-4fc7-8a6d-aee662a6369d",
+                "reason",
+                "修改图案",
+                "withPoints",
+                true,
+                "pointRuleCode",
+                "D30_11"));
+        assertThrows(IllegalArgumentException.class, () -> service.requestChangeBonus(1L, 11L, request));
+        request.put("changeTier", "other");
+        assertThrows(IllegalArgumentException.class, () -> service.requestChangeBonus(1L, 11L, request));
+        assertEquals("completed", task.getStatus());
+        assertNull(task.getPendingChangeBonusRequestId());
+        verify(projects, never()).saveAndFlush(any(Project.class));
+    }
+
+    @Test
+    void ordinaryEditKeepsTheRetiredRuleAndItsFrozenBasePoints() {
+        SubTask task = projectWithTask("regular", "pending").getTasks().getFirst();
+        task.setPointRuleCode("D30_11");
+        task.setBasePointSnapshot(15d);
+        PointsService points = mock(PointsService.class);
+        service.setPointsService(points);
+        when(users.getUserByUserId("designer-1"))
+                .thenReturn(com.emie.designpm.entity.User.builder()
+                        .userId("designer-1")
+                        .role("designer")
+                        .status("active")
+                        .build());
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(i -> i.getArgument(0));
+        service.updateSubTask(
+                1L,
+                11L,
+                Map.of(
+                        "currentRole",
+                        "planner",
+                        "currentUserId",
+                        "planner-1",
+                        "pointRuleCode",
+                        "D30_11",
+                        "plannedDate",
+                        "2026-11-20"));
+        assertEquals("2026-11-20", task.getPlannedDate());
+        assertEquals("D30_11", task.getPointRuleCode());
+        assertEquals(15d, task.getBasePointSnapshot());
+        verifyNoInteractions(points);
+    }
+
+    @Test
+    void legacyDeliveryUsesRetiredRuleWhenNoSnapshotWasEverCaptured() {
+        SubTask task =
+                projectWithTask("regular", "submitted_for_review").getTasks().getFirst();
+        task.setCreatedAt(LocalDateTime.of(2026, 10, 2, 10, 0));
+        task.setPointRuleCode("D30_11");
+        SubTaskDeliveryVersion version = deliveryVersion(task, 1);
+        version.setId(71L);
+        version.setSubmittedById("designer-1");
+        PointRule retired = new PointRule();
+        retired.setRuleCode("D30_11");
+        retired.setEnabled(false);
+        retired.setPoints(15d);
+        PointRuleRepository rules = mock(PointRuleRepository.class);
+        PointLedgerRepository ledgers = mock(PointLedgerRepository.class);
+        when(rules.findByRuleCode("D30_11")).thenReturn(Optional.of(retired));
+        when(deliveryVersions.findFirstBySubTaskIdOrderByVersionNoDesc(11L)).thenReturn(Optional.of(version));
+        when(projects.save(any(Project.class))).thenAnswer(i -> i.getArgument(0));
+        service.setPointsService(new PointsService(rules, ledgers, scoring));
+
+        service.taskApprove(
+                1L,
+                11L,
+                Map.of("currentRole", "planner", "currentUserId", "planner-1", "expectedDeliveryVersionId", "71"));
+
+        assertEquals(15d, task.getBasePointSnapshot());
+        assertEquals(15d, version.getExpectedPoints());
+        verify(ledgers)
+                .save(argThat(ledger -> "D30_11:BASE".equals(ledger.getRuleCode()) && ledger.getPoints() == 15d));
+    }
+
+    private static Stream<Arguments> visualRevisionCases() throws SQLException {
+        // Independent expected values transcribed from the workbook's F:H columns, rows 5–34.
+        int[][] expected = {
+            {4, 1, 3},
+            {6, 1, 3},
+            {8, 1, 3},
+            {2, 1, 3},
+            {2, 1, 3},
+            {5, 1, 3},
+            {4, 1, 3},
+            {6, 1, 3},
+            {2, 1, 2},
+            {20, 3, 6},
+            {10, 3, 6},
+            {15, 3, 6},
+            {5, 1, 3},
+            {2, 1, 3},
+            {1, 1, 2},
+            {4, 1, 2},
+            {6, 1, 3},
+            {15, 3, 6},
+            {20, 3, 6},
+            {30, 3, 6},
+            {40, 3, 6},
+            {20, 1, 3},
+            {10, 1, 3},
+            {5, 1, 3},
+            {5, 1, 2},
+            {5, 1, 3},
+            {5, 1, 3},
+            {4, 1, 3},
+            {6, 1, 3},
+            {2, 1, 2}
+        };
+        List<Arguments> cases = new ArrayList<>();
+        try (var connection = DriverManager.getConnection("jdbc:h2:mem:visual_points_v3;MODE=MySQL");
+                var statement = connection.createStatement()) {
+            statement.execute(
+                    """
+                    CREATE TABLE point_rules (
+                      rule_code VARCHAR(80) PRIMARY KEY, category VARCHAR(50), subcategory VARCHAR(50),
+                      description VARCHAR(255), points DECIMAL(12,2), quality_bonus_threshold INT,
+                      quality_bonus_ratio DECIMAL(12,2), quality_top_threshold INT, quality_top_ratio DECIMAL(12,2),
+                      max_total_multiplier DECIMAL(12,2), count_in_performance BOOLEAN, enabled BOOLEAN,
+                      created_at TIMESTAMP, updated_at TIMESTAMP
+                    )
+                    """);
+            statement.execute("CREATE TABLE sub_tasks (id BIGINT PRIMARY KEY)");
+            ScriptUtils.executeSqlScript(
+                    connection,
+                    new EncodedResource(
+                            new ClassPathResource("db/migration/V99__visual_points_rules_v3.sql"),
+                            StandardCharsets.UTF_8));
+            try (var rows = statement.executeQuery("SELECT * FROM point_rules ORDER BY rule_code")) {
+                for (int i = 0; i < expected.length; i++) {
+                    String code = "VIS_V3_%02d".formatted(i + 5);
+                    assertTrue(rows.next(), code);
+                    assertEquals(code, rows.getString("rule_code"));
+                    PointRule rule = new PointRule();
+                    rule.setRuleCode(code);
+                    rule.setEnabled(rows.getBoolean("enabled"));
+                    rule.setDescription(rows.getString("description"));
+                    rule.setPoints(rows.getDouble("points"));
+                    rule.setSmallChangePoints(rows.getDouble("small_change_points"));
+                    rule.setLargeChangePoints(rows.getDouble("large_change_points"));
+                    rule.setSmallChangeNote(rows.getString("small_change_note"));
+                    rule.setLargeChangeNote(rows.getString("large_change_note"));
+                    assertEquals(expected[i][1], rule.getSmallChangePoints(), code + " small");
+                    assertEquals(expected[i][2], rule.getLargeChangePoints(), code + " large");
+                    cases.add(Arguments.of(code, (double) expected[i][0], "none", 0d, rule));
+                    cases.add(Arguments.of(code, (double) expected[i][0], "small", (double) expected[i][1], rule));
+                    cases.add(Arguments.of(code, (double) expected[i][0], "large", (double) expected[i][2], rule));
+                }
+                assertFalse(rows.next(), "The migration should introduce exactly 30 visual rules");
+            }
+        }
+        return cases.stream();
     }
 
     private Project projectWithTask(String type, String taskStatus) {

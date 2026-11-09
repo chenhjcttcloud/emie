@@ -1,5 +1,6 @@
 package com.emie.designpm.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import lombok.Data;
@@ -52,6 +53,24 @@ public class SubTask {
 
     @Column(columnDefinition = "DECIMAL(12,2)")
     private Double basePointSnapshot;
+
+    @JsonIgnore
+    @Column(columnDefinition = "DECIMAL(12,2)")
+    private Double smallChangePointsSnapshot;
+
+    @JsonIgnore
+    @Column(columnDefinition = "DECIMAL(12,2)")
+    private Double largeChangePointsSnapshot;
+
+    @Column(length = 500)
+    private String smallChangeNoteSnapshot;
+
+    @Column(length = 500)
+    private String largeChangeNoteSnapshot;
+
+    public boolean isSupportsChangeTiers() {
+        return pointRuleCode != null && pointRuleCode.startsWith(PointRule.VISUAL_V3_PREFIX);
+    }
 
     private LocalDateTime basePointProcessedAt;
     private Integer qualityBonusThresholdSnapshot;

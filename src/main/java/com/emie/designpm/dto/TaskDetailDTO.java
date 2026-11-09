@@ -21,6 +21,9 @@ public class TaskDetailDTO {
     private String designerName;
     private String pointRuleCode;
     private Double basePointSnapshot;
+    private boolean supportsChangeTiers;
+    private String smallChangeNoteSnapshot;
+    private String largeChangeNoteSnapshot;
     private Double difficultyMultiplierSnapshot;
     private boolean conceptReserveExempt;
     private String pendingChangeRuleCode;

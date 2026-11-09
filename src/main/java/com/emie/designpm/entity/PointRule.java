@@ -1,5 +1,6 @@
 package com.emie.designpm.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import lombok.Data;
@@ -10,6 +11,8 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(name = "point_rules")
 public class PointRule {
+    public static final String VISUAL_V3_PREFIX = "VIS_V3_";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -19,6 +22,22 @@ public class PointRule {
 
     @Column(nullable = false, columnDefinition = "DECIMAL(12,2)")
     private Double points;
+
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    @Column(columnDefinition = "DECIMAL(12,2)")
+    private Double smallChangePoints;
+
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    @Column(columnDefinition = "DECIMAL(12,2)")
+    private Double largeChangePoints;
+
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    @Column(length = 500)
+    private String smallChangeNote;
+
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    @Column(length = 500)
+    private String largeChangeNote;
 
     @Column(length = 50)
     private String category;

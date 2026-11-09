@@ -110,6 +110,9 @@ public class ProjectViewSupport {
                     item.put("assigneeRole", task.getAssigneeRole());
                     item.put("pointRuleCode", task.getPointRuleCode());
                     item.put("basePointSnapshot", task.getBasePointSnapshot());
+                    item.put("supportsChangeTiers", task.isSupportsChangeTiers());
+                    item.put("smallChangeNoteSnapshot", task.getSmallChangeNoteSnapshot());
+                    item.put("largeChangeNoteSnapshot", task.getLargeChangeNoteSnapshot());
                     item.put("pendingChangeRuleCode", task.getPendingChangeRuleCode());
                     item.put("pendingChangeBonusRequestId", task.getPendingChangeBonusRequestId());
                     item.put("pendingChangeBonusPoints", task.getPendingChangeBonusPoints());
@@ -188,6 +191,9 @@ public class ProjectViewSupport {
                     item.put("assigneeRole", task.getAssigneeRole());
                     item.put("pointRuleCode", task.getPointRuleCode());
                     item.put("basePointSnapshot", task.getBasePointSnapshot());
+                    item.put("supportsChangeTiers", task.isSupportsChangeTiers());
+                    item.put("smallChangeNoteSnapshot", task.getSmallChangeNoteSnapshot());
+                    item.put("largeChangeNoteSnapshot", task.getLargeChangeNoteSnapshot());
                     item.put("pendingChangeBonusRequestId", task.getPendingChangeBonusRequestId());
                     item.put("pendingChangeRuleCode", task.getPendingChangeRuleCode());
                     item.put("pendingChangeBonusPoints", task.getPendingChangeBonusPoints());
@@ -436,6 +442,9 @@ public class ProjectViewSupport {
         dto.setDesignerName(task.getDesignerName());
         dto.setPointRuleCode(task.getPointRuleCode());
         dto.setBasePointSnapshot(task.getBasePointSnapshot());
+        dto.setSupportsChangeTiers(task.isSupportsChangeTiers());
+        dto.setSmallChangeNoteSnapshot(task.getSmallChangeNoteSnapshot());
+        dto.setLargeChangeNoteSnapshot(task.getLargeChangeNoteSnapshot());
         dto.setDifficultyMultiplierSnapshot(task.getDifficultyMultiplierSnapshot());
         dto.setConceptReserveExempt(task.isConceptReserveExempt());
         dto.setPendingChangeRuleCode(task.getPendingChangeRuleCode());

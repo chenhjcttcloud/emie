@@ -8,5 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface PointRuleRepository extends JpaRepository<PointRule, Long> {
     Optional<PointRule> findByRuleCode(String ruleCode);
 
+    boolean existsByRuleCodeStartingWith(String prefix);
+
     List<PointRule> findAllByOrderByRuleCodeAsc();
 }
