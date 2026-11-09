@@ -545,7 +545,7 @@ async function runVisualTaskRuleChecks(page) {
     const original = Object.fromEntries(['apiGet', 'apiPost', 'apiPut', 'hasPermission', 'refreshAfterMutation']
       .map(key => [key, e.actions[key]]));
     const fixture = window.visualTaskRuleFixture = { original, users: e.state.users, gets: [], writes: [] };
-    e.state.users = { ...e.state.users, designer: [] };
+    e.state.users = { ...e.state.users, designer: [{ userId: 777, name: '测试设计师' }] };
     e.actions.hasPermission = () => true;
     e.actions.refreshAfterMutation = async () => {};
     e.actions.apiGet = async url => {
@@ -565,31 +565,54 @@ async function runVisualTaskRuleChecks(page) {
     await page.evaluate(() => window.EMIE.actions.addSubTask(301));
     await addModal.waitFor();
     const picker = addModal.locator('.point-rule-picker');
+    const visibleRuleCodes = () => picker.locator('[data-point-rule-code]')
+      .evaluateAll(rows => rows.map(row => row.dataset.pointRuleCode));
+    const selectedRule = picker.locator('[name="pointRuleCode"]');
+    const allSubcategories = picker.locator('[data-point-subcategory-tab=""]');
     assert.match(await picker.locator('.point-rule-empty').innerText(), /选择一级分类/);
+    assert.deepEqual(await visibleRuleCodes(), []);
+    assert.equal(await picker.locator('[data-point-category-tab=""]').count(), 0);
     assert.equal(await picker.locator('[data-point-category-tab="通用"]').count(), 0);
     await picker.locator('[data-point-category-tab="包装设计"]').click();
-    assert.match(await picker.locator('.point-rule-empty').innerText(), /选择二级分类/);
-    await picker.locator('[data-point-subcategory-tab="包装设计"]').click();
-    assert.equal(await picker.locator('.point-rule-row').count(), 2);
+    assert.equal(await allSubcategories.getAttribute('aria-selected'), 'true');
+    assert.deepEqual(await visibleRuleCodes(), ['VIS_V3_05', 'VIS_V3_06']);
     const withoutUi = picker.locator('[data-point-rule-code="VIS_V3_05"]');
     const withUi = picker.locator('[data-point-rule-code="VIS_V3_06"]');
     assert.match(await withoutUi.innerText(), /无配件、无 UI[\s\S]*4 分/);
     assert.match(await withUi.innerText(), /有配件、有 UI[\s\S]*6 分/);
     await withoutUi.click();
-    assert.equal(await picker.locator('[name="pointRuleCode"]').inputValue(), 'VIS_V3_05');
+    assert.equal(await selectedRule.inputValue(), 'VIS_V3_05');
     await withUi.click();
-    assert.equal(await picker.locator('[name="pointRuleCode"]').inputValue(), 'VIS_V3_06');
+    assert.equal(await selectedRule.inputValue(), 'VIS_V3_06');
+
     await picker.locator('[data-point-category-tab="产品设计"]').click();
-    await picker.locator('[data-point-subcategory-tab="概念设计"]').click();
-    assert.equal(await picker.locator('.point-rule-row').count(), 1);
+    assert.equal(await selectedRule.inputValue(), '');
+    assert.deepEqual(await visibleRuleCodes(), ['VIS_V3_27', 'VIS_V3_30']);
     await picker.locator('[data-point-rule-code="VIS_V3_27"]').click();
-    assert.equal(await picker.locator('[name="pointRuleCode"]').inputValue(), 'VIS_V3_27');
+    await picker.locator('[data-point-subcategory-tab="概念设计"]').click();
+    assert.deepEqual(await visibleRuleCodes(), ['VIS_V3_27']);
+    assert.equal(await selectedRule.inputValue(), 'VIS_V3_27');
     await picker.locator('[data-point-subcategory-tab="3D 设计送审"]').click();
-    assert.equal(await picker.locator('.point-rule-row').count(), 1);
+    assert.deepEqual(await visibleRuleCodes(), ['VIS_V3_30']);
+    assert.equal(await selectedRule.inputValue(), '');
     await picker.locator('[data-point-rule-code="VIS_V3_30"]').click();
-    assert.equal(await picker.locator('[name="pointRuleCode"]').inputValue(), 'VIS_V3_30');
-    await addModal.locator('[data-emie-action="click:task-add-close"]').first().click();
+    await allSubcategories.click();
+    assert.deepEqual(await visibleRuleCodes(), ['VIS_V3_27', 'VIS_V3_30']);
+    assert.equal(await selectedRule.inputValue(), 'VIS_V3_30');
+
+    await picker.locator('[data-point-category-tab="包装设计"]').click();
+    await withUi.click();
+    assert.equal(await allSubcategories.getAttribute('aria-selected'), 'true');
+    await addModal.locator('[name="name"]').fill('只选一级分类的测试任务');
+    await addModal.locator('[name="workflowStage"]').selectOption('design');
+    const plannedDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    await addModal.locator('[name="plannedDate"]').fill(plannedDate);
+    await addModal.locator('[name="designerId"]').selectOption('777');
+    await addModal.getByRole('button', { name: '确认添加' }).click();
     await addModal.waitFor({ state: 'detached' });
+    const created = await page.evaluate(() => window.visualTaskRuleFixture.writes[0]);
+    assert.equal(created.url, '/projects/301/tasks');
+    assert.equal(created.body.pointRuleCode, 'VIS_V3_06');
 
     await page.evaluate(() => window.EMIE.actions.editTask(301, 302));
     await editModal.waitFor();
@@ -600,7 +623,7 @@ async function runVisualTaskRuleChecks(page) {
     assert.equal(await editPicker.locator('[name="pointRuleCode"]').inputValue(), 'D30_OLD');
     await page.evaluate(() => window.EMIE.actions.submitEditTask(301, 302));
     await editModal.waitFor({ state: 'detached' });
-    const edited = await page.evaluate(() => window.visualTaskRuleFixture.writes[0]);
+    const edited = await page.evaluate(() => window.visualTaskRuleFixture.writes.at(-1));
     assert.equal(edited.url, '/projects/301/tasks/302');
     assert.equal(Object.hasOwn(edited.body, 'pointRuleCode'), false);
 
