@@ -73,6 +73,7 @@ GET /api/materials/{id}
 GET /api/performance/designer-evaluations
 GET /api/performance/designer-evaluations/completion
 GET /api/performance/designer-monthly-report
+GET /api/performance/designer-monthly-report/export
 GET /api/performance/designer-monthly-report/{kind}/{taskId}/deliveries
 GET /api/performance/designer-targets
 GET /api/performance/growth-scores

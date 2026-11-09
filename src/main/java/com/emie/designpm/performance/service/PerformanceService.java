@@ -12,6 +12,7 @@ import com.emie.designpm.points.repository.PointRuleRepository;
 import com.emie.designpm.points.repository.StandardPointConfigRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
 import com.emie.designpm.util.TextEncodingUtil;
+import java.io.IOException;
 import java.time.*;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -21,6 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 public class PerformanceService {
+    private static final Set<String> DESIGNER_TASK_RULE_VERSIONS = Set.of("2.0", "3.0", "legacy", "unbound");
+
     private final PointLedgerRepository ledgers;
     private final PointAdjustmentLedgerRepository adjustments;
     private final UserRepository users;
@@ -163,8 +166,8 @@ public class PerformanceService {
                                     Double::sum));
             for (SubTask task : completed) {
                 Map<String, Object> report = reports.get(task.getDesignerId());
-                String category = categories.getOrDefault(
-                        Optional.ofNullable(task.getPointRuleCode()).orElse("").toUpperCase(Locale.ROOT), "未分类");
+                String ruleCode = Objects.toString(task.getPointRuleCode(), "");
+                String category = categories.getOrDefault(ruleCode.toUpperCase(Locale.ROOT), "未分类");
                 Map<String, Integer> categoryCounts = (Map<String, Integer>) report.get("categoryCounts");
                 categoryCounts.merge(category, 1, Integer::sum);
                 double score = taskPoints.getOrDefault(task.getId(), Map.of()).getOrDefault(task.getDesignerId(), 0d);
@@ -182,7 +185,9 @@ public class PerformanceService {
                                 "category",
                                 category,
                                 "ruleCode",
-                                Optional.ofNullable(task.getPointRuleCode()).orElse(""),
+                                ruleCode,
+                                "ruleVersion",
+                                designerTaskRuleVersion(ruleCode),
                                 "project",
                                 Optional.ofNullable(task.getProject().getProductName())
                                         .orElse(""),
@@ -246,6 +251,24 @@ public class PerformanceService {
             }
         }
         return Map.of("month", month, "from", from, "to", to, "designers", new ArrayList<>(reports.values()));
+    }
+
+    private static String designerTaskRuleVersion(String ruleCode) {
+        String code = ruleCode.strip().toUpperCase(Locale.ROOT);
+        if (code.isEmpty()) return "unbound";
+        if (code.startsWith("D20_")) return "2.0";
+        if (code.startsWith(PointRule.VISUAL_V3_PREFIX)) return "3.0";
+        return "legacy";
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] exportDesignerMonthlyReport(String month, String ruleVersion) throws IOException {
+        MonthlyDesignerEvaluationService.validatePeriod(month, true);
+        String filter = ruleVersion == null ? "" : ruleVersion.trim();
+        if (!filter.isEmpty() && !DESIGNER_TASK_RULE_VERSIONS.contains(filter)) {
+            throw new IllegalArgumentException("无效的规则版本");
+        }
+        return DesignerMonthlyReportWorkbook.write(designerMonthlyReport(month), filter);
     }
 
     @Transactional(readOnly = true)

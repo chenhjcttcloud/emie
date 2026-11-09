@@ -81,6 +81,7 @@ class PerformanceServiceTest {
         assertEquals(
                 "requirement",
                 ((List<Map<String, Object>>) row.get("tasks")).getFirst().get("kind"));
+        assertFalse(((Map<?, ?>) ((List<?>) row.get("tasks")).getFirst()).containsKey("ruleVersion"));
         when(ledgers.sumPerformancePointsBetweenMonths("2026-01", "2026-12"))
                 .thenReturn(Collections.singletonList(new Object[] {"d1", 100d}));
         when(adjustments.sumPointsBetweenMonths("2026-01", "2026-12"))
@@ -189,6 +190,16 @@ class PerformanceServiceTest {
         assertEquals(service.leaderboard("2026-01").getFirst().get("points"), row.get("score"));
         assertEquals(1, ((Map<?, ?>) row.get("categoryCounts")).get("A"));
         assertEquals("regular", ((Map<?, ?>) ((List<?>) row.get("tasks")).getFirst()).get("projectType"));
+        for (var versionByCode : Map.of(
+                        "D20_09", "2.0", "VIS_V3_11", "3.0", "D30_22", "legacy", "B4", "legacy", "", "unbound")
+                .entrySet()) {
+            task.setPointRuleCode(versionByCode.getKey());
+            var versionReport = (List<Map<String, Object>>)
+                    service.designerMonthlyReport("2026-01").get("designers");
+            var reportedTask = (Map<?, ?>) ((List<?>) versionReport.getFirst().get("tasks")).getFirst();
+            assertEquals(versionByCode.getKey(), reportedTask.get("ruleCode"));
+            assertEquals(versionByCode.getValue(), reportedTask.get("ruleVersion"));
+        }
         when(subTasks.findDesignerTasksCompletedBetween(any(), any())).thenReturn(List.of());
         List<Map<String, Object>> withoutCompletedTasks = (List<Map<String, Object>>)
                 service.designerMonthlyReport("2026-01").get("designers");

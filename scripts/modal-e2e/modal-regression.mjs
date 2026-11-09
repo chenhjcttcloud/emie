@@ -828,18 +828,90 @@ async function assertEventually(page, predicate, message) {
   });
 }
 
+async function runDesignerVersionFilterChecks(page, host) {
+  const exportPath = '/api/performance/designer-monthly-report/export';
+  const exportRoute = url => url.pathname === exportPath;
+  const exportButton = host.locator('[data-emie-action="click:scoring-export-subtasks"]');
+  const versionFilter = host.locator('#designerPerformanceRuleVersion');
+  const visibleNames = () => host.locator('.designer-performance-task:visible .designer-performance-task-head strong').allTextContents();
+  const versions = [
+    ['2.0', '2.0 已完成子任务', '2.0'],
+    ['3.0', '3.0 已完成子任务', '3.0'],
+    ['legacy', '更早规则已完成子任务', '其他历史规则'],
+    ['unbound', '未绑定规则已完成子任务', '未绑定'],
+  ];
+  const allNames = [...versions.map(([, name]) => name), '已完成设计需求'];
+  const workbookBytes = Buffer.from('spreadsheet download fixture');
+  const serveWorkbook = route => route.fulfill({
+    headers: {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename="designer-subtasks-2026-10.xlsx"',
+    },
+    body: workbookBytes,
+  });
+  await page.route(exportRoute, serveWorkbook);
+  try {
+    await host.locator('#designerPerformanceMonth').fill('2026-10');
+    await host.locator('.designer-performance-task').first().waitFor({ state: 'visible' });
+    assert.equal(await versionFilter.inputValue(), '');
+    assert.deepEqual(await visibleNames(), allNames);
+    for (const [version, name, label] of versions) {
+      const badge = host.locator(`.designer-performance-task[data-rule-version="${version}"] .designer-performance-rule-version`);
+      assert.equal(await badge.innerText(), label, name + '应显示对应版本');
+    }
+    assert.equal(await host.locator('.designer-performance-task').filter({ hasText: '已完成设计需求' })
+      .locator('.designer-performance-rule-version').count(), 0);
+    const summary = host.locator('.designer-performance-summary');
+    const unfilteredSummary = await summary.innerText();
+    assert.match(unfilteredSummary, /5\s+项完成任务与需求/);
+    assert.match(unfilteredSummary, /12\.00\s+当月归属积分/);
+
+    for (const [version, name] of versions) {
+      await versionFilter.selectOption(version);
+      assert.deepEqual(await visibleNames(), [name]);
+      assert.equal(await summary.innerText(), unfilteredSummary, '版本筛选只改变完成事项列表');
+    }
+    for (const version of ['', '3.0']) {
+      await versionFilter.selectOption(version);
+      if (!version) assert.deepEqual(await visibleNames(), allNames);
+      const [request, download] = await Promise.all([
+        page.waitForRequest(candidate => new URL(candidate.url()).pathname === exportPath),
+        page.waitForEvent('download'),
+        exportButton.click(),
+      ]);
+      assert.equal(request.method(), 'GET');
+      assert.deepEqual(Object.fromEntries(new URL(request.url()).searchParams),
+        version ? { month: '2026-10', ruleVersion: version } : { month: '2026-10' });
+      assert.match(download.suggestedFilename(), /\.xlsx$/i);
+      assert.deepEqual(await fs.readFile(await download.path()), workbookBytes);
+    }
+    await versionFilter.selectOption('');
+  } finally {
+    await page.unroute(exportRoute, serveWorkbook);
+  }
+  console.log('  designer-monthly-rule-version-filter-and-xlsx-download ok');
+}
+
 async function runDesignerEvaluationChecks(page) {
   await page.evaluate(async () => {
     const e = window.EMIE;
     window.evaluationMocks = { get: e.actions.apiGet, put: e.actions.apiPut, permission: e.actions.hasPermission, role: e.state.currentRole };
     window.evaluationStore = [];
     window.evaluationWrites = [];
+    e.state.currentRole = 'admin';
+    const tasks = [
+      { id: 101, kind: 'task', ruleVersion: '2.0', ruleCode: 'D20_9', name: '2.0 已完成子任务' },
+      { id: 102, kind: 'task', ruleVersion: '3.0', ruleCode: 'VIS_V3_05', name: '3.0 已完成子任务' },
+      { id: 103, kind: 'task', ruleVersion: 'legacy', ruleCode: 'A1', name: '更早规则已完成子任务' },
+      { id: 104, kind: 'task', ruleVersion: 'unbound', ruleCode: '', name: '未绑定规则已完成子任务' },
+      { id: 105, kind: 'requirement', ruleCode: 'VIS_V3_05', name: '已完成设计需求' },
+    ].map(task => ({ ...task, completedAt: '2026-10-03T11:30:00', category: '包装设计', project: '绩效用例项目', score: 2 }));
     e.actions.apiGet = async url => {
       const params = new URL(url, location.origin).searchParams;
       if (url.startsWith('/performance/designer-targets')) return [{ userId: 'e2e-designer', userName: '测试设计师', targetPoints: window.evaluationTarget || 0, configured: !!window.evaluationTarget }];
       if (url.startsWith('/performance/designer-evaluations/completion')) return { completionScore: window.evaluationNoTasks ? null : 100, earnedPoints: 100, targetPoints: window.evaluationNoTasks ? 0 : 100, completionReason: window.evaluationNoTasks ? '目标积分未配置' : '月度所得积分 100 ÷ 目标积分 100 × 100 = 100 分。' };
       if (url.startsWith('/performance/designer-evaluations')) return window.evaluationStore.filter(row => row.monthKey.startsWith(params.get('period')));
-      if (url.startsWith('/performance/designer-monthly-report')) return { month: params.get('month'), designers: [{ userId: 'e2e-designer', designer: '测试设计师', completedCount: 0, score: 12, tasks: [] }] };
+      if (url.startsWith('/performance/designer-monthly-report')) return { month: params.get('month'), designers: [{ userId: 'e2e-designer', designer: '测试设计师', completedCount: tasks.length, score: 12, tasks }] };
       return [];
     };
     e.actions.apiPut = async (url, body) => {
@@ -926,6 +998,7 @@ async function runDesignerEvaluationChecks(page) {
     assert.match(await modal.innerText(), /目标积分未配置/);
     assert.equal(await modal.locator('[data-emie-action="click:designer-evaluation-save"]').isDisabled(), true);
     await modal.locator('[data-emie-action="click:designer-evaluation-close"]').first().click();
+    await runDesignerVersionFilterChecks(page, host);
     await page.evaluate(() => {
       window.evaluationNoTasks = false;
       window.evaluationConflict = false;
@@ -935,6 +1008,8 @@ async function runDesignerEvaluationChecks(page) {
     await host.locator('#designerPerformanceMonth').fill('2026');
     await host.locator('#designerPerformanceMonth').dispatchEvent('change');
     await page.waitForFunction(() => document.querySelector('#evaluationTestHost').textContent.includes('已评分 2/12'));
+    assert.equal(await host.locator('[data-emie-action="click:scoring-export-subtasks"]').isVisible(), false, '按年不可导出月度报表');
+    assert.equal(await host.locator('#designerPerformanceRuleVersion').isVisible(), true, '按年仍可筛选完成事项');
     assert.match(await host.innerText(), /年度平均绩效：100\.01/);
     await host.locator('.designer-evaluation-summary summary').click();
     assert.equal(await host.locator('.designer-evaluation-months > div').count(), 12);

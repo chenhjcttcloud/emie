@@ -5,6 +5,7 @@ import com.emie.designpm.entity.*;
 import com.emie.designpm.performance.service.DesignerMonthlyDeliveryService;
 import com.emie.designpm.performance.service.PerformanceService;
 import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
 import java.util.*;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
@@ -12,6 +13,9 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/performance")
 public class PerformanceController {
+    private static final MediaType XLSX =
+            MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
     private final PerformanceService service;
     private final DesignerMonthlyDeliveryService deliveries;
 
@@ -36,6 +40,29 @@ public class PerformanceController {
             return ResponseEntity.badRequest().body(Map.of("error", "时间格式应为 YYYY-MM 或 YYYY"));
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(Map.of("error", "月度绩效加载失败，请稍后重试"));
+        }
+    }
+
+    @GetMapping("/designer-monthly-report/export")
+    public ResponseEntity<?> exportDesignerMonthlyReport(
+            @RequestParam String month, @RequestParam(required = false) String ruleVersion, HttpServletRequest r) {
+        if (!admin(r)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可导出设计师月度绩效表"));
+        try {
+            byte[] workbook = service.exportDesignerMonthlyReport(month, ruleVersion);
+            return ResponseEntity.ok()
+                    .contentType(XLSX)
+                    .cacheControl(CacheControl.noStore())
+                    .header(
+                            HttpHeaders.CONTENT_DISPOSITION,
+                            ContentDisposition.attachment()
+                                    .filename("designer-monthly-report-" + month + ".xlsx")
+                                    .build()
+                                    .toString())
+                    .body(workbook);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (IOException | RuntimeException e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", "导出失败，请稍后重试"));
         }
     }
 

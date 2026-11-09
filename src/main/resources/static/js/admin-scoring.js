@@ -17,6 +17,11 @@ function compareRuleCodes(left, right) {
 
 function displayPointRuleCode(code) { return ({ MATERIAL_MARKET_LAUNCH: 'M3', TASK_APPROVED: 'T1' }[String(code || '').toUpperCase()] || String(code || '')); }
 function localMonth() { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; }
+const designerRuleVersions = new Map([
+  ['2.0', '2.0'], ['3.0', '3.0'], ['legacy', '其他历史规则'], ['unbound', '未绑定'],
+]);
+const designerReportExcelType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
 function designerPerformancePeriodControls(period) {
   const annual = period.length === 4;
   return `<div class="designer-performance-period"><label class="form-label">查看方式<select class="form-select" id="designerPerformanceScope" data-emie-action="change:scoring-performance-scope"><option value="month" ${annual ? '' : 'selected'}>按月</option><option value="year" ${annual ? 'selected' : ''}>按年</option></select></label><label class="form-label">${annual ? '年份' : '月份'}<input class="form-input" type="${annual ? 'number' : 'month'}" ${annual ? 'min="1" max="9999" step="1"' : ''} id="designerPerformanceMonth" value="${escHtml(period)}" data-emie-action="change:scoring-performance-month"></label></div>`;
@@ -28,11 +33,66 @@ function changeDesignerPerformanceScope() {
   const annual = document.getElementById('designerPerformanceScope')?.value === 'year';
   const period = annual ? input.value.slice(0, 4) : input.value.slice(0, 4) + localMonth().slice(4);
   const card = input.closest('.card');
-  card.outerHTML = renderDesignerMonthlyReport({ month: period, designers: [] });
+  card.outerHTML = renderDesignerMonthlyReport({ month: period, designers: [] }, selectedDesignerRuleVersion(card));
   reloadDesignerMonthlyReport();
 }
 
-function renderDesignerMonthlyReport(report) {
+function selectedDesignerRuleVersion(card) {
+  const version = card?.querySelector('#designerPerformanceRuleVersion')?.value;
+  return designerRuleVersions.has(version) ? version : '';
+}
+
+function renderDesignerTaskControls(annual, selectedVersion) {
+  return `<div class="designer-performance-period">
+    <label class="form-label">积分规则版本<select class="form-select" id="designerPerformanceRuleVersion" data-emie-action="change:scoring-performance-rule-version">
+      <option value="">全部</option>${[...designerRuleVersions].map(([value, label]) => `<option value="${value}" ${value === selectedVersion ? 'selected' : ''}>${label}</option>`).join('')}
+    </select></label>
+    ${annual ? '' : '<button type="button" class="btn btn-outline" data-emie-action="click:scoring-export-subtasks">导出子任务 Excel</button>'}
+  </div>`;
+}
+
+function designerTaskRuleVersion(task) {
+  return task.kind === 'task' && designerRuleVersions.has(task.ruleVersion) ? task.ruleVersion : '';
+}
+
+function renderDesignerPerformanceTask(task, selectedVersion) {
+  const version = designerTaskRuleVersion(task);
+  const badge = version ? `<span class="badge badge-review designer-performance-rule-version" title="${escHtml(task.ruleCode || '积分规则版本')}">${designerRuleVersions.get(version)}</span>` : '';
+  return `<div class="designer-performance-task" ${version ? `data-rule-version="${version}"` : ''} ${selectedVersion && version !== selectedVersion ? 'hidden' : ''}>
+    <div class="designer-performance-task-head"><div><strong>${escHtml(task.name)}</strong> ${badge}<small>${escHtml(task.project || '')} · ${escHtml(String(task.completedAt || '').replace('T', ' '))} · ${escHtml(task.category || '未分类')}</small></div>
+    <div><span title="该设计师在此任务累计获得的积分，包含历史月份，不等于当月归属积分">该设计师在此任务累计获得 ${Number(task.score || 0).toFixed(2)} 积分</span><button type="button" class="btn btn-outline btn-sm" data-emie-action="click:scoring-task-deliveries" data-task-id="${Number(task.id)}" data-task-kind="${escHtml(task.kind || 'task')}" data-month="${escHtml(String(task.completedAt || '').slice(0, 7))}">查看成果</button></div></div>
+    <div class="designer-performance-deliveries" data-delivery-panel hidden></div>
+  </div>`;
+}
+
+function designerTasksEmptyText(version) {
+  return version ? '所选时间内暂无该版本的子任务' : '所选时间内暂无完成任务或需求';
+}
+
+function renderDesignerPerformanceTasks(tasks, selectedVersion) {
+  const hasVisibleTasks = tasks.some(task => !selectedVersion || designerTaskRuleVersion(task) === selectedVersion);
+  return `<div class="designer-performance-tasks">
+    ${tasks.map(task => renderDesignerPerformanceTask(task, selectedVersion)).join('')}
+    <p class="admin-section-hint" data-designer-tasks-empty ${hasVisibleTasks ? 'hidden' : ''}>${designerTasksEmptyText(selectedVersion)}</p>
+  </div>`;
+}
+
+function filterDesignerPerformanceTasks(control) {
+  const card = control.closest('.designer-performance');
+  const version = selectedDesignerRuleVersion(card);
+  card.querySelectorAll('.designer-performance-tasks').forEach(list => {
+    let hasVisibleTasks = false;
+    list.querySelectorAll('.designer-performance-task').forEach(task => {
+      task.hidden = Boolean(version && task.dataset.ruleVersion !== version);
+      if (!task.hidden) hasVisibleTasks = true;
+    });
+    const empty = list.querySelector('[data-designer-tasks-empty]');
+    empty.hidden = hasVisibleTasks;
+    empty.textContent = designerTasksEmptyText(version);
+  });
+}
+
+function renderDesignerMonthlyReport(report, selectedVersion = '') {
   const annual = report.month.length === 4;
   const periodLabel = annual ? '全年' : '当月';
   const rows = report?.designers || [];
@@ -41,8 +101,47 @@ function renderDesignerMonthlyReport(report) {
   return `<section class="card designer-performance">
     <div class="card-header"><div><h3>设计师${annual ? '年度' : '月度'}绩效与交付成果</h3><p class="admin-section-hint">${periodLabel}归属积分含调账；任务旁显示该设计师在此任务累计获得的积分（包含历史月份，不等于当月归属积分）。展开任务后加载交付成果。</p></div>${designerPerformancePeriodControls(report.month)}</div>
     ${!annual && report.growthScoreStatus === 'unavailable' ? `<p class="admin-section-hint" role="status" data-growth-integration-status>${escHtml(report.growthScoreMessage || '成长周报评分暂不可用，请稍后重试')}。现有积分与已保存评分继续保留。</p>` : ''}<div class="designer-performance-summary"><span><strong>${rows.length}</strong> 位设计师</span><span><strong>${total}</strong> 项完成任务与需求</span><span><strong>${rows.reduce((sum, row) => sum + Number(row.score || 0), 0).toFixed(2)}</strong> ${periodLabel}归属积分</span><span><strong>${rows.filter(row => (row.evaluations || []).some(item => item.totalScore != null)).length} / ${rows.length}</strong> ${annual ? '已有月度评分' : '已完成月度评分'}</span></div>
-    <div class="designer-performance-list">${rows.map(row => `<article class="designer-performance-person"><div class="designer-performance-person-head"><div><strong>${escHtml(row.designer)}</strong><small>${escHtml(mix(row.categoryCounts, row.completedCount))}</small></div><div class="designer-performance-score"><strong>${Number(row.score || 0).toFixed(2)}</strong><span>${periodLabel}归属积分</span></div></div>${EMIE.actions.renderDesignerEvaluationSummary(row, report.month)}<div class="designer-performance-count">完成 ${Number(row.completedCount || 0)} 项任务与需求</div><div class="designer-performance-tasks">${(row.tasks || []).map(task => `<div class="designer-performance-task"><div class="designer-performance-task-head"><div><strong>${escHtml(task.name)}</strong><small>${escHtml(task.project || '')} · ${escHtml(String(task.completedAt || '').replace('T', ' '))} · ${escHtml(task.category || '未分类')}</small></div><div><span title="该设计师在此任务累计获得的积分，包含历史月份，不等于当月归属积分">该设计师在此任务累计获得 ${Number(task.score || 0).toFixed(2)} 积分</span><button type="button" class="btn btn-outline btn-sm" data-emie-action="click:scoring-task-deliveries" data-task-id="${Number(task.id)}" data-task-kind="${escHtml(task.kind || 'task')}" data-month="${escHtml(String(task.completedAt || '').slice(0, 7))}">查看成果</button></div></div><div class="designer-performance-deliveries" data-delivery-panel hidden></div></div>`).join('') || '<p class="admin-section-hint">所选时间内暂无完成任务或需求</p>'}</div></article>`).join('') || '<div class="empty-state">暂无在职设计师</div>'}</div>
+    ${renderDesignerTaskControls(annual, selectedVersion)}
+    <div class="designer-performance-list">${rows.map(row => `<article class="designer-performance-person"><div class="designer-performance-person-head"><div><strong>${escHtml(row.designer)}</strong><small>${escHtml(mix(row.categoryCounts, row.completedCount))}</small></div><div class="designer-performance-score"><strong>${Number(row.score || 0).toFixed(2)}</strong><span>${periodLabel}归属积分</span></div></div>${EMIE.actions.renderDesignerEvaluationSummary(row, report.month)}<div class="designer-performance-count">完成 ${Number(row.completedCount || 0)} 项任务与需求</div>${renderDesignerPerformanceTasks(row.tasks || [], selectedVersion)}</article>`).join('') || '<div class="empty-state">暂无在职设计师</div>'}</div>
   </section>`;
+}
+
+async function exportDesignerSubtasks(button) {
+  const card = button.closest('.designer-performance');
+  const month = card?.querySelector('#designerPerformanceMonth')?.value;
+  if (EMIE.state.currentRole !== 'admin' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month || '')) return;
+  const params = new URLSearchParams({ month });
+  const version = selectedDesignerRuleVersion(card);
+  if (version) params.set('ruleVersion', version);
+  const authUser = EMIE.state.authUser;
+  const token = localStorage.getItem('design_pm_token');
+  let identityChanged = false;
+  const invalidate = () => { identityChanged = true; };
+  const isCurrent = () => !identityChanged && EMIE.state.authUser === authUser
+    && EMIE.state.currentRole === 'admin' && localStorage.getItem('design_pm_token') === token;
+  document.addEventListener('emie:identity-changing', invalidate);
+  try {
+    const response = await EMIE.actions.fetchWithTimeout(`/api/performance/designer-monthly-report/export?${params}`, {
+      headers: EMIE.actions.authHeaders(token), cache: 'no-store',
+    });
+    if (!isCurrent()) return;
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (response.headers.get('content-type')?.split(';')[0] !== designerReportExcelType) {
+      throw new Error('服务器未返回 Excel 文件');
+    }
+    const blob = await response.blob();
+    if (!isCurrent()) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `设计师子任务-${month}.xlsx`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) {
+    if (isCurrent()) showAdminToast('导出失败：' + (error.message || '请稍后重试'), 'error');
+  } finally {
+    document.removeEventListener('emie:identity-changing', invalidate);
+  }
 }
 
 async function renderAdminDesignerPerformance(container) {
@@ -154,7 +253,10 @@ async function reloadDesignerMonthlyReport() {
   let report, growth, ready = false;
   const renderCurrent = () => {
     const input = document.getElementById('designerPerformanceMonth');
-    if (requestId === designerPerformanceRequest && input?.isConnected && input.value === month) input.closest('.card').outerHTML = renderDesignerMonthlyReport(report);
+    if (requestId === designerPerformanceRequest && input?.isConnected && input.value === month) {
+      const currentCard = input.closest('.card');
+      currentCard.outerHTML = renderDesignerMonthlyReport(report, selectedDesignerRuleVersion(currentCard));
+    }
   };
   // A slow optional upstream never blocks the original points and saved evaluation.
   if (month.length === 7) {
@@ -580,6 +682,8 @@ if (registerEventAction) {
   registerEventAction('scoring-save-target', (_event, el) => saveDesignerTarget(Number(el.dataset.targetIndex)));
   registerEventAction('scoring-performance-scope', () => changeDesignerPerformanceScope());
   registerEventAction('scoring-performance-month', () => reloadDesignerMonthlyReport());
+  registerEventAction('scoring-performance-rule-version', (_event, el) => filterDesignerPerformanceTasks(el));
+  registerEventAction('scoring-export-subtasks', (_event, el) => EMIE.actions.submitGuard(el, () => exportDesignerSubtasks(el)));
   registerEventAction('scoring-task-deliveries', (_event, el) => loadDesignerTaskDeliveries(el));
   registerEventAction('scoring-preview-delivery', (_event, el) => previewDesignerDeliveryFile(el));
   registerEventAction('scoring-create-rule', () => createPointRule());

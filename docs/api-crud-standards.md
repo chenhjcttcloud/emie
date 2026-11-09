@@ -30,4 +30,5 @@
 
 - 项目列表 `GET /api/projects/page` 已符合上述分页响应、服务端筛选、会话权限范围和参数校验规范。
 - 旧 `GET /api/projects` 仅作为旧页面兼容接口，不得在新增列表或筛选功能中使用。
+- 管理员通过 `GET /api/performance/designer-monthly-report` 查询设计师完成事项。子任务的 `ruleVersion` 由原绑定规则编号决定，设计／送审需求沿用原响应。只读下载 `GET /api/performance/designer-monthly-report/export` 接收 `month`（`YYYY-MM`）和可选 `ruleVersion`（`2.0`、`3.0`、`legacy`、`unbound`），返回所选完成月份的子任务 Excel。无权限返回 403，参数错误返回 400，可用同一参数重试。
 - 其余 CRUD 资源按风险分批迁移：先管理配置类资源，再项目子任务/评分等状态机资源；不得在无回归验证的情况下批量改变既有响应结构。
