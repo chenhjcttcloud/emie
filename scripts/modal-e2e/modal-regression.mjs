@@ -529,9 +529,18 @@ async function runVisualTaskRuleChecks(page) {
     { ruleCode: 'VIS_V3_06', category: '包装设计', subcategory: '包装设计', description: '常规包装设计｜固定模板重新排版（有配件、有 UI）', points: 6 },
     { ruleCode: 'VIS_V3_27', category: '产品设计', subcategory: '概念设计', description: '现有产品延伸设计｜其它 IP 款从 0 到 1 设计', points: 10 },
     { ruleCode: 'VIS_V3_30', category: '产品设计', subcategory: '3D 设计送审', description: '现有产品延伸设计', points: 5 },
+    { ruleCode: 'VIS_V3_DISABLED', category: '停用分类', description: '停用的设计规则', points: 1, enabled: false },
     { ruleCode: 'D30_OLD', category: '产品设计', description: '旧设计规则', points: 8, enabled: false },
     { ruleCode: 'GENERAL', category: '通用', description: '其他积分', points: 1 },
   ];
+  const visualRuleCodes = Array.from({ length: 30 }, (_, index) => 'VIS_V3_' + String(index + 5).padStart(2, '0'));
+  const otherCategories = ['宝描', '海报视觉', '展位设计'];
+  visualRuleCodes.forEach((ruleCode, index) => {
+    if (!rules.some(rule => rule.ruleCode === ruleCode)) {
+      rules.push({ ruleCode, category: otherCategories[index % otherCategories.length],
+        subcategory: '测试分组', description: '测试任务类型 ' + ruleCode, points: 1 });
+    }
+  });
   await page.evaluate(rules => {
     const e = window.EMIE;
     const task = {
@@ -568,16 +577,47 @@ async function runVisualTaskRuleChecks(page) {
     const visibleRuleCodes = () => picker.locator('[data-point-rule-code]')
       .evaluateAll(rows => rows.map(row => row.dataset.pointRuleCode));
     const selectedRule = picker.locator('[name="pointRuleCode"]');
+    const allCategories = picker.locator('[data-point-category-tab=""]');
     const allSubcategories = picker.locator('[data-point-subcategory-tab=""]');
-    assert.match(await picker.locator('.point-rule-empty').innerText(), /选择一级分类/);
-    assert.deepEqual(await visibleRuleCodes(), []);
-    assert.equal(await picker.locator('[data-point-category-tab=""]').count(), 0);
+    const secondLevel = picker.locator('[data-point-subcategory-tabs]');
+    const pagination = picker.locator('.point-rule-pagination');
+    const withoutUi = picker.locator('[data-point-rule-code="VIS_V3_05"]');
+    const withUi = picker.locator('[data-point-rule-code="VIS_V3_06"]');
+    assert.equal(await allCategories.getAttribute('aria-selected'), 'true');
+    assert.equal(await secondLevel.isVisible(), false);
     assert.equal(await picker.locator('[data-point-category-tab="通用"]').count(), 0);
+    assert.equal(await picker.locator('[data-point-category-tab="停用分类"]').count(), 0);
+    for (let pageIndex = 0; pageIndex < 3; pageIndex += 1) {
+      assert.deepEqual(await visibleRuleCodes(), visualRuleCodes.slice(pageIndex * 10, (pageIndex + 1) * 10));
+      assert.match(await pagination.innerText(), new RegExp(`共 30 条 · ${pageIndex + 1} / 3 页`));
+      if (pageIndex < 2) await pagination.getByRole('button', { name: '下一页' }).click();
+    }
+    assert.equal(await pagination.getByRole('button', { name: '下一页' }).isDisabled(), true);
+    const search = picker.getByRole('searchbox', { name: '搜索积分规则' });
+    await search.fill('VIS_V3_30');
+    assert.deepEqual(await visibleRuleCodes(), ['VIS_V3_30']);
+    await search.clear();
+    assert.deepEqual(await visibleRuleCodes(), visualRuleCodes.slice(0, 10));
+
+    await withUi.click();
+    assert.equal(await selectedRule.inputValue(), 'VIS_V3_06');
+    assert.equal(await allCategories.getAttribute('aria-selected'), 'true');
+    await addModal.locator('[name="name"]').fill('未筛选分类的测试任务');
+    await addModal.locator('[name="workflowStage"]').selectOption('design');
+    const plannedDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    await addModal.locator('[name="plannedDate"]').fill(plannedDate);
+    await addModal.locator('[name="designerId"]').selectOption('777');
+    await addModal.getByRole('button', { name: '确认添加' }).click();
+    await addModal.waitFor({ state: 'detached' });
+    const created = await page.evaluate(() => window.visualTaskRuleFixture.writes[0]);
+    assert.equal(created.url, '/projects/301/tasks');
+    assert.equal(created.body.pointRuleCode, 'VIS_V3_06');
+
+    await page.evaluate(() => window.EMIE.actions.addSubTask(301));
+    await addModal.waitFor();
     await picker.locator('[data-point-category-tab="包装设计"]').click();
     assert.equal(await allSubcategories.getAttribute('aria-selected'), 'true');
     assert.deepEqual(await visibleRuleCodes(), ['VIS_V3_05', 'VIS_V3_06']);
-    const withoutUi = picker.locator('[data-point-rule-code="VIS_V3_05"]');
-    const withUi = picker.locator('[data-point-rule-code="VIS_V3_06"]');
     assert.match(await withoutUi.innerText(), /无配件、无 UI[\s\S]*4 分/);
     assert.match(await withUi.innerText(), /有配件、有 UI[\s\S]*6 分/);
     await withoutUi.click();
@@ -600,19 +640,13 @@ async function runVisualTaskRuleChecks(page) {
     assert.deepEqual(await visibleRuleCodes(), ['VIS_V3_27', 'VIS_V3_30']);
     assert.equal(await selectedRule.inputValue(), 'VIS_V3_30');
 
-    await picker.locator('[data-point-category-tab="包装设计"]').click();
-    await withUi.click();
-    assert.equal(await allSubcategories.getAttribute('aria-selected'), 'true');
-    await addModal.locator('[name="name"]').fill('只选一级分类的测试任务');
-    await addModal.locator('[name="workflowStage"]').selectOption('design');
-    const plannedDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    await addModal.locator('[name="plannedDate"]').fill(plannedDate);
-    await addModal.locator('[name="designerId"]').selectOption('777');
-    await addModal.getByRole('button', { name: '确认添加' }).click();
+    await picker.locator('[data-point-subcategory-tab="3D 设计送审"]').click();
+    await allCategories.click();
+    assert.equal(await secondLevel.isVisible(), false);
+    assert.equal(await selectedRule.inputValue(), 'VIS_V3_30');
+    assert.deepEqual(await visibleRuleCodes(), visualRuleCodes.slice(0, 10));
+    await addModal.locator('[data-emie-action="click:task-add-close"]').first().click();
     await addModal.waitFor({ state: 'detached' });
-    const created = await page.evaluate(() => window.visualTaskRuleFixture.writes[0]);
-    assert.equal(created.url, '/projects/301/tasks');
-    assert.equal(created.body.pointRuleCode, 'VIS_V3_06');
 
     await page.evaluate(() => window.EMIE.actions.editTask(301, 302));
     await editModal.waitFor();

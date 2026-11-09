@@ -36,9 +36,9 @@ function enabledPointRules(rules) {
 
 function pointRulesForTaskBinding(catalog) {
   const isVisualRule = rule => String(rule.ruleCode).startsWith('VIS_V3_');
-  const requirePrimaryCategory = Array.isArray(catalog) && catalog.some(isVisualRule);
+  const hasVisualCatalog = Array.isArray(catalog) && catalog.some(isVisualRule);
   const enabled = enabledPointRules(catalog);
-  return { rules: requirePrimaryCategory ? enabled.filter(isVisualRule) : enabled, requirePrimaryCategory };
+  return { rules: hasVisualCatalog ? enabled.filter(isVisualRule) : enabled, hasVisualCatalog };
 }
 
 function pointRuleDisplayName(code, description) {
@@ -58,10 +58,10 @@ function pointRuleDisplayName(code, description) {
 
 const POINT_RULE_PAGE_SIZE = 10;
 
-function pointRuleTabs(values, selected, action, dataName, disabled, showAll = true) {
+function pointRuleTabs(values, selected, action, dataName, disabled) {
   const attribute = dataName === 'category' ? 'data-point-category-tab' : 'data-point-subcategory-tab';
-  const allTab = showAll ? `<button type="button" role="tab" aria-selected="${selected ? 'false' : 'true'}" class="${selected ? '' : 'is-active'}" ${attribute}="" data-emie-action="click:${action}" ${disabled ? 'disabled' : ''}>全部</button>` : '';
-  return `<div class="point-rule-tabs" role="tablist"><span>${dataName === 'category' ? '一级分类' : '二级分类'}</span>${allTab}${values.map(value => `<button type="button" role="tab" aria-selected="${value === selected ? 'true' : 'false'}" class="${value === selected ? 'is-active' : ''}" ${attribute}="${escHtml(value)}" data-emie-action="click:${action}" ${disabled ? 'disabled' : ''}>${escHtml(value)}</button>`).join('')}</div>`;
+  const tabs = ['', ...values].map(value => `<button type="button" role="tab" aria-selected="${value === selected ? 'true' : 'false'}" class="${value === selected ? 'is-active' : ''}" ${attribute}="${escHtml(value)}" data-emie-action="click:${action}" ${disabled ? 'disabled' : ''}>${escHtml(value || '全部')}</button>`).join('');
+  return `<div class="point-rule-tabs" role="tablist"><span>${dataName === 'category' ? '一级分类' : '二级分类'}</span>${tabs}</div>`;
 }
 
 function pointRuleSelectionText(rule) {
@@ -72,12 +72,11 @@ function pointRuleSelectionText(rule) {
 }
 
 function pointRulePickerView(rules, category, subcategory, keyword, page, selectedCode, disabled, options = {}) {
-  const { requirePrimaryCategory, boundRule, preserveSelection } = options;
+  const { boundRule, preserveSelection } = options;
   const categories = [...new Set(rules.map(rule => rule.category || '其他'))];
   const subcategories = category ? [...new Set(rules.filter(rule => rule.category === category).map(rule => rule.subcategory).filter(Boolean))] : [];
   const query = keyword.trim().toLowerCase();
-  const categoryPrompt = requirePrimaryCategory && !category ? '请先选择一级分类' : '';
-  const filtered = categoryPrompt ? [] : rules.filter(rule => (!category || (rule.category || '其他') === category)
+  const filtered = rules.filter(rule => (!category || (rule.category || '其他') === category)
     && (!subcategory || rule.subcategory === subcategory)
     && (!query || `${rule.ruleCode || ''} ${rule.category || ''} ${rule.subcategory || ''} ${rule.description || ''}`.toLowerCase().includes(query)));
   const pages = Math.max(1, Math.ceil(filtered.length / POINT_RULE_PAGE_SIZE));
@@ -92,7 +91,7 @@ function pointRulePickerView(rules, category, subcategory, keyword, page, select
     const name = pointRuleDisplayName(code, rule.description);
     const [title, work] = code.startsWith('VIS_V3_') ? name.split('｜', 2) : [name];
     return `<button type="button" class="point-rule-row ${active ? 'is-selected' : ''}" data-point-rule-code="${escHtml(code)}" data-emie-action="click:task-point-select" aria-pressed="${active}" ${disabled ? 'disabled' : ''}><span class="point-rule-row-check">${active ? '✓' : ''}</span><span class="point-rule-row-name">${escHtml(title)}<small>${escHtml(work || code)}${!work && rule.subcategory ? ` · ${escHtml(rule.subcategory)}` : ''}</small></span><strong>${Number(rule.points || 0)} 分</strong></button>`;
-  }).join('') : `<div class="point-rule-empty">${categoryPrompt || '没有匹配的积分规则，请调整分类或关键词'}</div>`;
+  }).join('') : '<div class="point-rule-empty">没有匹配的积分规则，请调整分类或关键词</div>';
   const paginationHtml = `<div class="point-rule-pagination"><span>共 ${filtered.length} 条 · ${filtered.length ? currentPage + 1 : 0} / ${pages} 页</span><div><button type="button" data-emie-action="click:task-point-page" data-page="${currentPage - 1}" ${currentPage <= 0 || disabled ? 'disabled' : ''} aria-label="上一页">‹</button><button type="button" data-emie-action="click:task-point-page" data-page="${currentPage + 1}" ${currentPage >= pages - 1 || disabled ? 'disabled' : ''} aria-label="下一页">›</button></div></div>`;
   return {
     subcategories,
@@ -101,7 +100,7 @@ function pointRulePickerView(rules, category, subcategory, keyword, page, select
     paginationHtml,
     selectedCode: selectedRule ? selectedCode : '',
     selectionText: pointRuleSelectionText(selectedRule),
-    html: `<div class="point-rule-search"><span aria-hidden="true">⌕</span><input type="search" data-point-search data-emie-action="input:task-point-search" aria-label="搜索积分规则" placeholder="搜索规则名称或编号" value="${escHtml(keyword)}" ${disabled ? 'disabled' : ''}></div>${pointRuleTabs(categories, category, 'task-point-category-tab', 'category', disabled, !requirePrimaryCategory)}<div data-point-subcategory-tabs ${subcategories.length ? '' : 'hidden'}>${pointRuleTabs(subcategories, subcategory, 'task-point-subcategory-tab', 'subcategory', disabled)}</div><div class="point-rule-results"><div class="point-rule-list">${ruleRows}</div>${paginationHtml}</div><input type="hidden" name="pointRuleCode" value="${escHtml(selectedRule ? selectedCode : '')}"><div class="point-rule-selected">${escHtml(pointRuleSelectionText(selectedRule))}<button type="button" data-emie-action="click:task-point-clear" ${selectedRule && !disabled ? '' : 'hidden'}>清除选择</button></div>`
+    html: `<div class="point-rule-search"><span aria-hidden="true">⌕</span><input type="search" data-point-search data-emie-action="input:task-point-search" aria-label="搜索积分规则" placeholder="搜索规则名称或编号" value="${escHtml(keyword)}" ${disabled ? 'disabled' : ''}></div>${pointRuleTabs(categories, category, 'task-point-category-tab', 'category', disabled)}<div data-point-subcategory-tabs ${subcategories.length ? '' : 'hidden'}>${pointRuleTabs(subcategories, subcategory, 'task-point-subcategory-tab', 'subcategory', disabled)}</div><div class="point-rule-results"><div class="point-rule-list">${ruleRows}</div>${paginationHtml}</div><input type="hidden" name="pointRuleCode" value="${escHtml(selectedRule ? selectedCode : '')}"><div class="point-rule-selected">${escHtml(pointRuleSelectionText(selectedRule))}<button type="button" data-emie-action="click:task-point-clear" ${selectedRule && !disabled ? '' : 'hidden'}>清除选择</button></div>`
   };
 }
 
@@ -177,7 +176,7 @@ async function addSubTask(pid) {
     window.EMIE.actions.showSystemAlert('积分规则加载失败：' + (error.message || '请稍后重试'));
     return;
   }
-  const { rules: pointRules, requirePrimaryCategory } = pointRulesForTaskBinding(catalog);
+  const { rules: pointRules, hasVisualCatalog } = pointRulesForTaskBinding(catalog);
   const designerOpts = `<option value="">请选择设计师</option>` +
     EMIE.state.users.designer.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('');
   const supplychainOpts = EMIE.state.users.supplychain && EMIE.state.users.supplychain.length
@@ -216,8 +215,8 @@ async function addSubTask(pid) {
             </div>
             <div class="form-group"><label class="form-label"><span class="required">*</span> 计划要求完成时间</label>${renderDatePicker('plannedDate', {required:true})}</div>
           </div>
-          <div class="form-group" id="addSubTaskPointRuleGroup"><label class="form-label"><span class="required">*</span> ${requirePrimaryCategory ? '任务类型' : '积分规则'}</label>
-            ${renderPointRulePicker(pointRules, '', false, { requirePrimaryCategory })}
+          <div class="form-group" id="addSubTaskPointRuleGroup"><label class="form-label"><span class="required">*</span> ${hasVisualCatalog ? '任务类型' : '积分规则'}</label>
+            ${renderPointRulePicker(pointRules)}
             <div style="font-size:12px;color:var(--gray-500);margin-top:5px;">创建后将锁定规则快照并参与积分计算。</div>
           </div>
           <div class="form-group"><label class="form-label"><span class="required">*</span> 负责人类型</label>
