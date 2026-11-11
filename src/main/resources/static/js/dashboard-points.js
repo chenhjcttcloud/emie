@@ -138,6 +138,7 @@ function renderAdminPrograms(poProgress) {
 function adjustmentSourceLabel(sourceType) {
   return {
     MATERIAL_MARKET: '素材广场立项奖励',
+    MATERIAL_IDEA_PUBLISH: '创意单发布奖励',
     MATERIAL_FREE_RATING: '自由单评星奖励',
     PO_PROGRESS: 'PO 月度履职',
     DESIGN_REQUIREMENT: '设计/送审需求',

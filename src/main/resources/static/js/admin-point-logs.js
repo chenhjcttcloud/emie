@@ -1,7 +1,7 @@
 const EMIE = window.EMIE;
 const esc = value => EMIE.actions.escHtml(String(value ?? '未记录'));
 const time = value => value ? esc(EMIE.actions.fmtDT(value)) : '未记录';
-const sources = { TASK_BASE: '子任务基础分', TASK_REVISION: '子任务修改', TASK_MANUAL: '旧任务手动验收', TASK_QUALITY: '历史质量分', DESIGN_REQUIREMENT: '设计需求', MATERIAL_MARKET: '素材采纳', PO_PROGRESS: 'PO进度', MANUAL: '手动调整', APPEAL: '积分异议', TASK_WITHDRAWAL: '退单扣分' };
+const sources = { TASK_BASE: '子任务基础分', TASK_REVISION: '子任务修改', TASK_MANUAL: '旧任务手动验收', TASK_QUALITY: '历史质量分', DESIGN_REQUIREMENT: '设计需求', MATERIAL_MARKET: '素材采纳', MATERIAL_IDEA_PUBLISH: '创意单发布奖励', PO_PROGRESS: 'PO进度', MANUAL: '手动调整', APPEAL: '积分异议', TASK_WITHDRAWAL: '退单扣分' };
 const issues = { MISSING_LEDGER: '确认后未入账', AMOUNT_MISMATCH: '入账分值不符', UNEXPECTED_LEDGER: '无积分轮出现流水', EARLY_LEDGER: '确认前入账', RECIPIENT_MISMATCH: '积分接收人不符', RULE_MISMATCH: '入账规则不符' };
 const filters = ['personKeyword', 'from', 'to', 'source', 'keyword', 'sign'];
 let requestId = 0;

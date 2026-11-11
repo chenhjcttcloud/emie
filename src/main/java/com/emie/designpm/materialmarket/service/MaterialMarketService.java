@@ -136,7 +136,8 @@ public class MaterialMarketService {
     }
 
     public MaterialMarketItem publish(Map<String, Object> b, String creatorId) {
-        User u = users.findByUserId(creatorId).orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+        // 同一作者的发布串行校验文件归属，防止并发请求使用同一批未绑定的上传。
+        User u = users.findByUserIdForUpdate(creatorId).orElseThrow(() -> new IllegalArgumentException("用户不存在"));
         String postType = Objects.toString(b.get("postType"), "idea");
         if (!Set.of("idea", "free").contains(postType)) throw new IllegalArgumentException("请选择创意单或自由单");
         if ("free".equals(postType)) return publishFree(b, creatorId, u);
@@ -179,6 +180,16 @@ public class MaterialMarketService {
         m = materials.save(m);
         fileArchive.bindFilesFromJson(files, "material_market", m.getId());
         fileArchive.bindFilesFromJson(referenceImages, "material_market", m.getId());
+        PointAdjustmentLedger reward = new PointAdjustmentLedger();
+        reward.setUserId(creatorId);
+        reward.setSourceType("MATERIAL_IDEA_PUBLISH");
+        reward.setSourceId(m.getId());
+        reward.setPoints(5.0);
+        reward.setRuleCode("IDEA_PUBLISH");
+        reward.setRuleDescription("素材广场创意单发布奖励");
+        reward.setReason("创意单「" + m.getTitle() + "」发布奖励");
+        reward.setCreatedBy(creatorId);
+        adjustments.save(reward);
         return m;
     }
 

@@ -6,14 +6,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.emie.designpm.admin.repository.UserRepository;
 import com.emie.designpm.entity.FileRecord;
 import com.emie.designpm.entity.IpOption;
 import com.emie.designpm.entity.MaterialMarketItem;
+import com.emie.designpm.entity.PointAdjustmentLedger;
 import com.emie.designpm.entity.User;
 import com.emie.designpm.file.repository.FileRecordRepository;
 import com.emie.designpm.file.service.FileArchiveService;
@@ -27,6 +30,7 @@ import com.emie.designpm.reference.repository.IpOptionRepository;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class MaterialMarketServiceTest {
     @Test
@@ -35,6 +39,7 @@ class MaterialMarketServiceTest {
         UserRepository users = mock(UserRepository.class);
         FileRecordRepository records = mock(FileRecordRepository.class);
         FileArchiveService archive = mock(FileArchiveService.class);
+        PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
         User sales = User.builder().userId("sales_01").name("销售").role("sales").build();
         FileRecord reference = FileRecord.builder()
                 .storedName("concept.png")
@@ -42,7 +47,7 @@ class MaterialMarketServiceTest {
                 .fileSize(24L)
                 .ownerUserId("sales_01")
                 .build();
-        when(users.findByUserId("sales_01")).thenReturn(Optional.of(sales));
+        when(users.findByUserIdForUpdate("sales_01")).thenReturn(Optional.of(sales));
         when(records.findByStoredName("concept.png")).thenReturn(Optional.of(reference));
         when(materials.save(any(MaterialMarketItem.class))).thenAnswer(call -> call.getArgument(0));
 
@@ -53,7 +58,7 @@ class MaterialMarketServiceTest {
                         records,
                         archive,
                         mock(IpOptionRepository.class),
-                        mock(PointAdjustmentLedgerRepository.class),
+                        adjustments,
                         mock(NotificationWorkflowService.class),
                         mock(MaterialMarketLikeRepository.class),
                         mock(MaterialMarketAdoptionRepository.class))
@@ -71,6 +76,7 @@ class MaterialMarketServiceTest {
         assertEquals("通勤", result.getProductDescription());
         verify(archive)
                 .bindFilesFromJson(org.mockito.ArgumentMatchers.contains("concept.png"), eq("material_market"), any());
+        verifyNoInteractions(adjustments);
     }
 
     @Test
@@ -101,12 +107,13 @@ class MaterialMarketServiceTest {
     }
 
     @Test
-    void publishCanonicalizesOwnedUploadsAndBindsBothFileGroups() {
+    void publishCanonicalizesOwnedUploadsAndRewardsDesignerOnce() {
         MaterialMarketItemRepository materials = mock(MaterialMarketItemRepository.class);
         UserRepository users = mock(UserRepository.class);
         FileRecordRepository records = mock(FileRecordRepository.class);
         FileArchiveService archive = mock(FileArchiveService.class);
         IpOptionRepository ips = mock(IpOptionRepository.class);
+        PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
         User designer = User.builder()
                 .userId("designer_01")
                 .name("设计师")
@@ -125,7 +132,7 @@ class MaterialMarketServiceTest {
                 .fileSize(24L)
                 .ownerUserId("designer_01")
                 .build();
-        when(users.findByUserId("designer_01")).thenReturn(Optional.of(designer));
+        when(users.findByUserIdForUpdate("designer_01")).thenReturn(Optional.of(designer));
         when(ips.findByName("EMIE")).thenReturn(Optional.of(ip));
         when(records.findByStoredName("attachment.pdf")).thenReturn(Optional.of(attachment));
         when(records.findByStoredName("reference.png")).thenReturn(Optional.of(reference));
@@ -136,30 +143,47 @@ class MaterialMarketServiceTest {
                     return item;
                 });
 
-        MaterialMarketItem published = service(materials, users, records, archive, ips)
-                .publish(
-                        Map.of(
-                                "title",
-                                "桌面收纳灯",
-                                "description",
-                                "便携设计",
-                                "ipName",
-                                "EMIE",
-                                "category",
-                                "id",
-                                "filesJson",
-                                "[{\"storedName\":\"attachment.pdf\",\"url\":\"javascript:alert(1)\"}]",
-                                "referenceImagesJson",
-                                "[{\"storedName\":\"reference.png\"}]"),
-                        "designer_01");
+        MaterialMarketService service = service(materials, users, records, archive, ips, adjustments);
+        Map<String, Object> draft = Map.of(
+                "title",
+                "桌面收纳灯",
+                "description",
+                "便携设计",
+                "ipName",
+                "EMIE",
+                "category",
+                "id",
+                "filesJson",
+                "[{\"storedName\":\"attachment.pdf\",\"url\":\"javascript:alert(1)\"}]",
+                "referenceImagesJson",
+                "[{\"storedName\":\"reference.png\"}]");
+        MaterialMarketItem published = service.publish(draft, "designer_01");
+
+        reference.setTargetType("material_market");
+        reference.setTargetId(published.getId());
+        var retryError = assertThrows(IllegalArgumentException.class, () -> service.publish(draft, "designer_01"));
+        assertEquals("只能使用本人刚上传的文件", retryError.getMessage());
 
         assertTrue(published.getMaterialFilesJson().contains("\"storedName\":\"attachment.pdf\""));
         assertTrue(published.getMaterialFilesJson().contains("\"url\":\"/api/files/download/attachment.pdf\""));
         assertTrue(published.getReferenceImagesJson().contains("\"storedName\":\"reference.png\""));
         assertTrue(published.getReferenceImagesJson().contains("\"url\":\"/api/files/download/reference.png\""));
         assertEquals("id", published.getCategory());
-        verify(archive).bindFilesFromJson(contains("attachment.pdf"), eq("material_market"), eq(8L));
-        verify(archive).bindFilesFromJson(contains("reference.png"), eq("material_market"), eq(8L));
+        verify(materials).save(any(MaterialMarketItem.class));
+        verify(adjustments).save(any(PointAdjustmentLedger.class));
+        var ordered = inOrder(archive, adjustments);
+        ordered.verify(archive).bindFilesFromJson(contains("attachment.pdf"), eq("material_market"), eq(8L));
+        ordered.verify(archive).bindFilesFromJson(contains("reference.png"), eq("material_market"), eq(8L));
+        var reward = ArgumentCaptor.forClass(PointAdjustmentLedger.class);
+        ordered.verify(adjustments).save(reward.capture());
+        PointAdjustmentLedger ledger = reward.getValue();
+        assertEquals("MATERIAL_IDEA_PUBLISH", ledger.getSourceType());
+        assertEquals(8L, ledger.getSourceId());
+        assertEquals("designer_01", ledger.getUserId());
+        assertEquals("designer_01", ledger.getCreatedBy());
+        assertEquals(5.0, ledger.getPoints());
+        assertEquals("IDEA_PUBLISH", ledger.getRuleCode());
+        assertTrue(ledger.getReason().contains("桌面收纳灯"));
     }
 
     @Test
@@ -168,6 +192,7 @@ class MaterialMarketServiceTest {
         UserRepository users = mock(UserRepository.class);
         FileRecordRepository records = mock(FileRecordRepository.class);
         IpOptionRepository ips = mock(IpOptionRepository.class);
+        PointAdjustmentLedgerRepository adjustments = mock(PointAdjustmentLedgerRepository.class);
         User designer = User.builder()
                 .userId("designer_01")
                 .name("设计师")
@@ -180,12 +205,12 @@ class MaterialMarketServiceTest {
                 .fileSize(12L)
                 .ownerUserId("designer_02")
                 .build();
-        when(users.findByUserId("designer_01")).thenReturn(Optional.of(designer));
+        when(users.findByUserIdForUpdate("designer_01")).thenReturn(Optional.of(designer));
         when(ips.findByName("EMIE")).thenReturn(Optional.of(ip));
         when(records.findByStoredName("other.pdf")).thenReturn(Optional.of(otherUsersFile));
 
         assertThrows(IllegalArgumentException.class, () -> service(
-                        materials, users, records, mock(FileArchiveService.class), ips)
+                        materials, users, records, mock(FileArchiveService.class), ips, adjustments)
                 .publish(
                         Map.of(
                                 "title",
@@ -199,6 +224,7 @@ class MaterialMarketServiceTest {
                                 "filesJson",
                                 "[{\"storedName\":\"other.pdf\"}]"),
                         "designer_01"));
+        verifyNoInteractions(adjustments);
     }
 
     @Test
@@ -219,7 +245,7 @@ class MaterialMarketServiceTest {
                 .fileSize(24L)
                 .ownerUserId("designer_01")
                 .build();
-        when(users.findByUserId("designer_01")).thenReturn(Optional.of(designer));
+        when(users.findByUserIdForUpdate("designer_01")).thenReturn(Optional.of(designer));
         when(ips.findByName("EMIE")).thenReturn(Optional.of(ip));
         when(records.findByStoredName("reference.png")).thenReturn(Optional.of(reference));
         when(materials.save(org.mockito.ArgumentMatchers.any(MaterialMarketItem.class)))
@@ -262,7 +288,7 @@ class MaterialMarketServiceTest {
                 .fileSize(24L)
                 .ownerUserId("designer_01")
                 .build();
-        when(users.findByUserId("designer_01")).thenReturn(Optional.of(designer));
+        when(users.findByUserIdForUpdate("designer_01")).thenReturn(Optional.of(designer));
         when(ips.findByName("EMIE")).thenReturn(Optional.of(new IpOption("EMIE", 1)));
         when(records.findByStoredName("reference.png")).thenReturn(Optional.of(reference));
         when(materials.save(any(MaterialMarketItem.class))).thenAnswer(call -> call.getArgument(0));
@@ -315,7 +341,7 @@ class MaterialMarketServiceTest {
                 .name("设计师")
                 .role("designer")
                 .build();
-        when(users.findByUserId("designer_01")).thenReturn(Optional.of(designer));
+        when(users.findByUserIdForUpdate("designer_01")).thenReturn(Optional.of(designer));
 
         var error = assertThrows(IllegalArgumentException.class, () -> service(
                         materials,
@@ -556,6 +582,16 @@ class MaterialMarketServiceTest {
             FileRecordRepository records,
             FileArchiveService archive,
             IpOptionRepository ips) {
+        return service(materials, users, records, archive, ips, mock(PointAdjustmentLedgerRepository.class));
+    }
+
+    private MaterialMarketService service(
+            MaterialMarketItemRepository materials,
+            UserRepository users,
+            FileRecordRepository records,
+            FileArchiveService archive,
+            IpOptionRepository ips,
+            PointAdjustmentLedgerRepository adjustments) {
         return new MaterialMarketService(
                 materials,
                 mock(ProjectRepository.class),
@@ -563,7 +599,7 @@ class MaterialMarketServiceTest {
                 records,
                 archive,
                 ips,
-                mock(PointAdjustmentLedgerRepository.class),
+                adjustments,
                 mock(NotificationWorkflowService.class),
                 mock(MaterialMarketLikeRepository.class),
                 mock(MaterialMarketAdoptionRepository.class));
