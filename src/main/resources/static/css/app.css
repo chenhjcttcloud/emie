@@ -699,9 +699,13 @@ select.form-select:disabled::-ms-expand { display: none; }
 .project-file-group-list { margin:0; padding:0 12px; list-style:none; }
 .project-file-row { display:flex; align-items:center; flex-wrap:wrap; gap:6px 12px; padding:9px 0; border-top:1px solid var(--gray-200); }
 .project-file-row-info { flex:1 1 180px; min-width:0; overflow-wrap:anywhere; }
+.project-file-row-title { display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px; }
 .project-file-row-info strong, .project-file-row-info small { display:block; }
-.project-file-row-info strong { font-size:13px; }
+.project-file-row-info strong { min-width:0; font-size:13px; }
 .project-file-row-info small { margin-top:3px; color:var(--gray-500); font-size:11px; }
+.project-file-source { padding:2px 7px; border-radius:4px; background:var(--gray-100); color:var(--gray-700); font-size:11px; font-weight:600; white-space:nowrap; }
+.project-file-source.planner { background:#E0F2FE; color:#075985; }
+.project-file-source.designer { background:#EDE9FE; color:#5B21B6; }
 .project-file-row-actions { display:flex; align-items:center; gap:6px; flex:none; }
 .file-item-name { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .image-preview { display:flex; gap:8px; flex-wrap:wrap; max-height:200px; overflow-y:auto; contain:content; }
@@ -709,6 +713,7 @@ select.form-select:disabled::-ms-expand { display: none; }
 .image-preview img.img-preview-large { width:min(180px, 28vw); aspect-ratio:1; height:auto; object-fit:contain; background:#fff; }
 
 /* File preview */
+.image-preview-source { position:fixed; top:12px; left:50%; transform:translateX(-50%); max-width:calc(100vw - 32px); padding:6px 12px; border-radius:6px; background:#1E293B; color:#fff; font-size:13px; font-weight:600; text-align:center; pointer-events:none; }
 .file-preview-overlay { z-index:12000; padding:16px; background:rgba(15,23,42,.72); }
 .file-preview-dialog { width:min(1180px,96vw); height:min(900px,94vh); display:flex; flex-direction:column; overflow:hidden; border-radius:14px; background:#fff; box-shadow:0 24px 80px rgba(0,0,0,.35); }
 .file-preview-header { min-height:64px; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; gap:16px; border-bottom:1px solid var(--gray-200); }

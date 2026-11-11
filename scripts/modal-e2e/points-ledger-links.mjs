@@ -38,21 +38,28 @@ export async function runPointsLedgerLinkChecks(page, artifactRoot) {
     });
     const tasks = [task(82001, '包装主视觉设计'), task(82002, '包装修改'), task(82003, '详情页排版')];
     const file = (storedName, name) => ({ storedName, name, size: 1200 });
+    const plannerImage = { ...file('overview-setup.png', '最初企划参考图.png'), plannerUpload: true };
     const currentImage = file('overview-current.png', '当前交付图.png');
     const oldDesign = file('overview-old.ai', '首轮源文件.ai');
-    tasks[0].uploadedFiles = [file('overview-setup.pdf', '最初任务资料.pdf'), currentImage, { url: 'javascript:alert(1)' }];
+    const changeImage = { ...file('overview-change.png', '修改标注.png'), plannerUpload: true };
+    const rejectionFile = { ...file('overview-feedback.docx', '驳回说明 <补充>.docx'), plannerUpload: true };
+    tasks[0].uploadedFiles = [plannerImage, currentImage, changeImage, rejectionFile, { url: 'javascript:alert(1)' }];
     tasks[0].referenceImagesJson = JSON.stringify([currentImage]);
-    tasks[0].pendingChangeReferenceImagesJson = JSON.stringify([file('overview-change.png', '修改标注.png')]);
+    tasks[0].pendingChangeReferenceImagesJson = JSON.stringify([changeImage]);
     tasks[0].deliveryVersions = [
-      { id: 92002, versionNo: 2, submissionType: 'redelivery', referenceImagesJson: JSON.stringify([currentImage]) },
+      { id: 92002, versionNo: 2, submissionType: 'redelivery', submittedByRole: 'designer', referenceImagesJson: JSON.stringify([currentImage]) },
       { id: 92001, versionNo: 1, submissionType: 'initial', attachmentsJson: JSON.stringify([oldDesign]) },
     ];
     tasks[0].rejectionRecords = [{
       attemptNo: 1, reason: '请调整包装对比度', reviewerRole: 'planner', rejectedDeliveryVersionId: 92001,
       attachmentsJson: JSON.stringify([oldDesign]),
-      rejectionAttachmentsJson: JSON.stringify([file('overview-feedback.docx', '驳回说明 <补充>.docx')]),
+      rejectionAttachmentsJson: JSON.stringify([rejectionFile]),
     }];
     tasks[1].uploadedFiles = [file('overview-other.pdf', '第二个子任务附件.pdf')];
+    tasks[1].deliveryVersions = [{
+      id: 92003, versionNo: 1, submissionType: 'initial', submittedByRole: 'supplychain',
+      attachmentsJson: JSON.stringify([file('overview-supplychain.pdf', '供应链交付附件.pdf')]),
+    }];
     const project = {
       id: projectId, name: '关联测试项目', productName: '关联测试产品', type: 'regular',
       status: 'in_progress', statusLabel: '进行中', statusCls: 'badge-progress',
@@ -116,7 +123,11 @@ export async function runPointsLedgerLinkChecks(page, artifactRoot) {
     for (const action of ['apiPost', 'apiPut', 'apiDelete']) {
       e.actions[action] = async (...args) => { f.writes.push({ action, args }); throw new Error('Ledger link checks must remain read-only'); };
     }
-    e.actions.previewImage = url => { f.preview = new URL(url, location.origin).pathname; };
+    e.actions.previewImage = (url, name, _gallery, _index, sourceLabel) => {
+      f.preview = new URL(url, location.origin).pathname;
+      f.previewName = name;
+      f.previewSource = sourceLabel;
+    };
     e.actions.showDownloadOptions = url => { f.download = new URL(url, location.origin).pathname; };
     await e.actions.renderPointsView(main);
   });
@@ -160,24 +171,35 @@ export async function runPointsLedgerLinkChecks(page, artifactRoot) {
     assert.match(await page.locator('#projectDetailModal .modal-title').innerText(), /#81001/);
     assert.match(await page.locator('#projectDetailModal').innerText(), /关联测试产品/);
     const overview = page.locator('#projectDetailModal .project-file-overview');
-    assert.match(await overview.locator('.detail-section-title').innerText(), /文件总览\s*6 个文件/);
+    assert.match(await overview.locator('.detail-section-title').innerText(), /文件总览\s*7 个文件/);
     assert.match(await overview.evaluate(element => element.nextElementSibling?.textContent), /产品档案资料/);
     const fileGroups = overview.locator('.project-file-group');
     assert.equal(await fileGroups.count(), 2);
     assert.equal(await fileGroups.first().locator('.project-file-row').count(), 5, '每个文件在同一子任务内只显示一次');
-    assert.match(await fileGroups.first().innerText(), /最初任务资料\.pdf/);
-    assert.match(await fileGroups.first().innerText(), /首轮源文件\.ai/);
-    assert.match(await fileGroups.first().innerText(), /驳回说明 <补充>\.docx/);
-    assert.match(await fileGroups.first().innerText(), /修改标注\.png/);
+    const fileRow = name => overview.locator('.project-file-row').filter({ hasText: name });
+    const sourceLabels = name => fileRow(name).locator('.project-file-source').allTextContents();
+    assert.deepEqual(await sourceLabels('最初企划参考图.png'), ['企划参考']);
+    assert.deepEqual(await sourceLabels('当前交付图.png'), ['设计师交付']);
+    assert.deepEqual(await sourceLabels('首轮源文件.ai'), ['设计师交付']);
+    assert.deepEqual(await sourceLabels('修改标注.png'), ['修改参考']);
+    assert.deepEqual(await sourceLabels('驳回说明 <补充>.docx'), ['驳回资料']);
+    assert.match(await fileRow('首轮源文件.ai').innerText(), /交付第 1 版/);
     assert.doesNotMatch(await overview.innerText(), /项目本身的附件|javascript:/);
     await fileGroups.nth(1).locator('summary').click();
     assert.match(await fileGroups.nth(1).innerText(), /第二个子任务附件\.pdf/);
+    assert.deepEqual(await sourceLabels('第二个子任务附件.pdf'), []);
+    assert.deepEqual(await sourceLabels('供应链交付附件.pdf'), ['交付成果']);
     await fileGroups.nth(1).locator('summary').click();
-    const currentFile = overview.locator('.project-file-row').filter({ hasText: '当前交付图.png' });
+    await fileRow('最初企划参考图.png').getByRole('button', { name: /预览/ }).click();
+    assert.deepEqual(await page.evaluate(() => [
+      pointsLedgerLinkFixture.preview, pointsLedgerLinkFixture.previewName, pointsLedgerLinkFixture.previewSource,
+    ]), ['/api/files/download/overview-setup.png', '最初企划参考图.png', '企划参考']);
+    const currentFile = fileRow('当前交付图.png');
     await currentFile.getByRole('button', { name: /预览/ }).click();
     await currentFile.getByRole('button', { name: /下载/ }).click();
     assert.deepEqual(await page.evaluate(() => [pointsLedgerLinkFixture.preview, pointsLedgerLinkFixture.download]),
       ['/api/files/download/overview-current.png', '/api/files/download/overview-current.png']);
+    assert.equal(await page.evaluate(() => pointsLedgerLinkFixture.previewSource), '设计师交付');
     await overview.screenshot({ path: path.join(artifactRoot, 'project-file-overview.png'), animations: 'disabled' });
     await close('projectDetailModal');
 

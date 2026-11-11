@@ -127,7 +127,7 @@ function showImageCopyFeedback(image, text) {
 // EMIE 项目域：上传、项目详情、子任务工作流、评分与分享
 // ==================== 图片预览（Lightbox + 滚轮缩放 + 拖拽平移 + 左右切换）====================
 // gallery：同组图片 [{src, name}]，传入时可在预览内用左右箭头/键盘切换；index 为 src 在其中的位置。
-function previewImage(src, name, gallery, index) {
+function previewImage(src, name, gallery, index, sourceLabel = '') {
   const focusOrigin = document.activeElement;
   let cleanedUp = false;
   const items = Array.isArray(gallery) && gallery.length > 1 ? gallery : null;
@@ -322,6 +322,13 @@ function previewImage(src, name, gallery, index) {
 
   overlay.appendChild(imgWrap);
   overlay.appendChild(zoomLabel);
+  if (sourceLabel) {
+    const caption = document.createElement('div');
+    caption.className = 'image-preview-source';
+    caption.textContent = sourceLabel;
+    overlay.setAttribute('aria-description', sourceLabel);
+    overlay.appendChild(caption);
+  }
   document.body.appendChild(overlay);
   removalObserver.observe(document.body, { childList: true });
   requestAnimationFrame(() => overlay.focus({ preventScroll: true }));

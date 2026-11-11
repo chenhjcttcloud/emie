@@ -21,7 +21,7 @@ function closeFilePreview(immediate = false) {
 function retryFilePreview() {
   const current = EMIE.fileState.currentPreview;
   if (!current) return;
-  openFilePreview(current.fileUrl, current.fileName, current.fileSize, true, current.previewOnly);
+  openFilePreview(current.fileUrl, current.fileName, current.fileSize, true, current.previewOnly, current.sourceLabel);
 }
 
 function authenticatedFileUrl(url) {
@@ -41,7 +41,7 @@ function authenticatedFileUrl(url) {
   }
 }
 
-async function openFilePreview(fileUrl, fileName, fileSize, retry = false, previewOnly = false) {
+async function openFilePreview(fileUrl, fileName, fileSize, retry = false, previewOnly = false, sourceLabel = '') {
   if (!isPreviewableFile(fileName)) {
     showDownloadOptions(fileUrl, fileName, fileSize);
     return;
@@ -51,7 +51,7 @@ async function openFilePreview(fileUrl, fileName, fileSize, retry = false, previ
   const requestSequence = ++EMIE.fileState.previewSequence;
   const normalizedUrl = normalizeFileUrl(fileUrl);
   const storedName = storedNameFromFile(normalizedUrl);
-  EMIE.fileState.currentPreview = { fileUrl: normalizedUrl, fileName, fileSize, storedName, previewOnly };
+  EMIE.fileState.currentPreview = { fileUrl: normalizedUrl, fileName, fileSize, storedName, previewOnly, sourceLabel };
 
   const overlay = document.createElement('div');
   overlay.id = 'filePreviewOverlay';
@@ -62,7 +62,7 @@ async function openFilePreview(fileUrl, fileName, fileSize, retry = false, previ
       <div class="file-preview-header">
         <div class="file-preview-title-wrap">
           <span class="file-preview-icon">📄</span>
-          <div><div class="file-preview-title">${escHtml(fileName || storedName)}</div><div class="file-preview-meta">${fileSize ? fmtSize(fileSize) + ' · ' : ''}${escHtml((fileName || storedName).split('.').pop()?.toUpperCase() || '')}</div></div>
+          <div><div class="file-preview-title">${escHtml(fileName || storedName)}</div><div class="file-preview-meta">${sourceLabel ? escHtml(sourceLabel) + ' · ' : ''}${fileSize ? fmtSize(fileSize) + ' · ' : ''}${escHtml((fileName || storedName).split('.').pop()?.toUpperCase() || '')}</div></div>
         </div>
         <button class="file-preview-close" data-emie-action="click:file-close-preview" aria-label="关闭预览">✕</button>
       </div>

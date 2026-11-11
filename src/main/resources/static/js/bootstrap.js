@@ -14,9 +14,9 @@ import './dashboard-designer.js?v=616';
 import './dashboard.js?v=219';
 import './material-market.js?v=163';
 import './image-library.js?v=117';
-import './project-uploads.js?v=499';
+import './project-uploads.js?v=500';
 import './project-form.js?v=459';
-import './project-detail.js?v=675';
+import './project-detail.js?v=676';
 import './project-tasks.js?v=704';
 import './project-sharing.js?v=264';
 import './projects.js?v=148';
@@ -70,7 +70,7 @@ async function loadViewModules(view) {
   await adminModulesPromise;
 }
 
-import './files.js?v=303';
+import './files.js?v=304';
 import './business-assistant-position.js?v=3';
 import './business-assistant.js?v=19';
 

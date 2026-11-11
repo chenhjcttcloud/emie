@@ -65,5 +65,5 @@ public class TaskDetailDTO {
     private String activeRejectionRole;
     private String createdAt;
 
-    public record UploadedFile(String storedName, String name, Long size) {}
+    public record UploadedFile(String storedName, String name, Long size, boolean plannerUpload) {}
 }

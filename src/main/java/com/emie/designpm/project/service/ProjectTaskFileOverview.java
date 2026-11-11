@@ -25,12 +25,15 @@ public class ProjectTaskFileOverview {
         if (tasks.isEmpty()) return;
 
         List<Long> taskIds = tasks.stream().map(TaskDetailDTO::getId).toList();
+        String plannerId = detail.getPlannerId();
         Map<Long, List<TaskDetailDTO.UploadedFile>> uploadsByTask = new HashMap<>();
         for (var upload : files.findSubTaskUploads(taskIds)) {
+            boolean plannerUpload =
+                    plannerId != null && !plannerId.isBlank() && plannerId.equals(upload.getOwnerUserId());
             uploadsByTask
                     .computeIfAbsent(upload.getTargetId(), id -> new ArrayList<>())
                     .add(new TaskDetailDTO.UploadedFile(
-                            upload.getStoredName(), upload.getOriginalName(), upload.getFileSize()));
+                            upload.getStoredName(), upload.getOriginalName(), upload.getFileSize(), plannerUpload));
         }
         tasks.forEach(task -> task.setUploadedFiles(uploadsByTask.getOrDefault(task.getId(), List.of())));
     }

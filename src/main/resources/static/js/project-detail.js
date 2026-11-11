@@ -221,9 +221,17 @@ function renderSubTaskAuditDetail(log) {
   return parts.length ? `<div class="timeline-time" style="margin-top:4px;white-space:pre-wrap;">${parts.map(escHtml).join('<br>')}</div>` : '';
 }
 
+const projectFileSourceLabels = {
+  planner: '企划参考',
+  designer: '设计师交付',
+  delivery: '交付成果',
+  change: '修改参考',
+  rejection: '驳回资料',
+};
+
 function collectTaskOverviewFiles(task) {
   const files = new Map();
-  const collect = (value, source) => {
+  const collect = (value, source, kind) => {
     let entries = value;
     if (typeof entries === 'string') {
       try { entries = JSON.parse(entries); } catch (_) { return; }
@@ -240,30 +248,47 @@ function collectTaskOverviewFiles(task) {
       const url = normalizeFileUrl(file);
       if (!url.startsWith('/api/files/download/') && !url.startsWith('/api/files/download-by-original?name=')) continue;
       if (!files.has(url)) {
-        files.set(url, { file: { ...file, name: name || storedNameFromFile(file) }, url, sources: new Set() });
+        files.set(url, {
+          file: { ...file, name: name || storedNameFromFile(file) }, url,
+          sources: new Set(), kinds: new Set(), plannerUpload: !source && raw.plannerUpload === true,
+        });
       }
-      if (source) files.get(url).sources.add(source);
+      const item = files.get(url);
+      if (source) item.sources.add(source);
+      if (kind) item.kinds.add(kind);
     }
   };
 
+  const versions = task.deliveryVersions || [];
+  const deliveryKind = role => (role || task.assigneeRole || 'designer') === 'designer' ? 'designer' : 'delivery';
   collect(task.uploadedFiles);
-  collect(task.referenceImagesJson, '当前参考图');
-  collect(task.attachmentsJson, '当前附件');
-  collect(task.pendingChangeReferenceImagesJson, '本轮修改参考');
-  for (const version of task.deliveryVersions || []) {
+  const { referenceImages, deliveryImages, hasDelivery } = getSubTaskImageGroups(task);
+  const legacyKind = !versions.length && hasDelivery ? 'legacyDelivery' : undefined;
+  collect(referenceImages, '当前参考图');
+  collect(deliveryImages, legacyKind ? '当前图片' : '当前交付图片', legacyKind);
+  collect(task.attachmentsJson, '当前附件', legacyKind);
+  collect(task.pendingChangeReferenceImagesJson, '本轮修改参考', 'change');
+  for (const version of versions) {
     const label = version.versionNo == null ? '历史交付' : `交付第 ${version.versionNo} 版`;
-    collect(version.referenceImagesJson, label);
-    collect(version.attachmentsJson, label);
-    collect(version.changeReferenceImagesJson, `${label}的修改参考`);
+    const kind = deliveryKind(version.submittedByRole);
+    collect(version.referenceImagesJson, label, kind);
+    collect(version.attachmentsJson, label, kind);
+    collect(version.changeReferenceImagesJson, `${label}的修改参考`, 'change');
   }
   for (const record of task.rejectionRecords || []) {
     const label = record.attemptNo == null ? '历史驳回' : `第 ${record.attemptNo} 次驳回`;
     if (!record.legacy) {
-      collect(record.referenceImagesJson, `${label}前的成果`);
-      collect(record.attachmentsJson, `${label}前的成果`);
+      const version = versions.find(item => item.id != null && item.id === record.rejectedDeliveryVersionId);
+      const kind = deliveryKind(version?.submittedByRole);
+      collect(record.referenceImagesJson, `${label}前的成果`, kind);
+      collect(record.attachmentsJson, `${label}前的成果`, kind);
     }
-    collect(record.rejectionReferenceImagesJson, `${label}的参考`);
-    collect(record.rejectionAttachmentsJson, `${label}的附件`);
+    collect(record.rejectionReferenceImagesJson, `${label}的参考`, 'rejection');
+    collect(record.rejectionAttachmentsJson, `${label}的附件`, 'rejection');
+  }
+  for (const { kinds, plannerUpload } of files.values()) {
+    if (kinds.delete('legacyDelivery') && !kinds.size && !plannerUpload) kinds.add(deliveryKind());
+    if (!kinds.size && plannerUpload) kinds.add('planner');
   }
   return [...files.values()];
 }
@@ -276,8 +301,11 @@ function renderProjectFileOverview(tasks) {
     ${count ? `<p class="project-file-overview-hint">按子任务查看上传文件、历次交付和驳回附件。</p>
       ${groups.map(({ task, files }, index) => `<details class="project-file-group" ${index === 0 ? 'open' : ''}>
         <summary><strong>${escHtml(task.name || '未命名子任务')}</strong><span>${files.length} 个文件</span></summary>
-        <ul class="project-file-group-list">${files.map(({ file, url, sources }) => `<li class="project-file-row">
-          <div class="project-file-row-info"><strong>${escHtml(file.name)}</strong><small>${escHtml([...sources].join(' · ') || '子任务上传')}${file.size ? ` · ${fmtSize(file.size)}` : ''}</small></div>
+        <ul class="project-file-group-list">${files.map(({ file, url, sources, kinds }) => `<li class="project-file-row" data-file-source="${[...kinds].map(kind => projectFileSourceLabels[kind]).join(' · ')}">
+          <div class="project-file-row-info">
+            <div class="project-file-row-title"><strong>${escHtml(file.name)}</strong>${[...kinds].map(kind => `<span class="project-file-source ${kind}">${projectFileSourceLabels[kind]}</span>`).join('')}</div>
+            <small>${escHtml([...sources].join(' · ') || '子任务上传')}${file.size ? ` · ${fmtSize(file.size)}` : ''}</small>
+          </div>
           <div class="project-file-row-actions">${isRasterImageFile(file.name) ? `<button type="button" class="attachment-action-btn preview" data-emie-action="click:detail-overview-image" data-file-url="${escHtml(url)}" data-file-name="${escHtml(file.name)}">👁 预览</button>` : ''}${renderAttachmentActions(file)}</div>
         </li>`).join('')}</ul>
       </details>`).join('')}` : '<p class="project-file-overview-hint">子任务上传文件后会在这里显示。</p>'}
@@ -722,6 +750,30 @@ function renderProjectReferenceImages(detail) {
     </div></div>`;
 }
 
+function parseSubTaskImages(value) {
+  if (typeof value === 'string') {
+    try { value = JSON.parse(value); } catch (_) { return []; }
+  }
+  return Array.isArray(value) ? value.filter(Boolean) : [];
+}
+
+function getSubTaskImageGroups(task) {
+  const currentImages = parseSubTaskImages(task.referenceImagesJson);
+  const latest = task.deliveryVersions?.[0];
+  // 交付会覆盖任务图片，但后续编辑任务不会改写交付版本。
+  if (latest?.referenceImagesJson != null) {
+    const deliveryImages = parseSubTaskImages(latest.referenceImagesJson);
+    const deliveryUrls = new Set(deliveryImages.map(normalizeFileUrl));
+    return { referenceImages: currentImages.filter(image => !deliveryUrls.has(normalizeFileUrl(image))), deliveryImages, hasDelivery: true };
+  }
+  const hasDelivery = latest || task.submittedForReviewAt || task.actualDate || task.deliverables?.trim()
+    || task.pendingChangeBonusRequestId || task.rejectionRecords?.length
+    || ['delivered', 'submitted_for_review', 'planner_approved', 'scoring_planner', 'sales_approved', 'admin_approved',
+      'approved', 'completed', 'rejected', 'revision_requested'].includes(task.status);
+  return hasDelivery ? { referenceImages: [], deliveryImages: currentImages, hasDelivery: true }
+    : { referenceImages: currentImages, deliveryImages: [], hasDelivery: false };
+}
+
 /* 子任务参考图 */
 function renderSubTaskImages(jsonStr) {
   if (!jsonStr) return '';
@@ -1130,9 +1182,11 @@ if (registerEventAction) {
   registerEventAction('detail-subtask-close', () => closeM('projectSubTaskDetailModal'));
   registerEventAction('detail-rejection-close', () => closeM('taskRejectionRecordModal'));
   registerEventAction('detail-file-preview', (_event, element) =>
-    openFilePreview(element.dataset.fileUrl, element.dataset.fileName, Number(element.dataset.fileSize) || 0));
+    openFilePreview(element.dataset.fileUrl, element.dataset.fileName, Number(element.dataset.fileSize) || 0,
+      false, false, element.closest('.project-file-row')?.dataset.fileSource));
   registerEventAction('detail-overview-image', (_event, element) =>
-    EMIE.actions.previewImage(EMIE.actions.authenticatedFileUrl(element.dataset.fileUrl), element.dataset.fileName));
+    EMIE.actions.previewImage(EMIE.actions.authenticatedFileUrl(element.dataset.fileUrl), element.dataset.fileName,
+      undefined, undefined, element.closest('.project-file-row')?.dataset.fileSource));
   registerEventAction('detail-file-download', (_event, element) => {
     _event.stopPropagation();
     showDownloadOptions(element.dataset.fileUrl, element.dataset.fileName, Number(element.dataset.fileSize) || 0);
