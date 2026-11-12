@@ -343,7 +343,7 @@ document.addEventListener('click', function(e) {
     const gallery = siblings.map(el => ({ src: el.dataset.fullSrc || el.src, name: el.alt || el.title || '' }));
     const index = siblings.indexOf(img);
     const source = img.dataset.fullSrc || img.src;
-    previewImage(source, img.alt || img.title || '', gallery, index);
+    previewImage(source, img.alt || img.title || '', gallery, index, img.closest('[data-file-source]')?.dataset.fileSource);
   }
 });
 

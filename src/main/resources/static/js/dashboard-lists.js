@@ -2,6 +2,7 @@ const EMIE = window.EMIE;
 const REFERENCE_FILE_ACCEPT = EMIE.fileAccept?.reference || 'image/*';
 const ATTACHMENT_FILE_ACCEPT = EMIE.fileAccept?.attachment
   || '.ai,.step,.stp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*';
+const DELIVERY_IMAGE_LABEL = '设计师交付图';
 const hasPermission = (...args) => EMIE.actions.hasPermission(...args);
 const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const apiPost = (...args) => EMIE.actions.apiPost(...args);
@@ -27,8 +28,8 @@ function renderDesignRequirementMaterials(referenceImagesJson, attachmentsJson, 
     : EMIE.actions.renderProjectAttachments;
   const images = typeof imageRenderer === 'function'
     ? (delivery
-      ? imageRenderer(referenceImagesJson)
-      : imageRenderer({ referenceImagesJson }))
+      ? imageRenderer(referenceImagesJson, DELIVERY_IMAGE_LABEL)
+      : imageRenderer({ referenceImagesJson }, '需求参考图'))
     : '';
   const attachments = typeof attachmentRenderer === 'function'
     ? (delivery
@@ -96,11 +97,11 @@ async function openDesignRequirementDetail(id) {
             ${detail.description ? `<div style="margin-top:12px;"><div class="detail-label">细节描述</div><div class="detail-value" style="white-space:pre-wrap;">${escHtml(detail.description)}</div></div>` : ''}
           </div>
           ${requirementMaterials ? `
-          <div class="detail-section">
+          <div class="detail-section" data-file-source="需求参考">
             <div class="detail-section-title">🗂️ 需求资料</div>
             ${requirementMaterials}
           </div>` : ''}
-          <div class="detail-section">
+          <div class="detail-section" data-file-source="设计师交付">
             <div class="detail-section-title">📦 交付成果与验收</div>
             ${detail.deliveredAt ? `<div class="detail-label">成果提交时间：${EMIE.actions.fmtDT(detail.deliveredAt)}</div>` : ''}
             ${detail.deliveryContent
@@ -189,8 +190,8 @@ function openDesignRequirementDelivery(id) {
   modal.innerHTML = `<div class="modal"><div class="modal-header"><div class="modal-title">📦 提交设计成果</div></div>
     <div class="modal-body">
       <div class="form-group"><label class="form-label">交付内容</label><textarea class="form-textarea" id="designRequirementDeliveryContent" rows="7" placeholder="请填写本次交付内容或送审说明"></textarea></div>
-      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
-        <div class="form-label" style="margin-bottom:8px;">🖼️ 交付参考图</div>
+      <div data-file-source="设计师交付" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
+        <div class="form-label" style="margin-bottom:8px;">🖼️ ${DELIVERY_IMAGE_LABEL}</div>
         <div class="upload-area" data-emie-action="click:lists-open-input" data-input-id="designRequirementDeliverImageInput">
           <div>📁 拖拽图片到此处，或点击选择图片</div>
           <input type="file" id="designRequirementDeliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:lists-deliver-images">

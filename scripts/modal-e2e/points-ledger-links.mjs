@@ -15,7 +15,8 @@ export async function runPointsLedgerLinkChecks(page, artifactRoot) {
       role: e.state.currentRole, userId: e.state.currentUserId, permissions: e.state.permissions,
       authUser: e.state.authUser, designerTasks: e.dashboardState.designerTaskCache,
       projectDetail: e.projectState.currentProjectDetail,
-      previewImage: e.actions.previewImage, showDownloadOptions: e.actions.showDownloadOptions,
+      previewImage: e.actions.previewImage, openFilePreview: e.actions.openFilePreview,
+      showDownloadOptions: e.actions.showDownloadOptions,
       appDisplay: document.getElementById('appContainer').style.display,
       loginDisplay: document.getElementById('loginPage').style.display,
     };
@@ -26,7 +27,7 @@ export async function runPointsLedgerLinkChecks(page, artifactRoot) {
     e.projectState.currentProjectDetail = null;
     document.getElementById('appContainer').style.display = '';
     document.getElementById('loginPage').style.display = 'none';
-    const f = window.pointsLedgerLinkFixture = { reads: [], writes: [] };
+    const f = window.pointsLedgerLinkFixture = { reads: [], writes: [], filePreviews: [] };
     const projectId = 81001;
     const task = (id, name) => ({
       id, projectId, name, projectName: '关联测试项目', projectType: 'regular', status: 'completed',
@@ -74,8 +75,10 @@ export async function runPointsLedgerLinkChecks(page, artifactRoot) {
       ownerId: 'ledger-links-planner', plannerId: 'ledger-links-planner',
       status: 'completed', statusLabel: '已完成', deadline: '2026-11-04',
       createdAt: '2026-11-01T10:00:00', productRequirements: '核对需求积分对应的原始需求。',
-      referenceImagesJson: '[]', attachmentsJson: '[]',
-      deliveryReferenceImagesJson: '[]', deliveryAttachmentsJson: '[]',
+      referenceImagesJson: JSON.stringify([file('requirement-reference.png', '需求测试参考.png')]),
+      attachmentsJson: JSON.stringify([file('requirement-reference.pdf', '需求测试规范.pdf')]),
+      deliveryReferenceImagesJson: JSON.stringify([file('requirement-delivery.png', '需求测试成果.png')]),
+      deliveryAttachmentsJson: JSON.stringify([file('requirement-delivery.pdf', '需求测试源档.pdf')]),
       ownerAccepted: true, plannerAccepted: true,
     };
     const ledgers = Array.from({ length: 11 }, (_, index) => ({
@@ -128,12 +131,17 @@ export async function runPointsLedgerLinkChecks(page, artifactRoot) {
       f.previewName = name;
       f.previewSource = sourceLabel;
     };
+    e.actions.openFilePreview = (url, name, _size, _retry, _previewOnly, sourceLabel) => {
+      f.filePreviews.push([new URL(url, location.origin).pathname, name, sourceLabel]);
+    };
     e.actions.showDownloadOptions = url => { f.download = new URL(url, location.origin).pathname; };
     await e.actions.renderPointsView(main);
   });
   const main = page.locator('#mainContent');
   const card = main.locator('.points-ledger-card');
   const action = name => card.locator(`[data-emie-action="click:points-ledger-${name}"]`);
+  const requirementImageRoute = /\/api\/files\/(?:thumbnail|download)\/requirement-(?:reference|delivery)\.png(?:\?.*)?$/;
+  const requirementImagePreview = page.getByRole('dialog', { name: /^图片预览：需求测试/ });
   const close = async id => {
     await page.evaluate(id => EMIE.actions.closeM(id), id);
     await page.locator('#' + id).waitFor({ state: 'hidden' });
@@ -212,10 +220,43 @@ export async function runPointsLedgerLinkChecks(page, artifactRoot) {
     await close('projectSubTaskDetailModal');
     await close('projectDetailModal');
 
+    await page.route(requirementImageRoute, route => route.fulfill({
+      contentType: 'image/png',
+      body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMQMgkDAAD4AJ3MaiF4AAAAAElFTkSuQmCC', 'base64'),
+    }));
+    await page.evaluate(() => { EMIE.actions.previewImage = pointsLedgerLinkMocks.previewImage; });
     await action('requirement').click();
-    await page.locator('#designRequirementDetailModal').waitFor({ state: 'visible' });
-    assert.match(await page.locator('#designRequirementDetailModal').innerText(), /NEED-83001/);
-    assert.match(await page.locator('#designRequirementDetailModal').innerText(), /界面送审需求/);
+    const requirement = page.locator('#designRequirementDetailModal');
+    await requirement.waitFor({ state: 'visible' });
+    assert.match(await requirement.innerText(), /NEED-83001/);
+    assert.match(await requirement.innerText(), /界面送审需求/);
+    const materialSection = title => requirement.locator('.detail-section').filter({
+      has: page.locator('.detail-section-title').filter({ hasText: title }),
+    });
+    const reference = materialSection('需求资料');
+    const delivery = materialSection('交付成果与验收');
+    const requirementText = await requirement.innerText();
+    assert(requirementText.indexOf('需求资料') < requirementText.indexOf('交付成果与验收'));
+    for (const [section, label, image, pdf, source] of [
+      [reference, '需求参考图', '需求测试参考.png', '需求测试规范.pdf', '需求参考'],
+      [delivery, '设计师交付图', '需求测试成果.png', '需求测试源档.pdf', '设计师交付'],
+    ]) {
+      assert.match(await section.innerText(), new RegExp(label));
+      await section.getByAltText(image, { exact: true }).click();
+      await requirementImagePreview.waitFor({ state: 'visible' });
+      assert.equal(await requirementImagePreview.locator('.image-preview-source').innerText(), source);
+      assert.equal(await requirementImagePreview.getAttribute('aria-label'), `图片预览：${image}`);
+      const previewImage = requirementImagePreview.locator('img[src^="blob:"]');
+      await previewImage.waitFor({ state: 'visible' });
+      await previewImage.evaluate(element => element.decode());
+      await page.keyboard.press('Escape');
+      await requirementImagePreview.waitFor({ state: 'hidden' });
+      await section.locator(`[data-emie-action="click:detail-file-preview"][data-file-name="${pdf}"]`).click();
+    }
+    assert.deepEqual(await page.evaluate(() => pointsLedgerLinkFixture.filePreviews), [
+      ['/api/files/download/requirement-reference.pdf', '需求测试规范.pdf', '需求参考'],
+      ['/api/files/download/requirement-delivery.pdf', '需求测试源档.pdf', '设计师交付'],
+    ]);
     await close('designRequirementDetailModal');
 
     await page.setViewportSize({ width: 1440, height: 1100 });
@@ -243,6 +284,8 @@ export async function runPointsLedgerLinkChecks(page, artifactRoot) {
     assert.deepEqual(await page.evaluate(() => pointsLedgerLinkFixture.writes), []);
     console.log('  points-ledger-project-task-requirement-links-pagination-and-mobile ok');
   } finally {
+    if (await requirementImagePreview.isVisible()) await page.keyboard.press('Escape');
+    await page.unroute(requirementImageRoute);
     for (const id of ['projectSubTaskDetailModal', 'projectDetailModal', 'designRequirementDetailModal']) await close(id);
     const previous = card.locator('[data-emie-action="click:points-ledger-page"][data-page="0"]');
     if (await previous.count()) {
@@ -253,7 +296,8 @@ export async function runPointsLedgerLinkChecks(page, artifactRoot) {
     await page.evaluate(() => {
       const e = window.EMIE, saved = window.pointsLedgerLinkMocks;
       e.actions.apiGet = saved.get; e.actions.apiPost = saved.post; e.actions.apiPut = saved.put; e.actions.apiDelete = saved.delete;
-      e.actions.previewImage = saved.previewImage; e.actions.showDownloadOptions = saved.showDownloadOptions;
+      e.actions.previewImage = saved.previewImage; e.actions.openFilePreview = saved.openFilePreview;
+      e.actions.showDownloadOptions = saved.showDownloadOptions;
       e.state.currentRole = saved.role; e.state.currentUserId = saved.userId; e.state.permissions = saved.permissions;
       e.state.authUser = saved.authUser; e.dashboardState.designerTaskCache = saved.designerTasks;
       e.projectState.currentProjectDetail = saved.projectDetail;

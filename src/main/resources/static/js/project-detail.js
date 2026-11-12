@@ -734,14 +734,14 @@ function renderAttachmentActions(fileOrUrl, compact = false) {
   return `<span class="attachment-actions">${previewButton}<button class="attachment-action-btn download" data-emie-action="click:detail-file-download" data-file-url="${escHtml(fileUrl)}" data-file-name="${escHtml(fileName)}" data-file-size="${fileSize}" title="下载选项">${compact ? '⬇' : '⬇ 下载'}</button></span>`;
 }
 
-function renderProjectReferenceImages(detail) {
+function renderProjectReferenceImages(detail, label = '参考图片') {
   if (!detail.referenceImagesJson) return '';
   let imgs;
   try { imgs = JSON.parse(detail.referenceImagesJson); } catch(e) { return ''; }
   if (!imgs || !imgs.length) return '';
   const authUrl = u => normalizeFileUrl(u);
   const thumbUrl = u => protectedFileUrl(originalFileUrl(u, 'thumbnail'));
-  return `<div style="margin-top:8px;"><div class="detail-label">🖼️ 参考图片</div>
+  return `<div style="margin-top:8px;"><div class="detail-label">🖼️ ${escHtml(label)}</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => isRasterImageFile(img.name || storedNameFromFile(img)) ? `<div style="position:relative;display:inline-block;">
           <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" title="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="cursor:pointer;">
@@ -775,14 +775,14 @@ function getSubTaskImageGroups(task) {
 }
 
 /* 子任务参考图 */
-function renderSubTaskImages(jsonStr) {
+function renderSubTaskImages(jsonStr, label = '参考图片') {
   if (!jsonStr) return '';
   let imgs;
   try { imgs = JSON.parse(jsonStr); } catch(e) { return ''; }
   if (!imgs || !imgs.length) return '';
   const authUrl = u => normalizeFileUrl(u);
   const thumbUrl = u => protectedFileUrl(originalFileUrl(u, 'thumbnail'));
-  return `<div style="margin-top:8px;padding-left:4px;"><div class="detail-label">🖼️ 参考图片</div>
+  return `<div style="margin-top:8px;padding-left:4px;"><div class="detail-label">🖼️ ${escHtml(label)}</div>
     <div class="image-preview" style="margin-top:4px;">
       ${imgs.map(img => isRasterImageFile(img.name || storedNameFromFile(img)) ? `<div style="position:relative;display:inline-block;">
           <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable" loading="lazy" decoding="async" style="cursor:pointer;">
@@ -1183,7 +1183,7 @@ if (registerEventAction) {
   registerEventAction('detail-rejection-close', () => closeM('taskRejectionRecordModal'));
   registerEventAction('detail-file-preview', (_event, element) =>
     openFilePreview(element.dataset.fileUrl, element.dataset.fileName, Number(element.dataset.fileSize) || 0,
-      false, false, element.closest('.project-file-row')?.dataset.fileSource));
+      false, false, element.closest('[data-file-source]')?.dataset.fileSource));
   registerEventAction('detail-overview-image', (_event, element) =>
     EMIE.actions.previewImage(EMIE.actions.authenticatedFileUrl(element.dataset.fileUrl), element.dataset.fileName,
       undefined, undefined, element.closest('.project-file-row')?.dataset.fileSource));
