@@ -33,8 +33,8 @@ public class SubTaskDueReminderService {
         this.notifier = new ProjectNotifier(workflow);
     }
 
-    /** 每天 09:00 起扫描当日到期任务，覆盖服务重启或当天新增的任务。 */
-    @Scheduled(cron = "0 */10 9-23 * * *", zone = TIME_ZONE)
+    /** 每天 09:00 扫描当日到期的子任务。 */
+    @Scheduled(cron = "0 0 9 * * *", zone = TIME_ZONE)
     public void remindDueTasks() {
         remindDueTasks(LocalDate.now(ZoneId.of(TIME_ZONE)));
     }

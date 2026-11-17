@@ -17,6 +17,7 @@ import com.emie.designpm.project.repository.SubTaskRepository;
 import jakarta.persistence.EntityManager;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,8 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.support.CronExpression;
 import org.springframework.test.context.ContextConfiguration;
 
 @DataJpaTest(
@@ -47,6 +50,18 @@ class SubTaskDueReminderServiceTest {
 
     @Autowired
     SubTaskRepository subTasks;
+
+    @Test
+    void schedulesOneScanPerDayAtNineBeijingTime() throws NoSuchMethodException {
+        Scheduled schedule =
+                SubTaskDueReminderService.class.getMethod("remindDueTasks").getAnnotation(Scheduled.class);
+        assertEquals("Asia/Shanghai", schedule.zone());
+        var start = DUE_DATE.atStartOfDay(ZoneId.of(schedule.zone()));
+        var cron = CronExpression.parse(schedule.cron());
+        var firstScan = start.plusHours(9);
+        assertEquals(firstScan, cron.next(start));
+        assertEquals(firstScan.plusDays(1), cron.next(firstScan));
+    }
 
     @Test
     void scansAllBatchesForAssignedActionableTasksDueTodayEvenWhenOneReminderFails() {

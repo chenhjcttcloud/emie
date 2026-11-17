@@ -3,6 +3,7 @@ package com.emie.designpm.notification.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.emie.designpm.admin.repository.SystemConfigRepository;
@@ -120,15 +121,13 @@ class NotificationWorkflowReminderTest {
         assertEquals("pending", delivery.getStatus());
         assertNotNull(delivery.getNextRetryAt());
         var card = new ObjectMapper().readTree(delivery.getCardPayload());
+        var elements = card.path("body").path("elements");
+        String details = elements.get(1).path("content").asText();
+        assertTrue(details.contains("示例项目"));
+        assertTrue(details.contains("包装设计"));
         assertEquals(
                 BASE_URL + TASK_LINK,
-                card.path("body")
-                        .path("elements")
-                        .get(2)
-                        .path("behaviors")
-                        .get(0)
-                        .path("default_url")
-                        .asText());
+                elements.get(2).path("behaviors").get(0).path("default_url").asText());
         verifyNoInteractions(feishu);
     }
 
@@ -169,6 +168,6 @@ class NotificationWorkflowReminderTest {
                 21L,
                 "system",
                 key,
-                Map.of("projectName", "示例项目", "taskName", "设计", "deadline", "2026-11-06", "taskLink", TASK_LINK));
+                Map.of("projectName", "示例项目", "taskName", "包装设计", "deadline", "2026-11-06", "taskLink", TASK_LINK));
     }
 }
