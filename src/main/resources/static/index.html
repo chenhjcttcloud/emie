@@ -5,36 +5,78 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>产品管理系统 - EMIE</title>
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
-<link rel="stylesheet" href="/css/app.css?v=320">
+<link rel="stylesheet" href="/css/app.css?v=321">
 <link rel="stylesheet" href="/css/business-assistant.css?v=16">
 </head>
 <body>
 
 <!-- 登录页 -->
 <div id="loginPage" style="display:none;">
-  <div class="login-container">
-    <div class="login-card">
-      <div class="login-logo" data-emie-action="click:auth-reveal-internal-login">🎨</div>
-      <h1 class="login-title">产品管理系统</h1>
-      <p class="login-subtitle">EMIE Design Project Management</p>
-      <button id="feishuLoginBtn" class="btn btn-outline btn-lg" style="width:100%;justify-content:center;color:#3370FF;border-color:#3370FF;" data-emie-action="click:auth-feishu-login">
-        <svg viewBox="0 0 24 24" style="width:18px;height:18px;margin-right:4px;" fill="#3370FF"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1.41 15.41L6.41 13l1.41-1.41 3.18 3.18 5.59-5.59L18 10.59l-7.41 7.42z"/></svg>
-        飞书登录
-      </button>
-      <form id="internalLoginForm" hidden data-emie-action="submit:auth-internal-login" style="margin-top:12px;">
-        <div class="form-group">
-          <label class="form-label" for="loginId">账号</label>
-          <input type="text" class="form-input" id="loginId" placeholder="用户 ID / 手机号 / 邮箱" autocomplete="username">
+  <main class="login-container">
+    <div class="login-layout">
+      <div class="login-brand">
+        <div class="login-brand-copy">
+          <p class="login-brand-kicker"><strong>EMIE</strong><span>DESIGN WORKSPACE</span></p>
+          <p class="login-brand-headline">让好设计，<br><span>顺利交付。</span></p>
+          <p class="login-brand-description">从需求到交付，让团队协作更有条理。</p>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="loginPassword">密码</label>
-          <input type="password" class="form-input" id="loginPassword" placeholder="输入密码" autocomplete="current-password">
-        </div>
-        <button type="submit" class="btn btn-primary btn-lg" style="width:100%;justify-content:center;">登 录</button>
-      </form>
-      <div id="loginError" style="color:var(--danger);font-size:13px;text-align:center;margin-top:12px;display:none;"></div>
+        <svg class="login-brand-art" viewBox="0 0 460 268" fill="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="login-art-surface" x1="58" y1="90" x2="398" y2="115" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#9974f7" stop-opacity=".20"/>
+              <stop offset=".65" stop-color="#c888fa" stop-opacity=".52"/>
+              <stop offset="1" stop-color="#ff87c0" stop-opacity=".68"/>
+            </linearGradient>
+            <linearGradient id="login-art-stroke" x1="46" y1="93" x2="420" y2="178" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#8c78f5" stop-opacity=".45"/>
+              <stop offset=".6" stop-color="#d6a7ff"/>
+              <stop offset="1" stop-color="#ff9ac8"/>
+            </linearGradient>
+          </defs>
+          <path d="M8 183 224 100 452 183 236 266 8 183Z" stroke="#b6a0ff" stroke-opacity=".27" stroke-dasharray="3 6"/>
+          <path d="M46 167 224 99 414 167 236 235 46 167Z" fill="#8c66ee" fill-opacity=".11" stroke="url(#login-art-stroke)" stroke-opacity=".55"/>
+          <path d="M46 132 224 64 414 132 236 200 46 132Z" fill="#b77afa" fill-opacity=".17" stroke="url(#login-art-stroke)" stroke-opacity=".72"/>
+          <path d="M46 91 236 159 414 91v11l-178 68-190-68Z" fill="#a16bed" fill-opacity=".23" stroke="url(#login-art-stroke)" stroke-opacity=".70"/>
+          <path d="M46 91 224 23 414 91 236 159 46 91Z" fill="url(#login-art-surface)" stroke="url(#login-art-stroke)" stroke-width="1.5"/>
+          <path d="m93 108 178-68M141 125l178-68M188 142l178-68M90 74l190 68M135 57l190 68M179 40l190 68" stroke="#ecd6ff" stroke-opacity=".20"/>
+          <path d="m127 92 68-26 43 16-30 12 45 16 77-30" stroke="#f9e7ff" stroke-opacity=".83" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="127" cy="92" r="3.5" fill="#e0c6ff"/>
+          <circle cx="330" cy="80" r="5.5" fill="#ffe1f1"/>
+          <circle cx="330" cy="80" r="11" stroke="#ffd2ee" stroke-opacity=".50"/>
+          <path d="M330 69V38l33-12h31" stroke="#ffd9ef" stroke-opacity=".55" stroke-dasharray="3 4"/>
+          <path d="M394 15v22m-11-11h22" stroke="#ffd9ef" stroke-opacity=".75" stroke-linecap="round"/>
+          <path d="M65 202v14m-7-7h14m312-22v16m-8-8h16" stroke="#bda8fa" stroke-opacity=".65" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <section class="login-card" aria-labelledby="loginTitle">
+        <button type="button" class="login-logo" aria-label="EMIE 标志" aria-controls="internalLoginForm" data-emie-action="click:auth-reveal-internal-login">EMIE</button>
+        <h1 id="loginTitle" class="login-title">产品管理系统</h1>
+        <p class="login-subtitle" lang="en">EMIE Design Project Management</p>
+        <button type="button" id="feishuLoginBtn" class="login-feishu" data-emie-action="click:auth-feishu-login">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z"/><path d="m8 12 2.5 2.5L16 9"/>
+          </svg>
+          <span>飞书登录</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 12h15m-6-6 6 6-6 6"/>
+          </svg>
+        </button>
+        <form id="internalLoginForm" class="login-internal" hidden data-emie-action="submit:auth-internal-login">
+          <div class="form-group">
+            <label class="form-label" for="loginId">账号</label>
+            <input type="text" class="form-input" id="loginId" placeholder="用户 ID / 手机号 / 邮箱" autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="loginPassword">密码</label>
+            <input type="password" class="form-input" id="loginPassword" placeholder="输入密码" autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn btn-primary login-submit">登录</button>
+        </form>
+        <div id="loginError" class="login-error" role="alert" style="display:none;"></div>
+        <p class="login-note">请使用企业飞书账号登录</p>
+      </section>
     </div>
-  </div>
+  </main>
 </div>
 
 <!-- 主应用 -->
@@ -58,6 +100,6 @@
   </div>
 </div>
 
-<script type="module" src="/js/bootstrap.js?v=1539"></script>
+<script type="module" src="/js/bootstrap.js?v=1540"></script>
 </body>
 </html>
