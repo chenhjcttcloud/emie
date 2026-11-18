@@ -225,6 +225,7 @@ PUT /api/admin/configs
 PUT /api/admin/roles/{id}
 PUT /api/admin/scoring-weights
 PUT /api/admin/users/{id}
+PUT /api/admin/users/{id}/project-scope
 PUT /api/admin/users/{id}/reset-password
 PUT /api/admin/users/{id}/role
 PUT /api/admin/users/{id}/toggle-status
@@ -245,6 +246,7 @@ PUT /api/points/rules/{ruleCode}
 PUT /api/points/skills/{userId}
 PUT /api/price-ranges/{id}
 PUT /api/projects/{id}
+PUT /api/projects/{projectId}/collaborators
 PUT /api/projects/{projectId}/tasks/{taskId}
 PUT /api/share/admin/{id}
 PUT /api/users/org/{userId}

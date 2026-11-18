@@ -3,6 +3,7 @@ package com.emie.designpm.project.repository;
 import com.emie.designpm.dto.ProjectListQuery;
 import com.emie.designpm.entity.ProductCategory;
 import com.emie.designpm.entity.Project;
+import com.emie.designpm.entity.ProjectCollaborator;
 import com.emie.designpm.entity.SubTask;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -13,6 +14,7 @@ import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.data.domain.Page;
@@ -26,6 +28,12 @@ public class ProjectSearchRepositoryImpl implements ProjectSearchRepository {
 
     @Override
     public Page<Project> findVisiblePage(ProjectListQuery query, String viewerRole, List<String> visibleUserIds) {
+        return findVisiblePage(query, viewerRole, visibleUserIds, null);
+    }
+
+    @Override
+    public Page<Project> findVisiblePage(
+            ProjectListQuery query, String viewerRole, List<String> visibleUserIds, String viewerUserId) {
         if (!"admin".equals(viewerRole) && (visibleUserIds == null || visibleUserIds.isEmpty())) {
             return Page.empty(query.pageable());
         }
@@ -37,7 +45,7 @@ public class ProjectSearchRepositoryImpl implements ProjectSearchRepository {
         contentQuery
                 .select(project)
                 .distinct(true)
-                .where(predicates(cb, project, query, viewerRole, visibleUserIds))
+                .where(predicates(cb, contentQuery, project, query, viewerRole, visibleUserIds, viewerUserId))
                 .orderBy(cb.desc(project.get("createdAt")), cb.desc(project.get("id")));
         TypedQuery<Project> typedQuery = entityManager.createQuery(contentQuery);
         typedQuery.setFirstResult((int) query.pageable().getOffset());
@@ -48,43 +56,57 @@ public class ProjectSearchRepositoryImpl implements ProjectSearchRepository {
         Root<Project> countProject = countQuery.from(Project.class);
         countQuery
                 .select(cb.countDistinct(countProject.get("id")))
-                .where(predicates(cb, countProject, query, viewerRole, visibleUserIds));
+                .where(predicates(cb, countQuery, countProject, query, viewerRole, visibleUserIds, viewerUserId));
         long total = entityManager.createQuery(countQuery).getSingleResult();
         return new PageImpl<>(content, query.pageable(), total);
     }
 
     @Override
     public long countVisible(ProjectListQuery query, String viewerRole, List<String> visibleUserIds) {
+        return countVisible(query, viewerRole, visibleUserIds, null);
+    }
+
+    @Override
+    public long countVisible(
+            ProjectListQuery query, String viewerRole, List<String> visibleUserIds, String viewerUserId) {
         if (!"admin".equals(viewerRole) && (visibleUserIds == null || visibleUserIds.isEmpty())) return 0L;
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Long> countQuery = cb.createQuery(Long.class);
         Root<Project> project = countQuery.from(Project.class);
         countQuery
                 .select(cb.countDistinct(project.get("id")))
-                .where(predicates(cb, project, query, viewerRole, visibleUserIds));
+                .where(predicates(cb, countQuery, project, query, viewerRole, visibleUserIds, viewerUserId));
         return entityManager.createQuery(countQuery).getSingleResult();
     }
 
     @Override
     public List<Long> findVisibleIds(ProjectListQuery query, String viewerRole, List<String> visibleUserIds) {
+        return findVisibleIds(query, viewerRole, visibleUserIds, null);
+    }
+
+    @Override
+    public List<Long> findVisibleIds(
+            ProjectListQuery query, String viewerRole, List<String> visibleUserIds, String viewerUserId) {
         if (!"admin".equals(viewerRole) && (visibleUserIds == null || visibleUserIds.isEmpty())) return List.of();
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Long> idsQuery = cb.createQuery(Long.class);
         Root<Project> project = idsQuery.from(Project.class);
         idsQuery.select(project.get("id"))
                 .distinct(true)
-                .where(predicates(cb, project, query, viewerRole, visibleUserIds));
+                .where(predicates(cb, idsQuery, project, query, viewerRole, visibleUserIds, viewerUserId));
         return entityManager.createQuery(idsQuery).getResultList();
     }
 
     private Predicate[] predicates(
             CriteriaBuilder cb,
+            CriteriaQuery<?> criteriaQuery,
             Root<Project> project,
             ProjectListQuery query,
             String viewerRole,
-            List<String> visibleUserIds) {
+            List<String> visibleUserIds,
+            String viewerUserId) {
         List<Predicate> predicates = new ArrayList<>();
-        addAccessPredicate(cb, project, predicates, query, viewerRole, visibleUserIds);
+        addAccessPredicate(cb, criteriaQuery, project, predicates, query, viewerRole, visibleUserIds, viewerUserId);
 
         if (query.type() != null) predicates.add(cb.equal(project.get("type"), query.type()));
         if (query.status() != null) {
@@ -116,20 +138,33 @@ public class ProjectSearchRepositoryImpl implements ProjectSearchRepository {
 
     private void addAccessPredicate(
             CriteriaBuilder cb,
+            CriteriaQuery<?> criteriaQuery,
             Root<Project> project,
             List<Predicate> predicates,
             ProjectListQuery query,
             String viewerRole,
-            List<String> userIds) {
+            List<String> userIds,
+            String viewerUserId) {
         if ("admin".equals(viewerRole)) return;
         switch (viewerRole) {
             case "sales" -> predicates.add(project.get("salesId").in(userIds));
-            case "planner" -> predicates.add(cb.or(
-                    project.get("plannerId").in(userIds),
-                    cb.and(
-                            cb.equal(project.get("type"), "channel_custom"),
-                            cb.equal(project.get("status"), "pending_planner"),
-                            cb.or(cb.isNull(project.get("plannerId")), cb.equal(project.get("plannerId"), "")))));
+            case "planner" -> {
+                Predicate owner = project.get("plannerId").in(userIds);
+                Predicate unclaimed = cb.and(
+                        cb.equal(project.get("type"), "channel_custom"),
+                        cb.equal(project.get("status"), "pending_planner"),
+                        cb.or(cb.isNull(project.get("plannerId")), cb.equal(project.get("plannerId"), "")));
+                if (viewerUserId == null || viewerUserId.isBlank()) {
+                    predicates.add(cb.or(owner, unclaimed));
+                } else {
+                    Subquery<Long> collaboration = criteriaQuery.subquery(Long.class);
+                    Root<ProjectCollaborator> membership = collaboration.from(ProjectCollaborator.class);
+                    collaboration
+                            .select(membership.get("projectId"))
+                            .where(cb.equal(membership.get("userId"), viewerUserId));
+                    predicates.add(cb.or(owner, unclaimed, project.get("id").in(collaboration)));
+                }
+            }
             default -> addAssigneePredicate(cb, project, predicates, query, viewerRole, userIds);
         }
     }

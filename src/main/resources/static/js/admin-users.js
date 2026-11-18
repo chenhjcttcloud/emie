@@ -210,10 +210,11 @@ async function changeAdminUserPage(page) {
 
 // ===== Admin: 编辑用户弹窗 =====
 function openEditUserModal(userData) {
-  if (isModalOpen()) return;
+  if (!userData || isModalOpen()) return;
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'editUserModal';
+  modal.dataset.viewerKey = `${EMIE.state.currentRole}:${EMIE.state.currentUserId}`;
   modal.innerHTML = `
     <div class="modal modal-lg">
       <div class="modal-header"><button class="modal-close" data-emie-action="click:users-close-edit">✕</button><div class="modal-header-left"><div class="modal-title">✏️ 编辑用户：${escHtml(userData.name || userData.userId)}</div></div></div>
@@ -251,6 +252,25 @@ function openEditUserModal(userData) {
             <input type="password" class="form-input" id="editUserPasswordConfirm" placeholder="再次输入新密码" autocomplete="new-password">
           </div>
         </div>
+        ${adminUserRoleKey(userData.role) === 'planner' ? `
+        <section class="config-card" style="margin-top:16px;" aria-labelledby="userProjectScopeTitle">
+          <div class="config-card-header"><h3 id="userProjectScopeTitle">项目可见范围</h3></div>
+          <div class="config-card-body">
+            <div class="form-group">
+              <label class="form-label" for="editUserProjectScope">可查看的项目</label>
+              <select class="form-select" id="editUserProjectScope" data-saved-scope="${escHtml(userData.projectDataScope || 'inherit')}">
+                ${[['inherit', '跟随角色设置'], ['own', '个人项目'], ['department', '本部门项目（部门负责人）'], ['role_team', '全部企划项目']].map(([value, label]) => `<option value="${value}" ${(userData.projectDataScope || 'inherit') === value ? 'selected' : ''}>${label}</option>`).join('')}
+              </select>
+              <p class="form-hint">个人项目包含本人负责及获授权协作的项目。本部门范围按启用部门的负责人和成员计算。</p>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="editUserProjectScopeReason">变更原因</label>
+              <textarea class="form-input" id="editUserProjectScopeReason" rows="2" maxlength="500" placeholder="说明本次项目范围调整原因"></textarea>
+            </div>
+            <p id="editUserProjectScopeStatus" role="status" style="margin-bottom:10px;font-size:13px;" hidden></p>
+            <button type="button" class="btn btn-outline" data-emie-action="click:users-save-project-scope" data-user-id="${userData.id}">保存范围</button>
+          </div>
+        </section>` : ''}
         <div style="background:var(--gray-50);padding:12px 16px;border-radius:8px;margin-top:8px;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
             <span style="font-size:13px;color:var(--gray-500);">当前角色：<span class="admin-user-role-badge role-${adminUserRoleClass(userData.role)}">${escHtml(adminUserRoleLabels[adminUserRoleKey(userData.role)] || userData.role)}</span></span>
@@ -260,10 +280,48 @@ function openEditUserModal(userData) {
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" data-emie-action="click:users-close-edit">取消</button>
-        <button class="btn btn-primary" data-emie-action="click:users-submit-edit" data-user-id="${userData.id}">💾 保存修改</button>
+        <button class="btn btn-primary" data-emie-action="click:users-submit-edit" data-user-id="${userData.id}">💾 保存用户资料</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
+}
+
+async function saveUserProjectScope(userId) {
+  const modal = document.getElementById('editUserModal');
+  const select = modal?.querySelector('#editUserProjectScope');
+  const reasonInput = modal?.querySelector('#editUserProjectScopeReason');
+  const status = modal?.querySelector('#editUserProjectScopeStatus');
+  if (!select || !reasonInput || !status) return;
+  const reason = reasonInput.value.trim();
+  status.hidden = false;
+  status.style.color = 'var(--danger)';
+  if (!reason) { status.textContent = '请填写项目范围变更原因'; reasonInput.focus(); return; }
+  const scope = select.value;
+  const viewer = `${EMIE.state.currentRole}:${EMIE.state.currentUserId}`;
+  if (modal.dataset.viewerKey !== viewer) return;
+  try {
+    const result = await apiPut(`/admin/users/${userId}/project-scope`, { scope, reason });
+    if (!modal.isConnected || viewer !== `${EMIE.state.currentRole}:${EMIE.state.currentUserId}`) return;
+    const savedScope = result.projectDataScope || scope;
+    const user = EMIE.state.adminUsers?.find(item => Number(item.id) === userId);
+    if (user) user.projectDataScope = savedScope;
+    select.dataset.savedScope = savedScope;
+    reasonInput.value = '';
+    status.style.color = 'var(--success)';
+    status.textContent = '项目可见范围已保存';
+    EMIE.actions.clearSWRCache?.();
+    const capabilities = await apiGet('/auth/permissions').catch(() => null);
+    if (viewer !== `${EMIE.state.currentRole}:${EMIE.state.currentUserId}`) return;
+    if (!capabilities) return;
+    EMIE.state.permissions = Array.isArray(capabilities?.permissions) ? capabilities.permissions : null;
+    EMIE.state.permissionScopes = capabilities?.scopes || {};
+    EMIE.state.permissionVersion = capabilities?.permissionVersion ?? null;
+    EMIE.actions.renderSidebar?.();
+  } catch (error) {
+    if (!modal.isConnected || viewer !== `${EMIE.state.currentRole}:${EMIE.state.currentUserId}`) return;
+    status.style.color = 'var(--danger)';
+    status.textContent = error.message || '项目可见范围保存失败，请重试';
+  }
 }
 
 async function submitEditUser(userId) {
@@ -495,6 +553,7 @@ if (registerEventAction) {
   registerEventAction('users-close-role', () => closeM('changeRoleModal'));
   registerEventAction('users-close-pwd', () => closeM('resetPwdModal'));
   registerEventAction('users-submit-edit', (_event, el) => submitGuard(el, () => submitEditUser(Number(el.dataset.userId))));
+  registerEventAction('users-save-project-scope', (_event, el) => submitGuard(el, () => saveUserProjectScope(Number(el.dataset.userId))));
   registerEventAction('users-submit-role', (_event, el) => submitGuard(el, () => submitChangeRole(Number(el.dataset.userId))));
   registerEventAction('users-submit-pwd', (_event, el) => submitGuard(el, () => submitResetPwd(Number(el.dataset.userId))));
 }

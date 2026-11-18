@@ -19,6 +19,7 @@ public class TaskDetailDTO {
     private String actualDate;
     private String designerId;
     private String designerName;
+    private String publisherId;
     private String pointRuleCode;
     private Double basePointSnapshot;
     private boolean supportsChangeTiers;

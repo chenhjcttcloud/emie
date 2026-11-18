@@ -69,7 +69,7 @@ class ScoringQueryOptimizationTest {
         em.flush();
         em.clear();
         ProjectAccessService access = mock(ProjectAccessService.class);
-        when(access.findVisibleProjectIds("planner", "planner-a")).thenReturn(List.of(visible.getId()));
+        when(access.findReviewableProjectIds("planner", "planner-a")).thenReturn(List.of(visible.getId()));
         when(access.findVisibleProjectsWithTasks(new AuthSession("planner-a", "planner", "")))
                 .thenAnswer(call -> projects.findAllWithTasksByIdIn(List.of(visible.getId())));
         SystemConfigRepository configs = mock(SystemConfigRepository.class);
@@ -144,7 +144,7 @@ class ScoringQueryOptimizationTest {
         ScoringRepository repository = mock(ScoringRepository.class);
         ProjectScoringService service =
                 new ProjectScoringService(repository, mock(SystemConfigRepository.class), access);
-        when(access.findVisibleProjectIds("planner", "none")).thenReturn(List.of());
+        when(access.findReviewableProjectIds("planner", "none")).thenReturn(List.of());
         assertEquals(0, service.countPendingScoresForUser("planner", "none"));
         assertEquals(0, service.countPendingScoresForUser("designer", "designer-a"));
         verifyNoInteractions(repository);

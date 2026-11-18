@@ -29,6 +29,12 @@ public class PermissionService {
     private final RolePermissionRepository rolePermissionRepository;
     private final PermissionVersionRepository permissionVersionRepository;
     private final RolePermissionScopeRepository rolePermissionScopeRepository;
+    private UserProjectScopeService userProjectScopeService;
+
+    @Autowired(required = false)
+    void setUserProjectScopeService(UserProjectScopeService service) {
+        this.userProjectScopeService = service;
+    }
 
     @Autowired
     public PermissionService(
@@ -72,6 +78,24 @@ public class PermissionService {
         }
         result.put("scopes", scopes);
         return result;
+    }
+
+    public Map<String, Object> capabilities(String rawRole, String userId) {
+        Map<String, Object> result = capabilities(rawRole);
+        if (userProjectScopeService == null) return result;
+        @SuppressWarnings("unchecked")
+        Map<String, List<String>> inherited = (Map<String, List<String>>) result.get("scopes");
+        result.put("scopes", userProjectScopeService.applyScopes(rawRole, userId, inherited));
+        result.put(
+                "permissionVersion", result.get("permissionVersion") + ":" + userProjectScopeService.version(userId));
+        return result;
+    }
+
+    public List<String> scopes(String rawRole, String userId, String permission) {
+        List<String> inherited = scopes(rawRole, permission);
+        return userProjectScopeService == null
+                ? inherited
+                : userProjectScopeService.resolveScopes(rawRole, userId, permission, inherited);
     }
 
     public boolean has(String rawRole, String permission) {

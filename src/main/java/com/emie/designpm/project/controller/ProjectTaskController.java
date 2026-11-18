@@ -9,7 +9,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -155,7 +154,7 @@ public class ProjectTaskController {
             if (denied != null) return denied;
             Project project =
                     subTaskCommandService.updateSubTask(projectId, taskId, req.withSessionContext(body, request));
-            return ResponseEntity.ok(view.toDetail(project));
+            return ResponseEntity.ok(view.toCommandDetail(project, req.getSession(request)));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -173,7 +172,7 @@ public class ProjectTaskController {
             if (denied != null) return denied;
             Project project =
                     subTaskCommandService.taskAccept(projectId, taskId, req.withSessionContext(body, request));
-            return ResponseEntity.ok(view.toDetail(project));
+            return ResponseEntity.ok(view.toCommandDetail(project, req.getSession(request)));
         } catch (RuntimeException e) {
             if (e.getMessage() != null
                     && (e.getMessage().contains("已被接单") || e.getMessage().contains("已处理"))) {
@@ -190,8 +189,10 @@ public class ProjectTaskController {
         try {
             ResponseEntity<?> denied = req.denyUnless(request, "subtask.edit");
             if (denied != null) return denied;
-            return ResponseEntity.ok(view.toDetail(subTaskCommandService.withdrawMarketTask(
-                    projectId, taskId, req.withSessionContext(new LinkedHashMap<>(), request))));
+            return ResponseEntity.ok(view.toCommandDetail(
+                    subTaskCommandService.withdrawMarketTask(
+                            projectId, taskId, req.withSessionContext(new LinkedHashMap<>(), request)),
+                    req.getSession(request)));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -207,8 +208,10 @@ public class ProjectTaskController {
         try {
             ResponseEntity<?> denied = req.denyUnless(request, "subtask.accept");
             if (denied != null) return denied;
-            return ResponseEntity.ok(view.toDetail(subTaskCommandService.withdrawAcceptedTask(
-                    projectId, taskId, req.withSessionContext(body, request))));
+            return ResponseEntity.ok(view.toCommandDetail(
+                    subTaskCommandService.withdrawAcceptedTask(
+                            projectId, taskId, req.withSessionContext(body, request)),
+                    req.getSession(request)));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -221,8 +224,10 @@ public class ProjectTaskController {
         try {
             ResponseEntity<?> denied = req.denyUnless(request, "subtask.edit");
             if (denied != null) return denied;
-            return ResponseEntity.ok(view.toDetail(subTaskCommandService.cancelAcceptedTask(
-                    projectId, taskId, req.withSessionContext(new LinkedHashMap<>(), request))));
+            return ResponseEntity.ok(view.toCommandDetail(
+                    subTaskCommandService.cancelAcceptedTask(
+                            projectId, taskId, req.withSessionContext(new LinkedHashMap<>(), request)),
+                    req.getSession(request)));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -240,7 +245,7 @@ public class ProjectTaskController {
             if (denied != null) return denied;
             Project project =
                     subTaskCommandService.requestChangeBonus(projectId, taskId, req.withSessionContext(body, request));
-            return ResponseEntity.ok(view.toDetail(project));
+            return ResponseEntity.ok(view.toCommandDetail(project, req.getSession(request)));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -361,16 +366,10 @@ public class ProjectTaskController {
         try {
             ResponseEntity<?> denied = req.denyUnless(request, "subtask.delete");
             if (denied != null) return denied;
-            AuthSession session = req.getSession(request);
-            Project project = projectService.getProjectById(projectId).orElseThrow(() -> new RuntimeException("项目不存在"));
-            if (session == null
-                    || !("admin".equals(session.role())
-                            || ("planner".equals(session.role())
-                                    && Objects.equals(session.userId(), project.getPlannerId())))) {
-                return ResponseEntity.status(403).body(Map.of("error", "仅项目企划或管理员可删除子任务"));
-            }
-            return ResponseEntity.ok(view.toDetail(subTaskCommandService.deleteSubTask(
-                    projectId, taskId, req.withSessionContext(new LinkedHashMap<>(), request))));
+            return ResponseEntity.ok(view.toCommandDetail(
+                    subTaskCommandService.deleteSubTask(
+                            projectId, taskId, req.withSessionContext(new LinkedHashMap<>(), request)),
+                    req.getSession(request)));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -381,7 +380,7 @@ public class ProjectTaskController {
         try {
             ResponseEntity<?> denied = req.denyUnless(request, permission);
             if (denied != null) return denied;
-            return ResponseEntity.ok(view.toDetail(action.get()));
+            return ResponseEntity.ok(view.toCommandDetail(action.get(), req.getSession(request)));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

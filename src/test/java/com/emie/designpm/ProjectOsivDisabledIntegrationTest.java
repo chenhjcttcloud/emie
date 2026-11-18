@@ -84,7 +84,7 @@ class ProjectOsivDisabledIntegrationTest {
     @BeforeEach
     void createCommittedProjectGraph() {
         when(permissionService.has(anyString(), anyString())).thenReturn(true);
-        when(permissionService.scopes(anyString(), anyString())).thenReturn(java.util.List.of("all"));
+        when(permissionService.scopes(anyString(), anyString(), anyString())).thenReturn(java.util.List.of("all"));
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             activityLogs.deleteAll();
             subTasks.deleteAll();
@@ -165,5 +165,57 @@ class ProjectOsivDisabledIntegrationTest {
                 .andExpect(jsonPath("$[0].id").value(taskId))
                 .andExpect(jsonPath("$[0].projectId").value(projectId))
                 .andExpect(jsonPath("$[0].projectName").value("OSIV 回归项目"));
+    }
+
+    @Test
+    void assigneeTaskAcceptLoadsGraphBeforeCheckingOwnProjectScope() throws Exception {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            Project project = projects.findById(projectId).orElseThrow();
+            project.setStatus("in_progress");
+            SubTask task = subTasks.findById(taskId).orElseThrow();
+            task.setAssigneeRole("supplychain");
+        });
+        when(permissionService.scopes("supplychain", "planner-osiv", "project.detail.view"))
+                .thenReturn(java.util.List.of("own"));
+        String assigneeToken = AuthSessions.generateToken("planner-osiv", "supplychain", "测试执行人");
+
+        mvc.perform(post("/api/projects/{projectId}/tasks/{taskId}/accept", projectId, taskId)
+                        .header("X-Auth-Token", assigneeToken)
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tasks[0].id").value(taskId))
+                .andExpect(jsonPath("$.tasks[0].status").value("accepted"));
+    }
+
+    @Test
+    void assignedPlannerCanAcceptWithoutReceivingOtherProjectTasksOrRequirements() throws Exception {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            Project project = projects.findById(projectId).orElseThrow();
+            project.setStatus("in_progress");
+            project.setPlannerId("other-owner");
+            SubTask other = new SubTask();
+            other.setProject(project);
+            other.setName("其他人的私有任务");
+            other.setStatus("pending");
+            other.setPlannedDate("2026-12-31");
+            other.setAssigneeRole("planner");
+            other.setDesignerId("other-planner");
+            subTasks.saveAndFlush(other);
+        });
+        when(permissionService.scopes("planner", "planner-osiv", "project.detail.view"))
+                .thenReturn(java.util.List.of("own"));
+        String assigneeToken = AuthSessions.generateToken("planner-osiv", "planner", "测试企划执行人");
+
+        mvc.perform(post("/api/projects/{projectId}/tasks/{taskId}/accept", projectId, taskId)
+                        .header("X-Auth-Token", assigneeToken)
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tasks.length()").value(1))
+                .andExpect(jsonPath("$.tasks[0].id").value(taskId))
+                .andExpect(jsonPath("$.logs.length()").value(0))
+                .andExpect(jsonPath("$.productRequirements").isEmpty())
+                .andExpect(jsonPath("$.referenceImagesJson").isEmpty());
     }
 }

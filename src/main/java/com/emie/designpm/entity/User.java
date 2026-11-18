@@ -62,6 +62,10 @@ public class User {
     @Column(unique = true)
     private String feishuUserId;
 
+    /** 项目数据范围覆盖；null/inherit 沿用角色配置。 */
+    @Column(name = "project_data_scope", length = 20)
+    private String projectDataScope;
+
     /** 所属部门 ID */
     private Long departmentId;
 

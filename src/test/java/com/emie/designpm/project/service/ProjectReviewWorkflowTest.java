@@ -110,6 +110,7 @@ class ProjectReviewWorkflowTest {
         Project project = projectWithTask("regular", "completed");
         project.getTasks().clear();
         when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(users.getUserByUserId("designer-2"))
                 .thenReturn(com.emie.designpm.entity.User.builder()
                         .userId("designer-2")
@@ -153,6 +154,7 @@ class ProjectReviewWorkflowTest {
         Project project = projectWithTask("regular", "completed");
         project.getTasks().clear();
         when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(users.getUserByUserId("designer-2"))
                 .thenReturn(com.emie.designpm.entity.User.builder()
                         .userId("designer-2")
@@ -192,6 +194,7 @@ class ProjectReviewWorkflowTest {
         Project project = projectWithTask("regular", "completed");
         project.getTasks().clear();
         when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(users.getUserByUserId("planner-2"))
                 .thenReturn(com.emie.designpm.entity.User.builder()
                         .userId("planner-2")
@@ -340,6 +343,7 @@ class ProjectReviewWorkflowTest {
         ScoringRecord planner = review(project.getTasks().get(0), "planner", "first");
         planner.setReviewStatus("pending");
         when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(scoring.findBySubTaskIdAndRole(11L, "planner")).thenReturn(Optional.of(planner));
         when(scoring.findBySubTaskIdAndRole(11L, "sales")).thenReturn(Optional.empty());
@@ -534,6 +538,7 @@ class ProjectReviewWorkflowTest {
         ScoringRecord sales = review(project.getTasks().get(0), "sales", "second");
         sales.setReviewStatus("waiting");
         when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(scoring.findBySubTaskIdAndRole(11L, "planner")).thenReturn(Optional.of(planner));
         when(scoring.findBySubTaskIdAndRole(11L, "sales")).thenReturn(Optional.of(sales));
@@ -560,6 +565,7 @@ class ProjectReviewWorkflowTest {
         PointsService points = mock(PointsService.class);
         service.setPointsService(points);
         when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.taskApprove(
@@ -589,6 +595,7 @@ class ProjectReviewWorkflowTest {
         Project project = projectWithTask("regular", "submitted_for_review");
         project.getTasks().get(0).setAssigneeRole(null);
         when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.taskApprove(
@@ -613,6 +620,7 @@ class ProjectReviewWorkflowTest {
     void plannerRejectionDoesNotBookPoints() {
         Project project = projectWithTask("channel_custom", "planner_approved");
         when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(projects.saveAndFlush(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.taskReject(
@@ -774,6 +782,7 @@ class ProjectReviewWorkflowTest {
         Project project = projectWithTask("regular", "planner_approved");
         project.getTasks().get(0).setWorkflowStage("bulk");
         when(projects.findById(1L)).thenReturn(Optional.of(project));
+        when(projects.findByIdForUpdate(1L)).thenReturn(Optional.of(project));
         when(projects.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertThrows(

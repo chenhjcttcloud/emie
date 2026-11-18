@@ -780,6 +780,7 @@ public class AdminService {
         m.put("feishuOpenId", u.getFeishuOpenId());
         m.put("name", TextEncodingUtil.repairUtf8Mojibake(u.getName()));
         m.put("role", u.getRole());
+        m.put("projectDataScope", UserProjectScopeService.configuredScope(u));
         m.put("roleLevel", u.getRoleLevel());
         m.put("title", u.getTitle());
         m.put("phone", u.getPhone());
@@ -881,6 +882,7 @@ public class AdminService {
     @Transactional
     public Map<String, Object> updateUser(Long userId, Map<String, String> fields) {
         User user = userRepository.findById(userId).orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+        String originalUserId = user.getUserId();
         boolean roleChanged = false;
         boolean wasPending = "pending".equals(user.getRole()) || "pending".equalsIgnoreCase(user.getStatus());
 
@@ -977,6 +979,7 @@ public class AdminService {
         }
 
         userRepository.save(user);
+        if (!originalUserId.equals(user.getUserId())) AuthSessions.clearUserTokens(originalUserId);
         if (roleChanged) AuthSessions.clearUserTokens(user.getUserId());
         userService.refreshCache();
 

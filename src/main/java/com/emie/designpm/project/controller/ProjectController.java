@@ -499,10 +499,10 @@ public class ProjectController {
                         : Objects.equals(p.getPlannerId(), s.userId()));
     }
 
-    /** 产品企划可为任意渠道定制或公司常规品项目补建群；原项目负责人权限保持不变。 */
+    /** 产品企划可为可见项目补建群；项目负责人另按管理权限判断。 */
     private boolean canCreateProjectChat(Project p, AuthSession s) {
         if (s == null || p == null || !List.of("channel_custom", "regular").contains(p.getType())) return false;
-        return "planner".equals(s.role()) || canManageProjectChat(p, s);
+        return ("planner".equals(s.role()) && projectAccessService.canView(p, s)) || canManageProjectChat(p, s);
     }
 
     /** 编辑已创建项目的基础资料。权限不复用通用管理权限，严格限制为项目归属创建人。 */
@@ -572,7 +572,7 @@ public class ProjectController {
                 ensureProjectChat(p);
                 syncProjectChatMembers(p);
             }
-            return ResponseEntity.ok(toDetail(p));
+            return ResponseEntity.ok(view.toCommandDetail(p, session));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

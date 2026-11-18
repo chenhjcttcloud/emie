@@ -68,6 +68,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
     private SubTaskRejectionCycleRepository rejectionCycleRepository;
     private final ProjectNotifier notifier;
     private final ScoringWeightConfig scoringWeights;
+    private ProjectTaskManagementPolicy taskManagementPolicy = new ProjectTaskManagementPolicy(null);
 
     @Autowired
     public DefaultSubTaskCommandService(
@@ -188,20 +189,20 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         this.rejectionCycleRepository = repository;
     }
 
+    @Autowired
+    void setTaskManagementPolicy(ProjectTaskManagementPolicy policy) {
+        this.taskManagementPolicy = policy;
+    }
+
     public Project addSubTask(Long projectId, Map<String, Object> body) {
-        Project p = projectRepository.findById(projectId).orElseThrow(() -> new RuntimeException("项目不存在"));
+        Project p = lockProject(projectId);
 
         if (List.of("terminated", "paused", "pending_terminate").contains(p.getStatus())) {
             throw new RuntimeException("项目已" + ("terminated".equals(p.getStatus()) ? "终止" : "暂停") + "，无法操作");
         }
 
         String role = (String) body.getOrDefault("currentRole", "");
-        if (!List.of("planner", "admin").contains(role)) {
-            throw new RuntimeException("仅企划或管理员可创建子任务");
-        }
-        if ("planner".equals(role) && !isProjectPlanner(p, body)) {
-            throw new RuntimeException("仅项目负责人企划可创建子任务");
-        }
+        taskManagementPolicy.requireCreate(p, body);
 
         String name = SecurityUtil.sanitizeText((String) body.get("name"), 200);
         String plannedDate = (String) body.get("plannedDate");
@@ -321,19 +322,9 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
             throw new RuntimeException("项目已" + ("terminated".equals(p.getStatus()) ? "终止" : "暂停") + "，无法操作");
         }
 
-        // 销售不允许编辑子任务
         String currentRole = (String) body.getOrDefault("currentRole", "");
-        if (!List.of("planner", "admin").contains(currentRole)) {
-            throw new RuntimeException("仅企划或管理员可编辑子任务");
-        }
-        if ("planner".equals(currentRole) && !isProjectPlanner(p, body)) {
-            throw new RuntimeException("仅项目负责人企划可编辑子任务");
-        }
-
-        SubTask task = subTaskRepository.findByIdForUpdate(taskId).orElseThrow(() -> new RuntimeException("子任务不存在"));
-        if (task.getProject() == null || !Objects.equals(task.getProject().getId(), projectId)) {
-            throw new RuntimeException("子任务不属于当前项目");
-        }
+        SubTask task = lockSubTask(projectId, taskId);
+        taskManagementPolicy.requireManage(p, task, body);
         Map<String, Object> before = snapshotSubTask(task);
 
         if (body.containsKey("name")) task.setName(SecurityUtil.sanitizeText((String) body.get("name"), 200));
@@ -559,10 +550,11 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         // 锁序与全项目一致：project → subtask。锁内重新加载并重校验状态，
         // 避免与 taskAccept 抢单并发时快照校验通过、DELETE 阻塞后误删刚被认领的任务。
         Project p = lockProject(projectId);
+        SubTask task = lockSubTask(projectId, taskId);
+        taskManagementPolicy.requireManage(p, task, actor);
         if ("paused".equals(p.getStatus())) {
             throw new RuntimeException("项目已暂停，无法删除子任务");
         }
-        SubTask task = lockSubTask(projectId, taskId);
         if (!List.of("pending", "pending_planner").contains(p.getStatus()) && !"pending".equals(task.getStatus())) {
             throw new RuntimeException("项目已进入工作流程，无法删除子任务");
         }
@@ -722,11 +714,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
     public Project withdrawMarketTask(Long projectId, Long taskId, Map<String, Object> body) {
         Project p = projectRepository.findByIdForUpdate(projectId).orElseThrow(() -> new RuntimeException("项目不存在"));
         String role = (String) body.getOrDefault("currentRole", "");
-        if (!List.of("planner", "admin").contains(role)) throw new RuntimeException("仅企划或管理员可撤回市场任务");
-        if ("planner".equals(role) && !isProjectPlanner(p, body)) throw new RuntimeException("仅项目负责人企划可撤回市场任务");
-        SubTask task = subTaskRepository.findByIdForUpdate(taskId).orElseThrow(() -> new RuntimeException("子任务不存在"));
-        if (task.getProject() == null || !Objects.equals(task.getProject().getId(), projectId))
-            throw new RuntimeException("子任务不属于当前项目");
+        SubTask task = lockSubTask(projectId, taskId);
+        taskManagementPolicy.requireManage(p, task, body);
         if (!"market_open".equals(task.getAllocationStatus()) || !"pending".equals(task.getStatus())) {
             throw new RuntimeException("该任务已被领取或不在接单市场");
         }
@@ -829,9 +818,8 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
     public Project cancelAcceptedTask(Long projectId, Long taskId, Map<String, Object> body) {
         Project p = lockProject(projectId);
         String role = String.valueOf(body.getOrDefault("currentRole", ""));
-        if (!List.of("planner", "admin").contains(role)) throw new RuntimeException("仅企划或管理员可取消接单");
-        if ("planner".equals(role) && !isProjectPlanner(p, body)) throw new RuntimeException("仅项目负责人企划可取消接单");
         SubTask task = lockSubTask(projectId, taskId);
+        taskManagementPolicy.requireManage(p, task, body);
         if (!"accepted".equals(task.getStatus())) throw new RuntimeException("只有已接单且未交付的任务可以取消接单");
         Map<String, Object> before = snapshotSubTask(task);
         task.setDesignerId(null);
@@ -1676,11 +1664,6 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
 
     public Project submitScoring(Long projectId, Long taskId, Map<String, Object> body) {
         throw new RuntimeException("子任务已改为验收流程，无需评分");
-    }
-
-    private boolean isProjectPlanner(Project project, Map<String, Object> body) {
-        String userId = (String) body.getOrDefault("currentUserId", "");
-        return userId != null && !userId.isBlank() && Objects.equals(userId, project.getPlannerId());
     }
 
     /** 验收和评分必须同时满足角色、项目归属，不能仅由请求体中的 role 决定。 */

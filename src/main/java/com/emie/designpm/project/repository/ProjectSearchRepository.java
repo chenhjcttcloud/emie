@@ -9,7 +9,15 @@ import org.springframework.data.domain.Page;
 public interface ProjectSearchRepository {
     Page<Project> findVisiblePage(ProjectListQuery query, String viewerRole, List<String> visibleUserIds);
 
+    Page<Project> findVisiblePage(
+            ProjectListQuery query, String viewerRole, List<String> visibleUserIds, String viewerUserId);
+
     long countVisible(ProjectListQuery query, String viewerRole, List<String> visibleUserIds);
 
+    long countVisible(ProjectListQuery query, String viewerRole, List<String> visibleUserIds, String viewerUserId);
+
     List<Long> findVisibleIds(ProjectListQuery query, String viewerRole, List<String> visibleUserIds);
+
+    List<Long> findVisibleIds(
+            ProjectListQuery query, String viewerRole, List<String> visibleUserIds, String viewerUserId);
 }

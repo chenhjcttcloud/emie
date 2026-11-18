@@ -38,7 +38,7 @@ public class ProjectScoringService {
     /** 工作台首页、导航徽章和评分中心共用的待评分条目数量。 */
     public long countPendingScoresForUser(String role, String userId) {
         if (!List.of("admin", "planner", "sales").contains(role)) return 0L;
-        List<Long> projectIds = projectAccessService.findVisibleProjectIds(role, userId);
+        List<Long> projectIds = projectAccessService.findReviewableProjectIds(role, userId);
         return projectIds.isEmpty() ? 0L : scoringRepository.countPendingItemsByProjectIds(projectIds, role);
     }
 
@@ -150,7 +150,7 @@ public class ProjectScoringService {
 
     /** 获取待评分任务列表（替代前端 N+1 次循环） */
     public List<Map<String, Object>> getPendingScoringTasks(String role, String userId) {
-        List<Project> projects = getProjectsByRoleAndUser(role, userId);
+        List<Project> projects = reviewingProjects(role, userId);
         List<Map<String, Object>> result = new ArrayList<>();
         Map<String, Map<String, Double>> weightsByType = new HashMap<>();
         List<Long> taskIds = projects.stream()
@@ -231,6 +231,12 @@ public class ProjectScoringService {
             }
         }
         return result;
+    }
+
+    private List<Project> reviewingProjects(String role, String userId) {
+        return getProjectsByRoleAndUser(role, userId).stream()
+                .filter(project -> !"planner".equals(role) || Objects.equals(userId, project.getPlannerId()))
+                .toList();
     }
 
     private List<Project> getProjectsByRoleAndUser(String role, String userId) {

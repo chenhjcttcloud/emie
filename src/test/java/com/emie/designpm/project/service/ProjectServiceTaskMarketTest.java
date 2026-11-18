@@ -462,7 +462,8 @@ class ProjectServiceTaskMarketTest {
         service.setTaskWithdrawalRepository(withdrawals);
         service.setPointAdjustmentLedgerRepository(adjustments);
 
-        service.deleteSubTask(1L, 2L);
+        service.deleteSubTask(
+                1L, 2L, Map.of("currentRole", "admin", "currentUserId", "admin-test", "currentUser", "管理员"));
 
         // 清理顺序必须满足 FK 依赖：退单调账 → 退单(FK→sub_tasks) → 交付版本(FK→sub_tasks) → 评分 → 子任务
         InOrder order = inOrder(adjustments, withdrawals, versions, scoring, tasks, projects);
@@ -506,7 +507,10 @@ class ProjectServiceTaskMarketTest {
                 mock(ProjectAccessService.class),
                 mock(NotificationWorkflowService.class));
 
-        RuntimeException error = assertThrows(RuntimeException.class, () -> service.deleteSubTask(1L, 2L));
+        RuntimeException error = assertThrows(
+                RuntimeException.class,
+                () -> service.deleteSubTask(
+                        1L, 2L, Map.of("currentRole", "admin", "currentUserId", "admin-test", "currentUser", "管理员")));
 
         assertEquals("项目已进入工作流程，无法删除子任务", error.getMessage());
         // 拒绝删除：任何 FK 清理与删除动作都不应发生
@@ -550,7 +554,8 @@ class ProjectServiceTaskMarketTest {
                 mock(ProjectAccessService.class),
                 mock(NotificationWorkflowService.class));
 
-        service.deleteSubTask(1L, 2L);
+        service.deleteSubTask(
+                1L, 2L, Map.of("currentRole", "admin", "currentUserId", "admin-test", "currentUser", "管理员"));
 
         verify(versions).deleteBySubTaskIds(List.of(2L));
         verify(tasks).delete(task);
@@ -595,7 +600,8 @@ class ProjectServiceTaskMarketTest {
         service.setTaskWithdrawalRepository(withdrawals);
         service.setPointAdjustmentLedgerRepository(adjustments);
 
-        service.deleteSubTask(1L, 2L);
+        service.deleteSubTask(
+                1L, 2L, Map.of("currentRole", "admin", "currentUserId", "admin-test", "currentUser", "管理员"));
 
         // 无退单记录：调账与退单清理被空集合守卫跳过，其余 FK 清理顺序保持不变
         verify(adjustments, never()).deleteProjectRelated(any(), any());
@@ -641,7 +647,8 @@ class ProjectServiceTaskMarketTest {
                 mock(ProjectAccessService.class),
                 mock(NotificationWorkflowService.class));
 
-        service.deleteSubTask(1L, 2L);
+        service.deleteSubTask(
+                1L, 2L, Map.of("currentRole", "admin", "currentUserId", "admin-test", "currentUser", "管理员"));
 
         verify(versions).deleteBySubTaskIds(List.of(2L));
         verify(scoring).deleteAll(List.of());

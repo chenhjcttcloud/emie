@@ -54,6 +54,7 @@ class NotificationTemplateServiceTest {
     void mandatoryWorkflowEventsHaveConcreteTemplates() {
         for (String event : new String[] {
             "PROJECT_ASSIGNED",
+            "PROJECT_COLLABORATION_ASSIGNED",
             "MATERIAL_MARKET_PLANNER_PENDING",
             "TASK_ASSIGNED",
             "TASK_DELIVERED",
@@ -73,6 +74,18 @@ class NotificationTemplateServiceTest {
             assertTrue(result.mandatory(), event + " 必须为必达通知");
             assertFalse(result.feishuCardJson().isBlank());
         }
+    }
+
+    @Test
+    void collaborationNotificationDescribesTaskManagementWithoutChangingOwnerReview() {
+        var result = service.render(
+                "PROJECT_COLLABORATION_ASSIGNED",
+                Map.of("projectName", "水杯送审", "actorName", "思欣", "projectLink", "/?projectId=5"));
+
+        assertEquals("有新的项目协作安排", result.title());
+        assertTrue(result.content().contains("思欣"));
+        assertTrue(result.content().contains("自己创建的子任务"));
+        assertEquals("/?projectId=5", result.deepLink());
     }
 
     @Test

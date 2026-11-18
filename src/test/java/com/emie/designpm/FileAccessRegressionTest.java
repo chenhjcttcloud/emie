@@ -149,6 +149,71 @@ class FileAccessRegressionTest {
         assertTrue(allowed);
     }
 
+    @Test
+    void revokedPlannerCollaboratorCanOpenOnlyCurrentlyAssignedTasksBoundFiles() {
+        FileRecordRepository records = mock(FileRecordRepository.class);
+        ProjectAccessService access = mock(ProjectAccessService.class);
+        SubTaskRepository tasks = mock(SubTaskRepository.class);
+        FileController controller = fileController(mock(FileArchiveService.class), records, access, tasks);
+        AuthSession session = new AuthSession("planner-assignee", "planner", "协作企划");
+        when(tasks.existsByIdAndDesignerIdAndAssigneeRole(21L, "planner-assignee", "planner"))
+                .thenReturn(true);
+        FileRecord assigned = FileRecord.builder()
+                .storedName("assigned.png")
+                .targetType("sub_task")
+                .targetId(21L)
+                .build();
+        FileRecord other = FileRecord.builder()
+                .storedName("other.png")
+                .targetType("sub_task")
+                .targetId(22L)
+                .build();
+        FileRecord project = FileRecord.builder()
+                .storedName("project.png")
+                .targetType("project")
+                .targetId(9L)
+                .build();
+        when(records.findByStoredName("assigned.png")).thenReturn(Optional.of(assigned));
+        when(records.findByStoredName("other.png")).thenReturn(Optional.of(other));
+        when(records.findByStoredName("project.png")).thenReturn(Optional.of(project));
+        assertTrue(ReflectionTestUtils.<Boolean>invokeMethod(
+                controller, "canAccessFile", session, "assigned.png", "assigned.png"));
+        assertFalse(ReflectionTestUtils.<Boolean>invokeMethod(
+                controller, "canAccessFile", session, "other.png", "other.png"));
+        assertFalse(ReflectionTestUtils.<Boolean>invokeMethod(
+                controller, "canAccessFile", session, "project.png", "project.png"));
+        AuthSession formerPublisher = new AuthSession("old-publisher", "planner", "原发布人");
+        assertFalse(ReflectionTestUtils.<Boolean>invokeMethod(
+                controller, "canAccessFile", formerPublisher, "assigned.png", "assigned.png"));
+        when(tasks.existsByIdAndDesignerIdAndAssigneeRole(21L, "planner-assignee", "planner"))
+                .thenReturn(false);
+        assertFalse(ReflectionTestUtils.<Boolean>invokeMethod(
+                controller, "canAccessFile", session, "assigned.png", "assigned.png"));
+    }
+
+    @Test
+    void assignedPlannerLegacyReferencesRequireExactFilenamesAndValidJson() {
+        FileRecordRepository records = mock(FileRecordRepository.class);
+        ProjectAccessService access = mock(ProjectAccessService.class);
+        SubTaskRepository tasks = mock(SubTaskRepository.class);
+        FileController controller = fileController(mock(FileArchiveService.class), records, access, tasks);
+        AuthSession session = new AuthSession("planner-assignee", "planner", "协作企划");
+        SubTaskRepository.IntegritySubTaskProjection reference =
+                mock(SubTaskRepository.IntegritySubTaskProjection.class);
+        when(tasks.findAssignedPlannerFileReferences("planner-assignee", "reference.png"))
+                .thenReturn(List.of(reference));
+        when(reference.getReferenceImagesJson())
+                .thenReturn("[{\"url\":\"/api/files/download/reference.png?authToken=old\"}]");
+        assertTrue(ReflectionTestUtils.<Boolean>invokeMethod(
+                controller, "canAccessFile", session, "reference.png", "reference.png"));
+        when(reference.getReferenceImagesJson()).thenReturn("[{\"storedName\":\"other-reference.png\"}]");
+        assertFalse(ReflectionTestUtils.<Boolean>invokeMethod(
+                controller, "canAccessFile", session, "reference.png", "reference.png"));
+        when(reference.getReferenceImagesJson()).thenReturn("broken reference.png");
+        assertFalse(ReflectionTestUtils.<Boolean>invokeMethod(
+                controller, "canAccessFile", session, "reference.png", "reference.png"));
+    }
+
     private static void resetUploadSlots() {
         Semaphore slots = (Semaphore) ReflectionTestUtils.getField(FileController.class, "UPLOAD_SLOTS");
         assert slots != null;

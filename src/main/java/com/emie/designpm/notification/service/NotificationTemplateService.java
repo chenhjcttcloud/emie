@@ -54,6 +54,18 @@ public class NotificationTemplateService {
                     deadline,
                     actor,
                     context);
+            case "PROJECT_COLLABORATION_ASSIGNED" -> create(
+                    eventType,
+                    "有新的项目协作安排",
+                    "{{actorName}}已将你设为“{{projectName}}”的协作企划，可进入项目发布和管理自己创建的子任务。",
+                    "high",
+                    true,
+                    projectLink(context),
+                    project,
+                    "项目协作",
+                    deadline,
+                    actor,
+                    context);
             case "MATERIAL_MARKET_PLANNER_PENDING" -> create(
                     eventType,
                     "素材广场有新的待接单项目",

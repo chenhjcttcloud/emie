@@ -55,6 +55,15 @@ public interface SubTaskRepository extends JpaRepository<SubTask, Long> {
     List<Long> findIdsUpdatedBetween(
             @Param("after") LocalDateTime after, @Param("until") LocalDateTime until, Pageable pageable);
 
+    boolean existsByIdAndDesignerIdAndAssigneeRole(Long id, String designerId, String assigneeRole);
+
+    @Query(
+            "SELECT t.id AS id, t.referenceImagesJson AS referenceImagesJson, t.attachmentsJson AS attachmentsJson "
+                    + "FROM SubTask t WHERE t.designerId = :userId AND t.assigneeRole = 'planner' AND "
+                    + "(t.referenceImagesJson LIKE CONCAT('%', :storedName, '%') OR t.attachmentsJson LIKE CONCAT('%', :storedName, '%'))")
+    List<IntegritySubTaskProjection> findAssignedPlannerFileReferences(
+            @Param("userId") String userId, @Param("storedName") String storedName);
+
     List<SubTask> findByDesignerId(String designerId);
 
     List<SubTask> findByDesignerIdOrderByCreatedAtDesc(String designerId);

@@ -3,6 +3,7 @@ const getCurrentUserName = (...args) => EMIE.actions.getCurrentUserName(...args)
 const getCurrentUserId = (...args) => EMIE.actions.getCurrentUserId(...args);
 const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const apiPost = (...args) => EMIE.actions.apiPost(...args);
+const apiPut = (...args) => EMIE.actions.apiPut(...args);
 const openEditProject = (...args) => EMIE.actions.openEditProject(...args);
 const tryOpenModal = (...args) => EMIE.actions.tryOpenModal(...args);
 const doneOpenModal = (...args) => EMIE.actions.doneOpenModal(...args);
@@ -35,6 +36,106 @@ const taskCorrectDelivery = (...args) => EMIE.actions.taskCorrectDelivery(...arg
 const renderTaskPointSummary = (...args) => EMIE.actions.renderTaskPointSummary(...args);
 const renderSubTaskDetailBody = (...args) => EMIE.actions.renderSubTaskDetailBody(...args);
 const clearSWRCache = (...args) => EMIE.actions.clearSWRCache(...args);
+
+function projectViewerKey() {
+  return `${EMIE.state.currentRole}:${getCurrentUserId()}`;
+}
+
+function isProjectPlannerOwner(detail) {
+  return EMIE.state.currentRole === 'planner'
+    && !!getCurrentUserId() && String(detail.plannerId || '') === String(getCurrentUserId());
+}
+
+function isProjectCollaborator(detail) {
+  return EMIE.state.currentRole === 'planner' && !!getCurrentUserId()
+    && (detail.collaborators || []).some(user => String(user.userId) === String(getCurrentUserId()));
+}
+
+function canCreateProjectSubTasks(detail) {
+  return (isProjectPlannerOwner(detail) || isProjectCollaborator(detail))
+    && EMIE.actions.hasPermission('subtask.create');
+}
+
+function canManageProjectTask(detail, task) {
+  return EMIE.state.currentRole === 'admin' || isProjectPlannerOwner(detail)
+    || (isProjectCollaborator(detail) && String(task.publisherId || '') === String(getCurrentUserId()));
+}
+
+function canEditProjectCollaborators(detail) {
+  return EMIE.state.currentRole === 'admin' || isProjectPlannerOwner(detail);
+}
+
+function renderProjectCollaborators(detail) {
+  const collaborators = detail.collaborators || [];
+  return `<section class="detail-section">
+    <div class="detail-section-title">协作企划
+      ${canEditProjectCollaborators(detail) ? `<button type="button" class="btn btn-outline btn-sm" style="margin-left:auto;" data-emie-action="click:detail-collaborators-edit" data-project-id="${detail.id}">编辑协作企划</button>` : ''}
+    </div>
+    <p style="font-size:13px;color:var(--gray-600);">${collaborators.length ? collaborators.map(user => escHtml(user.name || user.userId)).join('、') : '尚未设置协作企划'}</p>
+    ${collaborators.length ? '<p class="form-hint">协作企划可创建并管理自己发布的子任务，项目负责人负责审核与评分。</p>' : ''}
+  </section>`;
+}
+
+async function openProjectCollaborators(projectId) {
+  if (!tryOpenModal('projectCollaboratorsModal')) return;
+  const viewer = projectViewerKey();
+  try {
+    const [detail, users] = await Promise.all([apiGet(`/projects/${projectId}`), apiGet('/users')]);
+    if (projectViewerKey() !== viewer) { doneOpenModal('projectCollaboratorsModal'); return; }
+    if (!canEditProjectCollaborators(detail)) throw new Error('仅项目负责人或管理员可调整协作企划');
+    const selected = new Set((detail.collaborators || []).map(user => String(user.userId)));
+    const candidates = new Map((users.planner || []).filter(user => user.userId !== detail.plannerId
+      && (!user.status || user.status === 'active')).map(user => [String(user.userId), user]));
+    for (const user of detail.collaborators || []) {
+      if (!candidates.has(String(user.userId))) candidates.set(String(user.userId), user);
+    }
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'projectCollaboratorsModal';
+    modal.dataset.viewerKey = viewer;
+    modal.innerHTML = `<div class="modal">
+      <div class="modal-header"><button class="modal-close" data-emie-action="click:detail-collaborators-close">✕</button><div class="modal-header-left"><div class="modal-title">编辑协作企划</div></div></div>
+      <div class="modal-body">
+        <p class="form-hint" style="margin-bottom:16px;">选中的企划可查看本项目，创建、分配和管理自己发布的子任务。新增协作人会收到通知，项目负责人负责审核与评分。</p>
+        <div id="projectCollaboratorsError" role="alert" style="color:var(--danger);margin-bottom:12px;" hidden></div>
+        <div class="checkbox-group">${[...candidates.values()].map(user => `<label class="checkbox-item ${selected.has(String(user.userId)) ? 'checked' : ''}">
+          <input type="checkbox" name="projectCollaborator" value="${escHtml(user.userId)}" style="display:block;accent-color:var(--primary);" ${selected.has(String(user.userId)) ? 'checked' : ''} data-emie-action="change:detail-collaborator-toggle"><span>${escHtml(user.name || user.userId)}</span>
+        </label>`).join('')}</div>
+        ${candidates.size ? '' : '<p class="form-hint">暂无其他在职产品企划。</p>'}
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:detail-collaborators-close">取消</button><button class="btn btn-primary" data-emie-action="click:detail-collaborators-save" data-project-id="${projectId}">保存协作企划</button></div>
+    </div>`;
+    document.body.appendChild(modal);
+    doneOpenModal('projectCollaboratorsModal');
+  } catch (error) {
+    doneOpenModal('projectCollaboratorsModal');
+    if (projectViewerKey() === viewer) EMIE.actions.showSystemAlert('加载协作企划失败：' + error.message);
+  }
+}
+
+async function saveProjectCollaborators(projectId) {
+  const modal = document.getElementById('projectCollaboratorsModal');
+  const viewer = projectViewerKey();
+  if (!modal || modal.dataset.viewerKey !== viewer) return;
+  const error = modal.querySelector('#projectCollaboratorsError');
+  const userIds = [...modal.querySelectorAll('input[name="projectCollaborator"]:checked')].map(input => input.value);
+  error.hidden = true;
+  try {
+    const detail = await apiPut(`/projects/${projectId}/collaborators`, { userIds });
+    if (projectViewerKey() !== viewer || !modal.isConnected) return;
+    closeM('projectCollaboratorsModal');
+    clearSWRCache();
+    const body = document.querySelector('#projectDetailModal .modal-body');
+    const actions = document.getElementById('detailActions');
+    if (body) body.innerHTML = renderProjectDetailContent(detail);
+    if (actions) actions.innerHTML = renderProjectActions(detail);
+    await refreshAfterMutation(projectId);
+  } catch (failure) {
+    if (projectViewerKey() !== viewer || !modal.isConnected) return;
+    error.textContent = failure.message || '协作企划保存失败，请重试';
+    error.hidden = false;
+  }
+}
 
 function formatProjectIp(ipName, ipSubOptions) {
   if (!ipName) return '无IP';
@@ -118,9 +219,7 @@ async function openProjectDetail(pid, taskId) {
 function renderProjectDetailContent(detail) {
   EMIE.projectState.currentProjectDetail = detail;
   const isChannel = detail.type === 'channel_custom';
-  const canManageSubTasks = EMIE.state.currentRole === 'planner'
-    && detail.plannerId === getCurrentUserId()
-    && EMIE.actions.hasPermission('subtask.create');
+  const canManageSubTasks = canCreateProjectSubTasks(detail);
   const canEditInformation = (isChannel
       && EMIE.state.currentRole === 'sales' && detail.salesId === getCurrentUserId()
       && EMIE.actions.hasPermission('project.channel.edit'))
@@ -178,6 +277,8 @@ function renderProjectDetailContent(detail) {
     ${renderProductArchiveSection(detail)}
 
     ${renderProjectRelatedRoles(detail)}
+
+    ${renderProjectCollaborators(detail)}
 
     <div class="detail-section">
       <div class="detail-section-title">
@@ -343,7 +444,10 @@ function renderLogLabel(l) {
 
 function renderSubTaskCard(detail, task, idx) {
   const tsi = getTaskStatusInfo(task.status);
-  const isPlanner = EMIE.state.currentRole === 'planner';
+  const isOwner = isProjectPlannerOwner(detail);
+  const canManageTask = canManageProjectTask(detail, task);
+  const canEditTask = canManageTask && EMIE.actions.hasPermission('subtask.edit');
+  const canDeleteTask = canManageTask && EMIE.actions.hasPermission('subtask.delete');
   const myTask = ['designer', 'supplychain', 'planner', 'promotion'].includes(EMIE.state.currentRole) && task.designerId === getCurrentUserId();
   const doneStatuses = ['delivered', 'planner_approved', 'sales_approved', 'admin_approved', 'completed'];
   const isDone = doneStatuses.includes(task.status);
@@ -395,26 +499,26 @@ function renderSubTaskCard(detail, task, idx) {
 
     <div class="subtask-actions${task.pendingChangeBonusRequestId ? ' has-change-note' : ''}">
       ${/* 企划验收（首轮）：常规品直接通过；渠道定制单进入企划确认状态 */''}
-      ${isPlanner && String(getCurrentUserId()) === String(detail.plannerId || '') && ['delivered', 'submitted_for_review', 'planner_approved'].includes(task.status) ? `
+      ${isOwner && ['delivered', 'submitted_for_review', 'planner_approved'].includes(task.status) ? `
         <button class="btn btn-success btn-sm" data-emie-action="click:detail-task-approve" data-project-id="${detail.id}" data-task-id="${task.id}" data-project-type="${escHtml(detail.type)}">✅ 确认</button>
         <button class="btn btn-danger btn-sm" data-emie-action="click:detail-task-reject" data-project-id="${detail.id}" data-task-id="${task.id}">↩️ 驳回</button>
       ` : ''}
       ${/* 渠道定制单：销售第二轮确认 */''}
-      ${isPlanner && String(getCurrentUserId()) === String(detail.plannerId || '') && (!task.assigneeRole || task.assigneeRole === 'designer') && task.status === 'completed' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-change-bonus" data-project-id="${detail.id}" data-task-id="${task.id}">修改</button>` : ''}
+      ${isOwner && (!task.assigneeRole || task.assigneeRole === 'designer') && task.status === 'completed' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-change-bonus" data-project-id="${detail.id}" data-task-id="${task.id}">修改</button>` : ''}
       ${myTask && task.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-accept" data-project-id="${detail.id}" data-task-id="${task.id}">✅ 接单</button>` : ''}
       ${myTask && task.status === 'accepted' ? (isRedelivering ? `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-redeliver" data-project-id="${detail.id}" data-task-id="${task.id}">📤 重新交付</button>` : `<button class="btn btn-primary btn-sm" data-emie-action="click:detail-task-deliver" data-project-id="${detail.id}" data-task-id="${task.id}">📤 交付成果</button>`) : ''}
       ${task.status === 'rejected' && task.activeRejectionCycleId && task.activeRejectionRole === EMIE.state.currentRole && (
-        (isPlanner && task.activeRejectionRole === 'planner')
-        || (EMIE.state.currentRole === 'sales' && detail.type === 'channel_custom')
+        (isOwner && task.activeRejectionRole === 'planner')
+        || (EMIE.state.currentRole === 'sales' && detail.type === 'channel_custom' && String(detail.salesId || '') === String(getCurrentUserId()))
         || (EMIE.state.currentRole === 'admin' && detail.type !== 'channel_custom')
       ) ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-cancel-reject" data-project-id="${detail.id}" data-task-id="${task.id}" data-cycle-id="${task.activeRejectionCycleId}">↩️ 取消驳回</button>` : ''}
       ${myTask && ['rejected', 'revision_requested'].includes(task.status) ? `<button class="btn btn-warning btn-sm" data-emie-action="click:detail-task-confirm-revision" data-project-id="${detail.id}" data-task-id="${task.id}">🛠️ 确认修改</button>` : ''}
       ${myTask && ['delivered', 'submitted_for_review'].includes(task.status) ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-correct" data-project-id="${detail.id}" data-task-id="${task.id}">📝 更正当前交付</button>` : ''}
-      ${isPlanner && detail.status !== 'paused' && (task.status === 'pending' || task.status === 'accepted') ? `
-        ${task.allocationStatus === 'market_open' ? `<button class="btn btn-warning btn-sm" data-emie-action="click:detail-task-withdraw" data-project-id="${detail.id}" data-task-id="${task.id}">撤回市场</button>` : ''}
-        ${task.status === 'accepted' ? `<button class="btn btn-warning btn-sm" data-emie-action="click:detail-task-cancel-accept" data-project-id="${detail.id}" data-task-id="${task.id}">取消接单</button>` : ''}
-        <button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-edit" data-project-id="${detail.id}" data-task-id="${task.id}">✏️ 编辑</button>
-        ${task.status === 'pending' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-delete" data-project-id="${detail.id}" data-task-id="${task.id}" style="color:var(--danger);border-color:var(--danger);">🗑️ 删除</button>` : ''}
+      ${canManageTask && !['paused', 'terminated', 'pending_terminate'].includes(detail.status) && (task.status === 'pending' || task.status === 'accepted') ? `
+        ${canEditTask && task.allocationStatus === 'market_open' ? `<button class="btn btn-warning btn-sm" data-emie-action="click:detail-task-withdraw" data-project-id="${detail.id}" data-task-id="${task.id}">撤回市场</button>` : ''}
+        ${canEditTask && task.status === 'accepted' ? `<button class="btn btn-warning btn-sm" data-emie-action="click:detail-task-cancel-accept" data-project-id="${detail.id}" data-task-id="${task.id}">取消接单</button>` : ''}
+        ${canEditTask ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-edit" data-project-id="${detail.id}" data-task-id="${task.id}">✏️ 编辑</button>` : ''}
+        ${canDeleteTask && task.status === 'pending' ? `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-task-delete" data-project-id="${detail.id}" data-task-id="${task.id}" style="color:var(--danger);border-color:var(--danger);">🗑️ 删除</button>` : ''}
       ` : ''}
     </div>
   </div>`;
@@ -526,10 +630,11 @@ function renderProjectActions(detail) {
       && detail.type === 'channel_custom'
       && detail.salesId != null
       && String(detail.salesId) === String(currentUserId));
-  const canCreateProjectChat = ['admin', 'planner'].includes(EMIE.state.currentRole)
+  const canCreateProjectChat = EMIE.state.currentRole === 'admin' || isProjectPlannerOwner(detail)
     || canManageProject;
 
-  if (EMIE.state.currentRole === 'planner' && detail.status === 'pending_planner' && detail.type === 'channel_custom') {
+  if (EMIE.state.currentRole === 'planner' && detail.status === 'pending_planner' && detail.type === 'channel_custom'
+      && (isProjectPlannerOwner(detail) || !detail.plannerId)) {
     actions += `<button class="btn btn-primary" data-emie-action="click:detail-project-accept" data-project-id="${detail.id}">✅ 接单</button>`;
   }
   if (EMIE.state.currentRole === 'planner' && detail.status === 'draft' && detail.type === 'regular'
@@ -571,7 +676,7 @@ function renderProjectActions(detail) {
       && (!detail.feishuChatStatus || ['not_created', 'failed', 'dissolved'].includes(detail.feishuChatStatus))) {
     actions += `<button class="btn btn-outline btn-sm" data-emie-action="click:detail-chat-create" data-project-id="${detail.id}">💬 创建项目群</button>`;
   }
-  if (hasProjectChat && ['completed', 'terminated', 'pending_terminate'].includes(detail.status)) {
+  if (hasProjectChat && canCreateProjectChat && ['completed', 'terminated', 'pending_terminate'].includes(detail.status)) {
     actions += `<button class="btn btn-danger btn-sm" data-emie-action="click:detail-chat-dissolve" data-project-id="${detail.id}">解散项目群</button>`;
   }
   // 管理员可永久删除项目
@@ -1122,6 +1227,10 @@ async function plannerAcceptFromList(pid) {
 
 
 EMIE.registerActions({
+  canCreateProjectSubTasks,
+  canManageProjectTask,
+  openProjectCollaborators,
+  saveProjectCollaborators,
   openProjectDetail,
   renderProjectDetailContent,
   cleanLogAction,
@@ -1159,6 +1268,10 @@ EMIE.registerActions({
 });
 
 EMIE.registerModule('projectDetail', {
+  canCreateProjectSubTasks,
+  canManageProjectTask,
+  openProjectCollaborators,
+  saveProjectCollaborators,
   openProjectDetail,
   renderProjectDetailContent,
   renderProjectActions,
@@ -1178,6 +1291,10 @@ EMIE.registerModule('projectDetail', {
 
 const registerEventAction = EMIE.actions.registerEventAction;
 if (registerEventAction) {
+  registerEventAction('detail-collaborators-edit', (_event, element) => openProjectCollaborators(Number(element.dataset.projectId)));
+  registerEventAction('detail-collaborators-close', () => closeM('projectCollaboratorsModal'));
+  registerEventAction('detail-collaborator-toggle', (_event, element) => element.closest('.checkbox-item')?.classList.toggle('checked', element.checked));
+  registerEventAction('detail-collaborators-save', (_event, element) => EMIE.actions.submitGuard(element, () => saveProjectCollaborators(Number(element.dataset.projectId))));
   registerEventAction('detail-close', () => closeM('projectDetailModal'));
   registerEventAction('detail-subtask-close', () => closeM('projectSubTaskDetailModal'));
   registerEventAction('detail-rejection-close', () => closeM('taskRejectionRecordModal'));

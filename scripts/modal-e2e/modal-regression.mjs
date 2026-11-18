@@ -553,14 +553,21 @@ async function runVisualTaskRuleChecks(page) {
     };
     const original = Object.fromEntries(['apiGet', 'apiPost', 'apiPut', 'hasPermission', 'refreshAfterMutation']
       .map(key => [key, e.actions[key]]));
-    const fixture = window.visualTaskRuleFixture = { original, users: e.state.users, gets: [], writes: [] };
-    e.state.users = { ...e.state.users, designer: [{ userId: 777, name: '测试设计师' }] };
+    const fixture = window.visualTaskRuleFixture = { original, users: e.state.users,
+      role: e.state.currentRole, userId: e.state.currentUserId, authUser: e.state.authUser,
+      projectDetail: e.projectState.currentProjectDetail, gets: [], writes: [] };
+    e.state.currentRole = 'planner';
+    e.state.currentUserId = 'visual-rule-planner';
+    e.state.authUser = { userId: 'visual-rule-planner', name: '积分规则测试企划', role: 'planner' };
+    e.state.users = { ...e.state.users, designer: [{ userId: 777, name: '测试设计师' }],
+      planner: [{ userId: 'visual-rule-planner', name: '积分规则测试企划' }] };
+    e.projectState.currentProjectDetail = null;
     e.actions.hasPermission = () => true;
     e.actions.refreshAfterMutation = async () => {};
     e.actions.apiGet = async url => {
       fixture.gets.push(url);
       if (url === '/points/rules') return rules;
-      if (url === '/projects/301') return { tasks: [task, legacyTask] };
+      if (url === '/projects/301') return { id: 301, plannerId: 'visual-rule-planner', collaborators: [], tasks: [task, legacyTask] };
       return original.apiGet(url);
     };
     const capture = async (url, body) => { fixture.writes.push({ url, body }); };
@@ -688,9 +695,13 @@ async function runVisualTaskRuleChecks(page) {
   } finally {
     await page.evaluate(() => {
       const e = window.EMIE;
-      const { original, users } = window.visualTaskRuleFixture;
+      const { original, users, role, userId, authUser, projectDetail } = window.visualTaskRuleFixture;
       Object.assign(e.actions, original);
       e.state.users = users;
+      e.state.currentRole = role;
+      e.state.currentUserId = userId;
+      e.state.authUser = authUser;
+      e.projectState.currentProjectDetail = projectDetail;
       ['addSubTaskModal', 'editTaskModal', 'taskChangeBonusModal'].forEach(id => document.getElementById(id)?.remove());
       delete window.visualTaskRuleFixture;
     });

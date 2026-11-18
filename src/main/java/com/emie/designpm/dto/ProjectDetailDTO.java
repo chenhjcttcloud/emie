@@ -17,6 +17,7 @@ public class ProjectDetailDTO {
     private String salesId;
     private String plannerName;
     private String plannerId;
+    private List<Map<String, String>> collaborators = List.of();
     private String productName;
     private String deadline;
     private String productRequirements;

@@ -15,6 +15,32 @@ import org.springframework.data.repository.query.Param;
 
 public interface ProjectRepository extends JpaRepository<Project, Long>, ProjectSearchRepository {
 
+    @Query("SELECT CASE WHEN COUNT(c) > 0 THEN true ELSE false END FROM ProjectCollaborator c "
+            + "WHERE c.projectId = :projectId AND c.userId = :userId")
+    boolean isCollaborator(@Param("projectId") Long projectId, @Param("userId") String userId);
+
+    @Query("SELECT DISTINCT p.plannerId FROM Project p WHERE p.id IN "
+            + "(SELECT c.projectId FROM ProjectCollaborator c WHERE c.userId = :userId) "
+            + "AND p.plannerId IS NOT NULL")
+    List<String> findCollaboratorProjectPlannerIds(@Param("userId") String userId);
+
+    @Query(
+            "SELECT p FROM Project p WHERE p.plannerId IN :ownerIds OR "
+                    + "(p.type = 'channel_custom' AND p.status = 'pending_planner' AND (p.plannerId IS NULL OR p.plannerId = '')) OR "
+                    + "p.id IN (SELECT c.projectId FROM ProjectCollaborator c WHERE c.userId = :viewerId) ORDER BY p.createdAt DESC")
+    List<Project> findPlannerProjectsLight(
+            @Param("ownerIds") List<String> ownerIds, @Param("viewerId") String viewerId);
+
+    @Query(
+            "SELECT DISTINCT p FROM Project p LEFT JOIN FETCH p.tasks WHERE p.plannerId IN :ownerIds OR "
+                    + "(p.type = 'channel_custom' AND p.status = 'pending_planner' AND (p.plannerId IS NULL OR p.plannerId = '')) OR "
+                    + "p.id IN (SELECT c.projectId FROM ProjectCollaborator c WHERE c.userId = :viewerId) ORDER BY p.createdAt DESC")
+    List<Project> findPlannerProjectsWithTasks(
+            @Param("ownerIds") List<String> ownerIds, @Param("viewerId") String viewerId);
+
+    @Query("SELECT p.id FROM Project p WHERE p.plannerId = :userId")
+    List<Long> findOwnedPlannerProjectIds(@Param("userId") String userId);
+
     interface IntegrityProjectProjection {
         Long getId();
 

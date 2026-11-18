@@ -5,8 +5,6 @@ import static org.mockito.Mockito.*;
 
 import com.emie.designpm.admin.repository.UserRepository;
 import com.emie.designpm.auth.AuthSession;
-import com.emie.designpm.entity.Project;
-import com.emie.designpm.entity.User;
 import com.emie.designpm.project.repository.ProjectRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
 import com.emie.designpm.project.service.ProjectService;
@@ -39,20 +37,18 @@ class DashboardCountReuseTest {
     }
 
     @Test
-    void plannerAllKeepsItsDistinctAdminCount() {
-        when(users.findByRole("planner"))
-                .thenReturn(List.of(User.builder().userId("viewer").build()));
-        Project project = new Project();
-        project.setId(1L);
-        when(projects.findByPlannerViewLight("viewer")).thenReturn(List.of(project));
+    void plannerAllCannotEscalateVisibleProjectsOrReviewCount() {
+        when(service.findVisibleProjectIds("planner", "viewer")).thenReturn(List.of(1L));
         when(service.getNavigationBadgeStats("planner", "viewer")).thenReturn(Map.of("pendingScoreCount", 2L));
-        when(service.countPendingScoresForUser("admin", "viewer")).thenReturn(9L);
         Map<String, Object> body = controller
                 .getFullDashboard("ignored", "ignored", "all", false, request("planner"))
                 .getBody();
-        assertEquals(9L, ((Map<?, ?>) body.get("stats")).get("pendingScore"));
+        assertEquals(2L, ((Map<?, ?>) body.get("stats")).get("pendingScore"));
         assertEquals(2L, ((Map<?, ?>) body.get("badgeStats")).get("pendingScoreCount"));
-        verify(service, times(1)).countPendingScoresForUser("admin", "viewer");
+        verify(service, never()).countPendingScoresForUser(anyString(), anyString());
+        verify(users, never()).findByRole("planner");
+        verify(projects, never()).findByPlannerViewLight(anyString());
+        verify(projects).findRecentIdsByIdIn(eq(List.of(1L)), any());
     }
 
     @Test

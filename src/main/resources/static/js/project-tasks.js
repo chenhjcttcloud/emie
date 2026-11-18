@@ -163,6 +163,12 @@ async function addSubTask(pid) {
     window.EMIE.actions.showSystemAlert('当前账号没有新建子任务的权限');
     return;
   }
+  const currentDetail = EMIE.projectState.currentProjectDetail;
+  if (Number(currentDetail?.id) === Number(pid) && !EMIE.actions.canCreateProjectSubTasks(currentDetail)) {
+    window.EMIE.actions.showSystemAlert('仅项目负责人、协作企划或管理员可新建子任务');
+    return;
+  }
+  const viewer = `${EMIE.state.currentRole}:${getCurrentUserId()}`;
   // 清理可能残留的其他弹窗，避免遮挡
   document.querySelectorAll('.modal-overlay').forEach(el => {
     if (el.id !== 'projectDetailModal' && el.id !== 'addSubTaskModal') el.remove();
@@ -176,6 +182,7 @@ async function addSubTask(pid) {
     window.EMIE.actions.showSystemAlert('积分规则加载失败：' + (error.message || '请稍后重试'));
     return;
   }
+  if (viewer !== `${EMIE.state.currentRole}:${getCurrentUserId()}`) return;
   const { rules: pointRules, hasVisualCatalog } = pointRulesForTaskBinding(catalog);
   const designerOpts = `<option value="">请选择设计师</option>` +
     EMIE.state.users.designer.map(u => `<option value="${u.userId}">${escHtml(displayText(u.name))} (${escHtml(displayText(u.title, '未设置职级'))})</option>`).join('');
@@ -199,7 +206,7 @@ async function addSubTask(pid) {
     <div class="modal modal-lg">
       <div class="modal-header"><div class="modal-header-left"><div class="modal-title">➕ 添加子任务</div></div></div>
       <div class="modal-body">
-        <form id="addSubTaskForm">
+        <form id="addSubTaskForm" data-viewer-key="${escHtml(viewer)}">
           <div class="form-group"><label class="form-label"><span class="required">*</span> 子任务名称</label><input type="text" class="form-input" name="name" required placeholder="如：首页Banner设计、详情页布局..." data-emie-action="input:task-clear-field-error"></div>
           <div class="form-row">
             <div class="form-group"><label class="form-label"><span class="required">*</span> 所属阶段</label>
@@ -327,6 +334,11 @@ function saveSubTaskDraft(pid) {
 }
 
 async function submitAddSubTask(pid) {
+  const openForm = document.getElementById('addSubTaskForm');
+  if (openForm?.dataset.viewerKey && openForm.dataset.viewerKey !== `${EMIE.state.currentRole}:${getCurrentUserId()}`) {
+    window.EMIE.actions.showSystemAlert('当前身份已变化，请重新打开子任务');
+    return;
+  }
   if (!pid) { window.EMIE.actions.showSystemAlert('项目ID无效'); return; }
   if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
   // 清除之前错误
@@ -412,10 +424,21 @@ async function submitAddSubTask(pid) {
 }
 
 function editTask(pid, tid) {
+  if (!EMIE.actions.hasPermission('subtask.edit')) {
+    window.EMIE.actions.showSystemAlert('当前账号没有编辑子任务的权限');
+    return;
+  }
   if (!tryOpenModal('editTaskModal')) return;
+  const viewer = `${EMIE.state.currentRole}:${getCurrentUserId()}`;
   Promise.all([apiGet(`/projects/${pid}`), apiGet('/points/rules')]).then(([detail, rules]) => {
+    if (viewer !== `${EMIE.state.currentRole}:${getCurrentUserId()}`) { doneOpenModal('editTaskModal'); return; }
     const task = detail.tasks.find(t => t.id === tid);
     if (!task) { doneOpenModal('editTaskModal'); return; }
+    if (!EMIE.actions.canManageProjectTask(detail, task)) {
+      doneOpenModal('editTaskModal');
+      window.EMIE.actions.showSystemAlert('当前账号没有管理该子任务的权限');
+      return;
+    }
     const selectedCode = task.pointRuleCode || '';
     const catalogRule = rules.find(rule => rule.ruleCode === selectedCode);
     const { rules: selectableRules } = pointRulesForTaskBinding(rules);
@@ -468,7 +491,7 @@ function editTask(pid, tid) {
       <div class="modal modal-lg">
         <div class="modal-header"><div class="modal-header-left"><div class="modal-title">✏️ 编辑子任务</div></div></div>
         <div class="modal-body">
-          <form id="editTaskForm" data-original-point-rule="${escHtml(selectedCode)}">
+          <form id="editTaskForm" data-original-point-rule="${escHtml(selectedCode)}" data-viewer-key="${escHtml(viewer)}">
             <div class="form-group"><label class="form-label">子任务名称</label><input type="text" class="form-input" name="name" value="${escHtml(task.name)}"></div>
             <div class="form-row">
               <div class="form-group"><label class="form-label"><span class="required">*</span> 所属阶段</label>
@@ -546,6 +569,10 @@ function handleEditAttachments(input) { handleFileUpload(input, EMIE.projectStat
 async function submitEditTask(pid, tid) {
   if (EMIE.projectState.uploadingCount > 0) { window.EMIE.actions.showSystemAlert('文件正在上传中，请等待上传完成'); return; }
   const form = document.getElementById('editTaskForm');
+  if (form?.dataset.viewerKey && form.dataset.viewerKey !== `${EMIE.state.currentRole}:${getCurrentUserId()}`) {
+    window.EMIE.actions.showSystemAlert('当前身份已变化，请重新打开子任务');
+    return;
+  }
   const fd = new FormData(form);
   const data = Object.fromEntries(fd.entries());
   if (data.assigneeRole !== 'designer' || data.pointRuleCode === form.dataset.originalPointRule) delete data.pointRuleCode;
@@ -581,6 +608,10 @@ async function submitEditTask(pid, tid) {
 }
 
 async function deleteTask(pid, tid) {
+  if (!EMIE.actions.hasPermission('subtask.delete')) {
+    window.EMIE.actions.showSystemAlert('当前账号没有删除子任务的权限');
+    return;
+  }
   if (!await EMIE.actions.showSystemConfirm('确定要删除这个子任务吗？此操作不可恢复。')) return;
   try {
     await apiDelete(`/projects/${pid}/tasks/${tid}`);
@@ -592,6 +623,10 @@ async function deleteTask(pid, tid) {
 }
 
 async function withdrawMarketTask(pid, tid) {
+  if (!EMIE.actions.hasPermission('subtask.edit')) {
+    window.EMIE.actions.showSystemAlert('当前账号没有编辑子任务的权限');
+    return;
+  }
   if (!await EMIE.actions.showSystemConfirm('确认将该任务撤出接单市场？撤回后设计师将无法抢单。')) return;
   try {
     await apiPost(`/projects/${pid}/tasks/${tid}/withdraw-market`, {});
@@ -608,6 +643,10 @@ async function withdrawAcceptedTask(pid, tid) {
 }
 
 async function cancelAcceptedTask(pid, tid) {
+  if (!EMIE.actions.hasPermission('subtask.edit')) {
+    window.EMIE.actions.showSystemAlert('当前账号没有编辑子任务的权限');
+    return;
+  }
   if (!await EMIE.actions.showSystemConfirm('确认取消该任务的接单吗？当前负责人将被释放，任务内容会保留并回到待处理。')) return;
   try { await apiPost(`/projects/${pid}/tasks/${tid}/cancel-accept`, {}); await refreshAfterMutation(pid); }
   catch (e) { window.EMIE.actions.showSystemAlert('取消接单失败：' + e.message); }

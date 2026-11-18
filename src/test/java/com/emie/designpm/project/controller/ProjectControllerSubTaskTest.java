@@ -1,8 +1,10 @@
 package com.emie.designpm.project.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.emie.designpm.admin.repository.ActivityLogRepository;
@@ -114,15 +116,17 @@ class ProjectControllerSubTaskTest {
     }
 
     @Test
-    void plannerCanCreateMissingChatForChannelAndRegularProjects() throws Exception {
+    void plannerCanCreateMissingChatForVisibleChannelAndRegularProjects() throws Exception {
         ProjectService projects = mock(ProjectService.class);
         FeishuChatService chats = mock(FeishuChatService.class);
+        ProjectAccessService access = mock(ProjectAccessService.class);
+        when(access.canView(any(Project.class), any(AuthSession.class))).thenReturn(true);
         ProjectController controller = new ProjectController(
                 projects,
                 mock(ScoringRepository.class),
                 mock(ActivityLogRepository.class),
                 mock(SubTaskRepository.class),
-                mock(ProjectAccessService.class),
+                access,
                 mock(ProjectWorkflowService.class));
         ReflectionTestUtils.setField(controller, "feishuChatService", chats);
         when(chats.enabled()).thenReturn(true);
@@ -148,6 +152,28 @@ class ProjectControllerSubTaskTest {
         assertEquals(HttpStatus.OK, regularResponse.getStatusCode(), String.valueOf(regularResponse.getBody()));
         assertEquals("created", channel.getFeishuChatStatus());
         assertEquals("created", regular.getFeishuChatStatus());
+    }
+
+    @Test
+    void ownScopedPlannerCannotReadHiddenProjectThroughExistingChatEndpoint() {
+        ProjectService projects = mock(ProjectService.class);
+        FeishuChatService chats = mock(FeishuChatService.class);
+        ProjectAccessService access = mock(ProjectAccessService.class);
+        ProjectController controller = new ProjectController(
+                projects,
+                mock(ScoringRepository.class),
+                mock(ActivityLogRepository.class),
+                mock(SubTaskRepository.class),
+                access,
+                mock(ProjectWorkflowService.class));
+        ReflectionTestUtils.setField(controller, "feishuChatService", chats);
+        Project hidden = project(13L, "其他企划保密项目", "保密资料");
+        hidden.setPlannerId("planner-owner");
+        hidden.setFeishuChatId("existing-chat");
+        when(projects.getProjectById(13L)).thenReturn(java.util.Optional.of(hidden));
+        var response = controller.createProjectChat(13L, request("planner-other", "planner"));
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        verifyNoInteractions(chats);
     }
 
     private ProjectController controller(SubTaskRepository tasks, ScoringRepository scoring) {

@@ -288,16 +288,21 @@ class FrontendModuleLayoutTest {
     }
 
     @Test
-    void addSubTaskButtonRequiresProjectPlannerOwnership() throws IOException {
+    void addSubTaskButtonRequiresProjectPlannerOwnershipOrCollaboration() throws IOException {
         String detail = readResource("/static/js/project-detail.js");
 
         assertFalse(
                 detail.contains("const canManageSubTasks = EMIE.state.currentRole === 'admin'"), "管理员不能代替产品企划创建子任务");
         assertTrue(
-                detail.contains("const canManageSubTasks = EMIE.state.currentRole === 'planner'"),
-                "添加子任务入口必须限定为产品企划角色");
-        assertTrue(detail.contains("detail.plannerId === getCurrentUserId()"), "企划只有作为当前项目负责人时才应看到添加子任务按钮");
-        assertTrue(detail.contains("canManageSubTasks &&"), "添加子任务按钮必须复用负责人权限判断");
+                detail.contains("return (isProjectPlannerOwner(detail) || isProjectCollaborator(detail))")
+                        && detail.contains("EMIE.actions.hasPermission('subtask.create')"),
+                "添加子任务入口必须同时校验项目负责人或协作企划归属与功能权限");
+        assertTrue(
+                detail.contains("EMIE.state.currentRole === 'planner'")
+                        && detail.contains("String(detail.plannerId || '') === String(getCurrentUserId())")
+                        && detail.contains("(detail.collaborators || []).some"),
+                "企划创建子任务必须有当前项目的负责人或协作授权");
+        assertTrue(detail.contains("canManageSubTasks &&"), "添加子任务按钮必须复用项目授权判断");
         assertTrue(detail.contains("📌 子任务进度"), "项目详情应在项目总进度上方展示独立子任务进度");
         assertTrue(
                 detail.contains("design_review")

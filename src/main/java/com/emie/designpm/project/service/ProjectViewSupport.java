@@ -1,6 +1,7 @@
 package com.emie.designpm.project.service;
 
 import com.emie.designpm.admin.repository.ActivityLogRepository;
+import com.emie.designpm.admin.service.PermissionCatalog;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.dto.ProjectDetailDTO;
 import com.emie.designpm.dto.TaskDetailDTO;
@@ -50,6 +51,9 @@ public class ProjectViewSupport {
     @Autowired(required = false)
     private SubTaskRejectionCycleRepository rejectionCycleRepository;
 
+    @Autowired(required = false)
+    private ProjectCollaborationService collaborationService;
+
     public ProjectViewSupport(
             ProjectService projectService,
             ScoringRepository scoringRepository,
@@ -68,7 +72,11 @@ public class ProjectViewSupport {
     }
 
     public List<Map<String, Object>> getMySubTasks(AuthSession session) {
-        List<SubTask> tasks = subTaskRepository.findMySubTasks(session.userId());
+        List<SubTask> tasks = subTaskRepository.findMySubTasks(session.userId()).stream()
+                .filter(task -> !"planner".equals(session.role())
+                        || Objects.equals(task.getDesignerId(), session.userId())
+                        || projectAccessService.canView(task.getProject(), session))
+                .toList();
         List<Long> taskIds = tasks.stream().map(SubTask::getId).toList();
         Map<Long, List<Map<String, Object>>> scoringByTask = loadScoringDetails(taskIds);
         Map<Long, List<Map<String, Object>>> deliveriesByTask = Optional.ofNullable(
@@ -155,7 +163,14 @@ public class ProjectViewSupport {
     public List<Map<String, Object>> getDepartmentSubTasks(AuthSession session) {
         List<String> userIds = projectAccessService.departmentTaskUserIds(session.role(), session.userId());
         if (userIds.isEmpty()) return List.of();
-        List<SubTask> tasks = subTaskRepository.findDepartmentSubTasks(userIds);
+        List<Long> projectIds = "planner".equals(session.role())
+                ? projectAccessService.findVisibleProjectIds(session.role(), session.userId())
+                : List.of();
+        List<SubTask> tasks = subTaskRepository.findDepartmentSubTasks(userIds).stream()
+                .filter(task -> !"planner".equals(session.role())
+                        || (task.getProject() != null
+                                && projectIds.contains(task.getProject().getId())))
+                .toList();
         List<Long> taskIds = tasks.stream().map(SubTask::getId).toList();
         Map<Long, List<PointLedger>> ledgersByTask = loadPointLedgers(taskIds);
         Map<Long, List<Map<String, Object>>> deliveriesByTask = Optional.ofNullable(
@@ -232,6 +247,35 @@ public class ProjectViewSupport {
         return toDetail(loaded, null, logs);
     }
 
+    /** 执行人可处理已指派的任务，操作结果只包含其当前有权读取的数据。 */
+    public ProjectDetailDTO toCommandDetail(Project project, AuthSession session) {
+        if (session == null) throw new SecurityException("请先登录");
+        Project loaded = project.getId() == null
+                ? project
+                : projectService.getProjectById(project.getId()).orElse(project);
+        if (projectAccessService.canView(loaded, session)) return toDetail(loaded);
+        ProjectDetailDTO dto = new ProjectDetailDTO();
+        dto.setId(loaded.getId());
+        dto.setProjectCode(loaded.getProjectCode());
+        dto.setType(loaded.getType());
+        dto.setStatus(loaded.getStatus());
+        Map<String, String> status = ProjectService.getProjectStatusInfo(loaded.getStatus());
+        dto.setStatusLabel(status.get("label"));
+        dto.setStatusCls(status.get("cls"));
+        dto.setProductName(loaded.getProductName());
+        String role = PermissionCatalog.normalizeRole(session.role());
+        dto.setTasks(loaded.getTasks().stream()
+                .filter(task -> Objects.equals(session.userId(), task.getDesignerId()))
+                .filter(task -> role.equals(PermissionCatalog.normalizeRole(task.getAssigneeRole()))
+                        || ("designer".equals(role)
+                                && (task.getAssigneeRole() == null
+                                        || task.getAssigneeRole().isBlank())))
+                .map(this::toTaskDetail)
+                .toList());
+        dto.setLogs(List.of());
+        return dto;
+    }
+
     public ProjectDetailDTO toDetailWithLogs(Project p, List<ActivityLog> logs) {
         return toDetail(p, null, logs);
     }
@@ -271,6 +315,7 @@ public class ProjectViewSupport {
         dto.setSalesId(p.getSalesId());
         dto.setPlannerName(p.getPlannerName());
         dto.setPlannerId(p.getPlannerId());
+        dto.setCollaborators(collaborationService == null ? List.of() : collaborationService.collaborators(p.getId()));
         dto.setProductName(p.getProductName());
         dto.setDeadline(p.getDeadline());
         dto.setProductRequirements(p.getProductRequirements());
@@ -440,6 +485,7 @@ public class ProjectViewSupport {
         dto.setActualDate(task.getActualDate());
         dto.setDesignerId(task.getDesignerId());
         dto.setDesignerName(task.getDesignerName());
+        dto.setPublisherId(task.getPublisherId());
         dto.setPointRuleCode(task.getPointRuleCode());
         dto.setBasePointSnapshot(task.getBasePointSnapshot());
         dto.setSupportsChangeTiers(task.isSupportsChangeTiers());

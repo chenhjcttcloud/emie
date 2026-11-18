@@ -75,11 +75,9 @@ public class DashboardController {
                 projects.stream().map(p -> toSummary(p, taskCountMap, scoreMap)).collect(Collectors.toList());
         result.put("orders", orders);
 
-        // 同一请求复用待评分计数；企划“全部”视角保留原先的管理员统计口径。
+        // 待评分只统计查看者自身的审核责任，查看团队项目不授予他人的审核待办。
         Map<String, Long> badgeStats = projectService.getNavigationBadgeStats(role, userId);
-        long pendingScore = allPlanners
-                ? projectService.countPendingScoresForUser("admin", userId)
-                : badgeStats.get("pendingScoreCount");
+        long pendingScore = badgeStats.get("pendingScoreCount");
         // 2. Dashboard stats
         result.put("stats", computeStatsByIds(visibleProjectIds, pendingScore));
 
@@ -98,24 +96,12 @@ public class DashboardController {
     }
 
     private List<Long> visibleProjectIds(String role, String userId, boolean allPlanners) {
-        if ("planner".equals(role)) {
-            if (!allPlanners)
-                return projectRepository.findByPlannerViewLight(userId).stream()
-                        .filter(p -> Objects.equals(p.getPlannerId(), userId))
-                        .map(Project::getId)
-                        .toList();
-            return userRepository.findByRole("planner").stream()
-                    .flatMap(u -> projectRepository.findByPlannerViewLight(u.getUserId()).stream())
-                    .map(Project::getId)
-                    .distinct()
-                    .toList();
-        }
-        if (!allPlanners) return projectService.findVisibleProjectIds(role, userId);
-        return userRepository.findByRole("planner").stream()
-                .map(u -> projectService.findVisibleProjectIds("planner", u.getUserId()))
-                .flatMap(Collection::stream)
-                .distinct()
-                .toList();
+        List<Long> visible = projectService.findVisibleProjectIds(role, userId);
+        if (!"planner".equals(role) || allPlanners || visible.isEmpty()) return visible;
+        // 本人视角还包括本人作为协作企划参与的项目，不能枚举其他企划的项目。
+        List<Project> mine = projectRepository.findPlannerProjectsLight(List.of(userId), userId);
+        Set<Long> allowed = new HashSet<>(visible);
+        return mine.stream().map(Project::getId).filter(allowed::contains).toList();
     }
 
     private List<Project> dashboardProjects(String role, String userId, List<Long> ids) {

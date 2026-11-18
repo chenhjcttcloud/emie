@@ -87,6 +87,7 @@ class ProjectViewRejectionHistoryTest {
         when(projects.computeProjectStatus(project)).thenReturn("in_progress");
         when(tasks.findMySubTasks("d1")).thenReturn(List.of(task));
         when(access.departmentTaskUserIds("planner", "p1")).thenReturn(List.of("d1"));
+        when(access.findVisibleProjectIds("planner", "p1")).thenReturn(List.of(1L));
         when(tasks.findDepartmentSubTasks(List.of("d1"))).thenReturn(List.of(task));
         when(logs.findSubTaskRejectionHistory(List.of(11L), List.of(1L)))
                 .thenReturn(List.of(old, duplicate, unrelated));

@@ -343,6 +343,6 @@ public class AuthController {
         if (session == null) {
             return ResponseEntity.status(401).body(Map.of("error", "未登录或会话已过期"));
         }
-        return ResponseEntity.ok(permissionService.capabilities(session.role()));
+        return ResponseEntity.ok(permissionService.capabilities(session.role(), session.userId()));
     }
 }

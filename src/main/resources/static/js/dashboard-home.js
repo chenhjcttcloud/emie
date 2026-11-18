@@ -20,6 +20,21 @@ const refreshNavigationBadges = (...args) => EMIE.actions.refreshNavigationBadge
 let plannerBoardScope = 'mine';
 let plannerScopeUserId = '';
 
+function plannerCanViewTeamProjects() {
+  const scopes = EMIE.state.permissionScopes?.['project.view'] || [];
+  return scopes.some(scope => ['all', 'role_team', 'department'].includes(scope));
+}
+
+function plannerTeamScopeLabel() {
+  const scopes = EMIE.state.permissionScopes?.['project.view'] || [];
+  return scopes.includes('department') && !scopes.some(scope => ['all', 'role_team'].includes(scope))
+    ? '本部门企划' : '全部产品企划';
+}
+
+function dashboardPermissionKey() {
+  return JSON.stringify([EMIE.state.permissionVersion, EMIE.state.permissionScopes || {}]);
+}
+
 function navigateMyProjects() {
   const role = EMIE.state.currentRole;
   const uid = EMIE.state.currentUserId;
@@ -27,6 +42,7 @@ function navigateMyProjects() {
   if (role === 'planner' && plannerBoardScope === 'all') {
     return navigateProjectList('orders', {});
   }
+  if (role === 'planner' && !plannerCanViewTeamProjects()) return navigateProjectList('orders', {});
   if (['planner', 'sales'].includes(role) && uid) {
     return navigateProjectList('orders', { ownerRole: role, ownerId: uid });
   }
@@ -37,6 +53,7 @@ function projectCardFilters(extra = {}) {
   const role = EMIE.state.currentRole;
   const uid = EMIE.state.currentUserId;
   if (role === 'planner' && plannerBoardScope === 'all') return { ...extra };
+  if (role === 'planner' && !plannerCanViewTeamProjects()) return { ...extra };
   if (['planner', 'sales'].includes(role) && uid) return { ownerRole: role, ownerId: uid, ...extra };
   return { ...extra };
 }
@@ -53,18 +70,19 @@ async function updateBadges(role, uid) {
 async function renderDashboard(main, role, uid) {
   // 统一入口已更新 renderId，导航或刷新后丢弃旧的工作台响应。
   const renderId = EMIE.state.renderId;
-  if (role === 'planner' && plannerScopeUserId !== uid) {
+  if (role === 'planner' && (plannerScopeUserId !== uid || !plannerCanViewTeamProjects())) {
     plannerScopeUserId = uid;
     plannerBoardScope = 'mine';
   }
   // 使用 SWR 缓存 + 聚合端点（1次API替代8次）
   const scopeParam = role === 'planner' ? plannerBoardScope : 'mine';
-  const cacheKey = `dashboard_${role}_${uid}_${scopeParam}`;
+  const permissionKey = dashboardPermissionKey();
+  const cacheKey = `dashboard_${role}_${uid}_${scopeParam}_${permissionKey}`;
   const data = await swrFetch(cacheKey,
     () => apiGet(`/dashboard/full?role=${role}&userId=${uid}&scope=${scopeParam}&includeRoleStatus=false`),
     30000
   );
-  if (EMIE.state.renderId !== renderId) return;
+  if (EMIE.state.renderId !== renderId || dashboardPermissionKey() !== permissionKey) return;
 
   const orders = data.orders || [];
   const stats = data.stats || {};
@@ -83,9 +101,9 @@ async function renderDashboard(main, role, uid) {
   const rolePanelsHtml = `<div id="dashboardRoleStatus" class="dashboard-role-status-loading">正在加载状态面板…</div>`;
 
   main.innerHTML = `
-    <h2 style="font-size:22px;margin-bottom:20px;">📊 工作台 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">— ${EMIE.state.currentRole === 'planner' ? `<select class="form-input" style="display:inline-block;width:auto;min-width:130px;padding:4px 28px 4px 8px;font-size:13px;vertical-align:middle;"><option value="mine" ${plannerBoardScope === 'mine' ? 'selected' : ''}>${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}</option><option value="all" ${plannerBoardScope === 'all' ? 'selected' : ''}>全部产品企划</option></select>` : `${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}（${roleLabel(EMIE.state.currentRole)}）`}</span></h2>
+    <h2 style="font-size:22px;margin-bottom:20px;">📊 工作台 <span style="font-size:13px;color:var(--gray-400);font-weight:400;">— ${EMIE.state.currentRole === 'planner' && plannerCanViewTeamProjects() ? `<select class="form-input" aria-label="工作台项目范围" style="display:inline-block;width:auto;min-width:130px;padding:4px 28px 4px 8px;font-size:13px;vertical-align:middle;"><option value="mine" ${plannerBoardScope === 'mine' ? 'selected' : ''}>${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}</option><option value="all" ${plannerBoardScope === 'all' ? 'selected' : ''}>${plannerTeamScopeLabel()}</option></select>` : `${escHtml(EMIE.state.authUser?.name || getCurrentUserName())}（${roleLabel(EMIE.state.currentRole)}）`}</span></h2>
     ${!executionRole ? `<div class="stats-grid dashboard-stats-row">
-      <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-my-projects"><div class="stat-icon blue">📁</div><div><div class="stat-value">${stats.totalProjects}</div><div class="stat-label">${EMIE.state.currentRole === 'admin' ? '全部项目' : (plannerBoardScope === 'all' ? '全部企划项目' : '我的项目')}</div></div></div>
+      <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-my-projects"><div class="stat-icon blue">📁</div><div><div class="stat-value">${stats.totalProjects}</div><div class="stat-label">${EMIE.state.currentRole === 'admin' ? '全部项目' : (plannerBoardScope === 'all' ? plannerTeamScopeLabel() + '项目' : '我的项目')}</div></div></div>
       <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-channel"><div class="stat-icon blue">📦</div><div><div class="stat-value">${stats.channelProjects}</div><div class="stat-label">渠道定制单</div></div></div>
       <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-regular"><div class="stat-icon green">🏭</div><div><div class="stat-value">${stats.regularProjects}</div><div class="stat-label">公司常规品</div></div></div>
       <div class="stat-card" style="cursor:pointer" data-emie-action="click:home-in-progress"><div class="stat-icon yellow">🔄</div><div><div class="stat-value">${stats.inProgress}</div><div class="stat-label">进行中项目</div></div></div>
@@ -99,7 +117,7 @@ async function renderDashboard(main, role, uid) {
     ${!executionRole && orders.length === 0 ? `<div class="empty"><div class="empty-icon">📭</div><p>暂无您负责的项目</p></div>` : ''}
     ${role === 'planner' ? '<section class="dashboard-zone dashboard-task-zone"><div class="dashboard-zone-heading"><div><h3>🧩 我的子任务</h3><p>P2 / P3 · 按状态处理具体执行事项</p></div></div><div id="dashboardPlannerTasks"><div class="empty" style="padding:24px;"><p>正在加载子任务面板…</p></div></div></section><section class="dashboard-zone dashboard-project-zone"><div class="dashboard-zone-heading"><div><h3>📁 我的项目</h3><p>P1 · 查看项目整体进度与协作状态</p></div></div><div id="dashboardDesignRequirements"><div class="empty" style="padding:20px;"><p>正在加载设计/送审需求…</p></div></div>' + renderProjectSummary(channel, '📦 渠道定制单') + renderProjectSummary(regular, '🏭 公司常规品') + '</section>' : executionRole ? '<section class="dashboard-zone dashboard-task-zone"><div class="dashboard-zone-heading"><div><h3>🧩 我的子任务</h3><p>P2 / P3 · 按状态处理具体执行事项</p></div></div><div id="dashboardExecutionTasks"><div class="empty" style="padding:24px;"><p>正在加载关联子任务…</p></div></div><div id="dashboardDesignRequirements"><div class="empty" style="padding:20px;"><p>正在加载设计/送审需求…</p></div></div></section>' : '<section class="dashboard-zone dashboard-project-zone"><div class="dashboard-zone-heading"><div><h3>📁 我的项目</h3><p>P1 · 查看项目整体进度与协作状态</p></div></div><div id="dashboardDesignRequirements"><div class="empty" style="padding:20px;"><p>正在加载设计/送审需求…</p></div></div>' + renderProjectSummary(channel, '📦 渠道定制单') + renderProjectSummary(regular, '🏭 公司常规品') + '</section>'}
   `;
-  const plannerScopeSelect = main.querySelector('select.form-input');
+  const plannerScopeSelect = main.querySelector('select[aria-label="工作台项目范围"]');
   if (plannerScopeSelect) plannerScopeSelect.addEventListener('change', e => changePlannerBoardScope(e.target.value));
   loadDashboardRoleStatus(role, uid, myDept);
   loadDashboardDesignRequirements(uid, role);
@@ -158,9 +176,13 @@ function syncExecutionTaskZoneVisibility() {
 async function loadDashboardPlannerTasks(uid) {
   const container = document.getElementById('dashboardPlannerTasks');
   if (!container) return;
+  const permissionKey = dashboardPermissionKey();
+  const renderId = EMIE.state.renderId;
   try {
     const endpoint = plannerBoardScope === 'all' ? '/projects/department-subtasks' : '/projects/my-subtasks';
     const rows = await apiGet(endpoint);
+    if (!container.isConnected || EMIE.state.renderId !== renderId || EMIE.state.currentUserId !== uid
+        || dashboardPermissionKey() !== permissionKey) return;
     const tasks = (rows || []).filter(t => !['completed', 'approved', 'terminated', 'pending_terminate'].includes(String(t.projectStatus || '').toLowerCase()));
     EMIE.dashboardState.designerTaskCache = tasks;
     const groups = [
@@ -174,7 +196,11 @@ async function loadDashboardPlannerTasks(uid) {
       return `<div class="type-section"><div class="card" style="padding:0;"><div style="padding:16px 20px 0;"><div class="type-section-title">${title} <span class="count">共 ${list.length} 个</span></div></div><div style="padding:0 20px 16px;">${list.length ? `<div class="table-wrap"><table class="dashboard-uniform-task-table"><thead><tr><th>子任务</th><th>所属项目</th><th>负责人</th><th>要求完成时间</th><th>状态</th></tr></thead><tbody>${list.slice(0, 8).map(t => `<tr style="cursor:pointer" data-emie-action="click:home-subtask-detail" data-task-id="${t.id}"><td><strong>${escHtml(t.name || '-')}</strong><div style="font-size:11px;color:var(--gray-400)">#${t.id}</div></td><td>${escHtml(t.projectName || '-')}</td><td>${escHtml(t.designerName || t.assigneeName || '待接单')}</td><td>${formatDate(t.plannedDate)}</td><td><span class="badge ${getTaskStatusInfo(t.status).cls}">${getTaskStatusInfo(t.status).label}</span></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state" style="padding:14px">暂无子任务</div>'}</div></div></div>`;
     };
     container.innerHTML = groups.map(renderGroup).join('');
-  } catch (error) { container.innerHTML = `<div class="empty"><p>子任务面板加载失败：${escHtml(error.message)}</p></div>`; }
+  } catch (error) {
+    if (container.isConnected && EMIE.state.renderId === renderId && dashboardPermissionKey() === permissionKey) {
+      container.innerHTML = `<div class="empty"><p>子任务面板加载失败：${escHtml(error.message)}</p></div>`;
+    }
+  }
 }
 
 async function loadDashboardExecutionTasks(uid, role) {
@@ -254,8 +280,11 @@ async function loadDashboardExecutionTasks(uid, role) {
 async function loadDashboardRoleStatus(role, uid, myDept) {
   const container = document.getElementById('dashboardRoleStatus');
   if (!container) return;
+  const permissionKey = dashboardPermissionKey();
+  const renderId = EMIE.state.renderId;
   try {
     const response = await apiGet('/dashboard/role-status?scope=' + (EMIE.state.currentRole === 'planner' ? plannerBoardScope : 'all'));
+    if (!container.isConnected || EMIE.state.renderId !== renderId || dashboardPermissionKey() !== permissionKey) return;
     const roleStatus = response || {};
     let html = '';
     if (EMIE.state.currentRole === 'admin') {
@@ -268,7 +297,7 @@ async function loadDashboardRoleStatus(role, uid, myDept) {
         + renderRolePanelFromData(roleStatus.designer || {}, 'designer')
         + '</div></div>';
     } else if (EMIE.state.currentRole === 'planner') {
-      // 企划状态看板统一展示全部产品企划，包含部门负责人和当前用户。
+      // 状态面板使用服务端按当前成员项目范围过滤后的数据。
       html = '<div class="dashboard-role-panels-grid dashboard-role-panels-masonry"><div class="dashboard-role-panel-column">'
         + renderRolePanelFromData(roleStatus.planner || {}, 'planner')
         + renderRolePanelFromData(roleStatus.promotion || {}, 'promotion')
@@ -289,7 +318,7 @@ async function loadDashboardRoleStatus(role, uid, myDept) {
 }
 
 async function changePlannerBoardScope(scope) {
-  const nextScope = scope === 'all' ? 'all' : 'mine';
+  const nextScope = scope === 'all' && plannerCanViewTeamProjects() ? 'all' : 'mine';
   if (nextScope === plannerBoardScope && document.querySelector('#dashboardRoleStatus')) return;
   plannerBoardScope = nextScope;
   EMIE.projectListPreset = null;

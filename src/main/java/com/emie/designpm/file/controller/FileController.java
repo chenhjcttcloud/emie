@@ -9,6 +9,7 @@ import com.emie.designpm.file.repository.FileRecordRepository;
 import com.emie.designpm.file.service.FileArchiveService;
 import com.emie.designpm.file.service.FilePreviewService;
 import com.emie.designpm.file.service.FileThumbnailService;
+import com.emie.designpm.file.service.PlannerTaskFileAccess;
 import com.emie.designpm.materialmarket.repository.MaterialMarketItemRepository;
 import com.emie.designpm.project.repository.ProjectRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
@@ -72,6 +73,7 @@ public class FileController {
     private final FilePreviewService filePreviewService;
     private final FileThumbnailService fileThumbnailService;
     private final PermissionService permissions;
+    private final PlannerTaskFileAccess plannerTaskFiles;
 
     public FileController(
             FileArchiveService fileArchiveService,
@@ -94,6 +96,7 @@ public class FileController {
         this.projectRepository = projectRepository;
         this.materialMarketRepository = materialMarketRepository;
         this.permissions = permissions;
+        this.plannerTaskFiles = new PlannerTaskFileAccess(subTaskRepository);
     }
 
     /** 读取受权限保护的缩略图；原图仅用于点击后的大图预览。 */
@@ -496,6 +499,9 @@ public class FileController {
         if ("admin".equals(session.role())) {
             return true;
         }
+        if (record.filter(file -> plannerTaskFiles.canAccessTarget(session, file.getTargetType(), file.getTargetId()))
+                        .isPresent()
+                || plannerTaskFiles.hasReference(session, storedName, relativePath)) return true;
         return record.map(file -> {
                     // 历史文件可能没有 owner/target 绑定，但仍被业务数据 JSON 引用。
                     // 按当前用户可见的项目、子任务及设计需求判断，避免历史文件被误判为无权访问。
