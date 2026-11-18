@@ -261,7 +261,7 @@ function openEditUserModal(userData) {
               <select class="form-select" id="editUserProjectScope" data-saved-scope="${escHtml(userData.projectDataScope || 'inherit')}">
                 ${[['inherit', '跟随角色设置'], ['own', '个人项目'], ['department', '本部门项目（部门负责人）'], ['role_team', '全部企划项目']].map(([value, label]) => `<option value="${value}" ${(userData.projectDataScope || 'inherit') === value ? 'selected' : ''}>${label}</option>`).join('')}
               </select>
-              <p class="form-hint">个人项目包含本人负责及获授权协作的项目。本部门范围按启用部门的负责人和成员计算。</p>
+              <p class="form-hint">个人项目包含本人负责及获授权协作的项目。本部门范围按启用部门的负责人和成员计算。修改范围需填写变更原因，可单独保存，也可点击底部“保存修改”。</p>
             </div>
             <div class="form-group">
               <label class="form-label" for="editUserProjectScopeReason">变更原因</label>
@@ -280,7 +280,7 @@ function openEditUserModal(userData) {
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" data-emie-action="click:users-close-edit">取消</button>
-        <button class="btn btn-primary" data-emie-action="click:users-submit-edit" data-user-id="${userData.id}">💾 保存用户资料</button>
+        <button class="btn btn-primary" data-emie-action="click:users-submit-edit" data-user-id="${userData.id}">💾 保存修改</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -291,17 +291,20 @@ async function saveUserProjectScope(userId) {
   const select = modal?.querySelector('#editUserProjectScope');
   const reasonInput = modal?.querySelector('#editUserProjectScopeReason');
   const status = modal?.querySelector('#editUserProjectScopeStatus');
-  if (!select || !reasonInput || !status) return;
+  if (!select || !reasonInput || !status) return false;
   const reason = reasonInput.value.trim();
   status.hidden = false;
   status.style.color = 'var(--danger)';
-  if (!reason) { status.textContent = '请填写项目范围变更原因'; reasonInput.focus(); return; }
+  if (!reason || reason.length > 500) { status.textContent = '请填写500字以内的项目范围变更原因'; reasonInput.focus(); return false; }
   const scope = select.value;
   const viewer = `${EMIE.state.currentRole}:${EMIE.state.currentUserId}`;
-  if (modal.dataset.viewerKey !== viewer) return;
+  if (modal.dataset.viewerKey !== viewer) return false;
+  const submitButton = modal.querySelector('[data-emie-action="click:users-submit-edit"]');
+  const submitDisabled = submitButton.disabled;
+  submitButton.disabled = true;
   try {
     const result = await apiPut(`/admin/users/${userId}/project-scope`, { scope, reason });
-    if (!modal.isConnected || viewer !== `${EMIE.state.currentRole}:${EMIE.state.currentUserId}`) return;
+    if (!modal.isConnected || viewer !== `${EMIE.state.currentRole}:${EMIE.state.currentUserId}`) return false;
     const savedScope = result.projectDataScope || scope;
     const user = EMIE.state.adminUsers?.find(item => Number(item.id) === userId);
     if (user) user.projectDataScope = savedScope;
@@ -311,21 +314,29 @@ async function saveUserProjectScope(userId) {
     status.textContent = '项目可见范围已保存';
     EMIE.actions.clearSWRCache?.();
     const capabilities = await apiGet('/auth/permissions').catch(() => null);
-    if (viewer !== `${EMIE.state.currentRole}:${EMIE.state.currentUserId}`) return;
-    if (!capabilities) return;
-    EMIE.state.permissions = Array.isArray(capabilities?.permissions) ? capabilities.permissions : null;
-    EMIE.state.permissionScopes = capabilities?.scopes || {};
-    EMIE.state.permissionVersion = capabilities?.permissionVersion ?? null;
-    EMIE.actions.renderSidebar?.();
+    if (!modal.isConnected || viewer !== `${EMIE.state.currentRole}:${EMIE.state.currentUserId}`) return false;
+    if (capabilities) {
+      EMIE.state.permissions = Array.isArray(capabilities?.permissions) ? capabilities.permissions : null;
+      EMIE.state.permissionScopes = capabilities?.scopes || {};
+      EMIE.state.permissionVersion = capabilities?.permissionVersion ?? null;
+      EMIE.actions.renderSidebar?.();
+    }
+    return true;
   } catch (error) {
-    if (!modal.isConnected || viewer !== `${EMIE.state.currentRole}:${EMIE.state.currentUserId}`) return;
+    if (!modal.isConnected || viewer !== `${EMIE.state.currentRole}:${EMIE.state.currentUserId}`) return false;
     status.style.color = 'var(--danger)';
     status.textContent = error.message || '项目可见范围保存失败，请重试';
+    return false;
+  } finally {
+    submitButton.disabled = submitDisabled;
   }
 }
 
 async function submitEditUser(userId) {
-  const errEl = document.getElementById('editUserError');
+  const modal = document.getElementById('editUserModal');
+  const viewer = `${EMIE.state.currentRole}:${EMIE.state.currentUserId}`;
+  if (!modal || modal.dataset.viewerKey !== viewer) return;
+  const errEl = modal.querySelector('#editUserError');
   errEl.style.display = 'none';
 
   const newUserId = document.getElementById('editUserId').value.trim();
@@ -347,16 +358,31 @@ async function submitEditUser(userId) {
   const body = { userId: newUserId, name, phone, email };
   if (password) body.password = password;
 
+  const scopeSelect = modal.querySelector('#editUserProjectScope');
+  const scopeChanged = scopeSelect && scopeSelect.value !== scopeSelect.dataset.savedScope;
+  const scopeButton = modal.querySelector('[data-emie-action="click:users-save-project-scope"]');
+  const scopeDisabled = scopeButton?.disabled;
+  if (scopeButton) scopeButton.disabled = true;
+  let scopeSaved = false;
   try {
+    if (scopeChanged) {
+      if (!await saveUserProjectScope(userId)) return;
+      scopeSaved = true;
+    }
+    if (!modal.isConnected || viewer !== `${EMIE.state.currentRole}:${EMIE.state.currentUserId}`) return;
     await apiPut(`/admin/users/${userId}`, body);
-    showAdminToast('✅ 用户资料已更新', 'success');
+    if (!modal.isConnected || viewer !== `${EMIE.state.currentRole}:${EMIE.state.currentUserId}`) return;
+    showAdminToast(scopeSaved ? '✅ 用户资料和项目可见范围已更新' : '✅ 用户资料已更新', 'success');
     closeM('editUserModal');
     EMIE.state.users = await apiGet('/users');
     await renderRoleSwitcher();
     await renderAdminContent();
   } catch (e) {
-    errEl.textContent = e.message;
+    if (!modal.isConnected || viewer !== `${EMIE.state.currentRole}:${EMIE.state.currentUserId}`) return;
+    errEl.textContent = scopeSaved ? `项目可见范围已保存，用户资料保存失败：${e.message}` : e.message;
     errEl.style.display = '';
+  } finally {
+    if (scopeButton) scopeButton.disabled = scopeDisabled;
   }
 }
 

@@ -11,7 +11,7 @@ const chrome = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Conten
 const browser = await chromium.launch({ headless: true, executablePath: chrome });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const errors = [], mutations = [], dashboardRequests = [];
-let scopeFailure = false, collaborationFailure = false;
+let scopeFailure = false, profileFailure = false, collaborationFailure = false;
 let deferPlannerTasks = false, pendingPlannerTasks;
 const planner = (id, userId, name) => ({ id, userId, name, role: 'planner', status: 'active', projectDataScope: 'inherit' });
 const owner = planner(1, 'planner-owner', '负责人企划');
@@ -42,12 +42,19 @@ await page.route('**/api/**', async route => {
   const respond = (value, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
   if (request.method() !== 'GET') mutations.push({ path: url.pathname, body: request.postDataJSON() });
   if (url.pathname === '/api/users') return respond(users);
+  if (url.pathname === '/api/admin/users/page') return respond({ items: planners, page: 0, size: 30, total: planners.length, totalPages: 1 });
+  if (url.pathname === '/api/admin/roles') return respond([{ name: 'planner', displayName: '产品企划' }]);
   if (url.pathname === '/api/auth/permissions') return respond({ permissions, scopes: { 'project.view': ['own'] }, permissionVersion: '1:1' });
   if (url.pathname === '/api/admin/users/2/project-scope') {
     if (scopeFailure) return respond({ error: '模拟范围保存被拒绝' }, 403);
     const body = request.postDataJSON();
     collaborator.projectDataScope = body.scope;
     return respond({ userId: collaborator.userId, projectDataScope: body.scope, permissionVersion: '1:2' });
+  }
+  if (url.pathname === '/api/admin/users/2') {
+    if (profileFailure) return respond({ error: '模拟用户资料保存失败' }, 400);
+    Object.assign(collaborator, request.postDataJSON());
+    return respond(collaborator);
   }
   if (url.pathname === '/api/projects/901/collaborators') {
     if (collaborationFailure) return respond({ error: '模拟协作保存被拒绝' }, 403);
@@ -91,6 +98,16 @@ async function showProject(user) {
   await page.evaluate(() => window.EMIE.actions.openProjectDetail(901));
   await page.locator('#projectDetailModal').waitFor();
 }
+async function reopenUser() {
+  await page.evaluate(async () => {
+    const e = window.EMIE;
+    const result = await e.actions.apiGet('/admin/users/page');
+    e.state.adminUsers = result.items;
+    e.actions.openEditUserModal(result.items.find(user => user.id === 2));
+  });
+}
+const scopePath = '/api/admin/users/2/project-scope';
+const profilePath = '/api/admin/users/2';
 
 try {
   await page.goto(baseURL, { waitUntil: 'domcontentloaded' });
@@ -104,6 +121,8 @@ try {
     e.actions.showSystemConfirm = async () => true;
     e.actions.showAdminToast = () => {};
     e.actions.renderSidebar = () => {};
+    e.actions.renderRoleSwitcher = async () => {};
+    e.actions.renderAdminContent = async () => {};
     document.getElementById('loginPage').style.display = 'none';
     document.getElementById('appContainer').style.display = '';
   }, { users, collaborator });
@@ -121,10 +140,13 @@ try {
   await page.waitForFunction(() => document.getElementById('editUserProjectScopeStatus').textContent === '项目可见范围已保存');
   assert.equal(await page.locator('#editUserName').inputValue(), '未保存的资料修改');
   assert.equal(mutations.length, 1);
-  assert.equal(mutations[0].path, '/api/admin/users/2/project-scope');
-  await action('users-close-edit').first().click();
+  assert.equal(mutations[0].path, scopePath);
+  // The separate scope save clears its reason; footer save must still accept the confirmed scope.
+  await page.locator('#editUserName').fill(collaborator.name);
+  await action('users-submit-edit').click();
   await page.locator('#editUserModal').waitFor({ state: 'detached' });
-  await page.evaluate(() => window.EMIE.actions.openEditUserModal(window.EMIE.state.adminUsers[0]));
+  assert.deepEqual(mutations.map(write => write.path), [scopePath, profilePath], '已单独保存的范围不应重复提交或要求再次填写原因');
+  await reopenUser();
   assert.equal(await page.locator('#editUserProjectScope').inputValue(), 'own');
   scopeFailure = true;
   await page.locator('#editUserProjectScope').selectOption('role_team');
@@ -133,6 +155,55 @@ try {
   await page.waitForFunction(() => document.getElementById('editUserProjectScopeStatus').textContent.includes('模拟范围保存被拒绝'));
   assert.equal(await page.locator('#editUserProjectScope').inputValue(), 'role_team');
   assert.equal(await page.locator('#editUserProjectScopeReason').inputValue(), '测试错误保留');
+
+  // A rejected scope must prevent footer save from reporting profile success and closing the dialog.
+  const beforeRejectedFooter = mutations.length;
+  await action('users-submit-edit').click();
+  await page.waitForFunction(() => !document.querySelector('[data-emie-action="click:users-submit-edit"]').disabled);
+  assert.equal(await page.locator('#editUserModal').count(), 1);
+  assert.deepEqual(mutations.slice(beforeRejectedFooter).map(write => write.path), [scopePath]);
+  assert.match(await page.locator('#editUserModal').innerText(), /模拟范围保存被拒绝/);
+  assert.equal(await page.locator('#editUserProjectScopeReason').inputValue(), '测试错误保留');
+
+  // A dirty scope without its audit reason cannot be silently discarded by footer save.
+  scopeFailure = false;
+  await page.locator('#editUserProjectScopeReason').fill('');
+  const beforeMissingReason = mutations.length;
+  await action('users-submit-edit').click();
+  await page.waitForFunction(() => !document.querySelector('[data-emie-action="click:users-submit-edit"]').disabled);
+  assert.equal(await page.locator('#editUserModal').count(), 1);
+  assert.match(await page.locator('#editUserModal').innerText(), /填写.*原因/);
+  assert.equal(mutations.length, beforeMissingReason, '缺少范围变更原因时不得提交资料或范围');
+
+  // The prominent footer button saves both changed scope and profile, and survives a fresh read.
+  await page.locator('#editUserProjectScopeReason').fill('通过统一保存入口扩大项目范围');
+  const beforeCombinedSave = mutations.length;
+  await action('users-submit-edit').click();
+  await page.locator('#editUserModal').waitFor({ state: 'detached' });
+  assert.deepEqual(mutations.slice(beforeCombinedSave).map(write => write.path), [scopePath, profilePath]);
+  assert.deepEqual(mutations[beforeCombinedSave].body, { scope: 'role_team', reason: '通过统一保存入口扩大项目范围' });
+  assert.equal(collaborator.projectDataScope, 'role_team');
+  await reopenUser();
+  assert.equal(await page.locator('#editUserProjectScope').inputValue(), 'role_team');
+
+  // If profile persistence fails after a confirmed scope write, retry must not duplicate that audit.
+  profileFailure = true;
+  await page.locator('#editUserProjectScope').selectOption('own');
+  await page.locator('#editUserProjectScopeReason').fill('资料重试时保留已保存的个人范围');
+  const beforeProfileFailure = mutations.length;
+  await action('users-submit-edit').click();
+  await page.locator('#editUserError').waitFor({ state: 'visible' });
+  assert.match(await page.locator('#editUserError').innerText(), /模拟用户资料保存失败/);
+  assert.deepEqual(mutations.slice(beforeProfileFailure).map(write => write.path), [scopePath, profilePath]);
+  assert.equal(await page.locator('#editUserProjectScope').getAttribute('data-saved-scope'), 'own');
+  assert.equal(collaborator.projectDataScope, 'own');
+  profileFailure = false;
+  const beforeProfileRetry = mutations.length;
+  await action('users-submit-edit').click();
+  await page.locator('#editUserModal').waitFor({ state: 'detached' });
+  assert.deepEqual(mutations.slice(beforeProfileRetry).map(write => write.path), [profilePath], '资料重试不得重复范围变更审计');
+  await reopenUser();
+  assert.equal(await page.locator('#editUserProjectScope').inputValue(), 'own');
   await action('users-close-edit').first().click();
   await page.locator('#editUserModal').waitFor({ state: 'detached' });
   await page.evaluate(() => window.EMIE.actions.openEditUserModal({ id: 4, userId: 'designer', name: '设计师', role: 'designer', status: 'active' }));
@@ -254,7 +325,7 @@ try {
   assert.ok(dialog.x >= 0 && dialog.x + dialog.width <= 390);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   assert.deepEqual(errors, []);
-  console.log('planner-collaboration: personal scope independent save/reopen/errors, collaborator selection/errors/stale identity, publisher controls and owner review, dashboard scope narrowing/cache/stale team responses, department label and mobile passed; external writes=0');
+  console.log('planner-collaboration: scope independent and combined save/reopen/validation/errors/profile retry, collaborator selection/errors/stale identity, publisher controls and owner review, dashboard scope narrowing/cache/stale team responses, department label and mobile passed; external writes=0');
 } finally {
   await browser.close();
 }

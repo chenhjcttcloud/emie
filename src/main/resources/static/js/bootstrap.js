@@ -23,7 +23,7 @@ import './projects.js?v=148';
 // 管理模块只在进入对应页面时下载；保留原有版本号作为缓存边界。
 const adminModuleDefinitions = [
   ['./admin-shell.js?v=455', 'adminShell'],
-  ['./admin-users.js?v=280', 'adminUsers'],
+  ['./admin-users.js?v=281', 'adminUsers'],
   ['./admin-roles.js?v=229', 'adminRoles'],
   ['./admin-catalog.js?v=276', 'adminCatalog'],
   ['./admin-org.js?v=292', 'adminOrg'],
