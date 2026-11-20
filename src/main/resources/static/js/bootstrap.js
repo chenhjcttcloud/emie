@@ -16,8 +16,8 @@ import './material-market.js?v=163';
 import './image-library.js?v=117';
 import './project-uploads.js?v=501';
 import './project-form.js?v=459';
-import './project-detail.js?v=684';
-import './project-tasks.js?v=706';
+import './project-detail.js?v=685';
+import './project-tasks.js?v=707';
 import './project-sharing.js?v=264';
 import './projects.js?v=148';
 // 管理模块只在进入对应页面时下载；保留原有版本号作为缓存边界。

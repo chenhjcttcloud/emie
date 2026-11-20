@@ -1,5 +1,6 @@
 package com.emie.designpm;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -13,13 +14,21 @@ import com.emie.designpm.auth.AuthSessions;
 import com.emie.designpm.auth.RedisSessionStore;
 import com.emie.designpm.entity.ActivityLog;
 import com.emie.designpm.entity.Project;
+import com.emie.designpm.entity.ProjectCollaborator;
 import com.emie.designpm.entity.SubTask;
 import com.emie.designpm.notification.service.NotificationRetryService;
+import com.emie.designpm.project.repository.ProjectCollaboratorRepository;
 import com.emie.designpm.project.repository.ProjectRepository;
+import com.emie.designpm.project.repository.SubTaskRejectionCycleRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
 import com.emie.designpm.sync.service.SyncQueueService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -63,6 +72,12 @@ class ProjectOsivDisabledIntegrationTest {
     ActivityLogRepository activityLogs;
 
     @Autowired
+    ProjectCollaboratorRepository collaborators;
+
+    @Autowired
+    SubTaskRejectionCycleRepository rejectionCycles;
+
+    @Autowired
     PlatformTransactionManager transactionManager;
 
     @MockitoBean
@@ -87,7 +102,9 @@ class ProjectOsivDisabledIntegrationTest {
         when(permissionService.scopes(anyString(), anyString(), anyString())).thenReturn(java.util.List.of("all"));
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             activityLogs.deleteAll();
+            rejectionCycles.deleteAll();
             subTasks.deleteAll();
+            collaborators.deleteAll();
             projects.deleteAll();
 
             Project project = new Project();
@@ -217,5 +234,95 @@ class ProjectOsivDisabledIntegrationTest {
                 .andExpect(jsonPath("$.logs.length()").value(0))
                 .andExpect(jsonPath("$.productRequirements").isEmpty())
                 .andExpect(jsonPath("$.referenceImagesJson").isEmpty());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"approve", "reject"})
+    void currentCollaboratorCanReviewTheirPublishedTaskWithOsivDisabled(String action) throws Exception {
+        prepareCollaboratorReview("collaborator-osiv", true);
+
+        reviewAsCollaborator(action, Map.of())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tasks[0].id").value(taskId))
+                .andExpect(jsonPath("$.tasks[0].status").value("approve".equals(action) ? "completed" : "rejected"));
+
+        assertEquals("approve".equals(action) ? "completed" : "rejected", storedTaskStatus());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"approve", "reject"})
+    void collaboratorCannotForgePublisherOrOwnerToReviewAnotherPublishersTask(String action) throws Exception {
+        prepareCollaboratorReview("planner-osiv", true);
+
+        reviewAsCollaborator(
+                        action,
+                        Map.of(
+                                "publisherId",
+                                "collaborator-osiv",
+                                "currentUserId",
+                                "planner-osiv",
+                                "currentRole",
+                                "admin"))
+                .andExpect(status().isBadRequest());
+
+        assertEquals("delivered", storedTaskStatus());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"approve", "reject"})
+    void formerCollaboratorCannotReviewTheirPreviouslyPublishedTask(String action) throws Exception {
+        prepareCollaboratorReview("collaborator-osiv", false);
+
+        reviewAsCollaborator(action, Map.of()).andExpect(status().isBadRequest());
+
+        assertEquals("delivered", storedTaskStatus());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"approve", "reject"})
+    void collaboratorReviewStillRequiresRoleFunctionPermission(String action) throws Exception {
+        prepareCollaboratorReview("collaborator-osiv", true);
+        String permission = "subtask.review.first." + action;
+        when(permissionService.has("planner", permission)).thenReturn(false);
+
+        reviewAsCollaborator(action, Map.of())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.permission").value(permission));
+
+        assertEquals("delivered", storedTaskStatus());
+    }
+
+    private void prepareCollaboratorReview(String publisherId, boolean activeCollaborator) {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            Project project = projects.findById(projectId).orElseThrow();
+            project.setStatus("in_progress");
+            SubTask task = subTasks.findById(taskId).orElseThrow();
+            task.setStatus("delivered");
+            task.setPublisherId(publisherId);
+            if (activeCollaborator) {
+                ProjectCollaborator collaborator = new ProjectCollaborator();
+                collaborator.setProjectId(projectId);
+                collaborator.setUserId("collaborator-osiv");
+                collaborator.setAssignedBy("planner-osiv");
+                collaborators.saveAndFlush(collaborator);
+            }
+        });
+    }
+
+    private org.springframework.test.web.servlet.ResultActions reviewAsCollaborator(
+            String action, Map<String, Object> overrides) throws Exception {
+        String collaboratorToken = AuthSessions.generateToken("collaborator-osiv", "planner", "协作企划");
+        Map<String, Object> body = new LinkedHashMap<>(overrides);
+        body.put("comments", "检查交付成果");
+        body.put("requiredCompletionDate", "2026-12-25");
+        return mvc.perform(post("/api/projects/{projectId}/tasks/{taskId}/{action}", projectId, taskId, action)
+                .header("X-Auth-Token", collaboratorToken)
+                .contentType("application/json")
+                .content(new ObjectMapper().writeValueAsString(body)));
+    }
+
+    private String storedTaskStatus() {
+        return new TransactionTemplate(transactionManager)
+                .execute(status -> subTasks.findById(taskId).orElseThrow().getStatus());
     }
 }

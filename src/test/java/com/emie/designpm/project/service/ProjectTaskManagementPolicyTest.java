@@ -24,6 +24,9 @@ class ProjectTaskManagementPolicyTest {
         assertTrue(policy.canCreate(project, session));
         assertTrue(policy.canManage(project, ownTask, session));
         assertFalse(policy.canManage(project, otherTask, session));
+        assertTrue(policy.canReview(project, ownTask, session));
+        assertFalse(policy.canReview(project, otherTask, session));
+        assertFalse(policy.canReview(project, task(project, null), session));
     }
 
     @Test
@@ -35,6 +38,7 @@ class ProjectTaskManagementPolicyTest {
         assertTrue(policy.canManage(project, task(project, "collaborator"), session));
         assertFalse(policy.canCreate(project, session));
         assertFalse(policy.canManage(project, task(project, "collaborator"), session));
+        assertFalse(policy.canReview(project, task(project, "collaborator"), session));
     }
 
     @Test
@@ -44,12 +48,18 @@ class ProjectTaskManagementPolicyTest {
 
         assertTrue(policy.canManage(project, task, new AuthSession("owner", "planner", "负责人")));
         assertTrue(policy.canManage(project, task, new AuthSession("admin", "admin", "管理员")));
+        assertTrue(policy.canReview(project, task, new AuthSession("owner", "planner", "负责人")));
+        assertFalse(policy.canReview(project, task, new AuthSession("admin", "admin", "管理员")));
+        assertFalse(policy.canReview(project, task, new AuthSession("owner", "designer", "设计师")));
+        assertFalse(policy.canReview(project, task, new AuthSession("collaborator", "planner", "非协作发布人")));
+        assertFalse(policy.canReview(project, task, null));
         assertFalse(policy.canCreate(project, new AuthSession("other", "planner", "其他企划")));
         assertFalse(policy.canCreate(project, new AuthSession("owner", "designer", "设计师")));
         assertFalse(policy.canCreate(project, new AuthSession("", "admin", "无身份")));
         Project another = project();
         another.setId(2L);
         assertFalse(policy.canManage(project, task(another, "owner"), new AuthSession("owner", "planner", "负责人")));
+        assertFalse(policy.canReview(project, task(another, "owner"), new AuthSession("owner", "planner", "负责人")));
     }
 
     private Project project() {

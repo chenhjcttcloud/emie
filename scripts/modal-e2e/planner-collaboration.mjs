@@ -30,10 +30,16 @@ let project = {
   plannerId: owner.userId, plannerName: owner.name, collaborators: [], deadline: '2026-12-20',
   statusLabel: '进行中', statusCls: 'badge-progress', logs: [],
   tasks: [task(11, collaborator.userId), task(12, owner.userId), task(13, collaborator.userId, 'accepted'),
-    task(14, collaborator.userId, 'delivered'), task(15, owner.userId, 'completed')],
+    task(14, collaborator.userId, 'delivered'), task(15, owner.userId, 'completed'),
+    task(16, owner.userId, 'delivered'), task(17, collaborator.userId, 'submitted_for_review'),
+    task(18, collaborator.userId, 'planner_approved'),
+    { ...task(19, collaborator.userId, 'rejected'), activeRejectionCycleId: 191, activeRejectionRole: 'planner' },
+    { ...task(20, owner.userId, 'rejected'), activeRejectionCycleId: 201, activeRejectionRole: 'planner' },
+    task(21, collaborator.userId, 'completed'), task(22, another.userId, 'delivered'), task(23, '', 'delivered')],
 };
 const permissions = ['page.dashboard.view', 'page.projects.view', 'page.admin.view', 'admin.user.manage',
-  'project.view', 'project.detail.view', 'subtask.create', 'subtask.edit', 'subtask.delete'];
+  'project.view', 'project.detail.view', 'subtask.create', 'subtask.edit', 'subtask.delete',
+  'subtask.review.first.approve', 'subtask.review.first.reject'];
 page.on('pageerror', error => errors.push(error.message));
 
 // Every API is simulated, including successful writes and rejected changes.
@@ -81,6 +87,13 @@ for (const [pattern, directory, contentType] of [['**/js/*.js*', 'js', 'text/jav
 await page.route(baseURL + '/', route => route.fulfill({ contentType: 'text/html', path: path.join(repository, 'src/main/resources/static/index.html') }));
 
 const action = name => page.locator(`[data-emie-action="click:${name}"]`);
+const taskAction = (name, taskId) => page.locator(`[data-emie-action="click:${name}"][data-task-id="${taskId}"]`);
+async function rerenderProject() {
+  await page.evaluate(() => {
+    const e = window.EMIE;
+    document.querySelector('#projectDetailModal .modal-body').innerHTML = e.actions.renderProjectDetailContent(e.projectState.currentProjectDetail);
+  });
+}
 async function identity(user, role = 'planner') {
   await page.evaluate(({ user, role, users, permissions }) => {
     const e = window.EMIE;
@@ -225,9 +238,59 @@ try {
   assert.equal(await action('detail-task-delete').count(), 1);
   assert.equal(await action('detail-task-cancel-accept').count(), 1);
   assert.equal(await page.locator('[data-emie-action="click:detail-task-edit"][data-task-id="12"]').count(), 0);
-  for (const name of ['detail-task-approve', 'detail-task-reject', 'detail-task-change-bonus', 'detail-collaborators-edit', 'detail-project-pause', 'detail-project-terminate']) {
+  for (const name of ['detail-task-approve', 'detail-task-reject']) {
+    assert.equal(await action(name).count(), 3, '协作企划仅可审核自己发布且等待审核的子任务');
+    for (const taskId of [14, 17, 18]) assert.equal(await taskAction(name, taskId).count(), 1);
+    for (const taskId of [11, 12, 13, 15, 16, 19, 20, 21, 22, 23]) assert.equal(await taskAction(name, taskId).count(), 0);
+  }
+  assert.equal(await taskAction('detail-task-cancel-reject', 19).count(), 1);
+  assert.equal(await taskAction('detail-task-cancel-reject', 20).count(), 0);
+  assert.match(await page.locator('#projectDetailModal').innerText(), /协作企划可创建、管理并审核自己发布的子任务/);
+  for (const name of ['detail-task-change-bonus', 'detail-collaborators-edit', 'detail-project-pause', 'detail-project-terminate']) {
     assert.equal(await action(name).count(), 0, name + ' must stay with owner');
   }
+  await taskAction('detail-task-approve', 14).click();
+  await page.locator('#taskApproveModal').waitFor();
+  assert.match(await page.locator('#taskApproveModal').innerText(), /企划确认.*协作任务 14/);
+  await action('task-approve-close').click();
+  await page.locator('#taskApproveModal').waitFor({ state: 'detached' });
+  await taskAction('detail-task-reject', 14).click();
+  await page.locator('#taskRejectModal').waitFor();
+  await page.waitForFunction(() => document.getElementById('rejectDeadline').dataset.datePickerReady === '1');
+  await action('task-reject-close').click();
+  await page.locator('#taskRejectModal').waitFor({ state: 'detached' });
+  // Each review permission is independent; rejection cancellation uses the reject permission.
+  await page.evaluate(() => {
+    window.EMIE.state.permissions = window.EMIE.state.permissions.filter(permission => permission !== 'subtask.review.first.approve');
+  });
+  await rerenderProject();
+  assert.equal(await action('detail-task-approve').count(), 0);
+  assert.equal(await action('detail-task-reject').count(), 3);
+  await page.evaluate(permissions => {
+    window.EMIE.state.permissions = permissions.filter(permission => permission !== 'subtask.review.first.reject');
+  }, permissions);
+  await rerenderProject();
+  assert.equal(await action('detail-task-approve').count(), 3);
+  assert.equal(await action('detail-task-reject').count(), 0);
+  assert.equal(await action('detail-task-cancel-reject').count(), 0);
+  await page.evaluate(permissions => { window.EMIE.state.permissions = permissions; }, permissions);
+  for (const status of ['paused', 'terminated', 'pending_terminate']) {
+    await page.evaluate(status => { window.EMIE.projectState.currentProjectDetail.status = status; }, status);
+    await rerenderProject();
+    for (const name of ['detail-task-approve', 'detail-task-reject', 'detail-task-cancel-reject']) {
+      assert.equal(await action(name).count(), 0, status + ' 项目不可审核');
+    }
+  }
+  await page.evaluate(() => {
+    const detail = window.EMIE.projectState.currentProjectDetail;
+    detail.status = 'in_progress';
+    detail.collaborators = [];
+  });
+  await rerenderProject();
+  for (const name of ['detail-task-approve', 'detail-task-reject', 'detail-task-cancel-reject', 'detail-subtask-add']) {
+    assert.equal(await action(name).count(), 0, '移除协作关系后，即使仍是任务发布人也不可继续审核');
+  }
+  await showProject(collaborator);
   await page.evaluate(() => {
     const e = window.EMIE;
     e.state.permissions = e.state.permissions.filter(permission => permission !== 'subtask.edit');
@@ -238,8 +301,10 @@ try {
   assert.equal(await action('detail-task-cancel-accept').count(), 0);
   assert.equal(await action('detail-task-delete').count(), 1, '删除权限独立判断');
   await showProject(owner);
-  assert.equal(await action('detail-task-approve').count(), 1);
-  assert.equal(await action('detail-task-change-bonus').count(), 1);
+  assert.equal(await action('detail-task-approve').count(), 6, '负责人仍可审核所有发布人的待审核任务');
+  assert.equal(await action('detail-task-reject').count(), 6);
+  assert.equal(await action('detail-task-cancel-reject').count(), 2);
+  assert.equal(await action('detail-task-change-bonus').count(), 2);
   assert.equal(await action('detail-task-edit').count(), 3);
   await action('detail-collaborators-edit').click();
   await page.locator('#projectCollaboratorsModal').waitFor();
@@ -258,6 +323,9 @@ try {
   assert.equal(await action('detail-subtask-add').count(), 0);
   assert.equal(await action('detail-task-edit').count(), 0);
   assert.equal(await action('detail-task-delete').count(), 0);
+  for (const name of ['detail-task-approve', 'detail-task-reject', 'detail-task-cancel-reject', 'detail-task-change-bonus']) {
+    assert.equal(await action(name).count(), 0, '仅有同角色项目可见权限不得审核，即使任务由本人发布');
+  }
   await page.evaluate(async () => {
     const e = window.EMIE;
     e.state.permissionScopes = { 'project.view': ['role_team'] };
@@ -325,7 +393,7 @@ try {
   assert.ok(dialog.x >= 0 && dialog.x + dialog.width <= 390);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   assert.deepEqual(errors, []);
-  console.log('planner-collaboration: scope independent and combined save/reopen/validation/errors/profile retry, collaborator selection/errors/stale identity, publisher controls and owner review, dashboard scope narrowing/cache/stale team responses, department label and mobile passed; external writes=0');
+  console.log('planner-collaboration: scope independent and combined save/reopen/validation/errors/profile retry, collaborator selection/errors/stale identity, own-publisher review/permissions/status/removal and owner rights, dashboard scope narrowing/cache/stale team responses, department label and mobile passed; external writes=0');
 } finally {
   await browser.close();
 }

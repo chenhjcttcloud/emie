@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** 项目负责人授权的协作企划，不改变项目归属和审核人。 */
+/** 项目负责人授权的协作企划，可验收自己发布的子任务，不改变项目归属。 */
 @Data
 @NoArgsConstructor
 @Entity

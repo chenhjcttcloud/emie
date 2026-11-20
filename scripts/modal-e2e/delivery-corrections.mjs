@@ -272,6 +272,7 @@ try {
     document.dispatchEvent(new Event('emie:identity-changing'));
     e.state.currentRole = 'planner'; e.state.currentUserId = userId;
     e.state.authUser = { userId, name, role: 'planner' };
+    e.state.permissions = ['project.detail.view', 'subtask.review.first.approve'];
   }, { userId: task.plannerId, name: task.plannerName });
   await showFixture('project');
   const approveButton = page.locator('[data-emie-action="click:detail-task-approve"]');

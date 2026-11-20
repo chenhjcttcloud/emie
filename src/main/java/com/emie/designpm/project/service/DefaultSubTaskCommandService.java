@@ -5,6 +5,7 @@ import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.admin.repository.UserRepository;
 import com.emie.designpm.admin.service.PermissionCatalog;
 import com.emie.designpm.admin.service.UserService;
+import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.file.repository.FileRecordRepository;
 import com.emie.designpm.file.service.FileArchiveService;
@@ -1338,7 +1339,7 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         String currentUserId = (String) body.getOrDefault("currentUserId", "");
         String comments = SecurityUtil.sanitizeText((String) body.getOrDefault("comments", ""), 500);
         if (!"planner".equals(currentRole) || !canReviewTask(p, task, currentRole, currentUserId)) {
-            throw new RuntimeException("仅项目负责人企划可确认该子任务");
+            throw new RuntimeException("仅项目负责人或发布该任务的协作企划可确认该子任务");
         }
         if ("completed".equals(task.getStatus())) return p;
         if (!List.of("delivered", "submitted_for_review", "planner_approved").contains(task.getStatus())) {
@@ -1666,12 +1667,12 @@ public class DefaultSubTaskCommandService implements SubTaskCommandService {
         throw new RuntimeException("子任务已改为验收流程，无需评分");
     }
 
-    /** 验收和评分必须同时满足角色、项目归属，不能仅由请求体中的 role 决定。 */
+    /** 验收按项目负责人或当前协作发布人校验，不能使用请求体声明的发布人授予权限。 */
     private boolean canReviewTask(Project project, SubTask task, String role, String userId) {
         if (project == null || task == null || userId == null || userId.isBlank()) return false;
         if ("admin".equals(role)) return true;
         if ("planner".equals(role)) {
-            return Objects.equals(userId, project.getPlannerId());
+            return taskManagementPolicy.canReview(project, task, new AuthSession(userId, role, ""));
         }
         return "sales".equals(role)
                 && "channel_custom".equals(project.getType())

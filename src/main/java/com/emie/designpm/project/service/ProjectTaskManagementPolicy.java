@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
 
-/** 协作企划可发布和管理自己发布的子任务，项目审核仍交给项目负责人。 */
+/** 协作企划可发布、管理和验收自己发布的子任务，项目负责人保留全部子任务管理与验收权限。 */
 @Service
 public class ProjectTaskManagementPolicy {
     private final ProjectCollaboratorRepository collaborators;
@@ -40,6 +40,13 @@ public class ProjectTaskManagementPolicy {
         return "admin".equals(PermissionCatalog.normalizeRole(session.role()))
                 || Objects.equals(project.getPlannerId(), session.userId())
                 || Objects.equals(task.getPublisherId(), session.userId());
+    }
+
+    /** 验收仅开放给企划；发布人还必须保留当前项目的协作资格。 */
+    public boolean canReview(Project project, SubTask task, AuthSession session) {
+        return session != null
+                && "planner".equals(PermissionCatalog.normalizeRole(session.role()))
+                && canManage(project, task, session);
     }
 
     public void requireCreate(Project project, Map<String, Object> actor) {

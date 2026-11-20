@@ -1102,7 +1102,6 @@ async function taskReject(pid, tid) {
       <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-reject-close">取消</button><button class="btn btn-danger" data-emie-action="click:task-submit-reject" data-project-id="${pid}" data-task-id="${tid}">确认驳回</button></div>
     </div>`;
   document.body.appendChild(modal);
-  enhanceDateInputs(modal);
 }
 
 function handleRejectImages(input) {
