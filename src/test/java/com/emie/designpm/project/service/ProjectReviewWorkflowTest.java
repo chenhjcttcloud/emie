@@ -60,6 +60,7 @@ class ProjectReviewWorkflowTest {
     private SystemConfigRepository configs;
     private ProjectAccessService access;
     private NotificationWorkflowService notifications;
+    private FileArchiveService files;
     private SubTaskRejectionCycleRepository rejectionCycles;
     private UserService users;
     private DefaultSubTaskCommandService service;
@@ -74,6 +75,7 @@ class ProjectReviewWorkflowTest {
         configs = mock(SystemConfigRepository.class);
         access = mock(ProjectAccessService.class);
         notifications = mock(NotificationWorkflowService.class);
+        files = mock(FileArchiveService.class);
         users = mock(UserService.class);
         rejectionCycles = mock(SubTaskRejectionCycleRepository.class);
         when(configs.findByConfigKey(anyString())).thenReturn(Optional.empty());
@@ -87,7 +89,7 @@ class ProjectReviewWorkflowTest {
                 mock(IpOptionRepository.class),
                 configs,
                 mock(SyncQueueService.class),
-                mock(FileArchiveService.class),
+                files,
                 access,
                 notifications);
         service.setRejectionCycleRepository(rejectionCycles);
@@ -1098,6 +1100,8 @@ class ProjectReviewWorkflowTest {
                 "增加原创设计",
                 "changeReferenceImagesJson",
                 "[{\"name\":\"修改参考.png\",\"url\":\"/api/files/download/change.png\",\"storedName\":\"change.png\"}]",
+                "changeAttachmentsJson",
+                "[{\"name\":\"修改说明.pdf\",\"url\":\"/api/files/download/change.pdf\",\"storedName\":\"change.pdf\"}]",
                 "withPoints",
                 true,
                 "pointRuleCode",
@@ -1113,6 +1117,9 @@ class ProjectReviewWorkflowTest {
         assertEquals("D30_8", task.getPendingChangeRuleCode());
         assertEquals(15d, task.getPendingChangeBonusPoints());
         assertTrue(task.getPendingChangeReferenceImagesJson().contains("修改参考.png"));
+        assertTrue(task.getPendingChangeAttachmentsJson().contains("修改说明.pdf"));
+        verify(files).bindFilesFromJson(task.getPendingChangeAttachmentsJson(), "sub_task", 11L);
+        assertTrue(project.getLogs().getFirst().getAfterData().contains("changeAttachmentsJson"));
         assertTrue(project.getLogs().get(0).getAfterData().contains("\"pointRequestId\":\"" + request + "\""));
         assertTrue(project.getLogs().get(0).getAfterData().contains("\"points\":15.0"));
         assertThrows(RuntimeException.class, () -> service.taskRedeliver(1L, 11L, deliveryBody()));
@@ -1139,6 +1146,7 @@ class ProjectReviewWorkflowTest {
         service.taskApprove(1L, 11L, Map.of("currentRole", "planner", "currentUserId", "planner-1"));
         assertEquals("completed", task.getStatus());
         assertEquals("[]", task.getPendingChangeReferenceImagesJson());
+        assertEquals("[]", task.getPendingChangeAttachmentsJson());
         verify(points, times(1))
                 .awardPendingChangeBonus(same(task), nullable(SubTaskDeliveryVersion.class), anyString());
         verify(points, times(1)).awardBaseSubmission(same(task), isNull(), anyString());
@@ -1171,6 +1179,7 @@ class ProjectReviewWorkflowTest {
                         "withPoints",
                         false));
         assertEquals(0d, task.getPendingChangeBonusPoints());
+        assertEquals("[]", task.getPendingChangeAttachmentsJson());
         assertNull(task.getPendingChangeRuleCode());
         verify(points, never()).bindRuleSnapshot(any(), anyString());
         task.setStatus("submitted_for_review");
@@ -1181,6 +1190,62 @@ class ProjectReviewWorkflowTest {
         assertThrows(
                 RuntimeException.class,
                 () -> service.taskApprove(1L, 11L, Map.of("currentRole", "sales", "currentUserId", "sales-1")));
+    }
+
+    @Test
+    void modificationAttachmentsAreValidatedAndKeptSeparateFromDeliveredFiles() throws Exception {
+        Project project = projectWithTask("regular", "completed");
+        SubTask task = project.getTasks().getFirst();
+        task.setAssigneeRole("designer");
+        task.setAttachmentsJson("[{\"name\":\"原交付.pdf\",\"url\":\"/original.pdf\"}]");
+        String deliveredFiles = task.getAttachmentsJson();
+        service.setPointsService(mock(PointsService.class));
+        when(projects.saveAndFlush(any(Project.class))).thenAnswer(i -> i.getArgument(0));
+        List<Map<String, String>> attachments = new ArrayList<>();
+        attachments.add(Map.of("name", "blocked.exe", "url", "/blocked.exe"));
+        attachments.add(Map.of("name", "not-uploaded.pdf"));
+        for (int i = 1; i <= 6; i++) {
+            attachments.add(Map.of("name", "需求" + i + ".pdf", "url", "/change-" + i + ".pdf"));
+        }
+        service.requestChangeBonus(
+                1L,
+                11L,
+                Map.of(
+                        "currentRole", "planner",
+                        "currentUserId", "planner-1",
+                        "requestId", "fa8dc57e-0902-4fc7-8a6d-aee662a6369d",
+                        "reason", "补充尺寸文件",
+                        "changeAttachmentsJson",
+                                new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(attachments)));
+
+        var cleaned =
+                new com.fasterxml.jackson.databind.ObjectMapper().readTree(task.getPendingChangeAttachmentsJson());
+        assertEquals(5, cleaned.size());
+        assertEquals("需求1.pdf", cleaned.get(0).get("name").asText());
+        assertEquals("需求5.pdf", cleaned.get(4).get("name").asText());
+        assertEquals(deliveredFiles, task.getAttachmentsJson());
+        verify(files).bindFilesFromJson(task.getPendingChangeAttachmentsJson(), "sub_task", 11L);
+        assertTrue(project.getLogs().getFirst().getAfterData().contains("需求5.pdf"));
+        assertFalse(project.getLogs().getFirst().getAfterData().contains("blocked.exe"));
+    }
+
+    @Test
+    void changeAttachmentMigrationPreservesExistingTasksAndDefaultsTheirRequirementsToEmpty() throws Exception {
+        try (var connection = DriverManager.getConnection("jdbc:h2:mem:task_change_attachments;MODE=MySQL");
+                var statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE sub_tasks (id BIGINT PRIMARY KEY, attachments_json LONGTEXT)");
+            statement.execute("INSERT INTO sub_tasks (id, attachments_json) VALUES (11, '[original]')");
+            ScriptUtils.executeSqlScript(
+                    connection,
+                    new EncodedResource(
+                            new ClassPathResource("db/migration/V103__task_change_attachments.sql"),
+                            StandardCharsets.UTF_8));
+            try (var rows = statement.executeQuery("SELECT * FROM sub_tasks WHERE id = 11")) {
+                assertTrue(rows.next());
+                assertEquals("[original]", rows.getString("attachments_json"));
+                assertEquals("[]", rows.getString("pending_change_attachments_json"));
+            }
+        }
     }
 
     @Test

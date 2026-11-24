@@ -612,6 +612,7 @@ function resolveFileListContext(list, isImage) {
   if (list === EMIE.projectState.rejectionImages) return { listKey: 'rejectionImage', containerId: 'rejectImageList' };
   if (list === EMIE.projectState.rejectionAttachments) return { listKey: 'rejectionAttachment', containerId: 'rejectAttachmentList' };
   if (list === EMIE.projectState.changeBonusImages) return { listKey: 'changeBonusImage', containerId: 'changeBonusImageList' };
+  if (list === EMIE.projectState.changeBonusAttachments) return { listKey: 'changeBonusAttachment', containerId: 'changeBonusAttachmentList' };
   if (list === EMIE.projectState.materialRefImages) return { listKey: 'materialRefImage', containerId: 'materialRefImageList' };
   if (list === window.EMIE.materialMarket?.packagingFlatImage) return { listKey: 'materialPackagingFlat', containerId: 'packagingFlatList' };
   if (list === window.EMIE.materialMarket?.packagingFoldedImage) return { listKey: 'materialPackagingFolded', containerId: 'packagingFoldedList' };
@@ -637,6 +638,7 @@ function removeFileItem(listKey, idx) {
     rejectionImage: [EMIE.projectState.rejectionImages, '驳回参考图'],
     rejectionAttachment: [EMIE.projectState.rejectionAttachments, '驳回附件'],
     changeBonusImage: [EMIE.projectState.changeBonusImages, '修改参考图'],
+    changeBonusAttachment: [EMIE.projectState.changeBonusAttachments, '修改附件'],
     materialRefImage: [EMIE.projectState.materialRefImages, '参考图片'],
     materialPackagingFlat: [window.EMIE.materialMarket?.packagingFlatImage, '包装展开图'],
     materialPackagingFolded: [window.EMIE.materialMarket?.packagingFoldedImage, '折叠效果图'],
@@ -663,7 +665,7 @@ function handleUploadDrop(input, files) {
     createRefImageInput: [EMIE.projectState.createRefImages, 6, '参考图片', true],
     createAttachmentInput: [EMIE.projectState.createAttachments, 5, '附件', false],
     subTaskRefImageInput: [EMIE.projectState.subTaskRefImages, 6, '参考图片', true],
-    subTaskAttachmentInput: [EMIE.projectState.subTaskAttachments, 9, '附件', false],
+    subTaskAttachmentInput: [EMIE.projectState.subTaskAttachments, 5, '附件', false],
     editRefImageInput: [EMIE.projectState.editTaskRefImages, 6, '编辑参考图片', true],
     editAttachmentInput: [EMIE.projectState.editTaskAttachments, 9, '编辑附件', false],
     editProjectRefImageInput: [EMIE.projectState.editProjectRefImages, 6, '编辑项目参考图片', true],
@@ -673,6 +675,7 @@ function handleUploadDrop(input, files) {
     rejectImageInput: [EMIE.projectState.rejectionImages, 6, '驳回参考图', true],
     rejectAttachmentInput: [EMIE.projectState.rejectionAttachments, 5, '驳回附件', false],
     changeBonusImageInput: [EMIE.projectState.changeBonusImages, 6, '修改参考图', true],
+    changeBonusAttachmentInput: [EMIE.projectState.changeBonusAttachments, 5, '修改附件', false],
     materialRefImageInput: [EMIE.projectState.materialRefImages, 6, '参考图片', true],
     materialAttachmentInput: [EMIE.projectState.materialAttachments, 5, '附件', false],
   }[id];

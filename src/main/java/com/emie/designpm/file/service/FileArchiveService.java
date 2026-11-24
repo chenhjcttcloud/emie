@@ -104,10 +104,13 @@ public class FileArchiveService {
                 if (storedName == null || storedName.isBlank()) {
                     continue;
                 }
-                // 图档引用不转移文件的图库归属及查看权限。
+                // 复用引用保留原来源归属和权限；只有未绑定的上传记录才首次绑定。
                 fileRecordRepository
                         .findByStoredName(storedName)
                         .filter(record -> !"image_library".equals(record.getTargetType()))
+                        .filter(record -> record.getTargetId() == null
+                                || record.getTargetType() == null
+                                || record.getTargetType().isBlank())
                         .ifPresent(record -> {
                             record.setTargetType(targetType);
                             record.setTargetId(targetId);

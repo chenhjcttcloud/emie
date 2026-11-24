@@ -79,7 +79,11 @@ final class SubTaskPointView {
                     snapshot.get("pointRequestId") instanceof String value && !value.isBlank() ? value : null;
             if (requestId != null && action.startsWith("发起子任务修改：")) {
                 revisionNumbers.computeIfAbsent(requestId, ignored -> revisionNumbers.size() + 1);
-                requests.put(requestId, snapshot);
+                Map<String, Object> request = new LinkedHashMap<>(snapshot);
+                request.put(
+                        "changeRequestedAt",
+                        log.getTime() == null ? null : log.getTime().toString());
+                requests.put(requestId, request);
             }
             if (action.startsWith("产品企划确认成果：") && snapshot.get("deliveryVersionId") instanceof Number id) {
                 confirmations.put(id.longValue(), snapshot);
@@ -125,10 +129,26 @@ final class SubTaskPointView {
                             ? "revision"
                             : "initial".equals(version.get("submissionType")) ? "initial" : "unknown");
             version.put("changeReason", request.get("reason"));
+            version.put("changeRequestedAt", request.get("changeRequestedAt"));
             version.put("changeReferenceImagesJson", request.get("changeReferenceImagesJson"));
+            version.put("changeAttachmentsJson", request.getOrDefault("changeAttachmentsJson", "[]"));
             version.put(
                     "reviewComments", confirmations.getOrDefault(id, Map.of()).get("reviewComments"));
         }
+    }
+
+    static String changeRequestedAt(Long taskId, String requestId, List<ActivityLog> logs) {
+        if (requestId == null || requestId.isBlank()) return null;
+        return logs.stream()
+                .filter(log -> "sub_task".equals(log.getEntityType())
+                        && Objects.equals(taskId, log.getEntityId())
+                        && Objects.toString(log.getAction(), "").startsWith("发起子任务修改：")
+                        && requestId.equals(parse(log.getAfterData()).get("pointRequestId")))
+                .map(ActivityLog::getTime)
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .map(Object::toString)
+                .orElse(null);
     }
 
     private static Map<String, Object> parse(String json) {

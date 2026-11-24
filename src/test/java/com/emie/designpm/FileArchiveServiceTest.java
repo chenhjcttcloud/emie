@@ -1,6 +1,7 @@
 package com.emie.designpm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -18,6 +19,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
@@ -53,6 +55,70 @@ class FileArchiveServiceTest {
         assertEquals("project", upload.getTargetType());
         assertEquals(4L, upload.getTargetId());
         verify(records).save(upload);
+    }
+
+    @Test
+    void reusingProjectAndTaskFilesPreservesTheirSourceBindingAndUploader() {
+        for (String sourceType : List.of("project", "sub_task")) {
+            FileRecordRepository records = mock(FileRecordRepository.class);
+            FileArchiveService service = new FileArchiveService(records, mock(SystemConfigRepository.class));
+            FileRecord source = FileRecord.builder()
+                    .storedName("source.pdf")
+                    .targetType(sourceType)
+                    .targetId(11L)
+                    .ownerUserId("original-uploader")
+                    .build();
+            when(records.findByStoredName("source.pdf")).thenReturn(Optional.of(source));
+
+            service.bindFilesFromJson("[{\"storedName\":\"source.pdf\"}]", "sub_task", 99L);
+            service.bindFilesFromJson("[{\"url\":\"/api/files/download/source.pdf?download=true\"}]", "project", 2L);
+
+            assertEquals(sourceType, source.getTargetType());
+            assertEquals(11L, source.getTargetId());
+            assertEquals("original-uploader", source.getOwnerUserId());
+            verify(records, never()).save(source);
+        }
+    }
+
+    @Test
+    void urlOnlyReferencesBindUnboundOrIncompleteUploadsWithoutChangingTheirUploader() {
+        for (FileRecord upload : List.of(
+                FileRecord.builder().build(),
+                FileRecord.builder().targetType("project").build(),
+                FileRecord.builder().targetId(3L).build(),
+                FileRecord.builder().targetType(" ").targetId(3L).build())) {
+            FileRecordRepository records = mock(FileRecordRepository.class);
+            FileArchiveService service = new FileArchiveService(records, mock(SystemConfigRepository.class));
+            upload.setStoredName("upload.pdf");
+            upload.setOwnerUserId("original-uploader");
+            when(records.findByStoredName("upload.pdf")).thenReturn(Optional.of(upload));
+
+            service.bindFilesFromJson("[{\"url\":\"/api/files/download/upload.pdf?download=true\"}]", "sub_task", 99L);
+
+            assertEquals("sub_task", upload.getTargetType());
+            assertEquals(99L, upload.getTargetId());
+            assertEquals("original-uploader", upload.getOwnerUserId());
+            verify(records).save(upload);
+        }
+    }
+
+    @Test
+    void libraryFilesWithoutTargetIdRemainProtectedWhenReferencedByTasks() {
+        FileRecordRepository records = mock(FileRecordRepository.class);
+        FileArchiveService service = new FileArchiveService(records, mock(SystemConfigRepository.class));
+        FileRecord library = FileRecord.builder()
+                .storedName("library.png")
+                .targetType("image_library")
+                .ownerUserId("library-owner")
+                .build();
+        when(records.findByStoredName("library.png")).thenReturn(Optional.of(library));
+
+        service.bindFilesFromJson("[{\"storedName\":\"library.png\"}]", "sub_task", 99L);
+
+        assertEquals("image_library", library.getTargetType());
+        assertNull(library.getTargetId());
+        assertEquals("library-owner", library.getOwnerUserId());
+        verify(records, never()).save(library);
     }
 
     @Test

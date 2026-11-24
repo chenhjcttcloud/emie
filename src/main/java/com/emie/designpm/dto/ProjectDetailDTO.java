@@ -31,6 +31,7 @@ public class ProjectDetailDTO {
     private String ipSubOptions;
     private String referenceImagesJson;
     private String attachmentsJson;
+    private Map<String, String> projectFileUploadTimes = Map.of();
     private String productArchiveJson;
     private List<Map<String, Object>> logs;
     private List<TaskDetailDTO> tasks;

@@ -200,7 +200,9 @@ final class SubTaskRejectionHistory {
             version.put("submissionOrigin", "rejection");
             version.put("revisionNo", null);
             version.put("changeReason", null);
+            version.put("changeRequestedAt", null);
             version.put("changeReferenceImagesJson", null);
+            version.put("changeAttachmentsJson", null);
             linked = true;
         }
     }

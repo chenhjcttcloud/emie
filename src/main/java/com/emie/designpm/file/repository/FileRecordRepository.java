@@ -29,10 +29,13 @@ public interface FileRecordRepository extends JpaRepository<FileRecord, Long> {
         Long getFileSize();
 
         String getOwnerUserId();
+
+        LocalDateTime getCreatedAt();
     }
 
     @Query("SELECT f.targetId AS targetId, f.storedName AS storedName, f.originalName AS originalName, "
-            + "f.fileSize AS fileSize, f.ownerUserId AS ownerUserId FROM FileRecord f WHERE f.targetType = 'sub_task' "
+            + "f.fileSize AS fileSize, f.ownerUserId AS ownerUserId, f.createdAt AS createdAt "
+            + "FROM FileRecord f WHERE f.targetType = 'sub_task' "
             + "AND f.targetId IN :taskIds ORDER BY f.createdAt DESC, f.id DESC")
     List<SubTaskUploadProjection> findSubTaskUploads(@Param("taskIds") Collection<Long> taskIds);
 

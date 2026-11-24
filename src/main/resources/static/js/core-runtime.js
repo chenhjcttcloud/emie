@@ -96,6 +96,7 @@ EMIE.projectState = Object.assign({
   rejectionImages: [],
   rejectionAttachments: [],
   changeBonusImages: [],
+  changeBonusAttachments: [],
   materialRefImages: [],
   materialAttachments: [],
   createProjectType: 'channel_custom',

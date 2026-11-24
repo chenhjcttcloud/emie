@@ -115,6 +115,10 @@ public class SubTask {
     @Column(columnDefinition = "LONGTEXT")
     private String pendingChangeReferenceImagesJson = "[]";
 
+    /** 本轮需求修改的附件，与设计师交付成果分开保存。 */
+    @Column(columnDefinition = "LONGTEXT")
+    private String pendingChangeAttachmentsJson = "[]";
+
     /** 接单所需能力标签，JSON 字符串数组。 */
     @Column(columnDefinition = "TEXT")
     private String requiredSkillTagsJson;

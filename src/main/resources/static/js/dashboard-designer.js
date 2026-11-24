@@ -218,6 +218,7 @@ function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
           ${renderTaskReviewComment(t)}
           ${renderTaskRejectionHistory(t, { compact: true })}
           ${taskDetailFiles(t.pendingChangeReferenceImagesJson, true)}
+          ${taskDetailFiles(t.pendingChangeAttachmentsJson, false, '修改附件')}
           ${latestDelivery ? `<div style="margin-top:12px;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;background:var(--gray-50);"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><strong style="font-size:13px;">${escHtml(taskDeliveryRounds(deliveryVersions, rejectionRecords).at(-1)?.label || '最新提交')} · 最新成果</strong><span style="font-size:11px;color:var(--gray-400);">${fmtDT(latestDelivery.submittedAt)}</span></div><div style="font-size:12px;color:var(--gray-700);white-space:pre-wrap;">${escHtml(latestDelivery.deliverables || '未填写文字交付内容')}</div>${taskDetailFiles(latestDelivery.referenceImagesJson, true)}${taskDetailFiles(latestDelivery.attachmentsJson, false)}</div>` : ''}
           <div class="subtask-actions">
             ${!readOnly && t.status === 'pending' && !t._unassigned && String(t.designerId || '') === String(getCurrentUserId()) ? `<button class="btn btn-primary btn-sm" data-emie-action="click:designer-accept" data-project-id="${t.projectId}" data-task-id="${t.id}">✅ 接单</button>` : ''}
@@ -455,6 +456,8 @@ function renderDeliveryRounds(versions, rejectionRecords = [], task = {},
       : current.changeReason || round.first.changeReason;
     const requirementImages = round.origin === 'rejection' ? round.requirement?.rejectionReferenceImagesJson
       : current.changeReferenceImagesJson || round.first.changeReferenceImagesJson;
+    const requirementAttachments = round.origin === 'rejection' ? round.requirement?.rejectionAttachmentsJson
+      : current.changeAttachmentsJson || round.first.changeAttachmentsJson;
     const requirementMeta = reviewerMeta(round.requirement);
     const rule = current.pointRuleDescription || current.pointRuleCode;
     const awaitingConfirmation = ['pending', 'no_points'].includes(round.pointStatus) && !confirmation.confirmedAt;
@@ -480,7 +483,7 @@ function renderDeliveryRounds(versions, rejectionRecords = [], task = {},
       <div class="delivery-round-body">
         ${requirement ? `<section class="delivery-round-step is-requirement"><h4>${round.origin === 'rejection' ? '重交依据 · 上一轮驳回理由' : '本轮修改要求'}</h4>
           ${requirementMeta ? `<div class="delivery-step-meta">${escHtml(requirementMeta)}</div>` : ''}
-          <p>${escHtml(requirement)}</p>${taskDetailFiles(requirementImages, true)}${taskDetailFiles(round.requirement?.rejectionAttachmentsJson, false)}</section>` : ''}
+          <p>${escHtml(requirement)}</p>${taskDetailFiles(requirementImages, true)}${taskDetailFiles(requirementAttachments, false, round.origin === 'rejection' ? '驳回附件' : '修改附件')}</section>` : ''}
         ${latest && !showLatestDelivery ? `<div class="delivery-round-current-note">${escHtml(currentLabel)}的成果和附件见上方「交付进度」</div>`
           : `<section class="delivery-round-step is-delivery"><h4>本轮成果 · ${escHtml(currentLabel)}</h4>
             ${current.changeSummary ? `<p>修正说明：${escHtml(current.changeSummary)}</p>` : ''}
@@ -552,7 +555,8 @@ function renderSubTaskDetailBody(task, { projectId = task.projectId, projectStat
     && (latest.referenceImagesJson == null || latest.referenceImagesJson === referenceImages)
     && (latest.attachmentsJson == null || latest.attachmentsJson === attachments);
   const reviewComment = renderTaskReviewComment(task);
-  const changeFiles = taskDetailFiles(task.pendingChangeReferenceImagesJson, true);
+  const changeFiles = taskDetailFiles(task.pendingChangeReferenceImagesJson, true)
+    + taskDetailFiles(task.pendingChangeAttachmentsJson, false, '修改附件');
   const basicDetails = [
     ['负责人', task.designerName || '待分配'],
     ...(task.publisherName ? [['发布人', task.publisherName]] : []),

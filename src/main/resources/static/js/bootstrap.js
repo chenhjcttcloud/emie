@@ -1,4 +1,4 @@
-import './core-runtime.js?v=328';
+import './core-runtime.js?v=329';
 import './event-runtime.js?v=269';
 import './core-auth.js?v=428';
 import './core-identity.js?v=498';
@@ -10,14 +10,15 @@ import './dashboard-home.js?v=626';
 import './dashboard-lists.js?v=434';
 import './dashboard-scoring.js?v=346';
 import './dashboard-points.js?v=387';
-import './dashboard-designer.js?v=616';
+import './dashboard-designer.js?v=617';
 import './dashboard.js?v=219';
 import './material-market.js?v=163';
 import './image-library.js?v=117';
-import './project-uploads.js?v=501';
+import './project-uploads.js?v=502';
 import './project-form.js?v=459';
-import './project-detail.js?v=685';
-import './project-tasks.js?v=707';
+import './project-detail.js?v=686';
+import './project-file-picker.js?v=1';
+import './project-tasks.js?v=708';
 import './project-sharing.js?v=264';
 import './projects.js?v=148';
 // 管理模块只在进入对应页面时下载；保留原有版本号作为缓存边界。
@@ -79,7 +80,7 @@ EMIE.loadViewModules = loadViewModules;
 const requiredEmieModules = [
   'coreRuntime', 'eventRuntime', 'coreAuth', 'coreIdentity', 'coreShell', 'coreUi', 'core',
   'dashboardProjects', 'dashboardHome', 'dashboardLists', 'dashboardScoring', 'dashboardPoints', 'dashboardDesigner', 'dashboard',
-  'projectUploads', 'projectForm', 'projectDetail', 'projectTasks', 'projectSharing', 'projects', 'materialMarket', 'imageLibrary',
+  'projectUploads', 'projectForm', 'projectDetail', 'projectFilePicker', 'projectTasks', 'projectSharing', 'projects', 'materialMarket', 'imageLibrary',
   'files', 'businessAssistantPosition', 'businessAssistant',
 ];
 const missingEmieModules = requiredEmieModules.filter(name => !EMIE.modules[name]);

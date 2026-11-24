@@ -38,6 +38,8 @@ class ProjectViewRejectionHistoryTest {
         task.setCreatedAt(AT.minusDays(1));
         task.setSubmittedForReviewAt(at(600));
         task.setDeliverables("最后一轮成果");
+        String changeFiles = "[{\"name\":\"修改要求.pdf\",\"url\":\"/requirements.pdf\"}]";
+        task.setPendingChangeAttachmentsJson(changeFiles);
         project.getTasks().add(task);
 
         var old = new ActivityLog("子任务驳回：包装稿（意见：旧版反馈）", "企划", "planner", project);
@@ -76,7 +78,9 @@ class ProjectViewRejectionHistoryTest {
         var v1 = version(101L, 1, 100, "initial", "首轮", "");
         var v2 = version(102L, 2, 300, "revision", "换色版", "same-bonus");
         var correction = version(103L, 3, 400, "correction", "换色更正版", "same-bonus");
-        var v3 = version(104L, 4, 600, "revision", "尺寸补充版", "same-bonus");
+        var v3 = new java.util.LinkedHashMap<>(version(104L, 4, 600, "revision", "尺寸补充版", "same-bonus"));
+        v3.put("changeAttachmentsJson", changeFiles);
+        v3.put("changeRequestedAt", AT.minusDays(1).toString());
 
         var projects = mock(ProjectService.class);
         var logs = mock(ActivityLogRepository.class);
@@ -110,8 +114,14 @@ class ProjectViewRejectionHistoryTest {
         var mine = view.getMySubTasks(new AuthSession("d1", "designer", "设计师")).getFirst();
         var department = view.getDepartmentSubTasks(new AuthSession("p1", "planner", "产品企划"))
                 .getFirst();
+        assertEquals(at(600).toString(), details.getSubmittedForReviewAt());
         assertEquals(at(600).format(ProjectViewSupport.DTF), mine.get("submittedForReviewAt"));
         assertEquals(mine.get("submittedForReviewAt"), department.get("submittedForReviewAt"));
+        assertEquals(changeFiles, details.getPendingChangeAttachmentsJson());
+        assertEquals(changeFiles, mine.get("pendingChangeAttachmentsJson"));
+        assertEquals(changeFiles, department.get("pendingChangeAttachmentsJson"));
+        var serialized = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(details);
+        assertEquals(changeFiles, serialized.get("pendingChangeAttachmentsJson").asText());
         var records = details.getRejectionRecords();
         var deliveries = details.getDeliveryVersions();
         assertEquals(records, mine.get("rejectionRecords"));
@@ -135,6 +145,8 @@ class ProjectViewRejectionHistoryTest {
         assertEquals("[{\"name\":\"尺寸要求.pdf\"}]", records.get(3).get("rejectionAttachmentsJson"));
         assertEquals(203L, deliveries.get(0).get("rejectionCycleId"));
         assertEquals("请补充尺寸", deliveries.get(0).get("rejectionReason"));
+        assertNull(deliveries.get(0).get("changeAttachmentsJson"));
+        assertNull(deliveries.get(0).get("changeRequestedAt"));
         assertEquals(201L, deliveries.get(1).get("rejectionCycleId"));
         assertEquals(201L, deliveries.get(2).get("rejectionCycleId"));
         assertEquals("请更换颜色", deliveries.get(2).get("rejectionReason"));
@@ -143,6 +155,83 @@ class ProjectViewRejectionHistoryTest {
         assertNull(deliveries.get(3).get("rejectionCycleId"));
         assertFalse(v3.containsKey("rejectionCycleId"));
         verify(logs, times(3)).findSubTaskRejectionHistory(List.of(11L), List.of(1L));
+        verify(logs, never()).findProjectHistory(anyLong());
+    }
+
+    @Test
+    void pendingModificationTimeUsesOneCompleteAuditQueryAndMatchesEachCurrentRequest() {
+        Project project = new Project();
+        project.setId(1L);
+        project.setType("regular");
+        project.setCreatedAt(AT.minusDays(2));
+        project.setUpdatedAt(AT);
+        for (long id : List.of(11L, 12L, 13L)) {
+            SubTask task = new SubTask();
+            task.setId(id);
+            task.setName("任务" + id);
+            task.setProject(project);
+            task.setStatus("revision_requested");
+            task.setCreatedAt(AT.minusDays(1));
+            task.setPendingChangeBonusRequestId("request-" + id);
+            project.getTasks().add(task);
+        }
+        ActivityLog first = new ActivityLog(
+                "发起子任务修改：任务11",
+                "企划",
+                "planner",
+                project,
+                "sub_task",
+                11L,
+                null,
+                "{\"pointRequestId\":\"request-11\"}",
+                "");
+        first.setTime(AT);
+        ActivityLog second = new ActivityLog(
+                "发起子任务修改：任务12",
+                "企划",
+                "planner",
+                project,
+                "sub_task",
+                12L,
+                null,
+                "{\"pointRequestId\":\"request-12\"}",
+                "");
+        second.setTime(AT.plusMinutes(1));
+        ActivityLog oldRequest = new ActivityLog(
+                "发起子任务修改：任务11",
+                "企划",
+                "planner",
+                project,
+                "sub_task",
+                11L,
+                null,
+                "{\"pointRequestId\":\"old-request\"}",
+                "");
+        oldRequest.setTime(AT.plusMinutes(10));
+        var projects = mock(ProjectService.class);
+        var logs = mock(ActivityLogRepository.class);
+        when(projects.computeProjectStatus(project)).thenReturn("in_progress");
+        when(logs.findSubTaskDeliveryHistory(List.of(11L, 12L, 13L))).thenReturn(List.of(first, second, oldRequest));
+        var view = new ProjectViewSupport(
+                projects,
+                mock(ScoringRepository.class),
+                logs,
+                mock(SubTaskRepository.class),
+                mock(ProjectAccessService.class),
+                mock(ProjectWorkflowService.class),
+                mock(SubTaskCommandService.class));
+
+        // The capped project activity feed is empty; current modification timestamps still come from durable audits.
+        var detail = view.toDetailWithLogs(project, List.of());
+        var byId = detail.getTasks().stream()
+                .collect(java.util.stream.Collectors.toMap(task -> task.getId(), task -> task));
+
+        assertEquals(AT.toString(), byId.get(11L).getPendingChangeRequestedAt());
+        assertEquals(AT.plusMinutes(1).toString(), byId.get(12L).getPendingChangeRequestedAt());
+        assertNull(byId.get(13L).getPendingChangeRequestedAt());
+        var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(byId.get(11L));
+        assertEquals(AT.toString(), json.get("pendingChangeRequestedAt").asText());
+        verify(logs).findSubTaskDeliveryHistory(List.of(11L, 12L, 13L));
         verify(logs, never()).findProjectHistory(anyLong());
     }
 

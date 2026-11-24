@@ -4,6 +4,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { runDesignerPersonalPerformanceChecks } from './designer-performance.mjs';
 import { runPointsLedgerLinkChecks } from './points-ledger-links.mjs';
+import { runTaskChangeAttachmentChecks } from './task-change-attachments.mjs';
+import { runProjectFileReferenceChecks } from './project-file-reference.mjs';
+import { runFileOverviewTimeChecks } from './file-overview-times.mjs';
+import { runProjectFilePickerTimeChecks } from './project-file-picker-times.mjs';
 
 const baseURL = process.env.EMIE_BASE_URL || 'http://127.0.0.1:8080';
 const repeat = Number.parseInt(process.env.MODAL_E2E_REPEAT || '1', 10);
@@ -687,7 +691,8 @@ async function runVisualTaskRuleChecks(page) {
       await changeModal.waitFor({ state: 'detached' });
       const sent = await page.evaluate(() => window.visualTaskRuleFixture.writes.at(-1));
       assert.equal(sent.url, '/projects/301/subtasks/301/change-bonus');
-      assert.deepEqual(Object.keys(sent.body).sort(), ['changeReferenceImagesJson', 'changeTier', 'reason', 'requestId']);
+      assert.deepEqual(Object.keys(sent.body).sort(), ['changeAttachmentsJson', 'changeReferenceImagesJson', 'changeTier', 'reason', 'requestId']);
+      assert.equal(sent.body.changeAttachmentsJson, '[]');
       assert.equal(sent.body.changeTier, tier);
       assert.equal(sent.body.reason, '测试修改意见');
     }
@@ -1074,6 +1079,10 @@ try {
       await runChecks(page);
       await runPointRuleChecks(page);
       await runVisualTaskRuleChecks(page);
+      await runTaskChangeAttachmentChecks(page);
+      await runProjectFileReferenceChecks(page);
+      await runFileOverviewTimeChecks(page);
+      await runProjectFilePickerTimeChecks(page);
       await runAdminSubcategoryChecks(page);
       await runPointLogChecks(page);
       await runDesignerEvaluationChecks(page);

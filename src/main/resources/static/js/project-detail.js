@@ -335,9 +335,40 @@ const projectFileSourceLabels = {
   rejection: '驳回资料',
 };
 
+function parseProjectFileTime(raw) {
+  if (typeof raw !== 'string') return null;
+  const value = raw.trim().replace(' ', 'T');
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})?$/i);
+  if (!match) return null;
+  const [, year, month, day, hour, minute, second] = match;
+  const daysInMonth = new Date(Date.UTC(Number(year), Number(month), 0)).getUTCDate();
+  if (Number(month) < 1 || Number(month) > 12 || Number(day) < 1 || Number(day) > daysInMonth
+      || Number(hour) > 23 || Number(minute) > 59 || Number(second || 0) > 59) return null;
+  // 服务端无时区的 LocalDateTime 使用北京时间，带时区的记录按其实际时刻排序。
+  const stamp = Date.parse(value + (match[7] ? '' : '+08:00'));
+  return Number.isFinite(stamp) ? { value, stamp } : null;
+}
+
+function latestProjectFileTime(first, second) {
+  return second && (!first || second.stamp > first.stamp) ? second : first;
+}
+
+function setProjectFileTime(item) {
+  const time = item.submittedAt || item.uploadedAt;
+  item.timestamp = time?.stamp ?? null;
+  item.timeKind = item.submittedAt ? 'submitted' : item.uploadedAt ? 'uploaded' : 'unknown';
+}
+
+function renderProjectFileTime(item) {
+  const time = item.submittedAt || item.uploadedAt;
+  if (!time) return '<span class="project-file-time">时间未记录</span>';
+  const text = new Date(time.stamp + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+  return `<time class="project-file-time" datetime="${new Date(time.stamp).toISOString()}">${item.timeKind === 'submitted' ? '提交于' : '上传于'} ${text}</time>`;
+}
+
 function collectTaskOverviewFiles(task) {
   const files = new Map();
-  const collect = (value, source, kind) => {
+  const collect = (value, source, kind, submittedAt) => {
     let entries = value;
     if (typeof entries === 'string') {
       try { entries = JSON.parse(entries); } catch (_) { return; }
@@ -357,11 +388,14 @@ function collectTaskOverviewFiles(task) {
         files.set(url, {
           file: { ...file, name: name || storedNameFromFile(file) }, url,
           sources: new Set(), kinds: new Set(), plannerUpload: !source && raw.plannerUpload === true,
+          submittedAt: null, uploadedAt: null,
         });
       }
       const item = files.get(url);
       if (source) item.sources.add(source);
       if (kind) item.kinds.add(kind);
+      item.submittedAt = latestProjectFileTime(item.submittedAt, parseProjectFileTime(submittedAt));
+      item.uploadedAt = latestProjectFileTime(item.uploadedAt, parseProjectFileTime(raw.createdAt) || parseProjectFileTime(raw.uploadedAt));
     }
   };
 
@@ -371,49 +405,68 @@ function collectTaskOverviewFiles(task) {
   const { referenceImages, deliveryImages, hasDelivery } = getSubTaskImageGroups(task);
   const legacyKind = !versions.length && hasDelivery ? 'legacyDelivery' : undefined;
   collect(referenceImages, '当前参考图');
-  collect(deliveryImages, legacyKind ? '当前图片' : '当前交付图片', legacyKind);
-  collect(task.attachmentsJson, '当前附件', legacyKind);
-  collect(task.pendingChangeReferenceImagesJson, '本轮修改参考', 'change');
+  const legacySubmittedAt = !versions.length && hasDelivery ? task.submittedForReviewAt : null;
+  collect(deliveryImages, legacyKind ? '当前图片' : '当前交付图片', legacyKind, legacySubmittedAt);
+  collect(task.attachmentsJson, '当前附件', legacyKind, legacySubmittedAt);
+  collect(task.pendingChangeReferenceImagesJson, '本轮修改参考', 'change', task.pendingChangeRequestedAt);
+  collect(task.pendingChangeAttachmentsJson, '本轮修改附件', 'change', task.pendingChangeRequestedAt);
   for (const version of versions) {
     const label = version.versionNo == null ? '历史交付' : `交付第 ${version.versionNo} 版`;
     const kind = deliveryKind(version.submittedByRole);
-    collect(version.referenceImagesJson, label, kind);
-    collect(version.attachmentsJson, label, kind);
-    collect(version.changeReferenceImagesJson, `${label}的修改参考`, 'change');
+    collect(version.referenceImagesJson, label, kind, version.submittedAt);
+    collect(version.attachmentsJson, label, kind, version.submittedAt);
+    collect(version.changeReferenceImagesJson, `${label}的修改参考`, 'change', version.changeRequestedAt);
+    collect(version.changeAttachmentsJson, `${label}的修改附件`, 'change', version.changeRequestedAt);
   }
   for (const record of task.rejectionRecords || []) {
     const label = record.attemptNo == null ? '历史驳回' : `第 ${record.attemptNo} 次驳回`;
     if (!record.legacy) {
       const version = versions.find(item => item.id != null && item.id === record.rejectedDeliveryVersionId);
       const kind = deliveryKind(version?.submittedByRole);
-      collect(record.referenceImagesJson, `${label}前的成果`, kind);
-      collect(record.attachmentsJson, `${label}前的成果`, kind);
+      const submittedAt = parseProjectFileTime(record.submittedAt) ? record.submittedAt : version?.submittedAt;
+      collect(record.referenceImagesJson, `${label}前的成果`, kind, submittedAt);
+      collect(record.attachmentsJson, `${label}前的成果`, kind, submittedAt);
     }
-    collect(record.rejectionReferenceImagesJson, `${label}的参考`, 'rejection');
-    collect(record.rejectionAttachmentsJson, `${label}的附件`, 'rejection');
+    collect(record.rejectionReferenceImagesJson, `${label}的参考`, 'rejection', record.reviewedAt);
+    collect(record.rejectionAttachmentsJson, `${label}的附件`, 'rejection', record.reviewedAt);
   }
   for (const { kinds, plannerUpload } of files.values()) {
     if (kinds.delete('legacyDelivery') && !kinds.size && !plannerUpload) kinds.add(deliveryKind());
     if (!kinds.size && plannerUpload) kinds.add('planner');
   }
-  return [...files.values()];
+  return [...files.values()].map(item => { setProjectFileTime(item); return item; });
 }
 
 function renderProjectFileOverview(tasks) {
   const groups = tasks.map(task => ({ task, files: collectTaskOverviewFiles(task) })).filter(group => group.files.length);
+  // 同项目复用文件仍可显示原上传时间，但不继承其他子任务的交付时间。
+  const uploads = new Map();
+  for (const { files } of groups) {
+    for (const item of files) uploads.set(item.url, latestProjectFileTime(uploads.get(item.url), item.uploadedAt));
+  }
+  for (const group of groups) {
+    for (const item of group.files) {
+      item.uploadedAt = latestProjectFileTime(item.uploadedAt, uploads.get(item.url));
+      setProjectFileTime(item);
+    }
+    group.files.sort((a, b) => (b.timestamp ?? -Infinity) - (a.timestamp ?? -Infinity) || 0);
+    group.timestamp = group.files[0].timestamp;
+  }
+  groups.sort((a, b) => (b.timestamp ?? -Infinity) - (a.timestamp ?? -Infinity) || 0);
   const count = groups.reduce((sum, group) => sum + group.files.length, 0);
   return `<section class="detail-section project-file-overview">
     <div class="detail-section-title">📁 文件总览 <span class="project-file-overview-count">${count} 个文件</span></div>
-    ${count ? `<p class="project-file-overview-hint">按子任务查看上传文件、历次交付和驳回附件。</p>
-      ${groups.map(({ task, files }, index) => `<details class="project-file-group" ${index === 0 ? 'open' : ''}>
+    ${count ? `<p class="project-file-overview-hint">按子任务查看上传文件、历次交付和驳回附件，最新提交的文件排在前面；无提交记录时显示上传时间。</p>
+      ${groups.map(({ task, files }, index) => `<details class="project-file-group" data-file-task-id="${escHtml(task.id)}" ${index === 0 ? 'open' : ''}>
         <summary><strong>${escHtml(task.name || '未命名子任务')}</strong><span>${files.length} 个文件</span></summary>
-        <ul class="project-file-group-list">${files.map(({ file, url, sources, kinds }) => `<li class="project-file-row" data-file-source="${[...kinds].map(kind => projectFileSourceLabels[kind]).join(' · ')}">
+        <ul class="project-file-group-list">${files.map(item => { const { file, url, sources, kinds } = item; return `<li class="project-file-row" data-file-source="${[...kinds].map(kind => projectFileSourceLabels[kind]).join(' · ')}" data-file-time="${escHtml((item.submittedAt || item.uploadedAt)?.value || '')}" data-file-time-kind="${item.timeKind}" data-file-timestamp="${item.timestamp ?? ''}">
           <div class="project-file-row-info">
             <div class="project-file-row-title"><strong>${escHtml(file.name)}</strong>${[...kinds].map(kind => `<span class="project-file-source ${kind}">${projectFileSourceLabels[kind]}</span>`).join('')}</div>
             <small>${escHtml([...sources].join(' · ') || '子任务上传')}${file.size ? ` · ${fmtSize(file.size)}` : ''}</small>
+            ${renderProjectFileTime(item)}
           </div>
           <div class="project-file-row-actions">${isRasterImageFile(file.name) ? `<button type="button" class="attachment-action-btn preview" data-emie-action="click:detail-overview-image" data-file-url="${escHtml(url)}" data-file-name="${escHtml(file.name)}">👁 预览</button>` : ''}${renderAttachmentActions(file)}</div>
-        </li>`).join('')}</ul>
+        </li>`; }).join('')}</ul>
       </details>`).join('')}` : '<p class="project-file-overview-hint">子任务上传文件后会在这里显示。</p>'}
   </section>`;
 }
@@ -503,6 +556,7 @@ function renderSubTaskCard(detail, task, idx) {
     ${EMIE.actions.renderTaskReviewComment(task)}
     ${EMIE.actions.renderTaskRejectionHistory(task, { compact: true })}
     ${renderSubTaskImages(task.pendingChangeReferenceImagesJson)}
+    ${renderTaskAttachments(task.pendingChangeAttachmentsJson, '修改附件')}
 
 
     <div class="subtask-actions${task.pendingChangeBonusRequestId ? ' has-change-note' : ''}">
@@ -922,7 +976,7 @@ function renderProjectAttachments(detail) {
 }
 
 // 渲染子任务交付附件
-function renderTaskAttachments(jsonStr) {
+function renderTaskAttachments(jsonStr, label) {
   if (!jsonStr) return '';
   let atts;
   try { atts = JSON.parse(jsonStr); } catch(e) { return ''; }
@@ -937,7 +991,7 @@ function renderTaskAttachments(jsonStr) {
   const thumbUrl = u => protectedFileUrl(originalFileUrl(u, 'thumbnail'));
   // 图片预览
   if (images.length) {
-    html += `<div style="margin-top:8px;"><div class="detail-label">🖼️ 交付图片</div>
+    html += `<div style="margin-top:8px;"><div class="detail-label">🖼️ ${escHtml(label || '交付图片')}</div>
       <div class="image-preview" style="margin-top:4px;">
         ${images.map(img => `<div style="position:relative;display:inline-block;">
           <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(thumbUrl(img))}" data-full-src="${escHtml(authUrl(img))}" alt="${escHtml(img.name || '')}" class="img-clickable img-preview-large" draggable="true" loading="lazy" decoding="async" style="cursor:grab;">
@@ -947,7 +1001,7 @@ function renderTaskAttachments(jsonStr) {
   }
   // 附件下载
   if (files.length) {
-    html += `<div style="margin-top:8px;"><div class="detail-label">📎 交付附件</div>
+    html += `<div style="margin-top:8px;"><div class="detail-label">📎 ${escHtml(label || '交付附件')}</div>
       ${files.map(a => `<div class="attachment-item" style="margin-top:4px;display:flex;align-items:center;gap:8px;">
         <span>📎</span><span class="attachment-name" style="flex:1;">${escHtml(a.name)}</span>
         ${a.size ? `<span class="attachment-size">${fmtSize(a.size)}</span>` : ''}
@@ -1243,6 +1297,11 @@ EMIE.registerActions({
   saveProjectCollaborators,
   openProjectDetail,
   renderProjectDetailContent,
+  collectTaskOverviewFiles,
+  parseProjectFileTime,
+  latestProjectFileTime,
+  setProjectFileTime,
+  renderProjectFileTime,
   cleanLogAction,
   renderLogLabel,
   renderSubTaskCard,

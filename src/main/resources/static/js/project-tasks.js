@@ -5,6 +5,7 @@ const ATTACHMENT_FILE_ACCEPT = EMIE.fileAccept?.attachment
 const roleLabel = (...args) => EMIE.actions.roleLabel(...args);
 const getCurrentUserName = (...args) => EMIE.actions.getCurrentUserName(...args);
 const getCurrentUserId = (...args) => EMIE.actions.getCurrentUserId(...args);
+const formModified = (...args) => EMIE.actions.formModified(...args);
 const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const apiPost = (...args) => EMIE.actions.apiPost(...args);
 const apiPut = (...args) => EMIE.actions.apiPut(...args);
@@ -154,7 +155,21 @@ function handleSubTaskRefImages(input) {
   handleFileUpload(input, EMIE.projectState.subTaskRefImages, 6, '参考图片', true);
 }
 function handleSubTaskAttachments(input) {
-  handleFileUpload(input, EMIE.projectState.subTaskAttachments, 9, '附件', false);
+  handleFileUpload(input, EMIE.projectState.subTaskAttachments, 5, '附件', false);
+}
+
+async function referenceSubTaskProjectFiles(pid, kind) {
+  const parentModal = document.getElementById('addSubTaskModal');
+  if (!parentModal || parentModal.dataset.projectId !== String(pid)) return;
+  const reference = kind === 'reference';
+  const selected = reference ? EMIE.projectState.subTaskRefImages : EMIE.projectState.subTaskAttachments;
+  const files = await EMIE.actions.pickProjectFiles({
+    projectId: pid, kind, selected, maxCount: reference ? 6 : 5, parentModal,
+  });
+  if (!files?.length || !parentModal.isConnected || parentModal.dataset.modalClosing === '1') return;
+  selected.push(...files);
+  renderFileList(selected, reference ? '参考图片' : '附件');
+  formModified();
 }
 
 async function addSubTask(pid) {
@@ -201,6 +216,7 @@ async function addSubTask(pid) {
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'addSubTaskModal';
+  modal.dataset.projectId = String(pid);
   modal.innerHTML = `
     <button class="modal-close-float" data-emie-action="click:task-add-close">✕</button>
     <div class="modal modal-lg">
@@ -257,7 +273,7 @@ async function addSubTask(pid) {
           <div class="form-group"><label class="form-label">细节要求说明</label><textarea class="form-textarea" name="details" placeholder="子任务的具体要求说明..." data-emie-action="input:task-clear-field-error"></textarea></div>
         </form>
         <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
-          <div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片（可选）</div>
+          <div class="project-file-reference-heading"><span class="form-label">🖼️ 参考图片（可选）</span><button type="button" class="btn btn-outline btn-sm" data-emie-action="click:task-reference-project-files" data-project-id="${pid}" data-kind="reference">引用项目文件</button></div>
           <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="subTaskRefImageInput">
             <div>📁 拖拽图片到此处，或点击选择图片</div>
             <input type="file" id="subTaskRefImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-subtask-ref-images">
@@ -265,7 +281,7 @@ async function addSubTask(pid) {
           <div class="file-list" id="createRefImageList"></div>
         </div>
         <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
-          <div class="form-label" style="margin-bottom:8px;">📎 附件（可选）</div>
+          <div class="project-file-reference-heading"><span class="form-label">📎 附件（可选）</span><button type="button" class="btn btn-outline btn-sm" data-emie-action="click:task-reference-project-files" data-project-id="${pid}" data-kind="attachment">引用项目文件</button></div>
           <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="subTaskAttachmentInput">
             <div>📁 拖拽文件到此处，或点击选择文件</div>
             <input type="file" id="subTaskAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-subtask-attachments">
@@ -1156,6 +1172,7 @@ async function openTaskChangeBonus(pid, tid) {
       : renderLegacyTaskChangePoints(await apiGet('/points/rules'));
     if (document.getElementById('taskChangeBonusModal')) return;
     EMIE.projectState.changeBonusImages = [];
+    EMIE.projectState.changeBonusAttachments = [];
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
     modal.id = 'taskChangeBonusModal';
@@ -1172,6 +1189,14 @@ async function openTaskChangeBonus(pid, tid) {
               <input type="file" id="changeBonusImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-change-bonus-images">
             </div>
             <div class="file-list" id="changeBonusImageList"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">修改附件（可选）</label>
+            <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="changeBonusAttachmentInput">
+              <div>📁 拖拽文件到此处，或点击选择文件</div>
+              <input type="file" id="changeBonusAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-change-bonus-attachments">
+            </div>
+            <div class="file-list" id="changeBonusAttachmentList"></div>
           </div>
           ${scoringOptions}
         </div>
@@ -1249,6 +1274,7 @@ async function submitTaskChangeBonus(pid, tid) {
       reason,
       requestId: modal.dataset.requestId,
       changeReferenceImagesJson: JSON.stringify(EMIE.projectState.changeBonusImages),
+      changeAttachmentsJson: JSON.stringify(EMIE.projectState.changeBonusAttachments),
     });
     modal.remove();
     await refreshAfterMutation(pid);
@@ -1258,6 +1284,11 @@ async function submitTaskChangeBonus(pid, tid) {
 function handleChangeBonusImages(input) {
   handleFileUpload(input, EMIE.projectState.changeBonusImages, 6, '修改参考图', true);
   setTimeout(() => renderFileList(EMIE.projectState.changeBonusImages, '修改参考图'), 0);
+}
+
+function handleChangeBonusAttachments(input) {
+  handleFileUpload(input, EMIE.projectState.changeBonusAttachments, 5, '修改附件', false);
+  setTimeout(() => renderFileList(EMIE.projectState.changeBonusAttachments, '修改附件'), 0);
 }
 
 EMIE.registerActions({
@@ -1293,6 +1324,7 @@ EMIE.registerActions({
   handleRejectImages,
   handleRejectAttachments,
   handleChangeBonusImages,
+  handleChangeBonusAttachments,
   submitTaskReject,
   toggleSubTaskMarketMode,
 });
@@ -1329,6 +1361,7 @@ EMIE.registerModule('projectTasks', {
   handleRejectImages,
   handleRejectAttachments,
   handleChangeBonusImages,
+  handleChangeBonusAttachments,
   submitTaskReject,
   toggleSubTaskMarketMode,
 });
@@ -1336,6 +1369,8 @@ EMIE.registerModule('projectTasks', {
 const registerEventAction = EMIE.actions.registerEventAction;
 if (registerEventAction) {
   registerEventAction('task-add-close', () => closeM('addSubTaskModal'));
+  registerEventAction('task-reference-project-files', (_event, element) =>
+    referenceSubTaskProjectFiles(Number(element.dataset.projectId), element.dataset.kind));
   registerEventAction('task-clear-field-error', (_event, element) => {
     element.closest('.form-group')?.querySelector('.field-error')?.remove();
     element.style.borderColor = '';
@@ -1419,6 +1454,7 @@ if (registerEventAction) {
   registerEventAction('task-change-bonus-close', () => closeM('taskChangeBonusModal'));
   registerEventAction('task-change-bonus-mode', (_event, element) => updateTaskChangeBonusMode(element));
   registerEventAction('task-change-bonus-images', (_event, element) => handleChangeBonusImages(element));
+  registerEventAction('task-change-bonus-attachments', (_event, element) => handleChangeBonusAttachments(element));
   registerEventAction('task-change-bonus-submit', (_event, element) => submitGuard(element, () => submitTaskChangeBonus(Number(element.dataset.projectId), Number(element.dataset.taskId))));
   registerEventAction('task-reject-images', (_event, element) => handleRejectImages(element));
   registerEventAction('task-reject-attachments', (_event, element) => handleRejectAttachments(element));

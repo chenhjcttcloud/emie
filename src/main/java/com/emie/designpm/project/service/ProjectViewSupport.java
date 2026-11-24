@@ -126,6 +126,7 @@ public class ProjectViewSupport {
                     item.put("pendingChangeBonusPoints", task.getPendingChangeBonusPoints());
                     item.put("pendingChangeBonusReason", task.getPendingChangeBonusReason());
                     item.put("pendingChangeReferenceImagesJson", task.getPendingChangeReferenceImagesJson());
+                    item.put("pendingChangeAttachmentsJson", task.getPendingChangeAttachmentsJson());
                     item.put("details", task.getDetails());
                     item.put("deliverables", task.getDeliverables());
                     item.put("referenceImagesJson", task.getReferenceImagesJson());
@@ -214,6 +215,7 @@ public class ProjectViewSupport {
                     item.put("pendingChangeBonusPoints", task.getPendingChangeBonusPoints());
                     item.put("pendingChangeBonusReason", task.getPendingChangeBonusReason());
                     item.put("pendingChangeReferenceImagesJson", task.getPendingChangeReferenceImagesJson());
+                    item.put("pendingChangeAttachmentsJson", task.getPendingChangeAttachmentsJson());
                     item.put("details", task.getDetails());
                     item.put("deliverables", task.getDeliverables());
                     item.put("referenceImagesJson", task.getReferenceImagesJson());
@@ -351,6 +353,15 @@ public class ProjectViewSupport {
 
         List<SubTask> taskList = p.getTasks();
         List<Long> taskIds = taskList.stream().map(SubTask::getId).collect(Collectors.toList());
+        List<Long> pendingChangeTaskIds = taskList.stream()
+                .filter(task -> task.getPendingChangeBonusRequestId() != null
+                        && !task.getPendingChangeBonusRequestId().isBlank())
+                .map(SubTask::getId)
+                .toList();
+        Map<Long, List<ActivityLog>> pendingChangeLogs = pendingChangeTaskIds.isEmpty()
+                ? Map.of()
+                : activityLogRepository.findSubTaskDeliveryHistory(pendingChangeTaskIds).stream()
+                        .collect(Collectors.groupingBy(ActivityLog::getEntityId));
         Map<Long, List<Map<String, Object>>> deliveriesByTask = Optional.ofNullable(
                         subTaskCommandService.getDeliveryVersionsByTaskIds(taskIds))
                 .orElse(Map.of());
@@ -383,6 +394,10 @@ public class ProjectViewSupport {
         dto.setTasks(taskList.stream()
                 .map(t -> {
                     TaskDetailDTO taskDto = toTaskDetail(t);
+                    taskDto.setPendingChangeRequestedAt(SubTaskPointView.changeRequestedAt(
+                            t.getId(),
+                            t.getPendingChangeBonusRequestId(),
+                            pendingChangeLogs.getOrDefault(t.getId(), List.of())));
                     taskDto.setScoringRecords(scoringMap.getOrDefault(t.getId(), List.of()));
                     var history = rejections.forTask(t, deliveriesByTask.getOrDefault(t.getId(), List.of()));
                     taskDto.setRejectionRecords(history.rejections());
@@ -483,6 +498,10 @@ public class ProjectViewSupport {
         dto.setWorkflowStage(task.getWorkflowStage());
         dto.setPlannedDate(task.getPlannedDate());
         dto.setActualDate(task.getActualDate());
+        dto.setSubmittedForReviewAt(
+                task.getSubmittedForReviewAt() == null
+                        ? null
+                        : task.getSubmittedForReviewAt().toString());
         dto.setDesignerId(task.getDesignerId());
         dto.setDesignerName(task.getDesignerName());
         dto.setPublisherId(task.getPublisherId());
@@ -498,6 +517,7 @@ public class ProjectViewSupport {
         dto.setPendingChangeBonusPoints(task.getPendingChangeBonusPoints());
         dto.setPendingChangeBonusReason(task.getPendingChangeBonusReason());
         dto.setPendingChangeReferenceImagesJson(task.getPendingChangeReferenceImagesJson());
+        dto.setPendingChangeAttachmentsJson(task.getPendingChangeAttachmentsJson());
         dto.setQualityBonusThresholdSnapshot(task.getQualityBonusThresholdSnapshot());
         dto.setQualityBonusRatioSnapshot(task.getQualityBonusRatioSnapshot());
         dto.setQualityTopThresholdSnapshot(task.getQualityTopThresholdSnapshot());

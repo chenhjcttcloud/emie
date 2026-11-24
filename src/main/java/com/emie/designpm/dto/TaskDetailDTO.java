@@ -17,6 +17,7 @@ public class TaskDetailDTO {
     private String workflowStage;
     private String plannedDate;
     private String actualDate;
+    private String submittedForReviewAt;
     private String designerId;
     private String designerName;
     private String publisherId;
@@ -33,6 +34,8 @@ public class TaskDetailDTO {
     private String pendingChangeBonusReason;
     private Map<String, Object> pointSummary;
     private String pendingChangeReferenceImagesJson;
+    private String pendingChangeAttachmentsJson;
+    private String pendingChangeRequestedAt;
     private Integer qualityBonusThresholdSnapshot;
     private Double qualityBonusRatioSnapshot;
     private Integer qualityTopThresholdSnapshot;
@@ -66,5 +69,9 @@ public class TaskDetailDTO {
     private String activeRejectionRole;
     private String createdAt;
 
-    public record UploadedFile(String storedName, String name, Long size, boolean plannerUpload) {}
+    public record UploadedFile(String storedName, String name, Long size, boolean plannerUpload, String createdAt) {
+        public UploadedFile(String storedName, String name, Long size, boolean plannerUpload) {
+            this(storedName, name, size, plannerUpload, null);
+        }
+    }
 }

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.admin.service.PermissionService;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
@@ -25,6 +26,7 @@ import com.emie.designpm.project.repository.ProjectRepository;
 import com.emie.designpm.project.repository.SubTaskRepository;
 import com.emie.designpm.project.service.ProjectAccessService;
 import jakarta.servlet.http.HttpServletRequest;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -212,6 +214,50 @@ class FileAccessRegressionTest {
         when(reference.getReferenceImagesJson()).thenReturn("broken reference.png");
         assertFalse(ReflectionTestUtils.<Boolean>invokeMethod(
                 controller, "canAccessFile", session, "reference.png", "reference.png"));
+    }
+
+    @Test
+    void sourceHistoryDownloadSurvivesDeletingTheTaskThatReusedItsFile(@TempDir Path tempDir) throws Exception {
+        String storedName = "historical-source.pdf";
+        FileRecordRepository records = mock(FileRecordRepository.class);
+        ProjectAccessService access = mock(ProjectAccessService.class);
+        SubTaskRepository tasks = mock(SubTaskRepository.class);
+        FileArchiveService archive = new FileArchiveService(records, mock(SystemConfigRepository.class));
+        FileController controller = fileController(archive, records, access, tasks);
+        ReflectionTestUtils.setField(controller, "uploadPath", tempDir);
+        Files.writeString(tempDir.resolve(storedName), "historical delivery");
+        FileRecord source = FileRecord.builder()
+                .storedName(storedName)
+                .originalName("原交付.pdf")
+                .fileSize(19L)
+                .targetType("sub_task")
+                .targetId(11L)
+                .ownerUserId("original-uploader")
+                .build();
+        when(records.findByStoredName(storedName)).thenReturn(Optional.of(source));
+        when(access.findVisibleProjectIds("designer", "designer-1")).thenReturn(List.of(1L));
+        when(tasks.findProjectIdById(11L)).thenReturn(Optional.of(1L));
+
+        archive.bindFilesFromJson(
+                "[{\"storedName\":\"" + storedName + "\",\"url\":\"/api/files/download/" + storedName + "\"}]",
+                "sub_task",
+                99L);
+        // The referencing task was deleted, and the source file now exists only in its original delivery history.
+        when(tasks.findProjectIdById(99L)).thenReturn(Optional.empty());
+        when(tasks.countFileReferencesByProjectIds(List.of(1L), storedName)).thenReturn(0L);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setAttribute("authSession", new AuthSession("designer-1", "designer", "设计师"));
+
+        assertEquals(
+                200,
+                controller
+                        .downloadFile(storedName, true, request)
+                        .getStatusCode()
+                        .value());
+        assertEquals("sub_task", source.getTargetType());
+        assertEquals(11L, source.getTargetId());
+        assertEquals("original-uploader", source.getOwnerUserId());
+        verify(tasks).findProjectIdById(11L);
     }
 
     private static void resetUploadSlots() {

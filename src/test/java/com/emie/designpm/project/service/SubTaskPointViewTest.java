@@ -104,7 +104,46 @@ class SubTaskPointViewTest {
         assertNull(rejection.get("rejectionReason"));
         assertNull(rejection.get("rejectionCycleId"));
         assertNull(unknown.get("revisionNo"));
+        assertNull(unknown.get("changeRequestedAt"));
         assertEquals("unknown", unknown.get("submissionOrigin"));
+    }
+
+    @Test
+    void modificationAttachmentsFollowTheirOwnRequestAcrossCorrectionsAndLegacyHistory() {
+        var first = version(1L, 0d, true, "change-1");
+        var second = version(2L, 0d, true, "change-2");
+        var correction = version(3L, 0d, false, "change-1");
+        correction.put("submissionType", "correction");
+        var legacy = version(4L, 0d, true, "legacy-change");
+        String firstFiles = "[{\"name\":\"首轮.pdf\",\"url\":\"/first.pdf\"}]";
+        String secondFiles = "[{\"name\":\"第二轮.zip\",\"url\":\"/second.zip\"}]";
+        List<ActivityLog> logs = List.of(
+                log(1L, 11L, "发起子任务修改：设计", Map.of("pointRequestId", "change-1", "changeAttachmentsJson", firstFiles)),
+                log(2L, 11L, "发起子任务修改：设计", Map.of("pointRequestId", "change-2", "changeAttachmentsJson", secondFiles)),
+                log(3L, 11L, "发起子任务修改：设计", Map.of("pointRequestId", "legacy-change", "reason", "旧需求")));
+
+        SubTaskPointView.enrich(11L, List.of(first, second, correction, legacy), List.of(), Map.of(), logs);
+
+        assertEquals(NOW.plusSeconds(1).toString(), first.get("changeRequestedAt"));
+        assertEquals(NOW.plusSeconds(2).toString(), second.get("changeRequestedAt"));
+        assertEquals(NOW.plusSeconds(1).toString(), correction.get("changeRequestedAt"));
+        assertEquals(firstFiles, first.get("changeAttachmentsJson"));
+        assertEquals(secondFiles, second.get("changeAttachmentsJson"));
+        assertEquals(firstFiles, correction.get("changeAttachmentsJson"));
+        assertEquals("[]", legacy.get("changeAttachmentsJson"));
+    }
+
+    @Test
+    void missingModificationAuditTimeRemainsUnknownInsteadOfUsingSubmissionTime() {
+        var version = version(1L, 0d, false, "change-1");
+        version.put("submittedAt", NOW.plusDays(1).toString());
+        var log = log(1L, 11L, "发起子任务修改：设计", Map.of("pointRequestId", "change-1"));
+        log.setTime(null);
+
+        SubTaskPointView.enrich(11L, List.of(version), List.of(), Map.of(), List.of(log));
+
+        assertNull(version.get("changeRequestedAt"));
+        assertNull(SubTaskPointView.changeRequestedAt(11L, "change-1", List.of(log)));
     }
 
     @Test
