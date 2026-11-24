@@ -3,6 +3,7 @@ const REFERENCE_FILE_ACCEPT = EMIE.fileAccept?.reference || 'image/*';
 const ATTACHMENT_FILE_ACCEPT = EMIE.fileAccept?.attachment
   || '.ai,.step,.stp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,image/*';
 const roleLabel = (...args) => EMIE.actions.roleLabel(...args);
+const taskDeliveryLabel = (...args) => EMIE.actions.taskDeliveryLabel(...args);
 const getCurrentUserName = (...args) => EMIE.actions.getCurrentUserName(...args);
 const getCurrentUserId = (...args) => EMIE.actions.getCurrentUserId(...args);
 const formModified = (...args) => EMIE.actions.formModified(...args);
@@ -273,7 +274,7 @@ async function addSubTask(pid) {
           <div class="form-group"><label class="form-label">细节要求说明</label><textarea class="form-textarea" name="details" placeholder="子任务的具体要求说明..." data-emie-action="input:task-clear-field-error"></textarea></div>
         </form>
         <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
-          <div class="project-file-reference-heading"><span class="form-label">🖼️ 参考图片（可选）</span><button type="button" class="btn btn-outline btn-sm" data-emie-action="click:task-reference-project-files" data-project-id="${pid}" data-kind="reference">引用项目文件</button></div>
+          <div class="project-file-reference-heading"><span class="form-label">🖼️ 参考图片（企划/销售提供，可选）</span><button type="button" class="btn btn-outline btn-sm" data-emie-action="click:task-reference-project-files" data-project-id="${pid}" data-kind="reference">引用项目文件</button></div>
           <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="subTaskRefImageInput">
             <div>📁 拖拽图片到此处，或点击选择图片</div>
             <input type="file" id="subTaskRefImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-subtask-ref-images">
@@ -553,7 +554,7 @@ function editTask(pid, tid) {
             <div class="form-group"><label class="form-label">细节要求说明</label><textarea class="form-textarea" name="details">${escHtml(task.details)}</textarea></div>
           </form>
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
-            <div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片（可选）</div>
+            <div class="form-label" style="margin-bottom:8px;">🖼️ 参考图片（企划/销售提供，可选）</div>
             <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="editRefImageInput">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
               <input type="file" id="editRefImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-edit-ref-images">
@@ -770,7 +771,7 @@ async function taskDeliver(pid, tid) {
           </form>
           <p class="form-hint">提交后通知产品企划，企划确认前可更正成果，确认后发放基础分。</p>
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
-            <div class="form-label" style="margin-bottom:8px;">🖼️ 本地上传的交付参考图</div>
+            <div class="form-label" style="margin-bottom:8px;">🖼️ ${escHtml(taskDeliveryLabel(task))}（本地上传）</div>
             <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="deliverImageInput">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
               <input type="file" id="deliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-deliver-images">
@@ -805,7 +806,7 @@ async function openDeliveryLibraryPicker() {
     const token = localStorage.getItem('design_pm_token');
     const authUrl = url => token ? `${url}${url.includes('?') ? '&' : '?'}authToken=${encodeURIComponent(token)}` : url;
     const overlay = document.createElement('div'); overlay.id = 'deliveryLibraryPicker'; overlay.className = 'modal-overlay modal-detail-drawer';
-    overlay.innerHTML = `<div class="modal"><div class="modal-header"><div><div class="modal-title">关联图档库图片</div><div class="form-hint">选择后会作为本次交付参考图，交付图片总数最多 6 张</div></div><button class="modal-close" data-emie-action="click:task-close-library-picker">✕</button></div><div class="modal-body"><div class="delivery-library-picker-grid">${images.length ? images.map((file, index) => { const thumb = `/api/files/thumbnail/${file.storedName}`; const selected = selectedNames.has(file.storedName); return `<button type="button" class="delivery-library-picker-card ${selected ? 'selected' : ''}" data-emie-action="click:task-toggle-library-image" data-file-index="${index}"><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(authUrl(thumb))}" alt="${escHtml(file.name || file.libraryName)}"><strong>${escHtml(file.libraryName || file.name)}</strong><small>${escHtml(file.ipName || '')}</small><span>✓</span></button>`; }).join('') : '<div class="empty-state">图档库中暂无可关联的图片</div>'}</div></div><div class="modal-footer"><span id="deliveryLibrarySelectedCount" class="form-hint">已选择 ${selectedNames.size} 张</span><button class="btn btn-outline" data-emie-action="click:task-close-library-picker">取消</button><button class="btn btn-primary" data-emie-action="click:task-confirm-library-picker">确认关联</button></div></div>`;
+    overlay.innerHTML = `<div class="modal"><div class="modal-header"><div><div class="modal-title">关联图档库图片</div><div class="form-hint">选择后会作为本次交付成果图片，交付图片总数最多 6 张</div></div><button class="modal-close" data-emie-action="click:task-close-library-picker">✕</button></div><div class="modal-body"><div class="delivery-library-picker-grid">${images.length ? images.map((file, index) => { const thumb = `/api/files/thumbnail/${file.storedName}`; const selected = selectedNames.has(file.storedName); return `<button type="button" class="delivery-library-picker-card ${selected ? 'selected' : ''}" data-emie-action="click:task-toggle-library-image" data-file-index="${index}"><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-auth-src="${escHtml(authUrl(thumb))}" alt="${escHtml(file.name || file.libraryName)}"><strong>${escHtml(file.libraryName || file.name)}</strong><small>${escHtml(file.ipName || '')}</small><span>✓</span></button>`; }).join('') : '<div class="empty-state">图档库中暂无可关联的图片</div>'}</div></div><div class="modal-footer"><span id="deliveryLibrarySelectedCount" class="form-hint">已选择 ${selectedNames.size} 张</span><button class="btn btn-outline" data-emie-action="click:task-close-library-picker">取消</button><button class="btn btn-primary" data-emie-action="click:task-confirm-library-picker">确认关联</button></div></div>`;
     overlay.addEventListener('click', event => { if (event.target === overlay) closeDeliveryLibraryPicker(); }); document.body.appendChild(overlay);
   } catch (error) { window.EMIE.actions.showSystemAlert('图档库加载失败：' + error.message); }
 }
@@ -873,7 +874,7 @@ async function taskRedeliver(pid, tid) {
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required style="min-height:100px;"></textarea></div>
           </form>
           <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-200);">
-            <div class="form-label" style="margin-bottom:8px;">🖼️ 本地上传的交付参考图</div>
+            <div class="form-label" style="margin-bottom:8px;">🖼️ ${escHtml(taskDeliveryLabel(task))}（本地上传）</div>
             <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="deliverImageInput">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
               <input type="file" id="deliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-deliver-images">
@@ -972,7 +973,7 @@ async function taskCorrectDelivery(pid, tid, detailDrawer) {
             <div class="form-group"><label class="form-label"><span class="required">*</span> 交付成果描述</label><textarea class="form-textarea" name="deliverables" required style="min-height:100px;">${escHtml(task.deliverables || '')}</textarea></div>
           </form>
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);">
-            <div class="form-label">🖼️ 当前本地交付参考图（可删除错误文件或补充文件）</div>
+            <div class="form-label">🖼️ ${escHtml(taskDeliveryLabel(task))}（可删除错误文件或补充文件）</div>
             <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="correctDeliverImageInput"><div>📁 点击补充图片或模型文件</div><input type="file" id="correctDeliverImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-deliver-images"></div>
             <div class="file-list" id="deliverImageList"></div>
           </div>
@@ -986,7 +987,7 @@ async function taskCorrectDelivery(pid, tid, detailDrawer) {
         <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-correct-close">取消</button><button class="btn btn-warning" data-emie-action="click:task-submit-correct" data-project-id="${pid}" data-task-id="${tid}">保存更正</button></div>
       </div>`;
     document.body.appendChild(modal);
-    renderFileList(EMIE.projectState.deliverImages, '交付参考图');
+    renderFileList(EMIE.projectState.deliverImages, taskDeliveryLabel(task));
     renderDeliveryLibrarySelection();
     renderFileList(EMIE.projectState.deliverAttachments, '交付附件');
     doneOpenModal('taskCorrectDeliveryModal');
@@ -1048,7 +1049,7 @@ function taskApprove(pid, tid, projectType) {
           <section class="delivery-confirmation-preview">
             <strong>${latestVersion ? `本次确认第 ${escHtml(String(latestVersion.versionNo))} 版成果` : '本次确认的成果'}</strong>
             <p style="white-space:pre-wrap;">${escHtml(currentDelivery.deliverables || '未填写文字交付内容')}</p>
-            ${EMIE.actions.renderSubTaskImages(currentDelivery.referenceImagesJson)}
+            ${EMIE.actions.renderSubTaskImages(currentDelivery.referenceImagesJson, taskDeliveryLabel(task, currentDelivery))}
             ${EMIE.actions.renderTaskAttachments(currentDelivery.attachmentsJson)}
           </section>
           <div class="form-group"><label class="form-label">验收意见（可选）</label><textarea class="form-textarea" id="approveComments" placeholder="输入验收意见..."></textarea></div>
@@ -1112,7 +1113,7 @@ async function taskReject(pid, tid) {
         <div class="form-group"><label class="form-label"><span class="required">*</span> 要求完成时间</label><div class="date-picker" style="max-width:280px;"><input type="date" class="form-input" id="rejectDeadline" required min="${new Date().toISOString().slice(0, 10)}" aria-label="选择要求完成时间" autocomplete="off" style="width:100%;min-height:38px;cursor:pointer;"></div><div class="form-hint">设计师重新交付需在此日期前完成</div></div>
         <div class="form-group"><span class="form-label">本次驳回修改是否加分</span><div class="reject-points-choice" role="radiogroup" aria-label="本次驳回修改是否加分"><label><input type="radio" name="rejectWithPoints" value="false" checked data-emie-action="change:task-reject-points-mode">否</label><label><input type="radio" name="rejectWithPoints" value="true" data-emie-action="change:task-reject-points-mode">是</label></div><div class="form-hint">选择“是”后设置本次修改的积分规则；原任务基础分在验收通过后照常计算。</div></div>
         <div data-reject-point-rules hidden>${renderPointRulePicker(rules)}</div>
-        <div class="form-group"><label class="form-label">参考图片（选填）</label><div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="rejectImageInput"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="rejectImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-reject-images"></div><div class="file-list" id="rejectImageList"></div></div>
+        <div class="form-group"><label class="form-label">参考图片（企划/销售提供，选填）</label><div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="rejectImageInput"><div>📁 拖拽图片到此处，或点击选择图片</div><input type="file" id="rejectImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-reject-images"></div><div class="file-list" id="rejectImageList"></div></div>
         <div class="form-group"><label class="form-label">附件（选填）</label><div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="rejectAttachmentInput"><div>📁 拖拽文件到此处，或点击选择文件</div><input type="file" id="rejectAttachmentInput" multiple accept="${ATTACHMENT_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-reject-attachments"></div><div class="file-list" id="rejectAttachmentList"></div></div>
       </div>
       <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:task-reject-close">取消</button><button class="btn btn-danger" data-emie-action="click:task-submit-reject" data-project-id="${pid}" data-task-id="${tid}">确认驳回</button></div>
@@ -1183,7 +1184,7 @@ async function openTaskChangeBonus(pid, tid) {
         <div class="modal-body">
           <div class="form-group"><label class="form-label">修改意见</label><textarea class="form-textarea" name="reason" required maxlength="500"></textarea></div>
           <div class="form-group">
-            <label class="form-label">修改参考图片（可选）</label>
+            <label class="form-label">修改参考图片（企划/销售提供，可选）</label>
             <div class="upload-area" data-emie-action="click:task-open-file-input" data-input-id="changeBonusImageInput">
               <div>📁 拖拽图片到此处，或点击选择图片</div>
               <input type="file" id="changeBonusImageInput" multiple accept="${REFERENCE_FILE_ACCEPT}" style="display:none" data-emie-action="change:task-change-bonus-images">

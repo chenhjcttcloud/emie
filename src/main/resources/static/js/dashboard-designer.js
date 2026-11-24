@@ -1,5 +1,6 @@
 const EMIE = window.EMIE;
 const roleLabel = (...args) => EMIE.actions.roleLabel(...args);
+const taskDeliveryLabel = (...args) => EMIE.actions.taskDeliveryLabel(...args);
 const apiGet = (...args) => EMIE.actions.apiGet(...args);
 const getTaskStatusInfo = (...args) => EMIE.actions.getTaskStatusInfo(...args);
 const formatDate = (...args) => EMIE.actions.formatDate(...args);
@@ -219,7 +220,7 @@ function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
           ${renderTaskRejectionHistory(t, { compact: true })}
           ${taskDetailFiles(t.pendingChangeReferenceImagesJson, true)}
           ${taskDetailFiles(t.pendingChangeAttachmentsJson, false, '修改附件')}
-          ${latestDelivery ? `<div style="margin-top:12px;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;background:var(--gray-50);"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><strong style="font-size:13px;">${escHtml(taskDeliveryRounds(deliveryVersions, rejectionRecords).at(-1)?.label || '最新提交')} · 最新成果</strong><span style="font-size:11px;color:var(--gray-400);">${fmtDT(latestDelivery.submittedAt)}</span></div><div style="font-size:12px;color:var(--gray-700);white-space:pre-wrap;">${escHtml(latestDelivery.deliverables || '未填写文字交付内容')}</div>${taskDetailFiles(latestDelivery.referenceImagesJson, true)}${taskDetailFiles(latestDelivery.attachmentsJson, false)}</div>` : ''}
+          ${latestDelivery ? `<div style="margin-top:12px;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;background:var(--gray-50);"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><strong style="font-size:13px;">${escHtml(taskDeliveryRounds(deliveryVersions, rejectionRecords).at(-1)?.label || '最新提交')} · 最新成果</strong><span style="font-size:11px;color:var(--gray-400);">${fmtDT(latestDelivery.submittedAt)}</span></div><div style="font-size:12px;color:var(--gray-700);white-space:pre-wrap;">${escHtml(latestDelivery.deliverables || '未填写文字交付内容')}</div>${taskDetailFiles(latestDelivery.referenceImagesJson, true, taskDeliveryLabel(t, latestDelivery))}${taskDetailFiles(latestDelivery.attachmentsJson, false)}</div>` : ''}
           <div class="subtask-actions">
             ${!readOnly && t.status === 'pending' && !t._unassigned && String(t.designerId || '') === String(getCurrentUserId()) ? `<button class="btn btn-primary btn-sm" data-emie-action="click:designer-accept" data-project-id="${t.projectId}" data-task-id="${t.id}">✅ 接单</button>` : ''}
             ${!readOnly && t._unassigned ? `<button class="btn btn-success btn-sm" data-emie-action="click:designer-accept-market" data-project-id="${t.projectId}" data-task-id="${t.id}" data-task-snapshot="${escHtml(JSON.stringify(t))}">⚡ 抢单</button>` : ''}
@@ -236,9 +237,9 @@ function renderDesignerTaskCardsFlat(tasks, readOnly = false) {
     </div>`;
 }
 
-function taskDetailFiles(json, images) {
+function taskDetailFiles(json, images, label) {
   const renderer = images ? EMIE.actions.renderSubTaskImages : EMIE.actions.renderTaskAttachments;
-  return typeof renderer === 'function' && json ? renderer(json) : '';
+  return typeof renderer === 'function' && json ? renderer(json, label) : '';
 }
 
 function rejectionPointInfo(record) {
@@ -270,7 +271,7 @@ function renderTaskReviewComment(task, { redelivery = false } = {}) {
 }
 
 function renderRejectionSnapshot(record, task) {
-  const submittedFiles = taskDetailFiles(record.referenceImagesJson, true) + taskDetailFiles(record.attachmentsJson, false);
+  const submittedFiles = taskDetailFiles(record.referenceImagesJson, true, taskDeliveryLabel(task, record)) + taskDetailFiles(record.attachmentsJson, false);
   const rejectionFiles = taskDetailFiles(record.rejectionReferenceImagesJson, true) + taskDetailFiles(record.rejectionAttachmentsJson, false);
   if (!record.deliverables && !submittedFiles && !rejectionFiles) return '';
   return `<details class="task-rejection-snapshot"><summary>查看当轮提交与附件</summary>
@@ -487,7 +488,7 @@ function renderDeliveryRounds(versions, rejectionRecords = [], task = {},
         ${latest && !showLatestDelivery ? `<div class="delivery-round-current-note">${escHtml(currentLabel)}的成果和附件见上方「交付进度」</div>`
           : `<section class="delivery-round-step is-delivery"><h4>本轮成果 · ${escHtml(currentLabel)}</h4>
             ${current.changeSummary ? `<p>修正说明：${escHtml(current.changeSummary)}</p>` : ''}
-            <p>${escHtml(current.deliverables || '未填写文字交付内容')}</p>${taskDetailFiles(current.referenceImagesJson, true)}${taskDetailFiles(current.attachmentsJson, false)}</section>`}
+            <p>${escHtml(current.deliverables || '未填写文字交付内容')}</p>${taskDetailFiles(current.referenceImagesJson, true, taskDeliveryLabel(task, current))}${taskDetailFiles(current.attachmentsJson, false)}</section>`}
         <section class="delivery-round-step${rejection ? ' is-rejection' : ''}"><h4>${rejection ? '本轮驳回理由' : '本轮验收'}</h4>
           <div class="delivery-step-meta">${escHtml(reviewMeta)}</div>
           ${confirmation.reviewComments && confirmation.reviewComments !== rejection?.reason ? `<p>${escHtml(confirmation.reviewComments)}</p>` : ''}
@@ -501,7 +502,7 @@ function renderDeliveryRounds(versions, rejectionRecords = [], task = {},
             <strong class="delivery-correction-heading">${version.versionNo != null ? `第 ${escHtml(String(version.versionNo))} 版 · ` : ''}${version.submissionType === 'correction' ? '更正提交' : '本轮原始提交'}</strong>
             <div class="delivery-step-meta">${escHtml(submittedMeta(version))}</div>
             ${version.changeSummary ? `<p>修正说明：${escHtml(version.changeSummary)}</p>` : ''}
-            <p>${escHtml(version.deliverables || '未填写文字交付内容')}</p>${taskDetailFiles(version.referenceImagesJson, true)}${taskDetailFiles(version.attachmentsJson, false)}</div>`).join('')}
+            <p>${escHtml(version.deliverables || '未填写文字交付内容')}</p>${taskDetailFiles(version.referenceImagesJson, true, taskDeliveryLabel(task, version))}${taskDetailFiles(version.attachmentsJson, false)}</div>`).join('')}
         </details>` : ''}
       </div>
     </details>`;
@@ -548,11 +549,11 @@ function renderSubTaskDetailBody(task, { projectId = task.projectId, projectStat
   const confirmation = latestRound?.confirmation;
   const reviewedBy = confirmation?.confirmedByName || confirmation?.confirmedBy;
   const deliverables = task.deliverables ?? latest?.deliverables;
-  const referenceImages = task.referenceImagesJson ?? latest?.referenceImagesJson;
+  const { referenceImages, deliveryImages } = EMIE.actions.getSubTaskImageGroups(task);
   const attachments = task.attachmentsJson ?? latest?.attachmentsJson;
-  const files = taskDetailFiles(referenceImages, true) + taskDetailFiles(attachments, false);
+  const files = taskDetailFiles(deliveryImages, true, taskDeliveryLabel(task, latest)) + taskDetailFiles(attachments, false);
   const matchesLatest = latest && (latest.deliverables == null || latest.deliverables === deliverables)
-    && (latest.referenceImagesJson == null || latest.referenceImagesJson === referenceImages)
+    && (latest.referenceImagesJson == null || latest.referenceImagesJson === versions[0]?.referenceImagesJson)
     && (latest.attachmentsJson == null || latest.attachmentsJson === attachments);
   const reviewComment = renderTaskReviewComment(task);
   const changeFiles = taskDetailFiles(task.pendingChangeReferenceImagesJson, true)
@@ -577,7 +578,7 @@ function renderSubTaskDetailBody(task, { projectId = task.projectId, projectStat
     </div>
     ${statusHint ? `<p class="task-detail-hint">${escHtml(statusHint)}</p>` : ''}
     <div class="task-detail-output">
-      <div class="task-detail-output-heading"><h3>${reworking ? '最近提交成果' : '当前交付成果'}</h3>${matchesLatest && latest.versionNo != null ? `<span class="task-detail-version">第 ${escHtml(latest.versionNo)} 版</span>` : ''}</div>
+      <div class="task-detail-output-heading"><h3>${reworking ? '最近提交 · ' : ''}${escHtml(taskDeliveryLabel(task, latest))}</h3>${matchesLatest && latest.versionNo != null ? `<span class="task-detail-version">第 ${escHtml(latest.versionNo)} 版</span>` : ''}</div>
       ${submittedAt ? `<div class="task-detail-meta">${escHtml(latest?.submittedByName || task.designerName || '提交人未记录')} 提交于 ${escHtml(fmtDT(submittedAt))}</div>` : ''}
       ${confirmation?.confirmedAt ? `<div class="task-detail-meta">${reviewedBy ? `${escHtml(reviewedBy)} 验收于 ` : '验收时间 '}${escHtml(fmtDT(confirmation.confirmedAt))}</div>` : ''}
       ${deliverables ? `<p class="task-detail-text">${escHtml(deliverables)}</p>` : ''}
@@ -599,6 +600,7 @@ function renderSubTaskDetailBody(task, { projectId = task.projectId, projectStat
   <section class="task-detail-panel task-detail-info">
     <h2>任务信息</h2>${renderDetails(basicDetails)}
     <h3>任务要求</h3><p class="task-detail-text">${escHtml(task.details || '未填写')}</p>
+    ${taskDetailFiles(referenceImages, true)}
     ${task.assignmentReason ? `<h3>指派／立项说明</h3><p class="task-detail-text">${escHtml(task.assignmentReason)}</p>` : ''}
   </section>`;
 }

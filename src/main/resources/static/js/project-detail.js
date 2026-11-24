@@ -524,6 +524,7 @@ function renderSubTaskCard(detail, task, idx) {
   const latestRejection = rejectionRecords.length ? rejectionRecords[rejectionRecords.length - 1] : null;
   const isRedelivering = task.status === 'accepted' && (task.pendingChangeBonusRequestId || (latestRejection && !latestRejection.cancelled));
   const deliveryVersions = Array.isArray(task.deliveryVersions) ? task.deliveryVersions : [];
+  const { referenceImages, deliveryImages } = getSubTaskImageGroups(task);
   const visibleDeadline = task.status === 'rejected' && latestRejection?.requiredCompletionDate
     ? latestRejection.requiredCompletionDate : task.plannedDate;
 
@@ -545,7 +546,8 @@ function renderSubTaskCard(detail, task, idx) {
     </div>
     ${renderTaskPointSummary(task)}
     ${task.details ? `<div style="font-size:13px;color:var(--gray-600);margin-top:6px;white-space:pre-wrap;">📝 ${escHtml(task.details)}</div>` : ''}
-    ${task.referenceImagesJson ? renderSubTaskImages(task.referenceImagesJson) : ''}
+    ${renderSubTaskImages(referenceImages)}
+    ${renderSubTaskImages(deliveryImages, taskDeliveryLabel(task, deliveryVersions[0]))}
     ${task.attachmentsJson ? renderTaskAttachments(task.attachmentsJson) : ''}
 
     ${['delivered', 'submitted_for_review', 'planner_approved', 'sales_approved', 'admin_approved', 'approved', 'completed', 'rejected'].includes(task.status) ? `
@@ -555,7 +557,7 @@ function renderSubTaskCard(detail, task, idx) {
 
     ${EMIE.actions.renderTaskReviewComment(task)}
     ${EMIE.actions.renderTaskRejectionHistory(task, { compact: true })}
-    ${renderSubTaskImages(task.pendingChangeReferenceImagesJson)}
+    ${renderSubTaskImages(task.pendingChangeReferenceImagesJson, '修改参考图片（企划/销售提供）')}
     ${renderTaskAttachments(task.pendingChangeAttachmentsJson, '修改附件')}
 
 
@@ -631,7 +633,7 @@ function openTaskRejectionRecord(taskId, attemptNo) {
   const record = task?.rejectionRecords?.find(item => Number(item.attemptNo) === Number(attemptNo));
   if (!task || !record) return;
   const roleNames = { planner: '产品企划', sales: '销售', admin: '管理员', designer: '设计师', supplychain: '供应链', promotion: '产品推广' };
-  const submittedImages = record.referenceImagesJson ? renderSubTaskImages(record.referenceImagesJson) : '';
+  const submittedImages = record.referenceImagesJson ? renderSubTaskImages(record.referenceImagesJson, taskDeliveryLabel(task, record)) : '';
   const submittedAttachments = record.attachmentsJson ? renderTaskAttachments(record.attachmentsJson) : '';
   const rejectionImages = record.rejectionReferenceImagesJson ? renderSubTaskImages(record.rejectionReferenceImagesJson) : '';
   const rejectionAttachments = record.rejectionAttachmentsJson ? renderTaskAttachments(record.rejectionAttachmentsJson) : '';
@@ -903,7 +905,7 @@ function renderAttachmentActions(fileOrUrl, compact = false) {
   return `<span class="attachment-actions">${previewButton}<button class="attachment-action-btn download" data-emie-action="click:detail-file-download" data-file-url="${escHtml(fileUrl)}" data-file-name="${escHtml(fileName)}" data-file-size="${fileSize}" title="下载选项">${compact ? '⬇' : '⬇ 下载'}</button></span>`;
 }
 
-function renderProjectReferenceImages(detail, label = '参考图片') {
+function renderProjectReferenceImages(detail, label = '参考图片（企划/销售提供）') {
   if (!detail.referenceImagesJson) return '';
   let imgs;
   try { imgs = JSON.parse(detail.referenceImagesJson); } catch(e) { return ''; }
@@ -943,12 +945,15 @@ function getSubTaskImageGroups(task) {
     : { referenceImages: currentImages, deliveryImages: [], hasDelivery: false };
 }
 
-/* 子任务参考图 */
-function renderSubTaskImages(jsonStr, label = '参考图片') {
-  if (!jsonStr) return '';
-  let imgs;
-  try { imgs = JSON.parse(jsonStr); } catch(e) { return ''; }
-  if (!imgs || !imgs.length) return '';
+function taskDeliveryLabel(task = {}, version) {
+  const role = version?.submittedByRole || task.assigneeRole || 'designer';
+  const names = { designer: '设计师', planner: '企划', supplychain: '供应链', promotion: '推广', sales: '销售' };
+  return `${names[role] || ''}交付成果`;
+}
+
+function renderSubTaskImages(value, label = '参考图片（企划/销售提供）') {
+  const imgs = parseSubTaskImages(value);
+  if (!imgs.length) return '';
   const authUrl = u => normalizeFileUrl(u);
   const thumbUrl = u => protectedFileUrl(originalFileUrl(u, 'thumbnail'));
   return `<div style="margin-top:8px;padding-left:4px;"><div class="detail-label">🖼️ ${escHtml(label)}</div>
@@ -1320,6 +1325,8 @@ EMIE.registerActions({
   renderAttachmentActions,
   renderProjectReferenceImages,
   renderSubTaskImages,
+  getSubTaskImageGroups,
+  taskDeliveryLabel,
   renderProjectAttachments,
   renderProductArchiveSection,
   renderTaskAttachments,

@@ -137,6 +137,8 @@ async function replaceImage(view, fileName, summary) {
   await buttonFor(view).click();
   await form().waitFor();
   assert.match(await form().innerText(), /企划确认前可多次更正/);
+  assert.match(await form().innerText(), /设计师交付成果/);
+  assert.doesNotMatch(await form().innerText(), /交付参考图/);
   await form().locator('[data-emie-action="click:upload-remove-file"][data-list-key="deliverImage"]').click();
   assert.equal(await form().locator('#deliverImageList img').count(), 0, '误传图已从本次成果移除');
   await form().locator('#correctDeliverImageInput').setInputFiles({ name: fileName, mimeType: 'image/png', buffer: imageBytes });
@@ -166,6 +168,8 @@ async function assertHistory(roundCount, previousNames) {
   const latest = history.locator('details.delivery-round').first();
   assert.match(await latest.locator('summary').first().innerText(), /含 2 次更正/);
   await latest.locator('.delivery-correction-history > summary').click();
+  assert.equal(await latest.locator('.delivery-correction-history').getByText('🖼️ 设计师交付成果', { exact: true }).count(), previousNames.length,
+    '本轮旧版本的图片仍明确标为设计师交付成果');
   for (const name of previousNames) {
     assert.equal(await latest.locator(`.delivery-correction-history img[alt="${name}"]`).count(), 1, '旧图仍可在更正历史中查看');
   }

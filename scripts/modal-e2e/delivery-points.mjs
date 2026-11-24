@@ -45,9 +45,13 @@ const secondChange = delivery(3, {
 });
 const currentAttachmentName = '包装交付更新版-2026-10-25-final-production-artwork-with-a-long-filename-for-mobile-layout.zip';
 const currentAttachments = JSON.stringify([{ name: currentAttachmentName, url: '/api/files/download/current-packaging.zip', size: 1024 }]);
+const deliveryImage = { name: '交付包装.png', storedName: 'current-packaging.png' };
+const referenceImage = { name: '任务参考.png', storedName: 'task-reference.png' };
 const correction = delivery(4, {
   ...secondChange, id: 4, versionNo: 4, submissionType: 'correction', changeSummary: '补充当前轮附件',
   deliverables: '已补充另一款包装附件', submittedAt: '2026-10-25T12:00:00', attachmentsJson: currentAttachments,
+  referenceImagesJson: JSON.stringify([deliveryImage]),
+  changeReferenceImagesJson: JSON.stringify([referenceImage]),
 });
 const summary = { awardedPoints: 13, basePoints: 10, changePoints: 3, otherPoints: 0, untrackedPoints: 0, hasUntrackedAwards: false };
 const task = {
@@ -122,7 +126,7 @@ async function assertTaskDrawer(drawer, { status, deliverables, versionNo, canCo
     '子任务详情先展示当前交付和验收状态');
   assert.match(await current.locator('.task-detail-state').innerText(), new RegExp(status));
   const output = current.locator('.task-detail-output');
-  assert.equal(await output.getByRole('heading', { name: '当前交付成果' }).isVisible(), true);
+  assert.equal(await output.getByRole('heading', { name: '设计师交付成果', exact: true }).isVisible(), true);
   assert.equal(await output.locator('.task-detail-version').innerText(), `第 ${versionNo} 版`);
   assert.equal(await output.getByText(deliverables, { exact: true }).isVisible(), true);
   assert.equal(await output.getByText(currentAttachmentName, { exact: true }).isVisible(), true);
@@ -255,6 +259,14 @@ try {
   assert.equal(await rounds().nth(1).getAttribute('open'), null, '旧轮默认保留摘要');
   assert.match(textNumbers(await latest.locator('summary').first().innerText()), /第\s*2\s*次修改/);
   assert.match(textNumbers(await latest.locator('summary').first().innerText()), /待验收.*预计.*\+?2\s*分/);
+  const latestLabelRequirement = latest.locator('.delivery-round-step.is-requirement');
+  const latestLabelDelivery = latest.locator('.delivery-round-step.is-delivery');
+  assert.equal(await latestLabelRequirement.getByText('🖼️ 参考图片（企划/销售提供）', { exact: true }).count(), 1);
+  assert.equal(await latestLabelRequirement.getByAltText(referenceImage.name).count(), 1, '修改要求使用企划或销售提供的参考图');
+  assert.equal(await latestLabelRequirement.getByAltText(deliveryImage.name).count(), 0, '设计师交付图不显示为修改参考图');
+  assert.equal(await latestLabelDelivery.getByText('🖼️ 设计师交付成果', { exact: true }).count(), 1);
+  assert.equal(await latestLabelDelivery.getByAltText(deliveryImage.name).count(), 1);
+  assert.equal(await latestLabelDelivery.getByAltText(referenceImage.name).count(), 0, '修改参考图不显示为设计师交付成果');
   const firstChangeTitle = rounds().nth(1).locator('summary').first();
   assert.match(textNumbers(await firstChangeTitle.innerText()), /第\s*1\s*次修改/);
   assert.match(textNumbers(await firstChangeTitle.innerText()), /已入账.*\+3\s*分/);
@@ -283,18 +295,33 @@ try {
   await closeHistory();
 
   // The same accounting is visible from the project card and task detail.
-  await page.evaluate(() => {
+  await page.evaluate(({ deliveryImage, referenceImage }) => {
     const e = window.EMIE, f = window.deliveryPointsFixture;
     e.state.currentRole = 'planner'; e.state.currentUserId = f.task.plannerId;
-    e.projectState.currentProjectDetail = f.project;
-    document.getElementById('mainContent').innerHTML = e.actions.renderProjectDetailContent(f.project);
-  });
+    const current = { ...f.project.tasks[0], referenceImagesJson: JSON.stringify([deliveryImage, referenceImage]) };
+    const fresh = { ...current, id: current.id + 1, status: 'accepted', deliverables: null, attachmentsJson: null,
+      pendingChangeBonusRequestId: null, deliveryVersions: [], referenceImagesJson: JSON.stringify([referenceImage]) };
+    const legacy = { ...fresh, id: current.id + 2, deliverables: '旧版交付', referenceImagesJson: JSON.stringify([deliveryImage]) };
+    const project = { ...f.project, tasks: [current, fresh, legacy] };
+    e.projectState.currentProjectDetail = project;
+    document.getElementById('mainContent').innerHTML = e.actions.renderProjectDetailContent(project);
+  }, { deliveryImage, referenceImage });
   await assertSummary(main);
-  await main.locator('.subtask-card').first().click();
+  const cards = main.locator('.subtask-card');
+  const imageGroup = (card, title) => card.getByText(`🖼️ ${title}`, { exact: true }).locator('..');
+  assert.equal(await imageGroup(cards.nth(0), '设计师交付成果').getByAltText(deliveryImage.name).count(), 1);
+  assert.equal(await imageGroup(cards.nth(0), '参考图片（企划/销售提供）').getByAltText(referenceImage.name).count(), 1);
+  assert.equal(await cards.nth(0).getByAltText(deliveryImage.name).count(), 1, '交付图只展示在成果分组');
+  assert.equal(await imageGroup(cards.nth(1), '参考图片（企划/销售提供）').getByAltText(referenceImage.name).count(), 1);
+  assert.equal(await imageGroup(cards.nth(1), '设计师交付成果').count(), 0, '首次交付前保留任务参考图');
+  assert.equal(await imageGroup(cards.nth(2), '设计师交付成果').getByAltText(deliveryImage.name).count(), 1, '重做中的旧交付仍显示为设计师交付成果');
+  await cards.first().click();
   const detail = page.locator('#projectSubTaskDetailModal');
   await detail.waitFor();
   await assertSummary(detail);
   await assertTaskDrawer(detail, { status: '等待企划验收', deliverables: correction.deliverables, versionNo: 4, canCorrect: false });
+  assert.equal(await detail.locator('.task-detail-output').getByAltText(deliveryImage.name).count(), 1);
+  assert.equal(await detail.locator('.task-detail-info').getByAltText(referenceImage.name).count(), 1);
   const olderRound = detail.locator('.task-detail-history .delivery-round').nth(1);
   await olderRound.locator(':scope > summary').click();
   assert.equal(await olderRound.getByText(firstChange.deliverables, { exact: true }).isVisible(), true,

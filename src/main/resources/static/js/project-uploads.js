@@ -571,8 +571,9 @@ async function handleFileUpload(input, list, maxCount, typeLabel, isImage) {
 }
 
 function renderFileList(list, typeLabel) {
-  // 驳回弹窗使用“驳回参考图”文案，仍应按图片列表渲染缩略图。
-  const isImage = typeLabel.includes('参考图片') || typeLabel.includes('参考图');
+  // 交付成果按图片列表渲染，避免文案变化导致缩略图退化成附件列表。
+  const isImage = list === EMIE.projectState.deliverImages
+    || typeLabel.includes('参考图片') || typeLabel.includes('参考图');
   const context = resolveFileListContext(list, isImage);
   const containerId = context.containerId;
   const c = document.getElementById(containerId);
@@ -627,7 +628,7 @@ function removeFileItem(listKey, idx) {
   const contexts = {
     createRef: [EMIE.projectState.createRefImages, '参考图片'],
     createAttachment: [EMIE.projectState.createAttachments, '附件'],
-    deliverImage: [EMIE.projectState.deliverImages, '交付参考图片'],
+    deliverImage: [EMIE.projectState.deliverImages, '交付成果图片'],
     deliverAttachment: [EMIE.projectState.deliverAttachments, '交付附件'],
     subTaskRef: [EMIE.projectState.subTaskRefImages, '参考图片'],
     subTaskAttachment: [EMIE.projectState.subTaskAttachments, '附件'],
@@ -655,7 +656,7 @@ function removeFileItem(listKey, idx) {
 
 function handleCreateRefImages(input) { handleFileUpload(input, EMIE.projectState.createRefImages, 6, '参考图片', true); }
 function handleCreateAttachments(input) { handleFileUpload(input, EMIE.projectState.createAttachments, 5, '附件', false); }
-function handleDeliverImages(input) { handleFileUpload(input, EMIE.projectState.deliverImages, 6, '交付参考图片', true); }
+function handleDeliverImages(input) { handleFileUpload(input, EMIE.projectState.deliverImages, 6, '交付成果图片', true); }
 function handleDeliverAttachments(input) { handleFileUpload(input, EMIE.projectState.deliverAttachments, 5, '交付附件', false); }
 
 // 全局拖拽上传：所有 .upload-area 根据其隐藏 input 自动复用现有上传逻辑。
@@ -670,7 +671,7 @@ function handleUploadDrop(input, files) {
     editAttachmentInput: [EMIE.projectState.editTaskAttachments, 9, '编辑附件', false],
     editProjectRefImageInput: [EMIE.projectState.editProjectRefImages, 6, '编辑项目参考图片', true],
     editProjectAttachmentInput: [EMIE.projectState.editProjectAttachments, 5, '编辑项目附件', false],
-    deliverImageInput: [EMIE.projectState.deliverImages, 6, '交付参考图片', true],
+    deliverImageInput: [EMIE.projectState.deliverImages, 6, '交付成果图片', true],
     deliverAttachmentInput: [EMIE.projectState.deliverAttachments, 5, '交付附件', false],
     rejectImageInput: [EMIE.projectState.rejectionImages, 6, '驳回参考图', true],
     rejectAttachmentInput: [EMIE.projectState.rejectionAttachments, 5, '驳回附件', false],
