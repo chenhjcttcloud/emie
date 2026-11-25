@@ -66,6 +66,19 @@ public class PerformanceController {
         }
     }
 
+    @GetMapping("/designer-monthly-report/{userId}/points")
+    public ResponseEntity<?> designerPointDetails(
+            @PathVariable String userId, @RequestParam String month, HttpServletRequest r) {
+        if (!admin(r)) return ResponseEntity.status(403).body(Map.of("error", "仅管理员可查看设计师积分明细"));
+        try {
+            return ResponseEntity.ok()
+                    .cacheControl(CacheControl.noStore())
+                    .body(service.designerPointDetails(month, userId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/designer-monthly-report/{kind}/{taskId}/deliveries")
     public ResponseEntity<?> designerTaskDeliveries(
             @PathVariable String kind, @PathVariable Long taskId, @RequestParam String month, HttpServletRequest r) {

@@ -61,7 +61,7 @@ public class PointAdjustmentLedger {
     @PrePersist
     void c() {
         if (createdAt == null) createdAt = LocalDateTime.now();
-        if (accountingMonth == null)
+        if (accountingMonth == null || accountingMonth.isBlank())
             accountingMonth = java.time.YearMonth.from(createdAt).toString();
     }
 }

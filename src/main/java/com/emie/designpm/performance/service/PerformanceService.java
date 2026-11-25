@@ -34,6 +34,7 @@ public class PerformanceService {
     private final PointRuleRepository rules;
     private MonthlyUserPointTargetRepository userTargets;
     private DesignRequirementRepository requirements;
+    private MonthlyPointReportService pointReports;
 
     public PerformanceService(
             PointLedgerRepository ledgers,
@@ -62,6 +63,11 @@ public class PerformanceService {
     @org.springframework.beans.factory.annotation.Autowired
     void designRequirements(DesignRequirementRepository requirements) {
         this.requirements = requirements;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void pointReports(MonthlyPointReportService pointReports) {
+        this.pointReports = pointReports;
     }
 
     @Transactional(readOnly = true)
@@ -99,7 +105,24 @@ public class PerformanceService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> designerMonthlyReport(String month) {
+        MonthlyDesignerEvaluationService.validatePeriod(month, false);
         return designerMonthlyReport(month, users.findByRole("designer"));
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> designerPointDetails(String month, String userId) {
+        MonthlyDesignerEvaluationService.validatePeriod(month, false);
+        if (userId == null || userId.isBlank()) throw new IllegalArgumentException("设计师不能为空");
+        User designer = users.findByUserId(userId)
+                .filter(user -> "designer".equals(user.getRole()))
+                .orElseThrow(() -> new IllegalArgumentException("设计师不存在"));
+        var items = pointReports.entries(month, List.of(userId));
+        return Map.of(
+                "month", month,
+                "userId", userId,
+                "designer", TextEncodingUtil.repairUtf8Mojibake(designer.getName()),
+                "score", MonthlyPointReportService.total(items),
+                "items", items);
     }
 
     @Transactional(readOnly = true)
@@ -241,6 +264,8 @@ public class PerformanceService {
                                 "ruleCode",
                                 Optional.ofNullable(requirement.getPointRuleCode())
                                         .orElse(""),
+                                "ruleVersion",
+                                designerTaskRuleVersion(Objects.toString(requirement.getPointRuleCode(), "")),
                                 "project",
                                 "设计/送审需求",
                                 "projectType",
@@ -250,7 +275,10 @@ public class PerformanceService {
                                         requirement.getId() + ":" + requirement.getDesignerId(), 0d)));
             }
         }
-        return Map.of("month", month, "from", from, "to", to, "designers", new ArrayList<>(reports.values()));
+        var report = Map.<String, Object>of(
+                "month", month, "from", from, "to", to, "designers", new ArrayList<>(reports.values()));
+        if (pointReports != null) pointReports.enrich(report);
+        return report;
     }
 
     private static String designerTaskRuleVersion(String ruleCode) {

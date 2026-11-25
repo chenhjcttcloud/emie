@@ -29,7 +29,7 @@ const adminModuleDefinitions = [
   ['./admin-catalog.js?v=276', 'adminCatalog'],
   ['./admin-org.js?v=292', 'adminOrg'],
   ['./designer-evaluation.js?v=20', 'designerEvaluation'],
-  ['./admin-scoring.js?v=664', 'adminScoring'],
+  ['./admin-scoring.js?v=665', 'adminScoring'],
   ['./admin-audit.js?v=384', 'adminAudit'],
   ['./admin-point-logs.js?v=18', 'adminPointLogs'],
   ['./admin-storage.js?v=321', 'adminStorage'],
@@ -52,7 +52,7 @@ async function loadViewModules(view) {
   if (view === 'designer-performance' && window.EMIE.state.currentRole === 'designer') {
     await Promise.all([
       loadAdminModule(['./designer-evaluation.js?v=20', 'designerEvaluation']),
-      loadAdminModule(['./designer-performance.js?v=2', 'designerPerformance']),
+      loadAdminModule(['./designer-performance.js?v=3', 'designerPerformance']),
     ]);
     return;
   }

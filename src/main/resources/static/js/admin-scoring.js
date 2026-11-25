@@ -44,35 +44,36 @@ function selectedDesignerRuleVersion(card) {
 
 function renderDesignerTaskControls(annual, selectedVersion) {
   return `<div class="designer-performance-period">
-    <label class="form-label">积分规则版本<select class="form-select" id="designerPerformanceRuleVersion" data-emie-action="change:scoring-performance-rule-version">
+    <label class="form-label">完成事项规则版本<select class="form-select" id="designerPerformanceRuleVersion" data-emie-action="change:scoring-performance-rule-version">
       <option value="">全部</option>${[...designerRuleVersions].map(([value, label]) => `<option value="${value}" ${value === selectedVersion ? 'selected' : ''}>${label}</option>`).join('')}
     </select></label>
-    ${annual ? '' : '<button type="button" class="btn btn-outline" data-emie-action="click:scoring-export-subtasks">导出子任务 Excel</button>'}
-  </div>`;
+    ${annual ? '' : '<button type="button" class="btn btn-outline" data-emie-action="click:scoring-export-subtasks">导出月度积分与完成事项</button>'}
+  </div><p class="admin-section-hint">规则版本仅筛选完成事项；${annual ? '全年' : '当月'}积分汇总与积分明细始终包含全部来源。${annual ? '' : 'Excel 包含月度积分汇总、当月积分明细和当月完成事项三张表。'}</p>`;
 }
 
 function designerTaskRuleVersion(task) {
-  return task.kind === 'task' && designerRuleVersions.has(task.ruleVersion) ? task.ruleVersion : '';
+  return designerRuleVersions.has(task.ruleVersion) ? task.ruleVersion : '';
 }
 
-function renderDesignerPerformanceTask(task, selectedVersion) {
+function renderDesignerPerformanceTask(task, selectedVersion, period) {
   const version = designerTaskRuleVersion(task);
   const badge = version ? `<span class="badge badge-review designer-performance-rule-version" title="${escHtml(task.ruleCode || '积分规则版本')}">${designerRuleVersions.get(version)}</span>` : '';
+  const periodLabel = period?.length === 4 ? '全年' : '当月';
   return `<div class="designer-performance-task" ${version ? `data-rule-version="${version}"` : ''} ${selectedVersion && version !== selectedVersion ? 'hidden' : ''}>
-    <div class="designer-performance-task-head"><div><strong>${escHtml(task.name)}</strong> ${badge}<small>${escHtml(task.project || '')} · ${escHtml(String(task.completedAt || '').replace('T', ' '))} · ${escHtml(task.category || '未分类')}</small></div>
-    <div><span title="该设计师在此任务累计获得的积分，包含历史月份，不等于当月归属积分">该设计师在此任务累计获得 ${Number(task.score || 0).toFixed(2)} 积分</span><button type="button" class="btn btn-outline btn-sm" data-emie-action="click:scoring-task-deliveries" data-task-id="${Number(task.id)}" data-task-kind="${escHtml(task.kind || 'task')}" data-month="${escHtml(String(task.completedAt || '').slice(0, 7))}">查看成果</button></div></div>
+    <div class="designer-performance-task-head"><div><strong>${escHtml(task.name)}</strong> ${badge}<small>${task.kind === 'requirement' ? '设计/送审需求' : '子任务'} · ${escHtml(task.project || '')} · ${escHtml(String(task.completedAt || '').replace('T', ' '))} · ${escHtml(task.category || '未分类')}</small></div>
+    <div><span>${periodLabel}归属 ${Number(task.periodPoints || 0).toFixed(2)} 积分<small>累计 ${Number(task.score || 0).toFixed(2)} 积分；其他月份 ${Number(task.otherPeriodPoints || 0).toFixed(2)} 积分</small></span><button type="button" class="btn btn-outline btn-sm" data-emie-action="click:scoring-task-deliveries" data-task-id="${Number(task.id)}" data-task-kind="${escHtml(task.kind || 'task')}" data-month="${escHtml(String(task.completedAt || '').slice(0, 7))}">查看成果</button></div></div>
     <div class="designer-performance-deliveries" data-delivery-panel hidden></div>
   </div>`;
 }
 
 function designerTasksEmptyText(version) {
-  return version ? '所选时间内暂无该版本的子任务' : '所选时间内暂无完成任务或需求';
+  return version ? '所选时间内暂无该版本的完成任务或需求' : '所选时间内暂无完成任务或需求';
 }
 
-function renderDesignerPerformanceTasks(tasks, selectedVersion) {
+function renderDesignerPerformanceTasks(tasks, selectedVersion, period) {
   const hasVisibleTasks = tasks.some(task => !selectedVersion || designerTaskRuleVersion(task) === selectedVersion);
   return `<div class="designer-performance-tasks">
-    ${tasks.map(task => renderDesignerPerformanceTask(task, selectedVersion)).join('')}
+    ${tasks.map(task => renderDesignerPerformanceTask(task, selectedVersion, period)).join('')}
     <p class="admin-section-hint" data-designer-tasks-empty ${hasVisibleTasks ? 'hidden' : ''}>${designerTasksEmptyText(selectedVersion)}</p>
   </div>`;
 }
@@ -99,11 +100,79 @@ function renderDesignerMonthlyReport(report, selectedVersion = '') {
   const total = rows.reduce((sum, row) => sum + Number(row.completedCount || 0), 0);
   const mix = (counts, count) => Object.entries(counts || {}).map(([label, value]) => `${escHtml(label)} ${value} (${count ? Math.round(value * 100 / count) : 0}%)`).join('、') || '—';
   return `<section class="card designer-performance">
-    <div class="card-header"><div><h3>设计师${annual ? '年度' : '月度'}绩效与交付成果</h3><p class="admin-section-hint">${periodLabel}归属积分含调账；任务旁显示该设计师在此任务累计获得的积分（包含历史月份，不等于当月归属积分）。展开任务后加载交付成果。</p></div>${designerPerformancePeriodControls(report.month)}</div>
+    <div class="card-header"><div><h3>设计师${annual ? '年度' : '月度'}绩效与交付成果</h3><p class="admin-section-hint">积分按每笔入账的归属月份统计，包含任务、需求及其他调账，点击分数可核对全部明细。下方完成事项按完成时间列出，分别显示本期与累计积分。</p></div>${designerPerformancePeriodControls(report.month)}</div>
     ${!annual && report.growthScoreStatus === 'unavailable' ? `<p class="admin-section-hint" role="status" data-growth-integration-status>${escHtml(report.growthScoreMessage || '成长周报评分暂不可用，请稍后重试')}。现有积分与已保存评分继续保留。</p>` : ''}<div class="designer-performance-summary"><span><strong>${rows.length}</strong> 位设计师</span><span><strong>${total}</strong> 项完成任务与需求</span><span><strong>${rows.reduce((sum, row) => sum + Number(row.score || 0), 0).toFixed(2)}</strong> ${periodLabel}归属积分</span><span><strong>${rows.filter(row => (row.evaluations || []).some(item => item.totalScore != null)).length} / ${rows.length}</strong> ${annual ? '已有月度评分' : '已完成月度评分'}</span></div>
     ${renderDesignerTaskControls(annual, selectedVersion)}
-    <div class="designer-performance-list">${rows.map(row => `<article class="designer-performance-person"><div class="designer-performance-person-head"><div><strong>${escHtml(row.designer)}</strong><small>${escHtml(mix(row.categoryCounts, row.completedCount))}</small></div><div class="designer-performance-score"><strong>${Number(row.score || 0).toFixed(2)}</strong><span>${periodLabel}归属积分</span></div></div>${EMIE.actions.renderDesignerEvaluationSummary(row, report.month)}<div class="designer-performance-count">完成 ${Number(row.completedCount || 0)} 项任务与需求</div>${renderDesignerPerformanceTasks(row.tasks || [], selectedVersion)}</article>`).join('') || '<div class="empty-state">暂无在职设计师</div>'}</div>
+    <div class="designer-performance-list">${rows.map(row => `<article class="designer-performance-person"><div class="designer-performance-person-head"><div><strong>${escHtml(row.designer)}</strong><small>${escHtml(mix(row.categoryCounts, row.completedCount))}</small></div><div class="designer-performance-score"><button type="button" class="btn btn-outline" style="display:block;text-align:right;" data-emie-action="click:scoring-period-points" data-user-id="${escHtml(row.userId)}" data-designer="${escHtml(row.designer)}" data-month="${escHtml(report.month)}"><strong>${Number(row.score || 0).toFixed(2)}</strong><span>${periodLabel}归属积分 · 查看明细</span></button></div></div>${EMIE.actions.renderDesignerEvaluationSummary(row, report.month)}<div class="designer-performance-count">完成 ${Number(row.completedCount || 0)} 项任务与需求</div>${renderDesignerPerformanceTasks(row.tasks || [], selectedVersion, report.month)}</article>`).join('') || '<div class="empty-state">暂无在职设计师</div>'}</div>
   </section>`;
+}
+
+const designerPointSources = {
+  TASK_BASE: '子任务基础分', TASK_REVISION: '子任务修改', TASK_MANUAL: '旧任务手动验收',
+  TASK_QUALITY: '历史质量分', DESIGN_REQUIREMENT: '设计/送审需求',
+  MATERIAL_MARKET: '素材采纳', MATERIAL_IDEA_PUBLISH: '创意单发布奖励',
+  MATERIAL_FREE_RATING: '自由单评星奖励', PO_PROGRESS: 'PO 月度履职',
+  MANUAL: '管理员调账', APPEAL: '积分异议更正', TASK_WITHDRAWAL: '退单扣分',
+};
+let designerPointDialog = null;
+
+function closeDesignerPointDetails(immediate = false) {
+  const overlay = designerPointDialog?.overlay || document.getElementById('designerPointDetailsModal');
+  designerPointDialog = null;
+  if (immediate) overlay?.remove();
+  else closeM('designerPointDetailsModal');
+}
+
+document.addEventListener('emie:identity-changing', () => closeDesignerPointDetails(true));
+
+function renderDesignerPointDetailRow(item, date) {
+  const name = item.taskName || item.requirementName;
+  const fallback = item.requirementId ? `设计/送审需求 #${item.requirementId}`
+    : item.taskId ? `子任务 #${item.taskId}` : '未关联事项';
+  const points = Number(item.points || 0);
+  return `<tr data-point-id="${escHtml(item.id)}">
+    <td style="white-space:nowrap;">${escHtml(designerPointSources[item.source] || item.source || '其他积分')}</td>
+    <td style="white-space:nowrap;">${escHtml(item.accountingMonth || '—')}</td>
+    <td style="white-space:nowrap;">${date(item.createdAt)}</td>
+    <td style="overflow-wrap:anywhere;">${escHtml(name || item.project || fallback)}
+      ${item.project && name ? `<small style="display:block;">${escHtml(item.project)}</small>` : ''}
+      ${item.completedAt ? `<small style="display:block;">完成 ${date(item.completedAt)}</small>` : ''}</td>
+    <td style="overflow-wrap:anywhere;">${escHtml(item.ruleCode || '—')}
+      ${item.ruleDescription ? `<small style="display:block;">${escHtml(item.ruleDescription)}</small>` : ''}
+      ${item.reason ? `<small style="display:block;">${escHtml(item.reason)}</small>` : ''}</td>
+    <td style="font-weight:700;white-space:nowrap;">${points > 0 ? '+' : ''}${points.toFixed(2)}</td></tr>`;
+}
+
+function renderDesignerPointDetails(data) {
+  const items = Array.isArray(data.items) ? data.items : [];
+  const total = items.reduce((sum, item) => sum + Math.round(Number(item.points || 0) * 100), 0) / 100;
+  const date = value => escHtml(value ? String(value).replace('T', ' ').slice(0, 19) : '—');
+  return `<div class="designer-performance-summary"><span><strong>${Number(data.score || 0).toFixed(2)}</strong> ${String(data.month).length === 4 ? '全年' : '当月'}归属积分</span><span>全部来源 <strong>${items.length}</strong> 条</span></div>
+    <p class="admin-section-hint">按归属月份列出全部积分，包含任务、需求及其他调账。入账时间、完成时间可能与归属月份不同；完成事项规则版本筛选不影响此明细。</p>
+    <div class="table-wrap" tabindex="0" aria-label="积分明细表，可左右滚动"><table style="min-width:820px;"><thead><tr><th>来源</th><th>归属月</th><th>入账时间</th><th>关联事项</th><th>规则与说明</th><th>积分</th></tr></thead><tbody>${items.map(item => renderDesignerPointDetailRow(item, date)).join('') || '<tr><td colspan="6">本期暂无积分记录</td></tr>'}</tbody><tfoot><tr><th colspan="5">明细合计</th><th data-point-total>${total.toFixed(2)}</th></tr></tfoot></table></div>`;
+}
+
+async function openDesignerPointDetails(button) {
+  const userId = button.dataset.userId;
+  const month = button.dataset.month;
+  if (EMIE.state.currentRole !== 'admin' || !userId || !/^\d{4}(-(0[1-9]|1[0-2]))?$/.test(month || '')) return;
+  closeDesignerPointDetails(true);
+  const overlay = document.createElement('div');
+  overlay.id = 'designerPointDetailsModal';
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal" style="width:min(1080px,100vw)!important;min-width:0;"><div class="modal-header"><div><div class="modal-title">${escHtml(button.dataset.designer || userId)} · ${escHtml(month)} 积分明细</div><div class="modal-subtitle">归属积分对账</div></div><button type="button" class="modal-close" aria-label="关闭积分明细" data-emie-action="click:scoring-close-period-points">✕</button></div><div class="modal-body" aria-live="polite"><p role="status">正在读取全部积分明细…</p></div><div class="modal-footer"><button type="button" class="btn btn-outline" data-emie-action="click:scoring-close-period-points">关闭</button></div></div>`;
+  const context = { overlay, authUser: EMIE.state.authUser, userId: EMIE.state.currentUserId, token: localStorage.getItem('design_pm_token') };
+  designerPointDialog = context;
+  document.body.appendChild(overlay);
+  const isCurrent = () => designerPointDialog === context && overlay.isConnected && overlay.dataset.modalClosing !== '1'
+    && EMIE.state.authUser === context.authUser && EMIE.state.currentRole === 'admin'
+    && EMIE.state.currentUserId === context.userId && localStorage.getItem('design_pm_token') === context.token;
+  try {
+    const data = await apiGet(`/performance/designer-monthly-report/${encodeURIComponent(userId)}/points?month=${encodeURIComponent(month)}`, { fresh: true });
+    if (isCurrent()) overlay.querySelector('.modal-body').innerHTML = renderDesignerPointDetails(data);
+  } catch (error) {
+    if (isCurrent()) overlay.querySelector('.modal-body').textContent = `积分明细加载失败：${error.message || '请关闭后重试'}`;
+  }
 }
 
 async function exportDesignerSubtasks(button) {
@@ -134,7 +203,7 @@ async function exportDesignerSubtasks(button) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `设计师子任务-${month}.xlsx`;
+    link.download = `设计师月度积分与完成事项-${month}.xlsx`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (error) {
@@ -684,6 +753,8 @@ if (registerEventAction) {
   registerEventAction('scoring-performance-month', () => reloadDesignerMonthlyReport());
   registerEventAction('scoring-performance-rule-version', (_event, el) => filterDesignerPerformanceTasks(el));
   registerEventAction('scoring-export-subtasks', (_event, el) => EMIE.actions.submitGuard(el, () => exportDesignerSubtasks(el)));
+  registerEventAction('scoring-period-points', (_event, el) => openDesignerPointDetails(el));
+  registerEventAction('scoring-close-period-points', () => closeDesignerPointDetails());
   registerEventAction('scoring-task-deliveries', (_event, el) => loadDesignerTaskDeliveries(el));
   registerEventAction('scoring-preview-delivery', (_event, el) => previewDesignerDeliveryFile(el));
   registerEventAction('scoring-create-rule', () => createPointRule());

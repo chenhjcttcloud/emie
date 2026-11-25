@@ -57,5 +57,8 @@ public class PointLedger {
     @PrePersist
     void onCreate() {
         if (createdAt == null) createdAt = LocalDateTime.now();
+        if (accountingMonth == null || accountingMonth.isBlank())
+            accountingMonth = java.time.YearMonth.from(confirmedAt == null ? createdAt : confirmedAt)
+                    .toString();
     }
 }

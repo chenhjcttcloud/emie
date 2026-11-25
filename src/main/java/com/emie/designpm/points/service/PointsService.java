@@ -15,6 +15,7 @@ import com.emie.designpm.util.TextEncodingUtil;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
 import org.slf4j.Logger;
@@ -127,10 +128,7 @@ public class PointsService {
         ledger.setSubTaskId(task.getId());
         ledger.setRuleCode(ruleCode);
         ledger.setCountInPerformance(true);
-        ledger.setAccountingMonth(
-                task.getMilestoneMonth() == null || task.getMilestoneMonth().isBlank()
-                        ? YearMonth.now().toString()
-                        : task.getMilestoneMonth());
+        ledger.setAccountingMonth(accountingMonth(version));
         ledger.setPoints(awarded);
         ledger.setReason("旧任务验收手动积分：" + task.getName());
         ledger.setCreatedBy(actorId);
@@ -180,16 +178,6 @@ public class PointsService {
         if (!"designer".equals(task.getAssigneeRole())) return false;
         // 不按项目/任务创建时间限制积分；所有符合条件的正式送审任务均可入账。
         return true;
-    }
-
-    private String completionMonth(SubTask task) {
-        try {
-            if (task.getActualDate() != null && !task.getActualDate().isBlank()) {
-                return YearMonth.from(LocalDate.parse(task.getActualDate())).toString();
-            }
-        } catch (Exception ignored) {
-        }
-        return null;
     }
 
     /** 兼容旧调用方；新流程实际在送审、最终验收两个节点分别调用。 */
@@ -248,7 +236,7 @@ public class PointsService {
         ledger.setRuleCode(ledgerCode);
         // 有效积分统一参与绩效统计；旧快照字段仅为历史兼容保留。
         ledger.setCountInPerformance(true);
-        ledger.setAccountingMonth(accountingMonth(task));
+        ledger.setAccountingMonth(accountingMonth(version));
         ledger.setPoints(awarded);
         ledger.setReason(reason);
         ledger.setCreatedBy(createdBy);
@@ -261,13 +249,13 @@ public class PointsService {
         ledgers.save(ledger);
     }
 
-    private String accountingMonth(SubTask task) {
-        String completed = completionMonth(task);
-        return completed != null
-                ? completed
-                : task.getMilestoneMonth() == null || task.getMilestoneMonth().isBlank()
-                        ? YearMonth.now().toString()
-                        : task.getMilestoneMonth();
+    /** Each confirmed delivery earns points in its own month, including later revisions. */
+    private String accountingMonth(SubTaskDeliveryVersion version) {
+        return YearMonth.from(
+                        version != null && version.getConfirmedAt() != null
+                                ? version.getConfirmedAt()
+                                : LocalDateTime.now())
+                .toString();
     }
 
     private double roundedPoints(double value) {

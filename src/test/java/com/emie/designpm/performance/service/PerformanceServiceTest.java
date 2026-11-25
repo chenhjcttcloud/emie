@@ -81,7 +81,7 @@ class PerformanceServiceTest {
         assertEquals(
                 "requirement",
                 ((List<Map<String, Object>>) row.get("tasks")).getFirst().get("kind"));
-        assertFalse(((Map<?, ?>) ((List<?>) row.get("tasks")).getFirst()).containsKey("ruleVersion"));
+        assertEquals("legacy", ((Map<?, ?>) ((List<?>) row.get("tasks")).getFirst()).get("ruleVersion"));
         when(ledgers.sumPerformancePointsBetweenMonths("2026-01", "2026-12"))
                 .thenReturn(Collections.singletonList(new Object[] {"d1", 100d}));
         when(adjustments.sumPointsBetweenMonths("2026-01", "2026-12"))

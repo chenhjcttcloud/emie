@@ -87,13 +87,13 @@ class DesignerMonthlyDeliveryControllerTest {
     }
 
     @Test
-    void monthlyExportUsesTaskRowsAndSelectedVersionFromReport() throws Exception {
+    void monthlyExportKeepsCompletePointsAndFiltersOnlyCompletedItems() throws Exception {
         PerformanceService service = mock(PerformanceService.class);
         when(service.exportDesignerMonthlyReport(anyString(), nullable(String.class)))
                 .thenCallRealMethod();
         LocalDateTime completedAt = LocalDateTime.of(2026, 11, 9, 15, 30);
         var tasks = List.of(
-                Map.of(
+                Map.<String, Object>of(
                         "id",
                         11L,
                         "kind",
@@ -105,21 +105,62 @@ class DesignerMonthlyDeliveryControllerTest {
                         "completedAt",
                         completedAt,
                         "score",
-                        2d),
-                Map.of(
-                        "id", 12L,
-                        "kind", "task",
-                        "name", "=SUM(1,2)",
-                        "project", "项目甲",
-                        "category", "包装设计",
-                        "ruleVersion", "3.0",
-                        "ruleCode", "VIS_V3_11",
-                        "completedAt", completedAt,
-                        "score", 7.5d),
-                Map.of("id", 13L, "kind", "requirement", "ruleCode", "VIS_V3_11", "completedAt", completedAt));
+                        2d,
+                        "periodPoints",
+                        2d,
+                        "otherPeriodPoints",
+                        0d),
+                Map.<String, Object>ofEntries(
+                        Map.entry("id", 12L),
+                        Map.entry("kind", "task"),
+                        Map.entry("name", "=SUM(1,2)"),
+                        Map.entry("project", "项目甲"),
+                        Map.entry("category", "包装设计"),
+                        Map.entry("ruleVersion", "3.0"),
+                        Map.entry("ruleCode", "VIS_V3_11"),
+                        Map.entry("completedAt", completedAt),
+                        Map.entry("score", 7.5d),
+                        Map.entry("periodPoints", 7.5d),
+                        Map.entry("otherPeriodPoints", 0d)),
+                Map.<String, Object>of(
+                        "id",
+                        13L,
+                        "kind",
+                        "requirement",
+                        "ruleVersion",
+                        "3.0",
+                        "ruleCode",
+                        "VIS_V3_11",
+                        "completedAt",
+                        completedAt,
+                        "score",
+                        2.5d,
+                        "periodPoints",
+                        2.5d,
+                        "otherPeriodPoints",
+                        0d));
+        var points = List.of(
+                Map.<String, Object>of("id", "L-1", "points", 2d),
+                Map.<String, Object>of("id", "L-2", "points", 7.5d),
+                Map.<String, Object>of("id", "A-3", "points", 2.5d));
         when(service.designerMonthlyReport("2026-11"))
-                .thenReturn(
-                        Map.of("month", "2026-11", "designers", List.of(Map.of("designer", "设计师甲", "tasks", tasks))));
+                .thenReturn(Map.of(
+                        "month",
+                        "2026-11",
+                        "designers",
+                        List.of(Map.of(
+                                "userId",
+                                "d1",
+                                "designer",
+                                "设计师甲",
+                                "score",
+                                12d,
+                                "completedCount",
+                                3,
+                                "tasks",
+                                tasks,
+                                "pointItems",
+                                points))));
         var mvc = MockMvcBuilders.standaloneSetup(
                         new PerformanceController(service, mock(DesignerMonthlyDeliveryService.class)))
                 .build();
@@ -139,22 +180,26 @@ class DesignerMonthlyDeliveryControllerTest {
                 .getResponse()
                 .getContentAsByteArray();
         try (var workbook = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
-            var sheet = workbook.getSheetAt(0);
-            assertEquals(2, sheet.getPhysicalNumberOfRows());
-            assertEquals("规则版本", sheet.getRow(0).getCell(7).getStringCellValue());
-            assertEquals("任务累计积分", sheet.getRow(0).getCell(9).getStringCellValue());
+            assertEquals(3, workbook.getNumberOfSheets());
+            assertEquals(12d, workbook.getSheet("月度积分汇总").getRow(1).getCell(3).getNumericCellValue());
+            assertEquals(4, workbook.getSheet("当月积分明细").getPhysicalNumberOfRows());
+            var sheet = workbook.getSheet("当月完成事项");
+            assertEquals(3, sheet.getPhysicalNumberOfRows());
+            assertEquals("事项累计积分", sheet.getRow(0).getCell(12).getStringCellValue());
             var row = sheet.getRow(1);
             assertEquals("2026-11", row.getCell(0).getStringCellValue());
             assertEquals("设计师甲", row.getCell(1).getStringCellValue());
             assertEquals("项目甲", row.getCell(2).getStringCellValue());
-            assertEquals("12", row.getCell(3).getStringCellValue());
-            assertEquals(CellType.STRING, row.getCell(4).getCellType());
-            assertEquals("=SUM(1,2)", row.getCell(4).getStringCellValue());
-            assertEquals(completedAt, row.getCell(5).getLocalDateTimeCellValue());
-            assertEquals("包装设计", row.getCell(6).getStringCellValue());
-            assertEquals("3.0", row.getCell(7).getStringCellValue());
-            assertEquals("VIS_V3_11", row.getCell(8).getStringCellValue());
-            assertEquals(7.5d, row.getCell(9).getNumericCellValue());
+            assertEquals("12", row.getCell(4).getStringCellValue());
+            assertEquals(CellType.STRING, row.getCell(5).getCellType());
+            assertEquals("=SUM(1,2)", row.getCell(5).getStringCellValue());
+            assertEquals(completedAt, row.getCell(6).getLocalDateTimeCellValue());
+            assertEquals("包装设计", row.getCell(7).getStringCellValue());
+            assertEquals("3.0", row.getCell(8).getStringCellValue());
+            assertEquals("VIS_V3_11", row.getCell(9).getStringCellValue());
+            assertEquals(7.5d, row.getCell(10).getNumericCellValue());
+            assertEquals(7.5d, row.getCell(12).getNumericCellValue());
+            assertEquals("设计/送审需求", sheet.getRow(2).getCell(3).getStringCellValue());
         }
         byte[] unfiltered = mvc.perform(get(endpoint).param("month", "2026-11").requestAttr("authSession", admin))
                 .andExpect(status().isOk())
@@ -162,9 +207,9 @@ class DesignerMonthlyDeliveryControllerTest {
                 .getResponse()
                 .getContentAsByteArray();
         try (var workbook = new XSSFWorkbook(new ByteArrayInputStream(unfiltered))) {
-            var sheet = workbook.getSheetAt(0);
-            assertEquals(3, sheet.getPhysicalNumberOfRows());
-            assertEquals("2.0", sheet.getRow(1).getCell(7).getStringCellValue());
+            assertEquals(4, workbook.getSheet("当月完成事项").getPhysicalNumberOfRows());
+            assertEquals("2.0", workbook.getSheet("当月完成事项").getRow(1).getCell(8).getStringCellValue());
+            assertEquals(12d, workbook.getSheet("月度积分汇总").getRow(1).getCell(3).getNumericCellValue());
         }
     }
 }
