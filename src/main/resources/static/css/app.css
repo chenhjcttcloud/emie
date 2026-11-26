@@ -1559,6 +1559,10 @@ html:has(.admin-page)::-webkit-scrollbar,body:has(.admin-page)::-webkit-scrollba
 .points-ledger-count { padding:5px 9px; border-radius:999px; color:#5B51C8; background:#EEECFF; font-size:11px; white-space:nowrap; }
 .points-admin-adjust-btn { margin-top:20px; color:#4F46E5; background:#fff; border:0; }
 .points-admin-leaderboard-panel { grid-column:1 / -1; }
+@media (max-width:600px) {
+  .points-admin-leaderboard-panel .points-section-head { flex-wrap:wrap; }
+  .points-admin-leaderboard-panel .points-section-head > div { flex:1 1 220px; }
+}
 .points-ledger-card .card-header { align-items:center; }
 .points-ledger-hint { display:block; margin-top:4px; color:var(--gray-400); font-size:11px; }
 .points-ledger-card { min-width:0; }

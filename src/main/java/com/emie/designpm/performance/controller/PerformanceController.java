@@ -1,5 +1,6 @@
 package com.emie.designpm.performance.controller;
 
+import com.emie.designpm.admin.service.PermissionCatalog;
 import com.emie.designpm.auth.AuthSession;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.performance.service.DesignerMonthlyDeliveryService;
@@ -27,6 +28,20 @@ public class PerformanceController {
     @GetMapping("/leaderboard")
     public List<Map<String, Object>> leaderboard(@RequestParam(required = false) String month) {
         return service.leaderboard(month);
+    }
+
+    @GetMapping("/designer-leaderboard")
+    public ResponseEntity<?> designerLeaderboard(
+            @RequestParam(required = false) String month, HttpServletRequest request) {
+        AuthSession current = (AuthSession) request.getAttribute("authSession");
+        String role = current == null ? "" : PermissionCatalog.normalizeRole(current.role());
+        if (!Set.of("admin", "planner").contains(role))
+            return ResponseEntity.status(403).body(Map.of("error", "仅管理员和产品企划可查看设计师积分总览"));
+        try {
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.designerLeaderboard(month));
+        } catch (IllegalArgumentException | java.time.format.DateTimeParseException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "月份格式应为 YYYY-MM"));
+        }
     }
 
     @GetMapping("/designer-monthly-report")

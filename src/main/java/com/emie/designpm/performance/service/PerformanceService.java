@@ -2,6 +2,7 @@ package com.emie.designpm.performance.service;
 
 import com.emie.designpm.admin.repository.SystemConfigRepository;
 import com.emie.designpm.admin.repository.UserRepository;
+import com.emie.designpm.admin.service.PermissionCatalog;
 import com.emie.designpm.designrequirement.repository.DesignRequirementRepository;
 import com.emie.designpm.entity.*;
 import com.emie.designpm.performance.repository.MonthlyPerformanceConfigRepository;
@@ -100,6 +101,37 @@ public class PerformanceService {
                     if (user != null) row.put("name", user.getName());
                     return row;
                 })
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> designerLeaderboard(String month) {
+        String selected = month == null || month.isBlank() ? null : month;
+        if (selected != null) MonthlyDesignerEvaluationService.validatePeriod(selected, true);
+        Map<String, Double> points = new HashMap<>();
+        for (var row : leaderboard(selected))
+            points.put((String) row.get("userId"), ((Number) row.get("points")).doubleValue());
+        Map<String, User> designers = new LinkedHashMap<>();
+        for (String role : List.of("designer", "设计师")) {
+            for (User user : users.findByRole(role)) {
+                if (!"designer".equals(PermissionCatalog.normalizeRole(user.getRole()))
+                        || (user.getStatus() != null && !"active".equalsIgnoreCase(user.getStatus()))
+                        || user.getUserId() == null
+                        || user.getUserId().isBlank()) continue;
+                designers.putIfAbsent(user.getUserId(), user);
+            }
+        }
+        return designers.values().stream()
+                .sorted(Comparator.<User>comparingDouble(user -> points.getOrDefault(user.getUserId(), 0d))
+                        .reversed()
+                        .thenComparing(User::getUserId))
+                .map(user -> Map.<String, Object>of(
+                        "userId", user.getUserId(),
+                        "name",
+                                user.getName() == null || user.getName().isBlank()
+                                        ? user.getUserId()
+                                        : TextEncodingUtil.repairUtf8Mojibake(user.getName()),
+                        "points", points.getOrDefault(user.getUserId(), 0d)))
                 .toList();
     }
 

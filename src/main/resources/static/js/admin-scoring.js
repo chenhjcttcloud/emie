@@ -138,6 +138,7 @@ const designerPointSources = {
   MANUAL: '管理员调账', APPEAL: '积分异议更正', TASK_WITHDRAWAL: '退单扣分',
 };
 let designerPointDialog = null;
+let scoringIdentityEpoch = 0;
 
 function closeDesignerPointDetails(immediate = false) {
   const overlay = designerPointDialog?.overlay || document.getElementById('designerPointDetailsModal');
@@ -146,7 +147,11 @@ function closeDesignerPointDetails(immediate = false) {
   else closeM('designerPointDetailsModal');
 }
 
-document.addEventListener('emie:identity-changing', () => closeDesignerPointDetails(true));
+document.addEventListener('emie:identity-changing', () => {
+  scoringIdentityEpoch++;
+  closeDesignerPointDetails(true);
+  document.getElementById('manualAdjustmentModal')?.remove();
+});
 
 function renderDesignerPointDetailRow(item, date) {
   const name = item.taskName || item.requirementName;
@@ -575,10 +580,23 @@ async function reviewPointAppeal(id, approve) {
 }
 
 // ==================== 手动调账（管理员主动补分/扣分） ====================
+const manualAdjustmentSessions = new WeakMap();
+
+function manualAdjustmentIdentity() {
+  const epoch = scoringIdentityEpoch, authUser = EMIE.state.authUser;
+  const userId = EMIE.state.currentUserId, token = localStorage.getItem('design_pm_token');
+  return () => EMIE.state.currentRole === 'admin' && scoringIdentityEpoch === epoch
+    && EMIE.state.authUser === authUser && EMIE.state.currentUserId === userId
+    && localStorage.getItem('design_pm_token') === token;
+}
+
 async function openManualAdjustmentModal() {
+  if (EMIE.state.currentRole !== 'admin') return;
   if (document.getElementById('manualAdjustmentModal')) return;
+  const isCurrent = manualAdjustmentIdentity();
   let users;
-  try { users = await apiGet('/admin/users'); } catch (e) { window.EMIE.actions.showSystemAlert('读取成员列表失败：' + e.message); return; }
+  try { users = await apiGet('/admin/users'); } catch (e) { if (isCurrent()) window.EMIE.actions.showSystemAlert('读取成员列表失败：' + e.message); return; }
+  if (!isCurrent()) return;
   const activeUsers = (Array.isArray(users) ? users : []).filter(u => (u.status || 'active') === 'active');
   // 手动调账仅面向有积分资格的角色（设计师），与后端校验一致；角色可能为英文标准值或中文别名（'设计师'）。
   const eligibleUsers = activeUsers.filter(u => u.role === 'designer' || u.role === '设计师');
@@ -596,10 +614,15 @@ async function openManualAdjustmentModal() {
     </div>
     <div class="modal-footer"><button class="btn btn-outline" data-emie-action="click:scoring-close-adjustment">取消</button><button class="btn btn-primary" data-emie-action="click:scoring-submit-adjustment">确认调账</button></div>
   </div>`;
+  manualAdjustmentSessions.set(modal, isCurrent);
   document.body.appendChild(modal);
 }
 
 async function submitManualAdjustment(button) {
+  const modal = document.getElementById('manualAdjustmentModal');
+  if (EMIE.state.currentRole !== 'admin') { modal?.remove(); return; }
+  const isCurrent = modal && manualAdjustmentSessions.get(modal);
+  if (!isCurrent?.()) return;
   const error = document.getElementById('manualAdjError');
   if (error) { error.style.display = 'none'; }
   const userId = document.getElementById('manualAdjUser')?.value;
@@ -616,10 +639,16 @@ async function submitManualAdjustment(button) {
   if (button) { button.disabled = true; button.textContent = '调账中…'; }
   try {
     await apiPost('/point-governance/manual-adjustment', { userId, points, reason });
+    if (!isCurrent()) return;
     closeM('manualAdjustmentModal');
     showAdminToast('调账成功，已记入调账台账', 'success');
-    await renderAdminPoints(document.getElementById('adminContent'));
+    if (document.getElementById('pointsLeaderboardBody')) {
+      await EMIE.actions.refreshPointsMonth(document.getElementById('pointsMonthFilter')?.value || localMonth());
+    } else {
+      await renderAdminPoints(document.getElementById('adminContent'));
+    }
   } catch (e) {
+    if (!isCurrent()) return;
     if (error) { error.textContent = '调账失败：' + (e.message || '请稍后重试'); error.style.display = 'block'; }
     if (button) { button.disabled = false; button.textContent = '确认调账'; }
   }

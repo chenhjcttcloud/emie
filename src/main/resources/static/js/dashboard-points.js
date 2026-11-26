@@ -8,10 +8,38 @@ let pointsRulesCache = [];
 let pointsLedgerPage = 0;
 let pointsViewRequest = 0;
 let pointsMonthRequest = 0;
+let pointsIdentityEpoch = 0;
 const pointsLedgerSize = 10;
 let pointsRulesPage = 0;
 let pointsRulesFilter = { category: '', keyword: '' };
 const pointsRulesSize = 10;
+
+document.addEventListener('emie:identity-changing', () => {
+  pointsIdentityEpoch++;
+  pointsViewRequest++;
+  pointsMonthRequest++;
+});
+
+function pointsIdentity() {
+  const role = EMIE.state.currentRole, userId = EMIE.state.currentUserId;
+  const authUser = EMIE.state.authUser, token = localStorage.getItem('design_pm_token');
+  const epoch = pointsIdentityEpoch;
+  return { role, userId, isCurrent: () => epoch === pointsIdentityEpoch
+    && EMIE.state.currentRole === role && EMIE.state.currentUserId === userId
+    && EMIE.state.authUser === authUser && localStorage.getItem('design_pm_token') === token };
+}
+
+async function openPointsManualAdjustment() {
+  if (EMIE.state.currentRole !== 'admin') return;
+  const identity = pointsIdentity(), renderId = EMIE.state.renderId;
+  const isCurrent = () => identity.isCurrent() && EMIE.state.renderId === renderId;
+  try {
+    if (typeof EMIE.actions.openManualAdjustmentModal !== 'function') await EMIE.loadViewModules('admin');
+    if (isCurrent()) return EMIE.actions.openManualAdjustmentModal();
+  } catch (error) {
+    if (isCurrent()) EMIE.actions.showSystemAlert(error.message || '调整积分功能加载失败，请稍后重试');
+  }
+}
 
 function currentMonthKey() {
   const now = new Date();
@@ -71,20 +99,22 @@ function changePointsRulesPage(page) {
   filterPointsRules(false);
 }
 
-function renderLeaderboardRows(rows, currentUserId) {
-  if (!rows.length) return '<div class="points-empty-compact">当前月份暂无可展示的团队积分排名</div>';
+function renderLeaderboardRows(rows, currentUserId, designerOverview = false, total = false) {
+  if (!rows.length) return `<div class="points-empty-compact">${designerOverview ? '暂无在职设计师' : '当前月份暂无可展示的团队积分排名'}</div>`;
   return rows.map((row, index) => {
     const mine = String(row.userId || '') === String(currentUserId || '');
     const rankClass = index < 3 ? ` top-${index + 1}` : '';
-    return `<div class="points-rank-row${mine ? ' is-me' : ''}"><span class="points-rank-number${rankClass}">${index + 1}</span><span class="points-rank-avatar">${escHtml(String(row.name || row.userId || '?').slice(0, 1))}</span><span class="points-rank-person"><strong>${escHtml(row.name || row.userId || '-')}</strong>${mine ? '<small class="points-rank-self">本人</small>' : '<small>本月已入账</small>'}</span><strong class="points-rank-score">${formatPoints(row.points)}<small>分</small></strong></div>`;
+    return `<div class="points-rank-row${mine ? ' is-me' : ''}"><span class="points-rank-number${rankClass}">${index + 1}</span><span class="points-rank-avatar">${escHtml(String(row.name || row.userId || '?').slice(0, 1))}</span><span class="points-rank-person"><strong>${escHtml(row.name || row.userId || '-')}</strong>${mine ? '<small class="points-rank-self">本人</small>' : `<small>${designerOverview ? total ? '累计积分' : '所选月份积分' : '本月已入账'}</small>`}</span><strong class="points-rank-score">${formatPoints(row.points)}<small>分</small></strong></div>`;
   }).join('');
 }
 
 async function refreshPointsMonth(month) {
+  const identity = pointsIdentity();
   const renderId = EMIE.state.renderId;
   const request = ++pointsMonthRequest;
-  const isCurrent = () => EMIE.state.renderId === renderId && pointsMonthRequest === request;
-  const isAdminView = EMIE.state.currentRole === 'admin';
+  const isCurrent = () => identity.isCurrent() && EMIE.state.renderId === renderId && pointsMonthRequest === request
+    && (!leaderboardBody || leaderboardBody.isConnected) && (!previewBox || previewBox.isConnected);
+  const isDesignerOverview = ['admin', 'planner'].includes(identity.role);
   const total = month === 'total';
   const requestedMonth = /^\d{4}-\d{2}$/.test(month || '') ? month : currentMonthKey();
   const leaderboardBody = document.getElementById('pointsLeaderboardBody');
@@ -94,13 +124,13 @@ async function refreshPointsMonth(month) {
   try {
     const query = total ? '' : '?month=' + encodeURIComponent(requestedMonth);
     const [leaderboard, preview] = await Promise.all([
-      apiGet('/performance/leaderboard' + query),
+      apiGet((isDesignerOverview ? '/performance/designer-leaderboard' : '/performance/leaderboard') + query),
       // 总计只影响顶部累计统计，下面的月度绩效卡保持当前月份口径，避免页面出现重复的累计摘要。
-      isAdminView ? Promise.resolve({}) : apiGet('/performance/preview?month=' + encodeURIComponent(requestedMonth)),
+      isDesignerOverview ? Promise.resolve({}) : apiGet('/performance/preview?month=' + encodeURIComponent(requestedMonth)),
     ]);
     if (!isCurrent()) return;
     const rows = Array.isArray(leaderboard) ? leaderboard : [];
-    if (leaderboardBody) leaderboardBody.innerHTML = renderLeaderboardRows(rows, EMIE.state.currentUserId);
+    if (leaderboardBody) leaderboardBody.innerHTML = renderLeaderboardRows(rows, identity.userId, isDesignerOverview, total);
     if (previewBox) {
       if (preview.performanceDisabled) {
         previewBox.innerHTML = '<div class="empty-state">当前仅记录积分，绩效由管理员根据积分人工核算</div>';
@@ -205,33 +235,29 @@ function renderPointsLedger(ledger, adjustments, ledgerPages, associations = {})
 }
 
 async function renderPointsView(main) {
+  const identity = pointsIdentity();
   const renderId = EMIE.state.renderId;
   const request = ++pointsViewRequest;
-  const isCurrent = () => EMIE.state.renderId === renderId && pointsViewRequest === request;
+  const isCurrent = () => identity.isCurrent() && EMIE.state.renderId === renderId && pointsViewRequest === request && main.isConnected;
+  const plannerMode = identity.role === 'planner';
+  const isAdminView = identity.role === 'admin';
+  const isDesignerView = identity.role === 'designer';
+  const isDesignerOverview = isAdminView || plannerMode;
   const category = document.querySelector('.points-rule-filter select')?.value;
   const keyword = document.getElementById('pointsRuleSearch')?.value;
   if (category !== undefined || keyword !== undefined) pointsRulesFilter = { category: category || '', keyword: String(keyword || '').trim().toLowerCase() };
   try {
     const [mine, rules, appeals, poData, archives, adminConfigs, adminProgress] = await Promise.all([
-      apiGet(`/points/me?page=${pointsLedgerPage}&size=${pointsLedgerSize}`), apiGet('/points/rules'), apiGet('/point-governance/appeals'),
+      isDesignerOverview ? Promise.resolve({}) : apiGet(`/points/me?page=${pointsLedgerPage}&size=${pointsLedgerSize}`), apiGet('/points/rules'), apiGet('/point-governance/appeals'),
       apiGet('/point-governance/po/me'), apiGet('/point-governance/archives'),
-      EMIE.state.currentRole === 'admin' ? apiGet('/admin/configs') : Promise.resolve({}),
-      EMIE.state.currentRole === 'admin' ? apiGet('/point-governance/po/progress') : Promise.resolve([]),
+      isAdminView ? apiGet('/admin/configs') : Promise.resolve({}),
+      isAdminView ? apiGet('/point-governance/po/progress') : Promise.resolve([]),
     ]);
     if (!isCurrent()) return;
     if (mine.ledgerPages && pointsLedgerPage >= mine.ledgerPages) {
       pointsLedgerPage = mine.ledgerPages - 1;
       return renderPointsView(main);
     }
-    const plannerMode = EMIE.state.currentRole === 'planner';
-    const isAdminView = EMIE.state.currentRole === 'admin';
-    const isDesignerView = EMIE.state.currentRole === 'designer';
-    const plannerTasks = plannerMode ? await apiGet('/projects/my-subtasks') : [];
-    if (!isCurrent()) return;
-    const issuedTasks = (Array.isArray(plannerTasks) ? plannerTasks : [])
-      .filter(task => task.publisherId === EMIE.state.currentUserId
-        && Number(task.issuedPoints || 0) > 0);
-    const issuedPoints = issuedTasks.reduce((sum, task) => sum + Number(task.issuedPoints || 0), 0);
     const ledger = Array.isArray(mine.ledger) ? mine.ledger : [];
     const ledgerPages = Number(mine.ledgerPages || 0);
     const adjustments = Array.isArray(mine.adjustmentLedger) ? mine.adjustmentLedger : [];
@@ -252,22 +278,22 @@ async function renderPointsView(main) {
     const poProgress = Array.isArray(poData?.progress) ? poData.progress : [];
     const archiveList = Array.isArray(archives) ? archives : [];
     const canPlannerProcessAppeals = false;
-    const ledgerSection = isAdminView ? '' : renderPointsLedger(ledger, adjustments, ledgerPages, mine.ledgerAssociations || {});
+    const ledgerSection = isDesignerOverview ? '' : renderPointsLedger(ledger, adjustments, ledgerPages, mine.ledgerAssociations || {});
     const month = currentMonthKey();
     main.innerHTML = `
       <div class="points-page">
-      <section class="points-hero"><div class="points-hero-copy"><span class="points-eyebrow">${plannerMode ? 'PLANNER POINTS' : isAdminView ? 'ADMIN POINTS' : 'MY PERFORMANCE'}</span><h2>${plannerMode ? '发放任务与积分' : isAdminView ? '设计师积分总览' : '积分与绩效中心'}</h2><p>${plannerMode ? '查看你发放的子任务及其实际积分入账情况' : isAdminView ? '查看所有设计师积分情况，快速完成积分调整' : '每一次交付都有记录，每一份成长都清晰可见'}</p>${isAdminView ? '<button class="btn btn-light points-admin-adjust-btn" data-emie-action="click:points-manual-adjust">＋ 调整积分</button>' : `<div class="points-hero-stats"><div><strong>${plannerMode ? issuedTasks.length : formatPoints(mine.balance)}</strong><span>${plannerMode ? '已发放子任务' : '累计积分'}</span></div><i></i><div><strong>${plannerMode ? formatPoints(issuedPoints) : (mine.ledgerTotal + visibleAdjustments.length)}</strong><span>${plannerMode ? '已入账积分' : '已入账记录'}</span></div></div>`}</div></section>
+      <section class="points-hero"><div class="points-hero-copy"><span class="points-eyebrow">${plannerMode ? 'PLANNER POINTS' : isAdminView ? 'ADMIN POINTS' : 'MY PERFORMANCE'}</span><h2>${isDesignerOverview ? '设计师积分总览' : '积分与绩效中心'}</h2><p>${isDesignerOverview ? '按月份查看所有在职设计师的积分情况' : '每一次交付都有记录，每一份成长都清晰可见'}</p>${isAdminView ? '<button class="btn btn-light points-admin-adjust-btn" data-emie-action="click:points-manual-adjust">＋ 调整积分</button>' : isDesignerOverview ? '' : `<div class="points-hero-stats"><div><strong>${formatPoints(mine.balance)}</strong><span>累计积分</span></div><i></i><div><strong>${mine.ledgerTotal + visibleAdjustments.length}</strong><span>已入账记录</span></div></div>`}</div></section>
       ${isAdminView ? renderAdminAppealPanel(appealList) : ''}
       ${isAdminView ? renderAdminGovernance(adminConfigs) : ''}
       ${isAdminView ? renderAdminPrograms(adminProgress) : ''}
-      <div class="points-dashboard-grid">${isDesignerView ? '<section class="points-panel"><div class="points-section-head"><div><span class="points-section-icon purple">↗</span><div><h3>月度绩效</h3><p>目标、积分与绩效结果一目了然</p></div></div><label class="points-month-picker"><span>查询月份</span><input id="pointsMonthFilter" class="points-month-input points-month-inline" type="month" value="' + month + '" data-emie-action="change:points-month"></label></div><div id="pointsPerformancePreview" class="points-panel-body"></div></section>' : ''}<section class="points-panel ${isAdminView ? 'points-admin-leaderboard-panel' : ''}"><div class="points-section-head"><div><span class="points-section-icon amber">★</span><div><h3>${isAdminView ? '设计师积分排名' : '积分排行榜'}</h3><p>${isAdminView ? '按当前月份查看所有设计师的积分情况' : '所选月份的团队积分排名'}</p></div></div>${isAdminView ? '<label class="points-month-picker"><span>查询月份</span><input class="points-month-input points-month-inline" type="month" value="' + month + '" data-emie-action="change:points-month"></label>' : ''}</div><div id="pointsLeaderboardBody" class="points-rank-list"></div></section></div>
+      <div class="points-dashboard-grid">${isDesignerView ? '<section class="points-panel"><div class="points-section-head"><div><span class="points-section-icon purple">↗</span><div><h3>月度绩效</h3><p>目标、积分与绩效结果一目了然</p></div></div><label class="points-month-picker"><span>查询月份</span><input id="pointsMonthFilter" class="points-month-input points-month-inline" type="month" value="' + month + '" data-emie-action="change:points-month"></label></div><div id="pointsPerformancePreview" class="points-panel-body"></div></section>' : ''}<section class="points-panel ${isDesignerOverview ? 'points-admin-leaderboard-panel' : ''}"><div class="points-section-head"><div><span class="points-section-icon amber">★</span><div><h3>${isDesignerOverview ? '设计师积分排名' : '积分排行榜'}</h3><p>${isDesignerOverview ? '所选月份的全部在职设计师，包含零积分人员' : '所选月份的团队积分排名'}</p></div></div>${isDesignerOverview ? '<label class="points-month-picker"><span>查询月份</span><input id="pointsMonthFilter" class="points-month-input points-month-inline" type="month" value="' + month + '" data-emie-action="change:points-month"></label>' : ''}</div><div id="pointsLeaderboardBody" class="points-rank-list"></div></section></div>
       ${ledgerSection}
       ${false && appealList.length ? '<div></div>' : ''}
       ${poProjects.length ? `<div class="card" style="margin-bottom:18px;"><div class="card-header"><h3>PO 月度履职</h3></div><div class="table-wrap"><table><thead><tr><th>PO 项目</th><th>月度积分</th><th>本月状态</th><th>操作</th></tr></thead><tbody>${poProjects.map(project => { const progress = poProgress.find(item => Number(item.poProjectId) === Number(project.id) && item.monthKey === month); return `<tr><td>${escHtml(project.name || '-')}</td><td>${formatPoints(project.monthlyPoints)}</td><td>${progress ? escHtml(poProgressStatusLabel(progress.status)) : '未提交'}</td><td>${progress ? '-' : `<button class="btn btn-primary btn-sm" data-emie-action="click:points-submit-po" data-project-id="${Number(project.id)}" data-month="${month}">提交本月进展</button>`}</td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
       ${archiveList.length ? `<div class="card" style="margin-bottom:18px;"><div class="card-header"><h3>月度归档</h3></div><div class="table-wrap"><table><thead><tr><th>月份</th><th>获得积分</th><th>目标积分</th><th>供单积分</th><th>供单保护</th><th>状态</th></tr></thead><tbody>${archiveList.map(item => `<tr><td>${escHtml(item.monthKey || '-')}</td><td>${formatPoints(item.earnedPoints)}</td><td>${formatPoints(item.targetPoints)}</td><td>${formatPoints(item.suppliedPoints)}</td><td>${item.insufficientSupplyProtection ? '已启用' : '未启用'}</td><td>${item.status === 'ARCHIVED' ? '已归档' : '待确认'}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
       <div class="card points-rules-card"><div class="card-header"><div><h3>当前生效规则</h3><span id="pointsRulesCount" class="points-rules-count">当前分类 ${initialCategoryRules.length} 条规则</span></div>${enabledRules.length ? `<label class="points-rule-filter"><span>规则分类</span><select data-emie-action="change:points-rules-filter">${ruleCategories.map(category => `<option value="${escHtml(category)}" ${category === initialRuleCategory ? 'selected' : ''}>${escHtml(pointRuleCategoryLabel(category))}</option>`).join('')}</select><input id="pointsRuleSearch" class="form-input" value="${escHtml(pointsRulesFilter.keyword)}" placeholder="全类别搜索规则编号/说明" data-emie-action="input:points-rules-filter" style="width:180px;"></label>` : ''}</div>${enabledRules.length ? `<div class="table-wrap points-rules-scroll"><table><thead><tr><th>类别</th><th>规则</th><th>基础分</th></tr></thead><tbody id="pointsRulesBody">${renderPointRuleRows(initialRuleRows)}</tbody></table></div><div id="pointsRulesPagination" class="points-pagination points-pagination-centered" style="display:${initialCategoryRules.length > pointsRulesSize ? 'flex' : 'none'}"><button class="points-page-button" disabled data-emie-action="click:points-rules-page" data-page="-1" aria-label="上一页">‹<span>上一页</span></button><span class="points-page-indicator"><b>1</b><i>/</i>${initialRulePages}</span><button class="points-page-button" ${initialRulePages <= 1 ? 'disabled' : ''} data-emie-action="click:points-rules-page" data-page="1" aria-label="下一页"><span>下一页</span>›</button></div>` : '<div class="empty-state">暂无生效积分规则</div>'}</div></div>`;
     if (enabledRules.length) filterPointsRules(false);
-    if (isDesignerView || isAdminView) await refreshPointsMonth(month);
+    if (isDesignerView || isDesignerOverview) await refreshPointsMonth(month);
   } catch (error) {
     if (!isCurrent()) return;
     main.innerHTML = `<div class="empty"><div class="empty-icon">❌</div><p>积分加载失败：${escHtml(error.message || '请稍后重试')}</p></div>`;
@@ -356,12 +382,12 @@ if (registerEventAction) {
     const id = pointLedgerTargetId(el.dataset.requirementId);
     if (id) return EMIE.actions.openDesignRequirementDetail(id);
   });
-  registerEventAction('points-eligibility', () => EMIE.actions.configureMarketEligibility());
-  registerEventAction('points-save-governance', () => EMIE.actions.saveWithdrawalGovernanceConfig());
+  registerEventAction('points-eligibility', () => { if (EMIE.state.currentRole === 'admin') return EMIE.actions.configureMarketEligibility(); });
+  registerEventAction('points-save-governance', () => { if (EMIE.state.currentRole === 'admin') return EMIE.actions.saveWithdrawalGovernanceConfig(); });
   registerEventAction('points-ledger-page', (_event, el) => changePointsLedgerPage(Number(el.dataset.page)));
-  registerEventAction('points-manual-adjust', () => EMIE.actions.openManualAdjustmentModal());
-  registerEventAction('points-create-po', () => EMIE.actions.createPoPointProject());
-  registerEventAction('points-review-po', (_event, el) => EMIE.actions.reviewPoProgress(Number(el.dataset.progressId), el.dataset.approve === 'true'));
+  registerEventAction('points-manual-adjust', () => openPointsManualAdjustment());
+  registerEventAction('points-create-po', () => { if (EMIE.state.currentRole === 'admin') return EMIE.actions.createPoPointProject(); });
+  registerEventAction('points-review-po', (_event, el) => { if (EMIE.state.currentRole === 'admin') return EMIE.actions.reviewPoProgress(Number(el.dataset.progressId), el.dataset.approve === 'true'); });
   registerEventAction('points-month', (_event, el) => refreshPointsMonth(el.value));
   registerEventAction('points-submit-po', (_event, el) => submitPoProgress(Number(el.dataset.projectId), el.dataset.month));
   registerEventAction('points-rules-filter', () => filterPointsRules(true));
