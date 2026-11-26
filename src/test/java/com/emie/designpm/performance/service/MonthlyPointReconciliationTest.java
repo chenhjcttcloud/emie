@@ -38,9 +38,11 @@ class MonthlyPointReconciliationTest {
         jdbc.execute("CREATE TABLE users(user_id VARCHAR(100),name VARCHAR(100),role VARCHAR(40),status VARCHAR(40))");
         jdbc.execute("CREATE TABLE projects(id BIGINT,product_name VARCHAR(200))");
         jdbc.execute(
-                "CREATE TABLE sub_tasks(id BIGINT,name VARCHAR(200),project_id BIGINT,designer_id VARCHAR(100),completed_at TIMESTAMP,point_rule_code VARCHAR(80))");
+                "CREATE TABLE sub_tasks(id BIGINT,name VARCHAR(200),project_id BIGINT,designer_id VARCHAR(100),completed_at TIMESTAMP,point_rule_code VARCHAR(80),status VARCHAR(40))");
         jdbc.execute(
-                "CREATE TABLE design_requirements(id BIGINT,name VARCHAR(200),designer_id VARCHAR(100),delivered_at TIMESTAMP,updated_at TIMESTAMP,point_rule_code VARCHAR(80))");
+                "CREATE TABLE design_requirements(id BIGINT,name VARCHAR(200),designer_id VARCHAR(100),delivered_at TIMESTAMP,updated_at TIMESTAMP,point_rule_code VARCHAR(80),status VARCHAR(40))");
+        jdbc.execute("CREATE TABLE point_rules(rule_code VARCHAR(80),category VARCHAR(100))");
+        jdbc.execute("INSERT INTO point_rules VALUES('D30_9','包装设计'),('D30_6','产品设计'),('D30_14','电商视觉')");
         jdbc.execute("CREATE TABLE task_withdrawals(id BIGINT,user_id VARCHAR(100),sub_task_id BIGINT)");
         jdbc.execute("CREATE TABLE point_appeals(id BIGINT,applicant_user_id VARCHAR(100),point_ledger_id BIGINT)");
         jdbc.execute(
@@ -118,6 +120,18 @@ class MonthlyPointReconciliationTest {
         assertPoints("3", sum(tasks, "otherPeriodPoints"));
         assertPoints("1", (Number) item(tasks, "requirement", 34).get("score"));
         assertPoints("3", (Number) item(tasks, "task", 34).get("score"));
+        var related = related(designer);
+        assertEquals(13, designer.get("relatedCount"));
+        assertEquals(13, related.size());
+        assertPoints("25", sum(related, "periodPoints"));
+        assertPoints("28", sum(related, "score"));
+        assertPoints("3", sum(related, "otherPeriodPoints"));
+        assertEquals("pending", item(related, "task", 49).get("periodStatus"));
+        assertEquals("submitted_for_review", item(related, "task", 49).get("status"));
+        assertEquals("completed_other_period", item(related, "task", 1099).get("periodStatus"));
+        assertEquals("completed_other_period", item(related, "task", 1166).get("periodStatus"));
+        assertEquals("completed_in_period", item(related, "task", 46).get("periodStatus"));
+        assertPoints("0", (Number) item(related, "task", 46).get("score"));
     }
 
     @Test
@@ -135,6 +149,10 @@ class MonthlyPointReconciliationTest {
         assertPoints("5", sum(tasks(designer(report)), "score"));
         assertPoints("0", sum(tasks(designer(report)), "periodPoints"));
         assertPoints("5", sum(tasks(designer(report)), "otherPeriodPoints"));
+        assertEquals(2, related(designer(report)).size());
+        assertPoints("0", sum(related(designer(report)), "periodPoints"));
+        assertTrue(related(designer(report)).stream()
+                .allMatch(item -> "completed_in_period".equals(item.get("periodStatus"))));
     }
 
     @Test
@@ -154,6 +172,125 @@ class MonthlyPointReconciliationTest {
         assertPoints("5.75", (Number) packaging.get("score"));
         assertPoints("2.75", (Number) packaging.get("periodPoints"));
         assertPoints("3", (Number) packaging.get("otherPeriodPoints"));
+        assertEquals(15, related(designer(report)).size());
+        assertPoints("25.05", sum(related(designer(report)), "periodPoints"));
+        assertPoints("28.05", sum(related(designer(report)), "score"));
+    }
+
+    @Test
+    void repeatedAwardsAndReassignmentKeepOneRelatedItemPerKindAndRetainHistoricalRecipient() {
+        ledger(15, 1124, "0.5", "2026-10");
+        jdbc.update("UPDATE point_ledgers SET rule_code='D30_9:CHANGE:extra' WHERE id=15");
+        ledger(16, 1124, "500", "2026-10");
+        jdbc.update("UPDATE point_ledgers SET user_id='d2' WHERE id=16");
+        jdbc.update("UPDATE sub_tasks SET designer_id='d2' WHERE id=1124");
+        var completed = tasks(designer(octoberReport())).stream()
+                .filter(item -> !Long.valueOf(1124).equals(item.get("id")))
+                .toList();
+        var report = report("2026-10", "25.5", completed);
+        service.enrich(report);
+
+        var designer = designer(report);
+        var related = related(designer);
+        assertEquals(9, tasks(designer).size());
+        assertEquals(13, related.size());
+        assertEquals(
+                13L,
+                related.stream()
+                        .map(item -> item.get("kind") + ":" + item.get("id"))
+                        .distinct()
+                        .count());
+        assertPoints("25.5", sum(related, "periodPoints"));
+        assertPoints("28.5", sum(related, "score"));
+        var reassigned = item(related, "task", 1124);
+        assertPoints("6.5", (Number) reassigned.get("score"));
+        assertPoints("3.5", (Number) reassigned.get("periodPoints"));
+        assertPoints("1", (Number) item(related, "requirement", 34).get("periodPoints"));
+        assertPoints("3", (Number) item(related, "task", 34).get("periodPoints"));
+    }
+
+    @Test
+    void reassignedAndLedgerOnlyItemsUseActualCompletionDatesForMonthlyAndAnnualStatus() {
+        jdbc.update("UPDATE sub_tasks SET designer_id='d2' WHERE id=1124");
+        var monthly = report("2026-10", "25", List.of());
+        service.enrich(monthly);
+
+        var monthlyItems = related(designer(monthly));
+        assertTrue(tasks(designer(monthly)).isEmpty());
+        assertEquals("completed_in_period", item(monthlyItems, "task", 1124).get("periodStatus"));
+        assertEquals("pending", item(monthlyItems, "task", 49).get("periodStatus"));
+        assertEquals("completed_other_period", item(monthlyItems, "task", 1099).get("periodStatus"));
+        assertPoints("25", sum(monthlyItems, "periodPoints"));
+
+        var annual = report("2026", "28", List.of());
+        service.enrich(annual);
+        var annualItems = related(designer(annual));
+        assertTrue(tasks(designer(annual)).isEmpty());
+        assertEquals("completed_in_period", item(annualItems, "task", 1099).get("periodStatus"));
+        assertEquals("completed_in_period", item(annualItems, "task", 1166).get("periodStatus"));
+        assertPoints("28", sum(annualItems, "periodPoints"));
+        assertPoints("28", sum(annualItems, "score"));
+        assertPoints("0", sum(annualItems, "otherPeriodPoints"));
+    }
+
+    @Test
+    void standaloneManualAdjustmentsRemainSeparateRowsAndNeverGuessTaskOrRequirementFromSourceId() throws Exception {
+        adjustment(51, "MANUAL", 1124, "-0.25", "2026-10");
+        adjustment(52, "MANUAL", 40, "0.1", "2026-10");
+        var report = report("2026-10", "24.85", tasks(designer(octoberReport())));
+        service.enrich(report);
+
+        var related = related(designer(report));
+        assertEquals(15, designer(report).get("relatedCount"));
+        assertEquals(15, related.size());
+        var independent = related.stream()
+                .filter(item -> "adjustment".equals(item.get("kind")))
+                .toList();
+        assertEquals(2, independent.size());
+        assertTrue(independent.stream().allMatch(item -> "independent".equals(item.get("periodStatus"))));
+        assertEquals(
+                List.of("A-51", "A-52"),
+                independent.stream().map(item -> item.get("id")).sorted().toList());
+        assertPoints("-0.15", sum(independent, "periodPoints"));
+        assertPoints("24.85", sum(related, "periodPoints"));
+        assertPoints("27.85", sum(related, "score"));
+        assertPoints("6", (Number) item(related, "task", 1124).get("score"));
+        assertPoints("1.5", (Number) item(related, "requirement", 40).get("score"));
+        try (var workbook =
+                new XSSFWorkbook(new ByteArrayInputStream(DesignerMonthlyReportWorkbook.write(report, "3.0")))) {
+            var sheet = workbook.getSheet("当月关联事项");
+            assertEquals(16, sheet.getPhysicalNumberOfRows());
+            assertPoints("24.85", columnTotal(sheet, "当月归属积分（核对用）"));
+            var independentIds = new ArrayList<String>();
+            for (int row = 1; row <= sheet.getLastRowNum(); row++) {
+                String id = sheet.getRow(row).getCell(column(sheet, "事项编号")).getStringCellValue();
+                if (id.startsWith("A-")) independentIds.add(id);
+            }
+            assertEquals(List.of("A-51", "A-52"), independentIds);
+        }
+    }
+
+    @Test
+    void reopenedRequirementsAndDeletedTaskReferencesRemainVisibleWithoutInventingCompletionDates() {
+        requirement(60, "已重新打开的需求", "D30_14", "1.25");
+        jdbc.update("UPDATE design_requirements SET status='pending_acceptance',delivered_at=NULL WHERE id=60");
+        ledger(17, 999, "0.75", "2026-10");
+        var report = report("2026-10", "27", tasks(designer(octoberReport())));
+        service.enrich(report);
+
+        var related = related(designer(report));
+        assertEquals(15, related.size());
+        assertPoints("27", sum(related, "periodPoints"));
+        var requirement = item(related, "requirement", 60);
+        assertEquals("pending", requirement.get("periodStatus"));
+        assertEquals("pending_acceptance", requirement.get("status"));
+        assertNull(requirement.get("completedAt"));
+        assertEquals("电商视觉", requirement.get("category"));
+        assertEquals("legacy", requirement.get("ruleVersion"));
+        var deleted = item(related, "task", 999);
+        assertEquals("子任务 #999", deleted.get("name"));
+        assertEquals("pending", deleted.get("periodStatus"));
+        assertPoints("0.75", (Number) deleted.get("periodPoints"));
     }
 
     @Test
@@ -195,7 +332,7 @@ class MonthlyPointReconciliationTest {
     }
 
     @Test
-    void workbookIncludesAllThreeReconciledViewsAndVersionFilterOnlyChangesCompletedItems() throws Exception {
+    void workbookIncludesEveryRelatedItemAndEveryPointRegardlessOfPageVersionFilter() throws Exception {
         var report = octoberReport();
         service.enrich(report);
         try (var workbook =
@@ -203,7 +340,7 @@ class MonthlyPointReconciliationTest {
             assertEquals(3, workbook.getNumberOfSheets());
             var summary = workbook.getSheet("月度积分汇总");
             var details = workbook.getSheet("当月积分明细");
-            var completed = workbook.getSheet("当月完成事项");
+            var related = workbook.getSheet("当月关联事项");
             assertEquals(2, summary.getPhysicalNumberOfRows());
             assertPoints(
                     "25", summary.getRow(1).getCell(column(summary, "当月归属积分")).getNumericCellValue());
@@ -211,19 +348,44 @@ class MonthlyPointReconciliationTest {
                     "25", summary.getRow(1).getCell(column(summary, "明细合计")).getNumericCellValue());
             assertPoints(
                     "10", summary.getRow(1).getCell(column(summary, "完成事项数")).getNumericCellValue());
+            assertPoints(
+                    "13", summary.getRow(1).getCell(column(summary, "关联事项数")).getNumericCellValue());
             assertEquals(13, details.getPhysicalNumberOfRows());
             assertPoints("25", columnTotal(details, "积分"));
-            assertEquals(11, completed.getPhysicalNumberOfRows());
-            assertPoints("18", columnTotal(completed, "当月归属积分"));
-            assertPoints("3", columnTotal(completed, "其他月份积分"));
-            assertPoints("21", columnTotal(completed, "事项累计积分"));
+            assertEquals(14, related.getPhysicalNumberOfRows());
+            assertEquals(14, related.getRow(0).getLastCellNum());
+            assertEquals("当月归属积分（核对用）", related.getRow(0).getCell(13).getStringCellValue());
+            assertPoints("25", columnTotal(related, "当月归属积分（核对用）"));
+            assertPoints("3", columnTotal(related, "其他月份积分"));
+            assertPoints("28", columnTotal(related, "事项累计积分（含其他月份）"));
         }
-        try (var workbook =
-                new XSSFWorkbook(new ByteArrayInputStream(DesignerMonthlyReportWorkbook.write(report, "legacy")))) {
-            assertPoints("25", columnTotal(workbook.getSheet("月度积分汇总"), "当月归属积分"));
-            assertPoints("25", columnTotal(workbook.getSheet("当月积分明细"), "积分"));
-            assertEquals(6, workbook.getSheet("当月完成事项").getPhysicalNumberOfRows());
+        for (String filter : List.of("legacy", "3.0")) {
+            try (var workbook =
+                    new XSSFWorkbook(new ByteArrayInputStream(DesignerMonthlyReportWorkbook.write(report, filter)))) {
+                assertPoints("25", columnTotal(workbook.getSheet("月度积分汇总"), "当月归属积分"));
+                assertPoints("25", columnTotal(workbook.getSheet("当月积分明细"), "积分"));
+                assertEquals(14, workbook.getSheet("当月关联事项").getPhysicalNumberOfRows());
+                assertPoints("25", columnTotal(workbook.getSheet("当月关联事项"), "当月归属积分（核对用）"));
+            }
         }
+    }
+
+    @Test
+    void workbookRefusesMissingOrUnbalancedRelatedItemsEvenWhenMonthlyLedgerStillBalances() {
+        var report = octoberReport();
+        service.enrich(report);
+        var designer = designer(report);
+        var original = related(designer);
+        designer.remove("relatedItems");
+        assertThrows(IllegalStateException.class, () -> DesignerMonthlyReportWorkbook.write(report, ""));
+        var incomplete = original.stream()
+                .filter(item ->
+                        !("task".equals(item.get("kind")) && Long.valueOf(49).equals(item.get("id"))))
+                .toList();
+        designer.put("relatedItems", incomplete);
+        designer.put("relatedCount", incomplete.size());
+        assertPoints("25", MonthlyPointReportService.total(items(designer)));
+        assertThrows(IllegalStateException.class, () -> DesignerMonthlyReportWorkbook.write(report, ""));
     }
 
     @Test
@@ -235,8 +397,8 @@ class MonthlyPointReconciliationTest {
         service.enrich(report);
         try (var workbook =
                 new XSSFWorkbook(new ByteArrayInputStream(DesignerMonthlyReportWorkbook.write(report, "")))) {
-            var completed = workbook.getSheet("当月完成事项");
-            var name = completed.getRow(1).getCell(column(completed, "事项名称"));
+            var related = workbook.getSheet("当月关联事项");
+            var name = related.getRow(1).getCell(column(related, "事项名称"));
             assertEquals(CellType.STRING, name.getCellType());
             assertEquals("=SUM(1,2)", name.getStringCellValue());
             var details = workbook.getSheet("当月积分明细");
@@ -295,10 +457,11 @@ class MonthlyPointReconciliationTest {
 
     private void task(long id, String name, String completedDay) {
         jdbc.update(
-                "INSERT INTO sub_tasks(id,name,project_id,designer_id,completed_at) VALUES(?,?,1,'d1',?)",
+                "INSERT INTO sub_tasks(id,name,project_id,designer_id,completed_at,status,point_rule_code) VALUES(?,?,1,'d1',?,?,'D30_9')",
                 id,
                 name,
-                completedDay == null ? null : LocalDateTime.parse(completedDay + "T12:00:00"));
+                completedDay == null ? null : LocalDateTime.parse(completedDay + "T12:00:00"),
+                completedDay == null ? "submitted_for_review" : "completed");
     }
 
     private void ledger(long id, long taskId, String points, String month) {
@@ -313,7 +476,7 @@ class MonthlyPointReconciliationTest {
 
     private void requirement(long id, String name, String rule, String points) {
         jdbc.update(
-                "INSERT INTO design_requirements(id,name,designer_id,delivered_at,updated_at,point_rule_code) VALUES(?,?,'d1','2026-10-15 12:00:00','2026-10-15 12:00:00',?)",
+                "INSERT INTO design_requirements(id,name,designer_id,delivered_at,updated_at,point_rule_code,status) VALUES(?,?,'d1','2026-10-15 12:00:00','2026-10-15 12:00:00',?,'completed')",
                 id,
                 name,
                 rule);
@@ -396,6 +559,11 @@ class MonthlyPointReconciliationTest {
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> items(Map<String, Object> designer) {
         return (List<Map<String, Object>>) designer.get("pointItems");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> related(Map<String, Object> designer) {
+        return (List<Map<String, Object>>) designer.get("relatedItems");
     }
 
     private static Map<String, Object> item(List<Map<String, Object>> items, String kind, long id) {

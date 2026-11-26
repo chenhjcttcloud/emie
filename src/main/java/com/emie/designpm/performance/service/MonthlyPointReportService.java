@@ -1,8 +1,11 @@
 package com.emie.designpm.performance.service;
 
+import com.emie.designpm.entity.PointRule;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Timestamp;
+import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.*;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -29,6 +32,7 @@ public class MonthlyPointReportService {
                     WHEN l.rule_code LIKE '%:CHANGE:%' THEN 'TASK_REVISION'
                     WHEN l.rule_code LIKE '%:BASE' THEN 'TASK_BASE' ELSE 'TASK_QUALITY' END AS source,
                 l.sub_task_id AS taskId,t.name AS taskName,NULL AS requirementId,NULL AS requirementName,
+                l.sub_task_id AS sourceId,p.id AS projectId,t.status AS itemStatus,t.point_rule_code AS itemRuleCode,
                 p.product_name AS taskProject,NULL AS materialProject,t.completed_at AS completedAt
             FROM point_ledgers l
                 LEFT JOIN sub_tasks t ON t.id=l.sub_task_id
@@ -44,7 +48,11 @@ public class MonthlyPointReportService {
                 t.name AS taskName,
                 CASE WHEN l.source_type='DESIGN_REQUIREMENT' THEN l.source_id END AS requirementId,
                 dr.name AS requirementName,p.product_name AS taskProject,mp.product_name AS materialProject,
-                CASE WHEN l.source_type='DESIGN_REQUIREMENT' THEN COALESCE(dr.delivered_at,dr.updated_at)
+                l.source_id AS sourceId,COALESCE(p.id,mp.id) AS projectId,
+                CASE WHEN l.source_type='DESIGN_REQUIREMENT' THEN dr.status ELSE t.status END AS itemStatus,
+                CASE WHEN l.source_type='DESIGN_REQUIREMENT' THEN dr.point_rule_code ELSE t.point_rule_code END AS itemRuleCode,
+                CASE WHEN l.source_type='DESIGN_REQUIREMENT' THEN
+                    CASE WHEN dr.status='completed' THEN COALESCE(dr.delivered_at,dr.updated_at) END
                     ELSE t.completed_at END AS completedAt
             FROM point_adjustment_ledgers l
                 LEFT JOIN task_withdrawals w ON l.source_type='TASK_WITHDRAWAL'
@@ -117,6 +125,79 @@ public class MonthlyPointReportService {
         return value == null ? BigDecimal.ZERO : new BigDecimal(value.toString());
     }
 
+    private record ItemKey(String userId, String kind, String id) {}
+
+    private static ItemKey itemKey(String userId, Map<String, Object> item) {
+        return new ItemKey(userId, Objects.toString(item.get("kind")), Objects.toString(item.get("id")));
+    }
+
+    private static ItemKey entryKey(Map<String, Object> entry) {
+        String kind = entry.get("requirementId") != null
+                ? "requirement"
+                : entry.get("taskId") != null ? "task" : "adjustment";
+        Object id = entry.get("requirementId") != null
+                ? entry.get("requirementId")
+                : entry.get("taskId") != null ? entry.get("taskId") : entry.get("id");
+        return new ItemKey(Objects.toString(entry.get("userId")), kind, Objects.toString(id));
+    }
+
+    private Map<String, String> categories() {
+        var categories = new HashMap<String, String>();
+        for (var row : jdbc.queryForList("SELECT rule_code AS code,category FROM point_rules", Map.of())) {
+            String category = Objects.toString(row.get("category"), "");
+            categories.put(
+                    Objects.toString(row.get("code"), "").toUpperCase(Locale.ROOT),
+                    category.isBlank() ? "未分类" : category);
+        }
+        return categories;
+    }
+
+    private Map<String, Object> fromEntry(Map<String, Object> entry, Map<String, String> categories) {
+        ItemKey key = entryKey(entry);
+        var item = new LinkedHashMap<String, Object>();
+        boolean independent = "adjustment".equals(key.kind());
+        String ruleCode = Objects.toString(entry.get("itemRuleCode"), "");
+        if (independent) ruleCode = Objects.toString(entry.get("ruleCode"), "");
+        String name =
+                Objects.toString(entry.get("requirement".equals(key.kind()) ? "requirementName" : "taskName"), "");
+        if (name.isBlank())
+            name = independent
+                    ? Objects.toString(entry.get("reason"), "")
+                    : ("requirement".equals(key.kind()) ? "设计/送审需求 #" : "子任务 #") + key.id();
+        if (name.isBlank()) name = Objects.toString(entry.get("source"), "独立积分") + " #" + key.id();
+        item.put("kind", key.kind());
+        item.put("id", independent ? key.id() : Long.valueOf(key.id()));
+        item.put("name", name);
+        item.put("project", Objects.toString(entry.get("project"), ""));
+        item.put("projectId", entry.get("projectId"));
+        item.put("source", entry.get("source"));
+        item.put("sourceId", entry.get("sourceId"));
+        item.put("status", Objects.toString(entry.get("itemStatus"), ""));
+        item.put("completedAt", entry.get("completedAt"));
+        item.put("ruleCode", ruleCode);
+        item.put("ruleVersion", ruleVersion(ruleCode));
+        item.put("category", categories.getOrDefault(ruleCode.toUpperCase(Locale.ROOT), "未分类"));
+        return item;
+    }
+
+    private static String ruleVersion(String ruleCode) {
+        String code = ruleCode.strip().toUpperCase(Locale.ROOT);
+        if (code.isEmpty()) return "unbound";
+        if (code.startsWith("D20_")) return "2.0";
+        if (code.startsWith(PointRule.VISUAL_V3_PREFIX)) return "3.0";
+        return "legacy";
+    }
+
+    private static void points(Map<String, Object> item, List<Map<String, Object>> history, String period) {
+        BigDecimal cumulative = total(history);
+        BigDecimal inPeriod = total(history.stream()
+                .filter(entry -> inPeriod(period, entry.get("accountingMonth")))
+                .toList());
+        item.put("score", cumulative);
+        item.put("periodPoints", inPeriod);
+        item.put("otherPeriodPoints", cumulative.subtract(inPeriod));
+    }
+
     @SuppressWarnings("unchecked")
     public void enrich(Map<String, Object> report) {
         String period = (String) report.get("month");
@@ -132,7 +213,18 @@ public class MonthlyPointReportService {
                         .add(((Number) item.get("id")).longValue());
             }
         }
+        for (var entry : entries) {
+            if (entry.get("taskId") instanceof Number id) taskIds.add(id.longValue());
+            if (entry.get("requirementId") instanceof Number id) requirementIds.add(id.longValue());
+        }
         var history = itemEntries(taskIds, requirementIds);
+        var histories = new HashMap<ItemKey, List<Map<String, Object>>>();
+        for (var entry : history) {
+            histories
+                    .computeIfAbsent(entryKey(entry), ignored -> new ArrayList<>())
+                    .add(entry);
+        }
+        var categories = categories();
         for (var designer : designers) {
             String userId = (String) designer.get("userId");
             var personal = entries.stream()
@@ -144,25 +236,36 @@ public class MonthlyPointReportService {
                     != 0) throw new IllegalStateException("月度积分与明细不一致，请核对积分流水");
             designer.put("pointItems", personal);
             var completed = new ArrayList<Map<String, Object>>();
+            var related = new LinkedHashMap<ItemKey, Map<String, Object>>();
             for (var original : (List<Map<String, Object>>) designer.get("tasks")) {
                 var task = new LinkedHashMap<>(original);
-                String key = "requirement".equals(task.get("kind")) ? "requirementId" : "taskId";
-                long id = ((Number) task.get("id")).longValue();
-                var matching = history.stream()
-                        .filter(item -> userId.equals(item.get("userId"))
-                                && item.get(key) instanceof Number n
-                                && n.longValue() == id)
-                        .toList();
-                BigDecimal cumulative = total(matching);
-                BigDecimal inPeriod = total(matching.stream()
-                        .filter(item -> inPeriod(period, item.get("accountingMonth")))
-                        .toList());
-                task.put("score", cumulative);
-                task.put("periodPoints", inPeriod);
-                task.put("otherPeriodPoints", cumulative.subtract(inPeriod));
+                ItemKey key = itemKey(userId, task);
+                var matching = histories.getOrDefault(key, List.of());
+                points(task, matching, period);
+                task.put("periodStatus", "completed_in_period");
+                task.put("status", "completed");
                 completed.add(task);
+                related.put(key, task);
+            }
+            for (var entry : personal) {
+                ItemKey key = entryKey(entry);
+                if (related.containsKey(key)) continue;
+                var item = fromEntry(entry, categories);
+                boolean independent = "adjustment".equals(key.kind());
+                points(item, independent ? List.of(entry) : histories.getOrDefault(key, List.of()), period);
+                item.put(
+                        "periodStatus",
+                        independent ? "independent" : completionStatus(period, item.get("completedAt")));
+                related.put(key, item);
             }
             designer.put("tasks", completed);
+            var associated = new ArrayList<>(related.values());
+            BigDecimal relatedTotal = associated.stream()
+                    .map(item -> amount(item.get("periodPoints")))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (relatedTotal.compareTo(total(personal)) != 0) throw new IllegalStateException("关联事项积分与月度明细不一致，请核对积分流水");
+            designer.put("relatedItems", associated);
+            designer.put("relatedCount", associated.size());
         }
     }
 
@@ -171,5 +274,10 @@ public class MonthlyPointReportService {
                 && (period.length() == 4
                         ? key.compareTo(period + "-01") >= 0 && key.compareTo(period + "-12") <= 0
                         : key.equals(period));
+    }
+
+    private static String completionStatus(String period, Object completedAt) {
+        if (!(completedAt instanceof LocalDateTime date)) return "pending";
+        return inPeriod(period, YearMonth.from(date).toString()) ? "completed_in_period" : "completed_other_period";
     }
 }

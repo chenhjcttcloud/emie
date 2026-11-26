@@ -11,6 +11,8 @@ import com.emie.designpm.performance.service.PerformanceService;
 import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.poi.ss.usermodel.CellType;
@@ -87,7 +89,7 @@ class DesignerMonthlyDeliveryControllerTest {
     }
 
     @Test
-    void monthlyExportKeepsCompletePointsAndFiltersOnlyCompletedItems() throws Exception {
+    void monthlyExportKeepsAllRelatedItemsRegardlessOfPageRuleVersion() throws Exception {
         PerformanceService service = mock(PerformanceService.class);
         when(service.exportDesignerMonthlyReport(anyString(), nullable(String.class)))
                 .thenCallRealMethod();
@@ -139,10 +141,29 @@ class DesignerMonthlyDeliveryControllerTest {
                         2.5d,
                         "otherPeriodPoints",
                         0d));
+        var related = new ArrayList<Map<String, Object>>();
+        for (var task : tasks) {
+            var item = new LinkedHashMap<>(task);
+            item.put("status", "completed");
+            item.put("periodStatus", "completed_in_period");
+            related.add(item);
+        }
+        related.add(Map.of(
+                "id", 14L,
+                "kind", "task",
+                "name", "尚未完成的跨月事项",
+                "status", "submitted_for_review",
+                "periodStatus", "pending",
+                "ruleVersion", "legacy",
+                "ruleCode", "D30_9",
+                "score", 2d,
+                "periodPoints", 2d,
+                "otherPeriodPoints", 0d));
         var points = List.of(
                 Map.<String, Object>of("id", "L-1", "points", 2d),
                 Map.<String, Object>of("id", "L-2", "points", 7.5d),
-                Map.<String, Object>of("id", "A-3", "points", 2.5d));
+                Map.<String, Object>of("id", "A-3", "points", 2.5d),
+                Map.<String, Object>of("id", "L-4", "points", 2d));
         when(service.designerMonthlyReport("2026-11"))
                 .thenReturn(Map.of(
                         "month",
@@ -154,11 +175,15 @@ class DesignerMonthlyDeliveryControllerTest {
                                 "designer",
                                 "设计师甲",
                                 "score",
-                                12d,
+                                14d,
                                 "completedCount",
                                 3,
                                 "tasks",
                                 tasks,
+                                "relatedItems",
+                                related,
+                                "relatedCount",
+                                4,
                                 "pointItems",
                                 points))));
         var mvc = MockMvcBuilders.standaloneSetup(
@@ -181,25 +206,33 @@ class DesignerMonthlyDeliveryControllerTest {
                 .getContentAsByteArray();
         try (var workbook = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
             assertEquals(3, workbook.getNumberOfSheets());
-            assertEquals(12d, workbook.getSheet("月度积分汇总").getRow(1).getCell(3).getNumericCellValue());
-            assertEquals(4, workbook.getSheet("当月积分明细").getPhysicalNumberOfRows());
-            var sheet = workbook.getSheet("当月完成事项");
-            assertEquals(3, sheet.getPhysicalNumberOfRows());
-            assertEquals("事项累计积分", sheet.getRow(0).getCell(12).getStringCellValue());
-            var row = sheet.getRow(1);
+            assertEquals(14d, workbook.getSheet("月度积分汇总").getRow(1).getCell(3).getNumericCellValue());
+            assertEquals(5, workbook.getSheet("当月积分明细").getPhysicalNumberOfRows());
+            var sheet = workbook.getSheet("当月关联事项");
+            assertEquals(5, sheet.getPhysicalNumberOfRows());
+            assertEquals("事项状态", sheet.getRow(0).getCell(6).getStringCellValue());
+            assertEquals("事项累计积分（含其他月份）", sheet.getRow(0).getCell(11).getStringCellValue());
+            assertEquals("当月归属积分（核对用）", sheet.getRow(0).getCell(13).getStringCellValue());
+            assertEquals("2.0", sheet.getRow(1).getCell(9).getStringCellValue());
+            var row = sheet.getRow(2);
             assertEquals("2026-11", row.getCell(0).getStringCellValue());
             assertEquals("设计师甲", row.getCell(1).getStringCellValue());
             assertEquals("项目甲", row.getCell(2).getStringCellValue());
             assertEquals("12", row.getCell(4).getStringCellValue());
             assertEquals(CellType.STRING, row.getCell(5).getCellType());
             assertEquals("=SUM(1,2)", row.getCell(5).getStringCellValue());
-            assertEquals(completedAt, row.getCell(6).getLocalDateTimeCellValue());
-            assertEquals("包装设计", row.getCell(7).getStringCellValue());
-            assertEquals("3.0", row.getCell(8).getStringCellValue());
-            assertEquals("VIS_V3_11", row.getCell(9).getStringCellValue());
-            assertEquals(7.5d, row.getCell(10).getNumericCellValue());
-            assertEquals(7.5d, row.getCell(12).getNumericCellValue());
-            assertEquals("设计/送审需求", sheet.getRow(2).getCell(3).getStringCellValue());
+            assertEquals(completedAt, row.getCell(7).getLocalDateTimeCellValue());
+            assertEquals("包装设计", row.getCell(8).getStringCellValue());
+            assertEquals("3.0", row.getCell(9).getStringCellValue());
+            assertEquals("VIS_V3_11", row.getCell(10).getStringCellValue());
+            assertEquals(7.5d, row.getCell(11).getNumericCellValue());
+            assertEquals(7.5d, row.getCell(13).getNumericCellValue());
+            assertEquals("设计/送审需求", sheet.getRow(3).getCell(3).getStringCellValue());
+            assertEquals("尚未完成的跨月事项", sheet.getRow(4).getCell(5).getStringCellValue());
+            double relatedPoints = 0;
+            for (int i = 1; i <= sheet.getLastRowNum(); i++)
+                relatedPoints += sheet.getRow(i).getCell(13).getNumericCellValue();
+            assertEquals(14d, relatedPoints);
         }
         byte[] unfiltered = mvc.perform(get(endpoint).param("month", "2026-11").requestAttr("authSession", admin))
                 .andExpect(status().isOk())
@@ -207,9 +240,9 @@ class DesignerMonthlyDeliveryControllerTest {
                 .getResponse()
                 .getContentAsByteArray();
         try (var workbook = new XSSFWorkbook(new ByteArrayInputStream(unfiltered))) {
-            assertEquals(4, workbook.getSheet("当月完成事项").getPhysicalNumberOfRows());
-            assertEquals("2.0", workbook.getSheet("当月完成事项").getRow(1).getCell(8).getStringCellValue());
-            assertEquals(12d, workbook.getSheet("月度积分汇总").getRow(1).getCell(3).getNumericCellValue());
+            assertEquals(5, workbook.getSheet("当月关联事项").getPhysicalNumberOfRows());
+            assertEquals("2.0", workbook.getSheet("当月关联事项").getRow(1).getCell(9).getStringCellValue());
+            assertEquals(14d, workbook.getSheet("月度积分汇总").getRow(1).getCell(3).getNumericCellValue());
         }
     }
 }

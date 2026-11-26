@@ -897,7 +897,7 @@ async function runDesignerVersionFilterChecks(page, host) {
       ]);
       assert.equal(request.method(), 'GET');
       assert.deepEqual(Object.fromEntries(new URL(request.url()).searchParams),
-        version ? { month: '2026-10', ruleVersion: version } : { month: '2026-10' });
+        { month: '2026-10' });
       assert.match(download.suggestedFilename(), /\.xlsx$/i);
       assert.deepEqual(await fs.readFile(await download.path()), workbookBytes);
     }
