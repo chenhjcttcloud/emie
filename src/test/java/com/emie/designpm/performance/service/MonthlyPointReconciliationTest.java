@@ -260,7 +260,7 @@ class MonthlyPointReconciliationTest {
                 new XSSFWorkbook(new ByteArrayInputStream(DesignerMonthlyReportWorkbook.write(report, "3.0")))) {
             var sheet = workbook.getSheet("当月关联事项");
             assertEquals(16, sheet.getPhysicalNumberOfRows());
-            assertPoints("24.85", columnTotal(sheet, "当月归属积分（核对用）"));
+            assertPoints("24.85", columnTotal(sheet, "当月积分"));
             var independentIds = new ArrayList<String>();
             for (int row = 1; row <= sheet.getLastRowNum(); row++) {
                 String id = sheet.getRow(row).getCell(column(sheet, "事项编号")).getStringCellValue();
@@ -343,7 +343,7 @@ class MonthlyPointReconciliationTest {
             var related = workbook.getSheet("当月关联事项");
             assertEquals(2, summary.getPhysicalNumberOfRows());
             assertPoints(
-                    "25", summary.getRow(1).getCell(column(summary, "当月归属积分")).getNumericCellValue());
+                    "25", summary.getRow(1).getCell(column(summary, "当月积分")).getNumericCellValue());
             assertPoints(
                     "25", summary.getRow(1).getCell(column(summary, "明细合计")).getNumericCellValue());
             assertPoints(
@@ -353,19 +353,32 @@ class MonthlyPointReconciliationTest {
             assertEquals(13, details.getPhysicalNumberOfRows());
             assertPoints("25", columnTotal(details, "积分"));
             assertEquals(14, related.getPhysicalNumberOfRows());
-            assertEquals(14, related.getRow(0).getLastCellNum());
-            assertEquals("当月归属积分（核对用）", related.getRow(0).getCell(13).getStringCellValue());
-            assertPoints("25", columnTotal(related, "当月归属积分（核对用）"));
-            assertPoints("3", columnTotal(related, "其他月份积分"));
-            assertPoints("28", columnTotal(related, "事项累计积分（含其他月份）"));
+            assertEquals(12, related.getRow(0).getLastCellNum());
+            assertEquals("当月积分", related.getRow(0).getCell(11).getStringCellValue());
+            for (var header : related.getRow(0)) {
+                assertFalse(header.getStringCellValue().contains("累计"));
+                assertFalse(header.getStringCellValue().contains("其他月份"));
+            }
+            assertPoints("25", columnTotal(related, "当月积分"));
+            boolean packagingFound = false;
+            for (int row = 1; row <= related.getLastRowNum(); row++) {
+                var item = related.getRow(row);
+                if ("1124".equals(item.getCell(column(related, "事项编号")).getStringCellValue())) {
+                    assertPoints("3", item.getCell(column(related, "当月积分")).getNumericCellValue());
+                    assertEquals(12, item.getLastCellNum());
+                    packagingFound = true;
+                }
+            }
+            assertTrue(packagingFound);
         }
         for (String filter : List.of("legacy", "3.0")) {
             try (var workbook =
                     new XSSFWorkbook(new ByteArrayInputStream(DesignerMonthlyReportWorkbook.write(report, filter)))) {
-                assertPoints("25", columnTotal(workbook.getSheet("月度积分汇总"), "当月归属积分"));
+                assertPoints("25", columnTotal(workbook.getSheet("月度积分汇总"), "当月积分"));
                 assertPoints("25", columnTotal(workbook.getSheet("当月积分明细"), "积分"));
                 assertEquals(14, workbook.getSheet("当月关联事项").getPhysicalNumberOfRows());
-                assertPoints("25", columnTotal(workbook.getSheet("当月关联事项"), "当月归属积分（核对用）"));
+                assertEquals(12, workbook.getSheet("当月关联事项").getRow(0).getLastCellNum());
+                assertPoints("25", columnTotal(workbook.getSheet("当月关联事项"), "当月积分"));
             }
         }
     }

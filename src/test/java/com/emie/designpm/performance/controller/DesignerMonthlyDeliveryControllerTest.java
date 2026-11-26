@@ -121,9 +121,9 @@ class DesignerMonthlyDeliveryControllerTest {
                         Map.entry("ruleVersion", "3.0"),
                         Map.entry("ruleCode", "VIS_V3_11"),
                         Map.entry("completedAt", completedAt),
-                        Map.entry("score", 7.5d),
+                        Map.entry("score", 10.5d),
                         Map.entry("periodPoints", 7.5d),
-                        Map.entry("otherPeriodPoints", 0d)),
+                        Map.entry("otherPeriodPoints", 3d)),
                 Map.<String, Object>of(
                         "id",
                         13L,
@@ -210,9 +210,13 @@ class DesignerMonthlyDeliveryControllerTest {
             assertEquals(5, workbook.getSheet("当月积分明细").getPhysicalNumberOfRows());
             var sheet = workbook.getSheet("当月关联事项");
             assertEquals(5, sheet.getPhysicalNumberOfRows());
+            assertEquals(12, sheet.getRow(0).getLastCellNum());
             assertEquals("事项状态", sheet.getRow(0).getCell(6).getStringCellValue());
-            assertEquals("事项累计积分（含其他月份）", sheet.getRow(0).getCell(11).getStringCellValue());
-            assertEquals("当月归属积分（核对用）", sheet.getRow(0).getCell(13).getStringCellValue());
+            assertEquals("当月积分", sheet.getRow(0).getCell(11).getStringCellValue());
+            for (var cell : sheet.getRow(0)) {
+                assertFalse(cell.getStringCellValue().contains("累计"));
+                assertFalse(cell.getStringCellValue().contains("其他月份"));
+            }
             assertEquals("2.0", sheet.getRow(1).getCell(9).getStringCellValue());
             var row = sheet.getRow(2);
             assertEquals("2026-11", row.getCell(0).getStringCellValue());
@@ -226,12 +230,12 @@ class DesignerMonthlyDeliveryControllerTest {
             assertEquals("3.0", row.getCell(9).getStringCellValue());
             assertEquals("VIS_V3_11", row.getCell(10).getStringCellValue());
             assertEquals(7.5d, row.getCell(11).getNumericCellValue());
-            assertEquals(7.5d, row.getCell(13).getNumericCellValue());
+            assertEquals(12, row.getLastCellNum());
             assertEquals("设计/送审需求", sheet.getRow(3).getCell(3).getStringCellValue());
             assertEquals("尚未完成的跨月事项", sheet.getRow(4).getCell(5).getStringCellValue());
             double relatedPoints = 0;
             for (int i = 1; i <= sheet.getLastRowNum(); i++)
-                relatedPoints += sheet.getRow(i).getCell(13).getNumericCellValue();
+                relatedPoints += sheet.getRow(i).getCell(11).getNumericCellValue();
             assertEquals(14d, relatedPoints);
         }
         byte[] unfiltered = mvc.perform(get(endpoint).param("month", "2026-11").requestAttr("authSession", admin))

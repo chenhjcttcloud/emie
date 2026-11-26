@@ -33,7 +33,7 @@ export async function runDesignerPersonalPerformanceChecks(page, artifactRoot) {
         userId: 'personal-designer', designer: f.mode === 'xss' ? '<img src=x onerror=alert(1)>' : '测试设计师',
         score, completedCount: pending ? 0 : 1, categoryCounts: pending ? {} : { 包装设计: 1 },
         tasks: pending ? [] : [{ id: 719, kind: 'task', name: f.mode === 'xss' ? '<img src=x onerror=alert(1)>' : '包装主视觉设计',
-          project: '测试项目', category: '包装设计', completedAt: '2026-11-03T15:30:00', score: 180 }],
+          project: '测试项目', category: '包装设计', completedAt: '2026-11-03T15:30:00', periodPoints: score, otherPeriodPoints: 15, score: score + 15 }],
         completionPreview: annual ? null : { earnedPoints: score, targetPoints: f.mode === 'no-target' ? 0 : 100,
           completionScore: f.mode === 'no-target' ? null : Math.min(150, score),
           completionReason: f.mode === 'no-target' ? '目标积分未配置，暂无法计算完成率评分。' : '月度所得积分 ÷ 目标积分 × 100，最高 150 分。' },
@@ -80,6 +80,9 @@ export async function runDesignerPersonalPerformanceChecks(page, artifactRoot) {
       '超额完成时保留真实比例，进度条限定在 100%');
     assert.match(await root.innerText(), /125\.50/);
     assert.match(await root.innerText(), /包装主视觉设计/);
+    assert.match(await root.locator('.designer-performance-tasks').innerText(), /当月积分 165\.00/);
+    assert.doesNotMatch(await root.locator('.designer-performance-tasks').innerText(), /累计|180\.00|(?:其他月份|上个月)\s*15/,
+      '事项只显示当月165分，不显示累计180分或其他月15分');
     assert.equal(await root.locator('[data-emie-action="click:designer-evaluation-edit"], .designer-target-settings, [data-emie-action="click:designer-evaluation-save"]').count(), 0,
       '个人绩效不能出现评分或目标配置入口');
     assert.equal(await root.locator('.designer-evaluation-result').count(), 4);
@@ -125,6 +128,8 @@ export async function runDesignerPersonalPerformanceChecks(page, artifactRoot) {
     await root.locator('#personalPerformancePeriod').dispatchEvent('change');
     await page.waitForFunction(() => document.querySelector('#designerPersonalPerformance')?.textContent.includes('已评分 2/12'));
     assert.match(await root.innerText(), /年度平均绩效：100\.01/);
+    assert.match(await root.locator('.designer-performance-tasks').innerText(), /全年积分 165\.00/);
+    assert.doesNotMatch(await root.locator('.designer-performance-tasks').innerText(), /累计|180\.00|(?:其他月份|上个月)\s*15/);
     await root.locator('.designer-evaluation-summary summary').click();
     assert.equal(await root.locator('.designer-evaluation-months > div').count(), 12);
     assert.equal(await root.locator('.designer-evaluation-months > div').filter({ hasText: '待评分' }).count(), 10);

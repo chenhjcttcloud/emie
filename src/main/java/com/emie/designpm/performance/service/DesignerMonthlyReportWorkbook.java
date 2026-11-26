@@ -17,25 +17,12 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 final class DesignerMonthlyReportWorkbook {
     private static final List<String> SUMMARY =
-            List.of("月份", "设计师", "用户账号", "当月归属积分", "明细合计", "核对结果", "完成事项数", "关联事项数", "导出范围");
+            List.of("月份", "设计师", "用户账号", "当月积分", "明细合计", "核对结果", "完成事项数", "关联事项数", "导出范围");
     private static final List<String> ENTRIES = List.of(
             "月份", "设计师", "用户账号", "流水编号", "归属月份", "入账时间", "来源", "项目", "事项类型", "事项编号", "事项名称", "规则编号", "规则说明", "原因", "积分",
             "完成时间");
-    private static final List<String> RELATED = List.of(
-            "月份",
-            "设计师",
-            "项目",
-            "事项类型",
-            "事项编号",
-            "事项名称",
-            "事项状态",
-            "完成时间",
-            "分类",
-            "规则版本",
-            "原规则编号",
-            "事项累计积分（含其他月份）",
-            "其他月份积分",
-            "当月归属积分（核对用）");
+    private static final List<String> RELATED =
+            List.of("月份", "设计师", "项目", "事项类型", "事项编号", "事项名称", "事项状态", "完成时间", "分类", "规则版本", "原规则编号", "当月积分");
 
     private DesignerMonthlyReportWorkbook() {}
 
@@ -128,10 +115,10 @@ final class DesignerMonthlyReportWorkbook {
                             task.get("category"),
                             version(ruleVersion),
                             task.get("ruleCode"),
-                            task.get("score"),
-                            task.get("otherPeriodPoints"),
                             task.get("periodPoints"));
-                    related.getRow(related.getLastRowNum()).getCell(13).setCellStyle(monthlyNumbers);
+                    related.getRow(related.getLastRowNum())
+                            .getCell(RELATED.size() - 1)
+                            .setCellStyle(monthlyNumbers);
                 }
             }
             for (var sheet : List.of(summary, entries, related)) {
@@ -155,13 +142,11 @@ final class DesignerMonthlyReportWorkbook {
             row.getCell(i).setCellStyle(style);
             int width = headers.get(i).contains("时间")
                     ? 22
-                    : headers.get(i).contains("核对用") || headers.get(i).contains("含其他月份")
-                            ? 32
-                            : headers.get(i).contains("名称")
-                                            || headers.get(i).equals("项目")
-                                            || headers.get(i).equals("原因")
-                                    ? 36
-                                    : 20;
+                    : headers.get(i).contains("名称")
+                                    || headers.get(i).equals("项目")
+                                    || headers.get(i).equals("原因")
+                            ? 36
+                            : 20;
             sheet.setColumnWidth(i, width * 256);
         }
         sheet.createFreezePane(0, 1);

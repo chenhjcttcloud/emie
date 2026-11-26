@@ -57,9 +57,9 @@ try {
     }));
     const relatedItems = [...tasks, ...[
       { id: 49, name: 'UI 关联任务', periodPoints: 2, periodStatus: 'pending', status: 'in_progress', completedAt: null, ruleVersion: '3.0' },
-      { id: 1099, name: '大货跨月关联任务', periodPoints: 3, periodStatus: 'completed_other_period', status: 'completed', completedAt: '2026-11-04T10:00:00', ruleVersion: 'legacy' },
-      { id: 1166, name: '包装跨月关联任务', periodPoints: 2, periodStatus: 'completed_other_period', status: 'completed', completedAt: '2026-11-05T10:00:00', ruleVersion: '3.0' },
-    ].map(task => ({ ...task, kind: 'task', category: '包装设计', project: '核对项目', ruleCode: 'VIS_V3_05', otherPeriodPoints: 0, score: task.periodPoints }))];
+      { id: 1099, name: '大货跨月关联任务', periodPoints: 3, otherPeriodPoints: 2, periodStatus: 'completed_other_period', status: 'completed', completedAt: '2026-11-04T10:00:00', ruleVersion: 'legacy' },
+      { id: 1166, name: '包装跨月关联任务', periodPoints: 2, otherPeriodPoints: 2, periodStatus: 'completed_other_period', status: 'completed', completedAt: '2026-11-05T10:00:00', ruleVersion: '3.0' },
+    ].map(task => ({ ...task, kind: 'task', category: '包装设计', project: '核对项目', ruleCode: 'VIS_V3_05', otherPeriodPoints: task.otherPeriodPoints || 0, score: task.periodPoints + (task.otherPeriodPoints || 0) }))];
     const items = relatedItems.flatMap((task, index) => {
       if (!task.periodPoints) return [];
       const split = index === 0 || index === 7;
@@ -123,16 +123,29 @@ try {
   const open = async () => { await scoreButton().click(); await modal.locator('[data-point-total]').waitFor(); };
   const close = async () => { await modal.locator('[data-emie-action="click:scoring-close-period-points"]').first().click(); await modal.waitFor({ state: 'hidden' }); };
   const render = period => page.evaluate(value => window.renderReconciliation(value), period);
+  const assertSelectedPeriodOnly = async (label, count, total) => {
+    const labels = await host.locator('.designer-performance-task-head > div:last-child > span').allTextContents();
+    assert.equal(labels.length, count);
+    const values = labels.map(value => {
+      const match = value.trim().match(new RegExp(`^${label}积分 (-?\\d+\\.\\d{2})$`));
+      assert(match, '每个事项只显示所选期间积分');
+      return Math.round(Number(match[1]) * 100);
+    });
+    assert.equal(values.reduce((sum, value) => sum + value, 0), total * 100, '显示的事项积分合计与所选期间一致');
+    assert.doesNotMatch(await host.locator('.designer-performance-tasks').textContent(), /累计|(?:其他月份|上个月)\s*-?\d+(?:\.\d+)?\s*(?:积分|分)/,
+      '事项列表不显示累计或其他月份分数');
+  };
   await render('2026-10');
   assert.match(await scoreButton().innerText(), /25\.00/);
   assert.equal(await host.locator('.designer-performance-task:visible').count(), 13, '完成事项与本期积分关联事项都列出');
   assert.match(await host.locator('.designer-performance-count').innerText(), /关联 13 项 · 当月完成 10 项/);
-  assert.match(await host.locator('.designer-performance-task').first().innerText(), /当月归属 3\.00 积分/);
-  assert.match(await host.locator('.designer-performance-task').first().innerText(), /累计 6\.00 积分；其他月份 3\.00 积分/);
+  assert.match(await host.locator('.designer-performance-task').first().innerText(), /当月积分 3\.00/);
+  assert.doesNotMatch(await host.locator('.designer-performance-task').first().innerText(), /6\.00/, '不显示此任务累计6分');
+  await assertSelectedPeriodOnly('当月', 13, 25);
   assert.deepEqual(await page.evaluate(() => {
     const items = reconciliationFixture.relatedItems;
     return [items.reduce((sum, item) => sum + item.periodPoints, 0), items.reduce((sum, item) => sum + item.otherPeriodPoints, 0), items.reduce((sum, item) => sum + item.score, 0)];
-  }), [25, 3, 28], '13项的本期、其他月和累计积分可分别核对');
+  }), [25, 7, 32], 'API仍保留历史积分，页面只显示当月25分');
   for (const id of [49]) {
     const item = host.locator(`[data-related-kind="task"][data-related-id="${id}"]`);
     assert.match(await item.innerText(), /尚未完成/);
@@ -140,6 +153,10 @@ try {
   }
   const crossMonth = host.locator('[data-related-kind="task"][data-related-id="1099"]');
   assert.match(await crossMonth.innerText(), /其他月份完成/);
+  assert.match(await crossMonth.innerText(), /当月积分 3\.00/);
+  assert.doesNotMatch(await crossMonth.innerText(), /5\.00/, '跨月事项不显示累计5分');
+  assert.match(await host.locator('[data-related-id="1166"]').innerText(), /当月积分 2\.00/);
+  assert.doesNotMatch(await host.locator('[data-related-id="1166"]').innerText(), /4\.00/, '跨月事项不显示累计4分');
   assert.equal(await crossMonth.locator('[data-emie-action="click:scoring-task-deliveries"]').getAttribute('data-month'), '2026-11');
   await crossMonth.locator('[data-emie-action="click:scoring-task-deliveries"]').click();
   await page.waitForFunction(() => reconciliationFixture.reads.some(item => item.url.includes('/task/1099/deliveries?month=2026-11')));
@@ -208,7 +225,8 @@ try {
   assert.equal(await host.locator('.designer-performance-task').count(), 14);
   assert.match(await scoreButton().innerText(), /23\.00/);
   assert.match(await independent.innerText(), /独立调账/);
-  assert.match(await independent.innerText(), /当月归属 -2\.00 积分/);
+  assert.match(await independent.innerText(), /当月积分 -2\.00/);
+  await assertSelectedPeriodOnly('当月', 14, 23);
   assert.equal(await independent.locator('[data-emie-action="click:scoring-task-deliveries"]').count(), 0);
   await open();
   assert.equal(await modal.locator('[data-point-total]').innerText(), '23.00');
@@ -270,8 +288,9 @@ try {
   await close();
 
   await render('2026');
+  await assertSelectedPeriodOnly('全年', 13, 25);
   await open();
-  assert.match(await modal.innerText(), /全年归属积分/);
+  assert.match(await modal.innerText(), /全年积分/);
   assert.equal(await page.evaluate(() => reconciliationFixture.reads.at(-1).url), '/performance/designer-monthly-report/designer/points?month=2026');
   await close();
   assert.equal(await host.locator('[data-emie-action="click:scoring-export-subtasks"]').count(), 0);
@@ -295,8 +314,8 @@ try {
     document.getElementById('personalPerformancePeriod').dispatchEvent(new Event('change', { bubbles: true }));
   });
   await host.locator('.designer-performance-task').first().waitFor();
-  assert.match(await host.locator('.designer-performance-task').first().innerText(), /当月归属 3\.00 积分/);
-  assert.match(await host.locator('.designer-performance-task').first().innerText(), /累计 6\.00 积分；其他月份 3\.00 积分/);
+  assert.match(await host.locator('.designer-performance-task').first().innerText(), /当月积分 3\.00/);
+  await assertSelectedPeriodOnly('当月', 13, 25);
   assert.equal(await host.locator('.designer-performance-task').count(), 13);
   assert.match(await host.locator('[data-related-id="49"]').innerText(), /尚未完成/);
   assert.match(await host.locator('[data-related-id="1099"]').innerText(), /其他月份完成/);
@@ -307,7 +326,7 @@ try {
   assert.equal(await host.locator('[data-emie-action="click:scoring-period-points"]').count(), 0);
   assert.deepEqual(realApiRequests, [], '无真实业务接口请求');
   assert.deepEqual(errors, []);
-  console.log(`Monthly point reconciliation checks passed: all 13 related items, pending and other-month states, independent debits, safe delivery requests, complete exports despite page filters, period/lifetime totals, mobile, errors, escaping, stale identities, legacy and personal views. Artifacts: ${artifacts}`);
+  console.log(`Monthly point reconciliation checks passed: all 13 related items, only selected-period points shown and totaling 25, hidden historical scores, pending/other-month states, independent debits, safe deliveries, complete exports, mobile, errors, escaping, stale identities, legacy and personal views. Artifacts: ${artifacts}`);
 } finally {
   if (browser) await browser.close();
   await new Promise(resolve => server.close(resolve));

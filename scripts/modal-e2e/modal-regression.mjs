@@ -880,7 +880,7 @@ async function runDesignerVersionFilterChecks(page, host) {
     const summary = host.locator('.designer-performance-summary');
     const unfilteredSummary = await summary.innerText();
     assert.match(unfilteredSummary, /5\s+项完成任务与需求/);
-    assert.match(unfilteredSummary, /12\.00\s+当月归属积分/);
+    assert.match(unfilteredSummary, /12\.00\s+当月积分/);
 
     for (const [version, name] of versions) {
       await versionFilter.selectOption(version);
